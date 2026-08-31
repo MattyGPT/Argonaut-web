@@ -1,8 +1,8 @@
 # Argonaut Web
 
-A fresh browser remake of the 1992 DOS tactical space-war game, which was originally (c) 1998, 1992n by Jim Chen. This remake uses newly
-written HTML, CSS, and JavaScript; the supplied DOS manual was used only as a
-behavioral reference.
+A fresh browser remake of the 1992 DOS tactical space-war game, originally
+(c) 1988, 1992 by Jim Chen. This remake uses newly written HTML, CSS, and
+JavaScript; the supplied DOS manual was used only as a behavioral reference.
 
 ## Run it
 
