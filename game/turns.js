@@ -101,27 +101,36 @@ const factionStrength = (game, faction) => game.ships
   .reduce((total, ship) => total + ship.shields + ship.crew, 0);
 
 /**
- * An autopilot that is down to its last ships and badly outmatched capitulates
- * rather than fight to annihilation ("has surrendered to").
+ * A fleet down to its last ships and badly outmatched capitulates
+ * ("has surrendered to"). An enemy alliance that surrenders simply drops out of
+ * the war — its ships stand down and the fight continues. Only the Federation
+ * autopilot's surrender (after you resign) ends the game.
  */
 export const applySurrender = (game) => {
   if (game.outcome) return game;
   const factions = [...new Set(game.ships.map((ship) => ship.faction))];
+  let next = game;
   for (const faction of factions) {
-    const active = game.ships.filter((ship) => isActive(ship) && ship.faction === faction);
+    const active = next.ships.filter((ship) => isActive(ship) && ship.faction === faction);
     if (active.length === 0 || active.length > 2) continue;
-    const mine = factionStrength(game, faction);
-    const opposing = factions.filter((f) => f !== faction).reduce((total, f) => total + factionStrength(game, f), 0);
+    const mine = factionStrength(next, faction);
+    const opposing = factions.filter((f) => f !== faction).reduce((total, f) => total + factionStrength(next, f), 0);
     if (opposing === 0 || mine > opposing * 0.15) continue;
     const winner = factions.filter((f) => f !== faction)
-      .sort((a, b) => factionStrength(game, b) - factionStrength(game, a))[0];
-    const kind = winner === FACTIONS.FEDERATION ? 'federation-win' : 'alliance-win';
-    const message = faction === FACTIONS.FEDERATION
-      ? `The Federation has surrendered to ${winner}.`
-      : `${faction} has surrendered to ${winner}.`;
-    return { ...game, phase: 'ended', outcome: { kind, message } };
+      .sort((a, b) => factionStrength(next, b) - factionStrength(next, a))[0];
+    if (faction === FACTIONS.FEDERATION) {
+      if (!next.resigned) continue; // only the autopilot may capitulate
+      return { ...next, phase: 'ended', outcome: { kind: 'alliance-win', message: `The Federation has surrendered to ${winner}.` } };
+    }
+    next = {
+      ...next,
+      ships: next.ships.map((ship) => isActive(ship) && ship.faction === faction
+        ? { ...ship, status: 'surrendered', tractorBy: null }
+        : ship),
+      log: [...(next.log ?? []), `${faction} has surrendered to ${winner}.  Its ships stand down.`],
+    };
   }
-  return game;
+  return next;
 };
 
 /** Runs one autopilot turn for the player's ship (backtick command / spectator mode). */

@@ -267,15 +267,27 @@ test('the vendetta ship hunts the player even when a nearer enemy exists', () =>
   assert.equal(action.targetId, 'fed-flagship');
 });
 
-test('a last outmatched ship surrenders rather than fight to annihilation', () => {
+test('a collapsing enemy alliance stands down without ending the war', () => {
   const game = withShips(createGame({ seed: 'surrender' }), (ship) => {
     if (ship.id === 'bloc-cruiser-1') return { ...ship, status: 'active', shields: 5, crew: 5 };
     if (ship.faction === 'Bloc') return { ...ship, status: 'destroyed' };
     return ship;
   });
   const result = applySurrender(game);
+  assert.ok(!result.outcome, 'an enemy surrender must not end the war');
+  assert.ok(result.ships.some((ship) => ship.id === 'bloc-cruiser-1' && ship.status === 'surrendered'));
+});
+
+test('the resigned Federation autopilot surrenders when collapsed', () => {
+  const base = withShips(createGame({ seed: 'fed-surrender' }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, status: 'active', shields: 5, crew: 5 };
+    if (ship.faction === 'Federation') return { ...ship, status: 'destroyed' };
+    return ship;
+  });
+  const result = applySurrender({ ...base, resigned: true });
   assert.ok(result.outcome);
-  assert.match(result.outcome.message, /Bloc has surrendered/);
+  assert.match(result.outcome.message, /Federation has surrendered/);
+  assert.equal(applySurrender(base).outcome, null, 'an active player never auto-surrenders');
 });
 
 test('a fresh war does not surrender', () => {
