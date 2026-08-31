@@ -100,6 +100,7 @@ export const renderGame = (game, view = {}) => {
 const statusLabel = (ship) => {
   if (ship.status === 'active') return 'Active';
   if (ship.status === 'vacant') return 'Vacant';
+  if (ship.status === 'surrendered') return 'Surrendered';
   return 'Dead';
 };
 
