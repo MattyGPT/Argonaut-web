@@ -90,7 +90,10 @@ export const renderGame = (game, view = {}) => {
   log.innerHTML = entries.slice(-150).reverse().map((entry) => `<li>${entry}</li>`).join('');
 
   if (game.outcome) {
-    report.innerHTML = `<h2>War concluded</h2><ul><li>${game.outcome.message ?? game.outcome.kind.replace('-', ' ')}</li><li>Begin a new war to continue.</li></ul>`;
+    const roll = reportFor(game, 'rollcall');
+    report.innerHTML = `<h2>War concluded</h2><ul><li>${game.outcome.message ?? game.outcome.kind.replace('-', ' ')}</li></ul>`
+      + `<h2>${roll.title}</h2><ul>${roll.lines.map((line) => `<li>${line}</li>`).join('')}</ul>`
+      + `<ul><li>Begin a new war to continue.</li></ul>`;
   }
 };
 
