@@ -28,7 +28,9 @@ const save = () => {
   }
 };
 
-let game = loadSave() ?? createGame();
+const randomSeed = () => `war-${Math.random().toString(36).slice(2, 8)}`;
+
+let game = loadSave() ?? createGame({ seed: randomSeed() });
 let view = { entries: ['Tactical systems online. Choose a command.'] };
 
 const targetActions = new Set(['phasers', 'photons', 'tractor', 'scan', 'transport']);
@@ -160,7 +162,7 @@ document.querySelector('#app-title').textContent = 'Argonaut Web';
 bindInput(document.querySelector('#game-root'), dispatch);
 
 document.querySelector('#new-game').addEventListener('click', () => {
-  document.querySelector('#new-seed').value = game.seed;
+  document.querySelector('#new-seed').value = randomSeed();
   document.querySelector('#regional').checked = game.regional;
   document.querySelector('#sound').checked = game.sound;
   document.querySelector('#new-game-dialog').showModal();
