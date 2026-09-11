@@ -1,8 +1,8 @@
-import { distance, getShip } from './state.js';
+import { RANGES } from './constants.js';
 import { createRng } from './rng.js';
+import { distance, engineCapacity, getShip, isTractorHeld, systemUnits } from './state.js';
 
 const isActive = (ship) => ship?.status === 'active';
-const units = (ship, system) => Math.max(0, ship.systems?.[system] ?? 0);
 
 const isVendetta = (game, actor) => Boolean(game.vendettaShipId) && actor.id === game.vendettaShipId;
 
@@ -29,10 +29,10 @@ export const chooseAiAction = (game, shipId) => {
   if (!isActive(actor)) return { type: 'pass' };
   const target = pickTarget(game, actor);
   if (!target) return { type: 'pass' };
-  if (units(actor, 'photons') > 0 && target.range <= 10) return { type: 'photons', targetId: target.ship.id };
-  if (units(actor, 'phasers') > 0 && target.range <= 30) return { type: 'phasers', targetId: target.ship.id };
-  if (units(actor, 'tractor') > 0 && target.range <= 35) return { type: 'tractor', targetId: target.ship.id };
-  if (units(actor, 'engines') > 0 && !actor.tractorBy) {
+  if (systemUnits(actor, 'photons') > 0 && target.range <= RANGES.photons) return { type: 'photons', targetId: target.ship.id };
+  if (systemUnits(actor, 'phasers') > 0 && target.range <= RANGES.phasers) return { type: 'phasers', targetId: target.ship.id };
+  if (systemUnits(actor, 'tractor') > 0 && target.range <= RANGES.tractor) return { type: 'tractor', targetId: target.ship.id };
+  if (systemUnits(actor, 'engines') > 0 && !isTractorHeld(game, actor)) {
     // Sitting on the target: hold position so the collision resolves.
     if (target.range < 1) return { type: 'move', dx: 0, dy: 0 };
     // Ruthless pursuit, clumsy navigation: seeded overshoot and drift so fleets
@@ -40,7 +40,7 @@ export const chooseAiAction = (game, shipId) => {
     const rng = createRng(`${game.seed}:${shipId}:${game.randomStep ?? 0}`);
     const deltaX = target.ship.x - actor.x;
     const deltaY = target.ship.y - actor.y;
-    const capacity = units(actor, 'engines') * 10;
+    const capacity = engineCapacity(actor);
     const magnitude = Math.min(capacity, Math.max(1, target.range - 8) * (0.8 + rng.next() * 0.5));
     const angle = Math.atan2(deltaY, deltaX) + (rng.next() - 0.5) * 0.3;
     return {

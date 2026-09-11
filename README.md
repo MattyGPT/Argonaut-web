@@ -52,8 +52,15 @@ The remake follows the manual's rules and the behavior confirmed in the
 original executable:
 
 - Reinforcing shields (`1`) flushes engine power and needs working engines.
-- Weapons can miss; the tractor beam (`5`) locks and pulls its target toward
-  you; hyperspace (`-`) can burn a ship up.
+- Weapons can miss, and every volley rolls its own damage inside a fixed band
+  instead of hitting for the same number each time.
+- The tractor beam (`5`) locks and pulls its target toward you, and enemy beams
+  pull you just as hard. A lock ends when the ship holding it dies; hyperspace
+  (`-`) also shakes one off, but can burn a ship up.
+- Damage that gets past your shields knocks out individual subsystems, which
+  shortens the reach of your scanner (`6`), mapper (`7`), transporter (`8`), and
+  radio (`9`). A ship that loses its entire crew is left vacant, and your
+  transporter can take it over — command included.
 - Self-destruct (`=`) destroys everything in its blast radius and sprays
   shrapnel in a wider ring; the Xanadu starbase has an especially large blast.
 - Two ships occupying the same point collide — one is destroyed, the other
@@ -85,7 +92,11 @@ original executable:
 - Weapon and tractor prompts preselect the nearest sensible target; confirm or
   pick another.
 - The battle narrative keeps a scrolling, newest-first log of your actions and
-  the autopilots'.
+  the autopilots'. A damaged radio abbreviates what comes back — the panel
+  header reports how much traffic you are still receiving — while your own
+  ship's lines stay intact.
+- Condition reads RED, YELLOW, or GREEN against your own shield capacity, so a
+  scout and a starbase are judged by the same standard.
 - Phaser fire draws a beam, photon torpedoes a traveling spark, and kills a
   burst — for shots you fire and shots fired at you.
 

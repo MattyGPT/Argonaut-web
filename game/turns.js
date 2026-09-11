@@ -1,11 +1,10 @@
-import { FACTIONS, GRID_SIZE } from './constants.js';
-import { damageShip, fireEvent, resolveCollision } from './actions.js';
+import { FACTIONS, GRID_SIZE, RANGES } from './constants.js';
+import { damageShip, fireEvent, resolveCollision, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
-import { getShip, strongestFederation } from './state.js';
+import { distance, getShip, strongestFederation } from './state.js';
 
 const isActive = (ship) => ship?.status === 'active';
-const units = (ship, system) => Math.max(0, ship.systems?.[system] ?? 0);
 const replaceShip = (game, replacement) => ({ ...game, ships: game.ships.map((ship) => ship.id === replacement.id ? replacement : ship) });
 const rngFor = (game) => createRng(`${game.seed}:${game.randomStep ?? 0}`);
 const advanceRandom = (game) => ({ ...game, randomStep: (game.randomStep ?? 0) + 1 });
@@ -17,9 +16,10 @@ const resolveAiAction = (game, shipId) => {
   if (action.type === 'pass') return { game, messages: [`${actor.name} holds position.`], type: action.type };
   if (['phasers', 'photons'].includes(action.type)) {
     const target = getShip(game, action.targetId);
-    const amount = action.type === 'phasers' ? 12 + units(actor, 'phasers') * 4 : 24 + units(actor, 'photons') * 9;
+    const rng = rngFor(game);
+    const amount = weaponDamage(action.type, actor, rng);
     const before = target.status;
-    const hit = damageShip(target, amount, rngFor(game));
+    const hit = damageShip(target, amount, rng);
     const kill = before === 'active' && hit.status !== 'active' ? 1 : 0;
     const shooter = { ...actor, shotsFired: actor.shotsFired + 1, kills: actor.kills + kill };
     const victim = { ...hit, shotsTaken: hit.shotsTaken + 1 };
@@ -37,7 +37,18 @@ const resolveAiAction = (game, shipId) => {
   }
   if (action.type === 'tractor') {
     const target = getShip(game, action.targetId);
-    return { game: replaceShip(game, { ...target, tractorBy: actor.id }), messages: [`${actor.name} locks ${target.name} in a tractor beam.`], type: action.type };
+    if (!isActive(target) || distance(actor, target) > RANGES.tractor) {
+      return { game, messages: [`${actor.name} holds position.`], type: 'pass' };
+    }
+    const { pull, position } = tractorLock(actor, target);
+    return {
+      game: replaceShip(game, { ...target, tractorBy: actor.id, x: position.x, y: position.y }),
+      messages: [
+        `${actor.name} locks ${target.name} in a tractor beam.`,
+        `Tractor beam good for ${pull} units pull. ${actor.name} has beamed ${target.name} to ${position.x}, ${position.y}.`,
+      ],
+      type: action.type,
+    };
   }
   if (action.type === 'move') {
     const x = Math.max(0, Math.min(GRID_SIZE, actor.x + action.dx));

@@ -92,3 +92,29 @@ export const STARTING_FORMATIONS = Object.freeze({
 });
 
 export const XANADU_POSITION = Object.freeze({ x: 50, y: 50 });
+
+export const RANGES = Object.freeze({
+  phasers: 30,
+  photons: 10,
+  tractor: 35,
+  hyperspace: GRID_SIZE,
+  selfDestruct: 20,
+});
+
+/**
+ * Sensor and personnel commands scale with surviving hardware, per the manual:
+ * scanner 10 x undamaged units, transporter 10 x, radio 25 x active units.
+ * The mapper has no stated formula, so its reach scales the same way.
+ */
+export const SYSTEM_RANGE_PER_UNIT = Object.freeze({
+  scanner: 10,
+  mapper: 20,
+  transporter: 10,
+  radio: 25,
+});
+
+/** Total displacement a ship may move per turn, per working engine unit. */
+export const ENGINE_MOVE_PER_UNIT = 10;
+
+/** Shield power gained per engine unit flushed. */
+export const SHIELD_PER_ENGINE = 5;
