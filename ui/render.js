@@ -1,4 +1,13 @@
-import { distance, getShip } from '../game/state.js';
+import { RANGES } from '../game/constants.js';
+import {
+  abbreviateNarrative,
+  alertLevel,
+  distance,
+  engineCapacity,
+  getShip,
+  radioIntegrity,
+  systemRange,
+} from '../game/state.js';
 
 const commands = [
   ['computer', 'Computer', '0'],
@@ -33,7 +42,7 @@ export const renderGame = (game, view = {}) => {
   document.querySelector('#turn-readout').textContent = `Stardate ${game.turn}`;
 
   const actorActive = Boolean(actor) && actor.status === 'active';
-  const mapperRange = actorActive ? Math.max(0, actor.systems?.mapper ?? 0) * 20 : Infinity;
+  const mapperRange = actorActive ? systemRange(actor, 'mapper') : Infinity;
   const isVisible = (ship) => !actorActive || ship.id === actor.id || distance(ship, actor) <= mapperRange;
   document.querySelector('#mapper-readout').textContent = actorActive
     ? (Number.isFinite(mapperRange) && mapperRange > 0 ? `Mapper ${mapperRange}` : 'Mapper blacked out')
@@ -44,15 +53,16 @@ export const renderGame = (game, view = {}) => {
     for (const ship of game.ships) {
       if (ship.status !== 'active' || ship.faction === actor.faction) continue;
       const range = distance(ship, actor);
-      if ((range <= 30 && ship.systems.phasers > 0) || (range <= 10 && ship.systems.photons > 0)) threats.add(ship.id);
+      if ((range <= RANGES.phasers && ship.systems.phasers > 0) || (range <= RANGES.photons && ship.systems.photons > 0)) threats.add(ship.id);
     }
   }
 
   const rings = [];
   if (actorActive) {
-    if (actor.systems.phasers > 0) rings.push({ r: 30, kind: 'phasers' });
-    if (actor.systems.photons > 0) rings.push({ r: 10, kind: 'photons' });
-    if (actor.systems.engines * 10 > 0) rings.push({ r: actor.systems.engines * 10, kind: 'engines' });
+    if (actor.systems.phasers > 0) rings.push({ r: RANGES.phasers, kind: 'phasers' });
+    if (actor.systems.photons > 0) rings.push({ r: RANGES.photons, kind: 'photons' });
+    const engineReach = engineCapacity(actor);
+    if (engineReach > 0) rings.push({ r: engineReach, kind: 'engines' });
   }
   const ringHtml = rings.map(({ r, kind }) => `<div class="range-ring ${kind}" style="--x:${actor.x};--y:${actor.y};--d:${2 * r}%" aria-hidden="true"></div>`).join('');
 
@@ -65,7 +75,7 @@ export const renderGame = (game, view = {}) => {
   }).join('');
   map.innerHTML = ringHtml + shipHtml;
 
-  const condition = actor.shields < 25 ? 'DISTRESS' : actor.shields < 55 ? 'YELLOW' : 'GREEN';
+  const condition = alertLevel(actor);
   consoleRoot.innerHTML = `
     <div class="panel-title"><span>Command console</span><span class="alert-${condition.toLowerCase()}">Condition: ${condition}</span></div>
     <div class="status">
@@ -87,7 +97,12 @@ export const renderGame = (game, view = {}) => {
   const entries = view.entries?.length
     ? view.entries
     : game.log?.length ? game.log : ['Tactical systems online. Choose a command.'];
-  log.innerHTML = entries.slice(-150).reverse().map((entry) => `<li>${entry}</li>`).join('');
+  const integrity = radioIntegrity(actor);
+  const narrated = abbreviateNarrative(entries, integrity, actor.name);
+  log.innerHTML = narrated.slice(-150).reverse().map((entry) => `<li>${entry}</li>`).join('');
+  document.querySelector('#log-meta').textContent = integrity >= 1
+    ? 'Newest first'
+    : `Newest first · radio at ${Math.round(integrity * 100)}%, traffic abbreviated`;
 
   if (game.outcome) {
     const roll = reportFor(game, 'rollcall');

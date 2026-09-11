@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, getShip } from '../game/state.js';
-import { applyPlayerAction, defaultTargetFor, eligibleTargets } from '../game/actions.js';
+import { RANGES } from '../game/constants.js';
+import { createRng } from '../game/rng.js';
+import { abbreviateNarrative, alertLevel, createGame, getShip, radioIntegrity } from '../game/state.js';
+import { applyPlayerAction, defaultTargetFor, eligibleTargets, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
@@ -372,4 +374,181 @@ test('victory outcomes carry the canonical proclamations', () => {
   assert.match(evaluateOutcome(fedWin).message, /Federation has triumphed/);
   const draw = withShips(game, (ship) => ({ ...ship, status: 'destroyed' }));
   assert.match(evaluateOutcome(draw).message, /No one wins/);
+});
+
+test('weapon damage varies from shot to shot inside the manual band', () => {
+  const argo = getShip(createGame({ seed: 'variance' }), 'fed-flagship');
+  const roll = (type, step) => weaponDamage(type, argo, createRng(`variance:${type}:${step}`));
+  const phasers = Array.from({ length: 60 }, (_, step) => roll('phasers', step));
+  const photons = Array.from({ length: 60 }, (_, step) => roll('photons', step));
+  assert.ok(new Set(phasers).size > 1, 'phasers must not always hit for the same number');
+  assert.ok(new Set(photons).size > 1, 'photons must not always hit for the same number');
+  // Argo: 12 + 5 phaser units x 4 = 32 nominal, rolled +/-25%.
+  for (const amount of phasers) assert.ok(amount >= 24 && amount <= 40, `phaser damage ${amount} left the band`);
+  // Argo: 24 + 3 photon tubes x 9 = 51 nominal, rolled +/-26.7%.
+  for (const amount of photons) assert.ok(amount >= 37 && amount <= 65, `photon damage ${amount} left the band`);
+});
+
+test('the damage band keeps the tuned mean, so wars last as long as before', () => {
+  const argo = getShip(createGame({ seed: 'mean' }), 'fed-flagship');
+  const meanOf = (type, nominal) => {
+    const rolls = Array.from({ length: 400 }, (_, step) => weaponDamage(type, argo, createRng(`mean:${type}:${step}`)));
+    const mean = rolls.reduce((total, amount) => total + amount, 0) / rolls.length;
+    assert.ok(Math.abs(mean - nominal) < 1, `${type} mean ${mean.toFixed(2)} drifted from ${nominal}`);
+  };
+  meanOf('phasers', 32);
+  meanOf('photons', 51);
+});
+
+test('the radio report gives allied condition as well as location', () => {
+  const game = withShips(placedGame('radio-condition'), (ship) => ship.id === 'fed-cruiser-1'
+    ? { ...ship, x: 15, y: 10, shields: 10 }
+    : ship);
+  const bonhomme = applyPlayerAction(game, { type: 'radio' }).report.lines.find((line) => /Bonhomme/.test(line));
+  assert.match(bonhomme, /at 5\.0/);
+  assert.match(bonhomme, /condition RED/);
+  assert.match(bonhomme, /shields 10/);
+});
+
+test('radio integrity tracks the surviving radio units', () => {
+  const argo = getShip(createGame({ seed: 'integrity' }), 'fed-flagship');
+  assert.equal(radioIntegrity(argo), 1);
+  assert.equal(radioIntegrity({ ...argo, systems: { ...argo.systems, radio: 1 } }), 0.5);
+  assert.equal(radioIntegrity({ ...argo, systems: { ...argo.systems, radio: 0 } }), 0);
+});
+
+test('a damaged radio abbreviates the narrative but spares your own ship', () => {
+  const traffic = ['Firebreather fires phasers at Bonhomme for 32 damage.'];
+  assert.deepEqual(abbreviateNarrative(traffic, 1, 'Argo'), traffic);
+  assert.deepEqual(abbreviateNarrative(traffic, 0.5, 'Argo'), ['Firebreather fires phasers at …']);
+  assert.deepEqual(abbreviateNarrative(traffic, 0, 'Argo'), ['Firebreather …']);
+  const own = ['Argo moves to 12,14.'];
+  assert.deepEqual(abbreviateNarrative(own, 0, 'Argo'), own);
+});
+
+test('alert level is proportional to shield capacity and named as the manual names it', () => {
+  const game = createGame({ seed: 'alert' });
+  const argo = getShip(game, 'fed-flagship');
+  const xanadu = getShip(game, 'xanadu');
+  assert.equal(alertLevel(argo), 'GREEN');
+  assert.equal(alertLevel({ ...argo, shields: 40 }), 'YELLOW');
+  assert.equal(alertLevel({ ...argo, shields: 10 }), 'RED');
+  // The same 80 shields are comfortable in a battle cruiser, worrying in a starbase.
+  assert.equal(alertLevel({ ...argo, shields: 80 }), 'GREEN');
+  assert.equal(alertLevel({ ...xanadu, shields: 80 }), 'YELLOW');
+});
+
+test('an autopilot tractor beam drags its target toward the shooter', () => {
+  const game = withShips(createGame({ seed: 'ai-tractor' }), (ship, index) => {
+    if (ship.id === 'axis-flagship') return { ...ship, x: 20, y: 10, systems: { ...ship.systems, phasers: 0, photons: 0 } };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 40, y: 10 };
+    return { ...ship, x: 90 + (index % 5), y: 90 + Math.floor(index / 5) };
+  });
+  const result = resolveComputerTurns({ ...game, phase: 'computer' });
+  const argo = getShip(result, 'fed-flagship');
+  // Firebreather has 3 tractor units, so the beam pulls 15 of the 20 units between them.
+  assert.equal(argo.x, 25);
+  assert.equal(argo.y, 10);
+  assert.equal(argo.tractorBy, 'axis-flagship');
+  assert.ok(result.log.some((line) => /Tractor beam good for 15 units pull/.test(line)));
+});
+
+test('an autopilot will not reach for a tractor lock beyond 35 units', () => {
+  const game = withShips(createGame({ seed: 'tractor-reach' }), (ship, index) => {
+    if (ship.id === 'axis-flagship') return { ...ship, x: 10, y: 10, systems: { ...ship.systems, phasers: 0, photons: 0 } };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 60, y: 10 };
+    return { ...ship, x: 90 + (index % 5), y: 90 + Math.floor(index / 5) };
+  });
+  assert.equal(RANGES.tractor, 35);
+  assert.equal(chooseAiAction(game, 'axis-flagship').type, 'move');
+});
+
+test('the player tractor beam pulls by the same amount as the autopilot beam', () => {
+  const game = withShips(createGame({ seed: 'player-tractor' }), (ship, index) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 20, y: 10 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 40, y: 10 };
+    return { ...ship, x: 90 + (index % 5), y: 90 + Math.floor(index / 5) };
+  });
+  const firebreather = getShip(
+    applyPlayerAction(game, { type: 'tractor', targetId: 'axis-flagship' }).game,
+    'axis-flagship',
+  );
+  assert.equal(firebreather.x, 25);
+  assert.equal(firebreather.tractorBy, 'fed-flagship');
+});
+
+test('a tractor lock dies with the ship that cast it', () => {
+  const game = withShips(placedGame('stale-lock'), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, tractorBy: 'axis-flagship' };
+    if (ship.id === 'axis-flagship') return { ...ship, status: 'destroyed' };
+    return ship;
+  });
+  const result = applyPlayerAction(game, { type: 'move', dx: 1, dy: 0 });
+  assert.ok(!/tractor lock/i.test(result.messages.join(' ')), 'a wreck cannot keep holding you');
+  assert.equal(getShip(result.game, 'fed-flagship').x, 11);
+});
+
+test('an autopilot held by a destroyed locker starts moving again', () => {
+  const game = withShips(createGame({ seed: 'stale-ai-lock' }), (ship, index) => {
+    if (ship.id === 'bloc-flagship') return { ...ship, x: 20, y: 20, tractorBy: 'axis-flagship' };
+    if (ship.id === 'axis-flagship') return { ...ship, status: 'destroyed' };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 50, y: 50 };
+    return { ...ship, x: 90 + (index % 5), y: 90 + Math.floor(index / 5) };
+  });
+  assert.equal(chooseAiAction(game, 'bloc-flagship').type, 'move');
+});
+
+test('autopilot volleys can miss, exactly as the player\'s can', () => {
+  const outcomes = new Set();
+  for (let index = 0; index < 24; index += 1) {
+    const game = withShips(
+      { ...createGame({ seed: `ai-miss-${index}` }), randomStep: index },
+      (ship, i) => {
+        if (ship.id === 'axis-flagship') return { ...ship, x: 20, y: 10, systems: { ...ship.systems, photons: 0 } };
+        if (ship.id === 'fed-flagship') return { ...ship, x: 30, y: 10 };
+        return { ...ship, x: 90 + (i % 5), y: 90 + Math.floor(i / 5) };
+      },
+    );
+    const log = resolveComputerTurns({ ...game, phase: 'computer' }).log.join(' ');
+    if (/Missed!/.test(log)) outcomes.add('miss');
+    else if (/fires phasers/.test(log)) outcomes.add('hit');
+  }
+  assert.ok(outcomes.has('hit'), 'autopilots must still land shots');
+  assert.ok(outcomes.has('miss'), 'autopilots must be able to miss too');
+});
+
+test('boarding the vendetta ship ends the vendetta rather than arming a self-hunt', () => {
+  const game = {
+    ...withShips(placedGame('vendetta-capture'), (ship) => ship.id === 'axis-flagship'
+      ? { ...ship, status: 'vacant', crew: 0 }
+      : ship),
+    vendettaShipId: 'axis-flagship',
+  };
+  const result = applyPlayerAction(game, {
+    type: 'transport', targetId: 'axis-flagship', amount: 8, transferCommand: true,
+  });
+  assert.equal(result.game.vendettaShipId, null);
+  assert.equal(result.game.playerShipId, 'axis-flagship');
+  assert.notEqual(chooseAiAction(result.game, 'axis-flagship').targetId, 'axis-flagship');
+});
+
+test('a vendetta marker on a friendly hull cannot make it hunt its own side', () => {
+  const game = withShips(
+    { ...createGame({ seed: 'vendetta-friendly' }), vendettaShipId: 'fed-cruiser-1' },
+    (ship) => {
+      if (ship.id === 'fed-cruiser-1') return { ...ship, x: 10, y: 10 };
+      if (ship.id === 'fed-flagship') return { ...ship, x: 15, y: 10 };
+      return ship;
+    },
+  );
+  // Without the faction guard this returns photons aimed at the player's own flagship.
+  assert.notEqual(chooseAiAction(game, 'fed-cruiser-1').targetId, 'fed-flagship');
+});
+
+test('resigning twice does not hand the successor over as well', () => {
+  const once = applyPlayerAction(createGame({ seed: 'resign-twice' }), { type: 'resign' });
+  assert.equal(once.game.resigned, true);
+  const twice = applyPlayerAction(once.game, { type: 'resign' });
+  assert.match(twice.messages.join(' '), /already resigned/i);
+  assert.equal(twice.game.playerShipId, once.game.playerShipId);
 });

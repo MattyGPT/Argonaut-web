@@ -79,6 +79,8 @@ const spectate = () => {
 };
 
 const dispatch = async (action) => {
+  // The spectator loop mutates `game` on a timer; ignore input while it runs.
+  if (spectating) return;
   if (action.type === 'map-select') {
     const ship = game.ships.find((entry) => entry.id === action.targetId);
     view = {

@@ -1,32 +1,45 @@
-import { GRID_SIZE, SHIP_TEMPLATES } from './constants.js';
+import { GRID_SIZE, MISS_CHANCE, RANGES, SHIELD_PER_ENGINE } from './constants.js';
 import { createRng } from './rng.js';
-import { distance, getLivingShips, getShip } from './state.js';
+import {
+  alertLevel,
+  crewCapacity,
+  distance,
+  engineCapacity,
+  getLivingShips,
+  getShip,
+  isTractorHeld,
+  shieldCapacity,
+  systemRange,
+  systemUnits,
+} from './state.js';
 
-const RANGES = Object.freeze({
-  phasers: 30,
-  photons: 10,
-  tractor: 35,
-  hyperspace: GRID_SIZE,
-  selfDestruct: 20,
-});
-
-const SHIELD_PER_ENGINE = 5;
 const TRACTOR_PULL_PER_UNIT = 5;
 const SHRAPNEL_EXTRA_RANGE = 15;
 const STARBASE_BLAST_RADIUS = 40;
-const MISS_CHANCE = 0.12;
 const HYPERSPACE_BURN_CHANCE = 0.1;
 
+/**
+ * The manual fixes absolute damage ranges (phasers 0.20-2.00, photons 0.20-3.00)
+ * against the original's shield scale. The remake keeps its rescaled per-unit
+ * damage as the MEAN of a symmetric seeded roll, so average damage per volley is
+ * unchanged while shot to shot varies. The spreads hold the manual's ratio of
+ * (max - min) to (max + min): 0.818 for phasers, 0.875 for photons.
+ */
+const WEAPONS = Object.freeze({
+  phasers: Object.freeze({ base: 12, perUnit: 4, spread: 0.25 }),
+  photons: Object.freeze({ base: 24, perUnit: 9, spread: 0.267 }),
+});
+
 const isActive = (ship) => ship?.status === 'active';
-const systemUnits = (ship, system) => Math.max(0, ship?.systems?.[system] ?? 0);
-const systemRange = (ship, system, perUnit) => systemUnits(ship, system) * perUnit;
-
-const templateFor = (ship) => Object.values(SHIP_TEMPLATES)
-  .find((template) => template.className === ship.className);
-
-const shieldCapacity = (ship) => templateFor(ship)?.shields ?? ship.shields;
-const crewCapacity = (ship) => templateFor(ship)?.crew ?? ship.crew;
 const unitName = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
+
+/** Rolls one volley's damage. Shared by the player's shots and the autopilots'. */
+export const weaponDamage = (type, shooter, rng) => {
+  const { base, perUnit, spread } = WEAPONS[type];
+  const nominal = base + systemUnits(shooter, type) * perUnit;
+  const low = nominal * (1 - spread);
+  return Math.max(1, Math.round(low + rng.next() * nominal * 2 * spread));
+};
 
 const replaceShip = (game, replacement) => ({
   ...game,
@@ -194,7 +207,7 @@ const scanReport = (target) => ({
 });
 
 const mapReport = (game, actor) => {
-  const range = systemRange(actor, 'mapper', 20);
+  const range = systemRange(actor, 'mapper');
   const visible = getLivingShips(game)
     .filter((ship) => distance(actor, ship) <= range)
     .sort((left, right) => distance(actor, left) - distance(actor, right));
@@ -204,14 +217,18 @@ const mapReport = (game, actor) => {
   };
 };
 
+/**
+ * The manual has the radio report "the location and condition of allied ships",
+ * so each contact answers with its alert level as well as its range.
+ */
 const radioReport = (game, actor) => {
-  const range = systemRange(actor, 'radio', 25);
+  const range = systemRange(actor, 'radio');
   const contacts = getLivingShips(game)
     .filter((ship) => ship.id !== actor.id && ship.faction === actor.faction && distance(actor, ship) <= range);
   return {
     title: 'Radio traffic',
     lines: contacts.length
-      ? contacts.map((ship) => `${ship.name}: standing by at ${distance(actor, ship).toFixed(1)}.`)
+      ? contacts.map((ship) => `${ship.name}: condition ${alertLevel(ship)} at ${distance(actor, ship).toFixed(1)}; shields ${ship.shields}, crew ${ship.crew}, ${ship.status}.`)
       : ['No allied stations answer within radio range.'],
   };
 };
@@ -231,9 +248,7 @@ const weaponAction = (game, action, actor, type) => {
     const updated = completeTurn(advanceRandom(replaceShip(game, shooter)));
     return result(updated, `${actor.name} fires ${type} at ${found.target.name}. Missed!`, { events: [fireEvent(type, actor, found.target, false)] });
   }
-  const damage = type === 'phasers'
-    ? 12 + systemUnits(actor, 'phasers') * 4
-    : 24 + systemUnits(actor, 'photons') * 9;
+  const damage = weaponDamage(type, actor, rng);
   const before = found.target.status;
   const hit = damageShip(found.target, damage, rng);
   const kill = before === 'active' && hit.status !== 'active' ? 1 : 0;
@@ -271,12 +286,12 @@ export const resolveCollision = (game, actor) => {
 const moveAction = (game, action, actor) => {
   const disabled = requiresSystem(game, actor, 'engines');
   if (disabled) return disabled;
-  if (actor.tractorBy) return invalid(game, `${actor.name} cannot move while held by a tractor lock.`);
+  if (isTractorHeld(game, actor)) return invalid(game, `${actor.name} cannot move while held by a tractor lock.`);
   const dx = Number(action.dx);
   const dy = Number(action.dy);
   if (!Number.isFinite(dx) || !Number.isFinite(dy)) return invalid(game, 'Movement requires numeric displacement coordinates.');
   const displacement = Math.hypot(dx, dy);
-  const capacity = systemUnits(actor, 'engines') * 10;
+  const capacity = engineCapacity(actor);
   if (displacement > capacity) return invalid(game, `Movement exceeds engine capacity of ${capacity}.`);
   const x = actor.x + dx;
   const y = actor.y + dy;
@@ -298,6 +313,15 @@ const pullToward = (actor, target, pull) => {
   };
 };
 
+/**
+ * One tractor lock: how hard the beam pulls and where it lands the target.
+ * Shared by the player's command and the autopilots' so both beams behave alike.
+ */
+export const tractorLock = (actor, target) => {
+  const pull = systemUnits(actor, 'tractor') * TRACTOR_PULL_PER_UNIT;
+  return { pull, position: pullToward(actor, target, pull) };
+};
+
 const tractorAction = (game, action, actor) => {
   const disabled = requiresSystem(game, actor, 'tractor');
   if (disabled) return disabled;
@@ -308,8 +332,7 @@ const tractorAction = (game, action, actor) => {
   const found = hostileTarget(game, action, actor);
   if (found.error) return invalid(game, found.error, found.requiresTarget);
   if (distance(actor, found.target) > RANGES.tractor) return invalid(game, `${found.target.name} is out of tractor range.`);
-  const pull = systemUnits(actor, 'tractor') * TRACTOR_PULL_PER_UNIT;
-  const position = pullToward(actor, found.target, pull);
+  const { pull, position } = tractorLock(actor, found.target);
   const updated = completeTurn(replaceShip(game, { ...found.target, tractorBy: actor.id, x: position.x, y: position.y }));
   return result(updated, [
     `${actor.name} locks a tractor beam on ${found.target.name}.`,
@@ -322,7 +345,7 @@ const transportAction = (game, action, actor) => {
   if (disabled) return disabled;
   const found = targetFor(game, action, actor);
   if (found.error) return invalid(game, found.error, found.requiresTarget);
-  if (distance(actor, found.target) > systemRange(actor, 'transporter', 10)) return invalid(game, `${found.target.name} is out of transporter range.`);
+  if (distance(actor, found.target) > systemRange(actor, 'transporter')) return invalid(game, `${found.target.name} is out of transporter range.`);
   if (isActive(found.target) && found.target.faction !== actor.faction) return invalid(game, 'Cannot transport onto a live enemy ship.');
   const amount = Number(action.amount ?? 10);
   if (!Number.isInteger(amount) || amount < 1) return invalid(game, 'Transport crew amount must be a positive whole number.');
@@ -342,6 +365,9 @@ const transportAction = (game, action, actor) => {
   const base = {
     ...game,
     playerShipId: action.transferCommand ? captured.id : game.playerShipId,
+    // Boarding the vendetta ship ends the vendetta; otherwise that hull would
+    // keep hunting Captain Jason after it joined the Federation.
+    vendettaShipId: game.vendettaShipId === captured.id ? null : game.vendettaShipId,
     ships: game.ships.map((ship) => ship.id === source.id ? source : ship.id === captured.id ? captured : ship),
   };
   return result(completeTurn(base), `${captured.name} is occupied by ${placed} crew${action.transferCommand ? '; command transferred.' : '.'}`);
@@ -426,7 +452,7 @@ export const applyPlayerAction = (game, action = {}) => {
       if (disabled) return disabled;
       const found = targetFor(game, action, actor);
       if (found.error) return invalid(game, found.error, found.requiresTarget);
-      if (distance(actor, found.target) > systemRange(actor, 'scanner', 10)) return invalid(game, `${found.target.name} is out of scanner range.`);
+      if (distance(actor, found.target) > systemRange(actor, 'scanner')) return invalid(game, `${found.target.name} is out of scanner range.`);
       return result(game, `Scan of ${found.target.name} complete.`, { report: scanReport(found.target) });
     }
     case 'map': {
@@ -442,6 +468,7 @@ export const applyPlayerAction = (game, action = {}) => {
     case 'transport': return transportAction(game, action, actor);
     case 'autopilot': return result(completeTurn(game), `${actor.name} autopilot holds course.`);
     case 'resign': {
+      if (game.resigned) return invalid(game, 'You have already resigned command; the autopilot has the conn.');
       const successor = game.ships
         .filter((ship) => isActive(ship) && ship.faction === actor.faction && ship.id !== actor.id)
         .sort((a, b) => (b.shields + b.crew) - (a.shields + a.crew) || a.id.localeCompare(b.id))[0];
