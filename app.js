@@ -1,11 +1,11 @@
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, orderTargets } from './game/actions.js';
 import { SPECTATOR_TICK_MS, TARGETED_ORDERS } from './game/constants.js';
-import { createGame } from './game/state.js';
+import { alertLevel, createGame, getShip } from './game/state.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './game/turns.js';
 import { bindInput, promptForCoordinates, promptForTarget } from './ui/input.js';
 import { renderGame, reportFor } from './ui/render.js';
 import { playEffect, playEvent } from './ui/sound.js';
-import { playEffects } from './ui/fx.js';
+import { playEffects, replayEffects } from './ui/fx.js';
 
 const SAVE_KEY = 'argonaut-web-save-v1';
 
@@ -38,12 +38,33 @@ const targetActions = new Set(['phasers', 'photons', 'tractor', 'scan', 'transpo
 
 const refresh = () => {
   renderGame(game, view);
+  warnOnRedAlert();
   save();
+};
+
+/** Sounds the klaxon on the transition into RED, not on every frame spent there. */
+let lastCondition = null;
+const warnOnRedAlert = () => {
+  const actor = getShip(game, game.playerShipId);
+  const condition = actor ? alertLevel(actor) : null;
+  if (condition === 'RED' && lastCondition && lastCondition !== 'RED') playEvent('klaxon', game.sound);
+  lastCondition = condition;
+};
+
+/** Nudges the map when a volley lands on you. CSS honors prefers-reduced-motion. */
+const shake = () => {
+  const map = document.querySelector('#map');
+  if (!map?.classList) return;
+  map.classList.remove('shake');
+  void map.offsetWidth; // restart the animation if one is already running
+  map.classList.add('shake');
+  setTimeout(() => map.classList.remove('shake'), 460);
 };
 
 const showEvents = (events) => {
   if (!events?.length) return;
   playEffects(events, document.querySelector('#map'), game.playerShipId);
+  if (events.some((e) => e.toId === game.playerShipId && e.hit)) shake();
   if (game.sound) {
     events
       .filter((e) => e.fromId === game.playerShipId || e.toId === game.playerShipId)
@@ -113,6 +134,19 @@ const dispatch = async (action) => {
 
   if (['rollcall', 'statistics', 'shots', 'fullmap', 'fleet'].includes(action.type)) {
     view = { ...view, orderShipId: null, report: reportFor(game, action.type) };
+    refresh();
+    return;
+  }
+
+  if (action.type === 'replay') {
+    const round = game.lastRound;
+    if (!round?.events?.length) {
+      view = { ...view, entries: ['No round to replay yet.'] };
+      refresh();
+      return;
+    }
+    replayEffects(round.events, document.querySelector('#map'));
+    view = { ...view, entries: round.entries ?? [], report: null, orderShipId: null };
     refresh();
     return;
   }
@@ -200,6 +234,19 @@ document.querySelector('#new-game').addEventListener('click', () => {
   document.querySelector('#new-game-dialog').showModal();
 });
 
+/**
+ * The opening narrative. An extended war names the captain who has sworn to hunt
+ * you — but not the hull they command, which is what makes scanning worth doing.
+ */
+const openingLines = (war) => {
+  const lines = [`New war initialized with seed ${war.seed}.`];
+  if (war.extended) {
+    const hunter = getShip(war, war.vendettaShipId);
+    lines.push(`Intelligence: a captain called ${hunter?.captain ?? 'an unnamed officer'} has sworn to hunt you down. Scan the enemy fleet to learn which hull they command.`);
+  }
+  return lines;
+};
+
 document.querySelector('#new-game-form').addEventListener('submit', () => {
   const dialog = document.querySelector('#new-game-dialog');
   if (dialog.returnValue === 'confirm') {
@@ -209,7 +256,7 @@ document.querySelector('#new-game-form').addEventListener('submit', () => {
       sound: document.querySelector('#sound').checked,
       extended: document.querySelector('#extended').checked,
     });
-    view = { entries: [`New war initialized with seed ${game.seed}.`] };
+    view = { entries: openingLines(game) };
     refresh();
   }
 });

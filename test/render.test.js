@@ -155,3 +155,43 @@ test('the war concluded panel carries a battle report and roll call', () => {
   assert.match(panel, /Stardates elapsed: 1\./);
   assert.match(panel, /Roll call/);
 });
+
+test('a scanned ace wears a star; an unscanned one does not', () => {
+  const base = createGame({ seed: 'ace-mark', extended: true });
+  const aced = {
+    ...base,
+    ships: base.ships.map((ship) => (ship.id === 'fed-flagship' ? { ...ship, kills: 3 } : ship)),
+    scanned: { 'fed-flagship': true },
+  };
+  elements.clear();
+  renderGame(aced);
+  assert.match(read('#map-field').innerHTML, /class="ship Federation active ace"/);
+
+  elements.clear();
+  renderGame({ ...aced, scanned: {} });
+  assert.ok(!/active ace/.test(read('#map-field').innerHTML), 'who captains a hull is intelligence you have to earn');
+});
+
+test('a classic war never marks an ace', () => {
+  const base = createGame({ seed: 'ace-classic' });
+  elements.clear();
+  renderGame({
+    ...base,
+    ships: base.ships.map((ship) => (ship.id === 'fed-flagship' ? { ...ship, kills: 5 } : ship)),
+    scanned: { 'fed-flagship': true },
+  });
+  assert.ok(!/ ace/.test(read('#map-field').innerHTML));
+});
+
+test('the replay button stays hidden until a round has been fought', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'replay-hidden' }));
+  assert.equal(read('#replay-round').hidden, true);
+
+  elements.clear();
+  renderGame({
+    ...createGame({ seed: 'replay-shown' }),
+    lastRound: { events: [{ kind: 'explosion', x2: 5, y2: 5, hit: true }], entries: ['A round.'] },
+  });
+  assert.equal(read('#replay-round').hidden, false);
+});

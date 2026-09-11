@@ -43,7 +43,11 @@ export const playEvent = (kind, enabled) => {
     else if (kind === 'photons') tone(c, { type: 'square', from: 130, to: 55, duration: 0.22, gain: 0.06 });
     else if (kind === 'explosion') { noise(c, { duration: 0.4, gain: 0.1 }); tone(c, { type: 'sine', from: 90, to: 40, duration: 0.3, gain: 0.06 }); }
     else if (kind === 'miss') tone(c, { type: 'sine', from: 320, to: 220, duration: 0.08, gain: 0.02 });
-    else tone(c, { type: 'sine', from: 520, duration: 0.06, gain: 0.03 });
+    else if (kind === 'klaxon') {
+      // Two alternating wails, the way a red alert sounds rather than a beep.
+      tone(c, { type: 'triangle', from: 440, to: 330, duration: 0.3, gain: 0.05 });
+      tone(c, { type: 'triangle', from: 440, to: 330, duration: 0.3, gain: 0.05, delay: 0.36 });
+    } else tone(c, { type: 'sine', from: 520, duration: 0.06, gain: 0.03 });
   } catch {
     /* optional sound */
   }

@@ -143,6 +143,19 @@ you issue an order.
   comes for Captain Jason through any amount of fire.
 - Doctrine applies only to hulls you have not ordered — your orders always
   outrank your own captains' instincts.
+- **Every hull has a captain, and you have to earn their names.** A new extended
+  war tells you that a captain — by name — has sworn to hunt you down, but not
+  which ship they command. Scanning a hull reveals who captains it, so finding
+  your hunter means getting inside scanner range of the enemy fleet. That is what
+  makes the scanner worth its hardware.
+- **Aces and a deepening vendetta.** Two credited kills make a captain an ace, and
+  a scanned ace wears a ★ on the map. Every third kill the vendetta captain scores
+  makes its volleys against your command ship bite 25% harder, so ignoring that
+  hull gets worse the longer you leave it alive.
+- **Replay the round.** The button in the battle narrative header plays the last
+  computer phase back on the map — every alliance's beams, torpedoes, and kills,
+  not just the ones that touched you — with that round's narrative beside it.
+  Twenty autopilot decisions no longer arrive as one wall of text.
 
 ## The tactical display
 
@@ -170,7 +183,11 @@ you issue an order.
 - **Classic view** — the top-bar toggle switches to a black phosphor CRT theme
   with scanlines; your choice persists.
 - **Sound** — enable tactical sound in `New game` for distinct phaser, photon,
-  explosion, and miss effects (WebAudio, no assets).
+  explosion, and miss effects (WebAudio, no assets). A klaxon sounds on the
+  transition into RED alert, not continuously while you sit there.
+- **Impact juice** — phaser hits flash where they land and the map shakes when a
+  volley lands on your command ship. Both are suppressed under
+  `prefers-reduced-motion`, and nothing in the rules reads them.
 
 ## Rights note
 
@@ -179,3 +196,7 @@ restoration exercise unless the original rights holder grants permission for a
 public release using the Argonaut title, story, names, and other game
 expression. The program does not include the original `.COM`, screenshots, or
 other original game assets.
+
+Captain names, fleet orders, alliance doctrines, the Xanadu dockyard, and the
+extended-war narrative are original to this remake — the manual names every ship
+but only one person, Captain Jason.

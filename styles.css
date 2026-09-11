@@ -684,3 +684,67 @@ body.classic .ship.has-order::before {
   border-color: var(--cyan);
   color: var(--cyan);
 }
+
+/* Round replay, ace captains, and impact juice */
+.panel-title button.tiny {
+  padding: .1rem .45rem;
+  min-height: 0;
+  font-size: .68rem;
+  text-transform: none;
+  letter-spacing: .02em;
+}
+
+.ship.ace::after {
+  content: "★";
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  color: var(--bloc);
+  font-size: .6rem;
+  line-height: 1;
+  text-shadow: 0 0 5px currentColor;
+}
+
+.fx-impact {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  animation: fx-impact .34s ease-out forwards;
+}
+
+@keyframes fx-impact {
+  from {
+    r: .4;
+    opacity: .95;
+  }
+
+  to {
+    r: 3;
+    opacity: 0;
+  }
+}
+
+#map.shake {
+  animation: map-shake .42s ease-out;
+}
+
+@keyframes map-shake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-3px, 2px); }
+  40% { transform: translate(3px, -2px); }
+  60% { transform: translate(-2px, -1px); }
+  80% { transform: translate(2px, 1px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #map.shake {
+    animation: none;
+  }
+
+  .fx-impact,
+  .fx-boom,
+  .fx-phaser {
+    animation-duration: .01s;
+  }
+}
