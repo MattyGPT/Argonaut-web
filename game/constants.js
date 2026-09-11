@@ -118,3 +118,6 @@ export const ENGINE_MOVE_PER_UNIT = 10;
 
 /** Shield power gained per engine unit flushed. */
 export const SHIELD_PER_ENGINE = 5;
+
+/** Shots can miss. The same roll governs the player's volleys and the autopilots'. */
+export const MISS_CHANCE = 0.12;

@@ -52,8 +52,9 @@ The remake follows the manual's rules and the behavior confirmed in the
 original executable:
 
 - Reinforcing shields (`1`) flushes engine power and needs working engines.
-- Weapons can miss, and every volley rolls its own damage inside a fixed band
-  instead of hitting for the same number each time.
+- Weapons can miss — yours and the enemy's alike, at the same rate — and every
+  volley rolls its own damage inside a fixed band instead of hitting for the
+  same number each time.
 - The tractor beam (`5`) locks and pulls its target toward you, and enemy beams
   pull you just as hard. A lock ends when the ship holding it dies; hyperspace
   (`-`) also shakes one off, but can burn a ship up.
@@ -74,8 +75,8 @@ original executable:
 - Backtick runs the autopilot for your ship for one turn; it pursues, fires,
   and navigates like the enemy captains (ruthless, but clumsy — it can collide).
 - Resigning (`Esc`) hands the whole Federation to the autopilot and lets you
-  watch the war play out. The vendetta against Captain Jason ends when he
-  resigns or dies.
+  watch the war play out; it is final for that war. The vendetta against Captain
+  Jason ends when he resigns or dies — or when you board the vendetta ship.
 - Enemy fleets concentrate their fire on a shared target (formation), while the
   vendetta ship breaks formation to hunt your command ship.
 - An autopilot reduced to its last ships and badly outmatched will surrender

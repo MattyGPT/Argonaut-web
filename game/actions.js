@@ -1,4 +1,4 @@
-import { GRID_SIZE, RANGES, SHIELD_PER_ENGINE } from './constants.js';
+import { GRID_SIZE, MISS_CHANCE, RANGES, SHIELD_PER_ENGINE } from './constants.js';
 import { createRng } from './rng.js';
 import {
   alertLevel,
@@ -16,7 +16,6 @@ import {
 const TRACTOR_PULL_PER_UNIT = 5;
 const SHRAPNEL_EXTRA_RANGE = 15;
 const STARBASE_BLAST_RADIUS = 40;
-const MISS_CHANCE = 0.12;
 const HYPERSPACE_BURN_CHANCE = 0.1;
 
 /**
@@ -366,6 +365,9 @@ const transportAction = (game, action, actor) => {
   const base = {
     ...game,
     playerShipId: action.transferCommand ? captured.id : game.playerShipId,
+    // Boarding the vendetta ship ends the vendetta; otherwise that hull would
+    // keep hunting Captain Jason after it joined the Federation.
+    vendettaShipId: game.vendettaShipId === captured.id ? null : game.vendettaShipId,
     ships: game.ships.map((ship) => ship.id === source.id ? source : ship.id === captured.id ? captured : ship),
   };
   return result(completeTurn(base), `${captured.name} is occupied by ${placed} crew${action.transferCommand ? '; command transferred.' : '.'}`);
@@ -466,6 +468,7 @@ export const applyPlayerAction = (game, action = {}) => {
     case 'transport': return transportAction(game, action, actor);
     case 'autopilot': return result(completeTurn(game), `${actor.name} autopilot holds course.`);
     case 'resign': {
+      if (game.resigned) return invalid(game, 'You have already resigned command; the autopilot has the conn.');
       const successor = game.ships
         .filter((ship) => isActive(ship) && ship.faction === actor.faction && ship.id !== actor.id)
         .sort((a, b) => (b.shields + b.crew) - (a.shields + a.crew) || a.id.localeCompare(b.id))[0];

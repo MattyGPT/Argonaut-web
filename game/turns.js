@@ -1,4 +1,4 @@
-import { FACTIONS, GRID_SIZE, RANGES } from './constants.js';
+import { FACTIONS, GRID_SIZE, MISS_CHANCE, RANGES } from './constants.js';
 import { damageShip, fireEvent, resolveCollision, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
@@ -17,6 +17,16 @@ const resolveAiAction = (game, shipId) => {
   if (['phasers', 'photons'].includes(action.type)) {
     const target = getShip(game, action.targetId);
     const rng = rngFor(game);
+    // Autopilots miss at the same rate as the player, from the same roll order.
+    if (rng.next() < MISS_CHANCE) {
+      const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
+      return {
+        game: advanceRandom(replaceShip(game, shooter)),
+        messages: [`${actor.name} fires ${action.type} at ${target.name}. Missed!`],
+        type: action.type,
+        events: [fireEvent(action.type, actor, target, false)],
+      };
+    }
     const amount = weaponDamage(action.type, actor, rng);
     const before = target.status;
     const hit = damageShip(target, amount, rng);

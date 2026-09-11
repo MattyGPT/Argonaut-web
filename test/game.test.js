@@ -497,3 +497,58 @@ test('an autopilot held by a destroyed locker starts moving again', () => {
   });
   assert.equal(chooseAiAction(game, 'bloc-flagship').type, 'move');
 });
+
+test('autopilot volleys can miss, exactly as the player\'s can', () => {
+  const outcomes = new Set();
+  for (let index = 0; index < 24; index += 1) {
+    const game = withShips(
+      { ...createGame({ seed: `ai-miss-${index}` }), randomStep: index },
+      (ship, i) => {
+        if (ship.id === 'axis-flagship') return { ...ship, x: 20, y: 10, systems: { ...ship.systems, photons: 0 } };
+        if (ship.id === 'fed-flagship') return { ...ship, x: 30, y: 10 };
+        return { ...ship, x: 90 + (i % 5), y: 90 + Math.floor(i / 5) };
+      },
+    );
+    const log = resolveComputerTurns({ ...game, phase: 'computer' }).log.join(' ');
+    if (/Missed!/.test(log)) outcomes.add('miss');
+    else if (/fires phasers/.test(log)) outcomes.add('hit');
+  }
+  assert.ok(outcomes.has('hit'), 'autopilots must still land shots');
+  assert.ok(outcomes.has('miss'), 'autopilots must be able to miss too');
+});
+
+test('boarding the vendetta ship ends the vendetta rather than arming a self-hunt', () => {
+  const game = {
+    ...withShips(placedGame('vendetta-capture'), (ship) => ship.id === 'axis-flagship'
+      ? { ...ship, status: 'vacant', crew: 0 }
+      : ship),
+    vendettaShipId: 'axis-flagship',
+  };
+  const result = applyPlayerAction(game, {
+    type: 'transport', targetId: 'axis-flagship', amount: 8, transferCommand: true,
+  });
+  assert.equal(result.game.vendettaShipId, null);
+  assert.equal(result.game.playerShipId, 'axis-flagship');
+  assert.notEqual(chooseAiAction(result.game, 'axis-flagship').targetId, 'axis-flagship');
+});
+
+test('a vendetta marker on a friendly hull cannot make it hunt its own side', () => {
+  const game = withShips(
+    { ...createGame({ seed: 'vendetta-friendly' }), vendettaShipId: 'fed-cruiser-1' },
+    (ship) => {
+      if (ship.id === 'fed-cruiser-1') return { ...ship, x: 10, y: 10 };
+      if (ship.id === 'fed-flagship') return { ...ship, x: 15, y: 10 };
+      return ship;
+    },
+  );
+  // Without the faction guard this returns photons aimed at the player's own flagship.
+  assert.notEqual(chooseAiAction(game, 'fed-cruiser-1').targetId, 'fed-flagship');
+});
+
+test('resigning twice does not hand the successor over as well', () => {
+  const once = applyPlayerAction(createGame({ seed: 'resign-twice' }), { type: 'resign' });
+  assert.equal(once.game.resigned, true);
+  const twice = applyPlayerAction(once.game, { type: 'resign' });
+  assert.match(twice.messages.join(' '), /already resigned/i);
+  assert.equal(twice.game.playerShipId, once.game.playerShipId);
+});

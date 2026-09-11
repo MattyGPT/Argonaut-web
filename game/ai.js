@@ -16,7 +16,12 @@ const pickTarget = (game, actor) => {
   if (enemies.length === 0) return null;
   if (isVendetta(game, actor)) {
     const player = getShip(game, game.playerShipId);
-    if (player && isActive(player)) return { ship: player, range: distance(actor, player) };
+    // A vendetta only makes sense against an enemy: if the vendetta ship has been
+    // captured or command transferred onto it, hunting "Jason" means shooting
+    // your own side, or yourself.
+    if (player && isActive(player) && player.faction !== actor.faction && player.id !== actor.id) {
+      return { ship: player, range: distance(actor, player) };
+    }
   }
   const flagship = game.ships.find((ship) => isActive(ship) && ship.faction === actor.faction && ship.id.endsWith('-flagship')) ?? actor;
   return enemies

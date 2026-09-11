@@ -33,6 +33,9 @@ export const bindInput = (root, dispatch) => {
 
   document.addEventListener('keydown', (event) => {
     if (event.target.matches('input,select,textarea')) return;
+    // A modal prompt owns the keyboard. Without this guard Escape resigns command
+    // instead of dismissing the dialog, and command keys fire behind the modal.
+    if (document.querySelector('dialog[open]')) return;
     const command = keys[event.key];
     if (!command) return;
     event.preventDefault();
