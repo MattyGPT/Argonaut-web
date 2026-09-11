@@ -1,5 +1,5 @@
 import { DOCKING, FACTIONS, GRID_SIZE, MISS_CHANCE, RANGES, STALEMATE_ROUNDS, SURRENDER } from './constants.js';
-import { damageShip, fireEvent, resolveCollision, tractorLock, weaponDamage } from './actions.js';
+import { damageShip, detonate, fireEvent, flushShields, resolveCollision, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
 import {
@@ -23,6 +23,19 @@ const resolveAiAction = (game, shipId) => {
   if (!isActive(actor)) return { game, messages: [], type: 'pass' };
   const action = chooseAiAction(game, shipId);
   if (action.type === 'pass') return { game, messages: [`${actor.name} holds position.`], type: action.type };
+  if (action.type === 'shields') {
+    const flushed = flushShields(actor);
+    if (!flushed) return { game, messages: [`${actor.name} holds position.`], type: 'pass' };
+    return {
+      game: replaceShip(game, flushed.ship),
+      messages: [`${actor.name} has flushed its engines for shield power.`],
+      type: action.type,
+    };
+  }
+  if (action.type === 'self-destruct') {
+    const blast = detonate(game, actor);
+    return { game: blast.game, messages: blast.messages, type: action.type };
+  }
   if (['phasers', 'photons'].includes(action.type)) {
     const target = getShip(game, action.targetId);
     const rng = rngFor(game);
@@ -60,12 +73,16 @@ const resolveAiAction = (game, shipId) => {
       return { game, messages: [`${actor.name} holds position.`], type: 'pass' };
     }
     const { pull, position } = tractorLock(actor, target);
+    const pulled = { ...target, tractorBy: actor.id, x: position.x, y: position.y };
+    const collision = resolveCollision(replaceShip(game, pulled), pulled);
     return {
-      game: replaceShip(game, { ...target, tractorBy: actor.id, x: position.x, y: position.y }),
+      game: collision.game,
       messages: [
         `${actor.name} locks ${target.name} in a tractor beam.`,
         `Tractor beam good for ${pull} units pull. ${actor.name} has beamed ${target.name} to ${position.x}, ${position.y}.`,
+        ...collision.messages,
       ],
+      events: collision.events,
       type: action.type,
     };
   }

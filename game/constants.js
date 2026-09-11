@@ -141,8 +141,13 @@ export const SHRAPNEL_EXTRA_RANGE = 15;
 /** Xanadu's self-destruct blast; every other ship uses RANGES.selfDestruct. */
 export const STARBASE_BLAST_RADIUS = 40;
 
-/** Damage the survivor of a collision takes; the other ship is destroyed. */
-export const COLLISION_DAMAGE = 120;
+/**
+ * A collision destroys one ship and cripples the other, per the manual. The
+ * survivor loses its shields and this fraction of its crew and subsystems — a
+ * share, not a flat number, because the old flat 120 damage exceeded a scout's
+ * entire hull and so destroyed both ships.
+ */
+export const CRIPPLE = Object.freeze({ fraction: 0.5 });
 
 /** Chance a hyperspace jump burns the ship up. */
 export const HYPERSPACE_BURN_CHANCE = 0.1;
@@ -209,3 +214,55 @@ export const DOCKING = Object.freeze({
  * both sides unable, or unwilling, to ever close.
  */
 export const STALEMATE_ROUNDS = 12;
+
+/**
+ * How each alliance's captains fight, in an extended war. The original ran every
+ * autopilot on one doctrine — pursue the fleet's target, fire, and never mind your
+ * own skin — so shields only ever went down and no captain ever ran.
+ *
+ * `standoff` is the range a captain tries to fight from; `minRange` is the range it
+ * will not let an enemy inside, backing off instead of shooting. `flushBelow` and
+ * `retreatBelow` are fractions of the ship's own shield capacity.
+ */
+export const PERSONALITIES = Object.freeze({
+  Axis: Object.freeze({
+    // Swarm: goes for the nearest hull and stays inside photon range, which is where
+    // the heavy damage is. Gives ground only when practically dead, and then goes out
+    // among the enemy rather than run.
+    standoff: 6,
+    minRange: 0,
+    flushBelow: 0.2,
+    retreatBelow: 0.08,
+    suicideBelow: 0.08,
+    suicideMinEnemies: 4,
+  }),
+  Bloc: Object.freeze({
+    // Artillery: works the phaser edge and will not let anything sit at point-blank,
+    // concentrating on whichever hull it can hit that is nearest to dying.
+    standoff: 18,
+    minRange: 5,
+    flushBelow: 0.35,
+    retreatBelow: 0.12,
+    focusWeakest: true,
+    noTractor: true,
+  }),
+  Cabal: Object.freeze({
+    // Tricksters: concentrate with the fleet like anyone else, but spend a tractor
+    // beam whenever the tow would wreck the target on somebody.
+    standoff: 10,
+    minRange: 0,
+    flushBelow: 0.25,
+    retreatBelow: 0.15,
+    fleetFocus: true,
+    tractorFirst: true,
+  }),
+  Federation: Object.freeze({
+    // By the book: the original's fleet concentration, plus the damage discipline
+    // the original's autopilots never had.
+    standoff: 10,
+    minRange: 0,
+    flushBelow: 0.35,
+    retreatBelow: 0.12,
+    fleetFocus: true,
+  }),
+});

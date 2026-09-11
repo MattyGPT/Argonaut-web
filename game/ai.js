@@ -1,6 +1,16 @@
-import { AI_PURSUIT, FLEET_ORDER_TUNING, RANGES } from './constants.js';
+import { AI_PURSUIT, FLEET_ORDER_TUNING, PERSONALITIES, RANGES } from './constants.js';
+import { flushShields, tractorLock } from './actions.js';
 import { createRng } from './rng.js';
-import { distance, engineCapacity, getShip, isTractorHeld, orderFor, systemUnits } from './state.js';
+import {
+  blastRadius,
+  distance,
+  engineCapacity,
+  getShip,
+  isTractorHeld,
+  orderFor,
+  shieldCapacity,
+  systemUnits,
+} from './state.js';
 
 const isActive = (ship) => ship?.status === 'active';
 
@@ -18,10 +28,10 @@ const nearestTo = (from, ships) => ships
  * photons inside 10, phasers inside 30, otherwise a tractor lock inside 35. Null
  * when the target is past every reach or the hardware is gone.
  */
-const engage = (actor, target, range) => {
+const engage = (actor, target, range, noTractor = false) => {
   if (systemUnits(actor, 'photons') > 0 && range <= RANGES.photons) return { type: 'photons', targetId: target.id };
   if (systemUnits(actor, 'phasers') > 0 && range <= RANGES.phasers) return { type: 'phasers', targetId: target.id };
-  if (systemUnits(actor, 'tractor') > 0 && range <= RANGES.tractor) return { type: 'tractor', targetId: target.id };
+  if (!noTractor && systemUnits(actor, 'tractor') > 0 && range <= RANGES.tractor) return { type: 'tractor', targetId: target.id };
   return null;
 };
 
@@ -144,6 +154,106 @@ const orderedAction = (game, actor, order) => {
   return stepToward(actor, ward, FLEET_ORDER_TUNING.escortDistance);
 };
 
+/** Backs away from a threat on a full engine burn; the caller clamps to the map. */
+const stepAway = (actor, threat) => {
+  const capacity = engineCapacity(actor);
+  const span = distance(actor, threat) || 1;
+  return {
+    type: 'move',
+    dx: Math.round(((actor.x - threat.x) / span) * capacity),
+    dy: Math.round(((actor.y - threat.y) / span) * capacity),
+  };
+};
+
+/** Falls back on the base or the fleet when that lies away from the threat; else runs. */
+const fallBack = (game, actor, threat) => {
+  if (!canNavigate(game, actor)) return { type: 'pass' };
+  const home = withdrawTo(game, actor);
+  if (home && distance(actor, home) > 4 && distance(home, threat) > distance(actor, threat)) {
+    return stepToward(actor, home, 0);
+  }
+  return stepAway(actor, threat);
+};
+
+/**
+ * An Axis captain's last resort: go out rather than be destroyed, but only when the
+ * blast takes strictly more of the enemy than of its own fleet, and enough of them.
+ */
+const suicideRun = (game, actor, doctrine, enemies) => {
+  if (!(doctrine.suicideBelow > 0)) return null;
+  if (actor.shields > shieldCapacity(actor) * doctrine.suicideBelow) return null;
+  const blast = blastRadius(actor);
+  const inside = (list) => list.filter((ship) => distance(actor, ship) <= blast).length;
+  const friendlies = game.ships.filter((ship) => isActive(ship) && ship.faction === actor.faction && ship.id !== actor.id);
+  if (inside(enemies) < Math.max(doctrine.suicideMinEnemies, inside(friendlies) + 1)) return null;
+  return { type: 'self-destruct' };
+};
+
+/** Which hull an alliance's captains go for once the player has not ordered them. */
+const doctrineTarget = (game, actor, doctrine, enemies) => {
+  if (isVendetta(game, actor)) {
+    const player = getShip(game, game.playerShipId);
+    if (player && isActive(player) && player.faction !== actor.faction && player.id !== actor.id) return player;
+  }
+  // By the book: the original's concentration on the enemy nearest the flagship.
+  if (doctrine.fleetFocus) return pickTarget(game, actor)?.ship ?? null;
+  if (doctrine.focusWeakest) {
+    // Execute the wounded — but only among hulls this gunner can actually hit, or a
+    // battery spends the war chasing one crippled scout across the map.
+    const within = enemies.filter((ship) => distance(actor, ship) <= RANGES.phasers);
+    const pool = within.length > 0 ? within : enemies;
+    return [...pool].sort((a, b) => (a.shields + a.crew) - (b.shields + b.crew)
+      || distance(actor, a) - distance(actor, b) || a.id.localeCompare(b.id))[0];
+  }
+  return nearestTo(actor, enemies)?.ship ?? null;
+};
+
+/**
+ * How an alliance fights when the player has given that hull no orders: each
+ * doctrine keeps its own fighting range, minds its own skin, and picks its own
+ * targets. A classic war never reaches this, and a ship under orders obeys you
+ * instead of its captains.
+ */
+const doctrineAction = (game, actor) => {
+  const doctrine = PERSONALITIES[actor.faction];
+  if (!doctrine) return null;
+  const enemies = enemiesOf(game, actor);
+  if (enemies.length === 0) return { type: 'pass' };
+
+  const suicide = suicideRun(game, actor, doctrine, enemies);
+  if (suicide) return suicide;
+
+  // The vendetta is single-minded: that captain neither refits nor runs, per the
+  // manual's ship that "numbly navigates through devastating enemy fire".
+  const hunting = isVendetta(game, actor);
+  const capacity = shieldCapacity(actor);
+  const ratio = capacity ? actor.shields / capacity : 1;
+  if (!hunting && ratio <= doctrine.flushBelow && flushShields(actor)) return { type: 'shields' };
+
+  const target = doctrineTarget(game, actor, doctrine, enemies);
+  if (!target) return { type: 'pass' };
+  const range = distance(actor, target);
+
+  if (!hunting && doctrine.retreatBelow > 0 && ratio <= doctrine.retreatBelow) return fallBack(game, actor, target);
+  if (doctrine.minRange > 0 && range < doctrine.minRange && canNavigate(game, actor)) return stepAway(actor, target);
+  // Cabal would rather wreck your hull on somebody else's than shoot it — but only
+  // when the tow lands you on another enemy, so both hulls in that collision belong
+  // to someone else. Towing you onto a Cabal ship is a coin flip it will not take.
+  if (doctrine.tractorFirst && systemUnits(actor, 'tractor') > 0 && range <= RANGES.tractor
+    && !isTractorHeld(game, target)) {
+    const { position } = tractorLock(actor, target);
+    const wreck = game.ships.some((ship) => ship.id !== target.id && isActive(ship)
+      && ship.faction !== actor.faction && distance(position, ship) < 1);
+    if (wreck) return { type: 'tractor', targetId: target.id };
+  }
+
+  const shot = engage(actor, target, range, doctrine.noTractor);
+  if (shot) return shot;
+  if (!canNavigate(game, actor)) return { type: 'pass' };
+  if (range > doctrine.standoff) return stepToward(actor, target, doctrine.standoff);
+  return { type: 'pass' };
+};
+
 export const chooseAiAction = (game, shipId) => {
   const actor = getShip(game, shipId);
   if (!isActive(actor)) return { type: 'pass' };
@@ -154,6 +264,11 @@ export const chooseAiAction = (game, shipId) => {
   if (order && order.type !== 'focus') {
     const ordered = orderedAction(game, actor, order);
     if (ordered) return ordered;
+  }
+
+  if (game.extended) {
+    const doctrine = doctrineAction(game, actor);
+    if (doctrine) return doctrine;
   }
 
   const target = pickTarget(game, actor);

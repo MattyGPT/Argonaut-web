@@ -66,7 +66,10 @@ original executable:
 - Self-destruct (`=`) destroys everything in its blast radius and sprays
   shrapnel in a wider ring; the Xanadu starbase has an especially large blast.
 - Two ships occupying the same point collide — one is destroyed, the other
-  crippled. This applies to your moves as well as the autopilots'.
+  crippled: its shields burn off and it loses half its remaining crew and
+  subsystems. This applies to your moves and the autopilots', to a tractor tow
+  that drags a hull into another, and to a hyperspace arrival on an occupied
+  point.
 - If your command ship is lost, or you resign, command shifts to another
   Federation ship and the war goes on. The conflict ends when a side is wiped
   out — or, if every survivor is stranded out of engines and past reach of
@@ -80,7 +83,8 @@ original executable:
   watch the war play out; it is final for that war. The vendetta against Captain
   Jason ends when he resigns or dies — or when you board the vendetta ship.
 - Enemy fleets concentrate their fire on a shared target (formation), while the
-  vendetta ship breaks formation to hunt your command ship.
+  vendetta ship breaks formation to hunt your command ship. That is the classic
+  war; an extended war gives each alliance its own doctrine instead.
 - An autopilot reduced to its last ships and badly outmatched will surrender
   ("has surrendered to") rather than fight to annihilation.
 
@@ -124,6 +128,21 @@ you issue an order.
 - **The war ends with a battle report**: stardates elapsed, Federation losses,
   the top gun of any alliance, the hull that absorbed the most punishment, the
   clumsiest captain by collisions, and your own record as Captain Jason.
+- **Each alliance fights its own way.** In the original every autopilot ran the
+  same doctrine. In an extended war: **Axis** swarms the nearest hull and refuses
+  to give ground, refits late, and detonates rather than be destroyed once at
+  least four enemy ships — more enemies than friends — sit inside its blast;
+  **Bloc** works the phaser edge, backs off anything that closes to point-blank,
+  never tractors, and executes the weakest hull it can actually hit; **Cabal**
+  fights with its fleet but spends a tractor beam whenever it can smash you into
+  another enemy; **Federation** keeps the original's concentration and adds the
+  damage discipline the enemy captains never had.
+- **Enemy captains look after themselves now.** They flush engines into shields
+  and withdraw when mauled, so a fleet you have hurt can slip away instead of
+  fighting to the last point of shield. The vendetta ship is exempt: it still
+  comes for Captain Jason through any amount of fire.
+- Doctrine applies only to hulls you have not ordered — your orders always
+  outrank your own captains' instincts.
 
 ## The tactical display
 
