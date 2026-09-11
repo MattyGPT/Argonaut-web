@@ -40,6 +40,7 @@ const createShip = ({ id, name, faction, kind, x, y }) => {
     kills: 0,
     shotsFired: 0,
     shotsTaken: 0,
+    collisions: 0,
   };
 };
 
@@ -134,7 +135,10 @@ export const blastRadius = (ship) => ship?.className === 'Starbase' ? STARBASE_B
  * inside transporter range.
  */
 const canStillAct = (game, ship) => {
-  if (systemUnits(ship, 'engines') > 0) return true;
+  // A ship ordered to hold will not use its engines, so it counts as immobile: a
+  // fleet holding station against an enemy that cannot reach it is as hopeless as
+  // one that ran out of engines, and without this the war would never end.
+  if (orderFor(game, ship.id)?.type !== 'hold' && systemUnits(ship, 'engines') > 0) return true;
   const reach = Math.max(
     systemUnits(ship, 'phasers') > 0 ? RANGES.phasers : 0,
     systemUnits(ship, 'photons') > 0 ? RANGES.photons : 0,

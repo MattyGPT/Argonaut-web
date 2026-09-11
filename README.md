@@ -114,6 +114,16 @@ you issue an order.
 - An order naming a destroyed ship is dropped, and that hull returns to fleet
   default rather than idling.
 - Ships under orders wear a white pip on the map.
+- **Xanadu is a dockyard.** Any Federation hull that ends a stardate inside the
+  green ring around the base, and is not being dragged by a tractor beam,
+  recovers shield power and crew. The rate is deliberately slow — a gutted
+  cruiser needs a dozen quiet stardates to refit — and the base must still hold
+  half its own shields to spare the resources. Burnt-out subsystems are beyond
+  the dockyard, so losing your mapper stays permanent. This is what `withdraw`
+  is for, and it makes screening Xanadu worth a ship.
+- **The war ends with a battle report**: stardates elapsed, Federation losses,
+  the top gun of any alliance, the hull that absorbed the most punishment, the
+  clumsiest captain by collisions, and your own record as Captain Jason.
 
 ## The tactical display
 

@@ -1,4 +1,4 @@
-import { RANGES } from '../game/constants.js';
+import { DOCKING, FACTIONS, RANGES } from '../game/constants.js';
 import {
   abbreviateNarrative,
   alertLevel,
@@ -84,7 +84,7 @@ export const renderGame = (game, view = {}) => {
   document.querySelector('#turn-readout').textContent = `Stardate ${game.turn}`;
   document.querySelector('#mode-readout').textContent = game.extended ? 'EXTENDED WAR' : '';
   document.querySelector('#legend-note').textContent = game.extended
-    ? 'dashed rings = your phaser / photon / engine range · red outline = enemy that can reach you · white pip = ship under orders · click a Federation ship to order it'
+    ? 'dashed rings = your phaser / photon / engine range · green ring = Xanadu dockyard range · red outline = enemy that can reach you · white pip = ship under orders · click a Federation ship to order it'
     : 'dashed rings = your phaser / photon / engine range · red outline = enemy that can reach you';
 
   const actorActive = Boolean(actor) && actor.status === 'active';
@@ -105,12 +105,17 @@ export const renderGame = (game, view = {}) => {
 
   const rings = [];
   if (actorActive) {
-    if (actor.systems.phasers > 0) rings.push({ r: RANGES.phasers, kind: 'phasers' });
-    if (actor.systems.photons > 0) rings.push({ r: RANGES.photons, kind: 'photons' });
+    if (actor.systems.phasers > 0) rings.push({ r: RANGES.phasers, kind: 'phasers', x: actor.x, y: actor.y });
+    if (actor.systems.photons > 0) rings.push({ r: RANGES.photons, kind: 'photons', x: actor.x, y: actor.y });
     const engineReach = engineCapacity(actor);
-    if (engineReach > 0) rings.push({ r: engineReach, kind: 'engines' });
+    if (engineReach > 0) rings.push({ r: engineReach, kind: 'engines', x: actor.x, y: actor.y });
   }
-  const ringHtml = rings.map(({ r, kind }) => `<div class="range-ring ${kind}" style="--x:${actor.x};--y:${actor.y};--d:${2 * r}%" aria-hidden="true"></div>`).join('');
+  // In an extended war the dockyard at Xanadu repairs anything inside its ring.
+  const xanadu = getShip(game, 'xanadu');
+  if (game.extended && xanadu?.status === 'active' && xanadu.faction === actor?.faction) {
+    rings.push({ r: DOCKING.range, kind: 'dock', x: xanadu.x, y: xanadu.y });
+  }
+  const ringHtml = rings.map(({ r, kind, x, y }) => `<div class="range-ring ${kind}" style="--x:${x};--y:${y};--d:${2 * r}%" aria-hidden="true"></div>`).join('');
 
   const shipHtml = game.ships.filter(isVisible).map((ship) => {
     if (ship.status === 'destroyed') {
@@ -158,9 +163,10 @@ export const renderGame = (game, view = {}) => {
     : `Newest first · radio at ${Math.round(integrity * 100)}%, traffic abbreviated`;
 
   if (game.outcome) {
-    const roll = reportFor(game, 'rollcall');
+    const section = (part) => `<h2>${part.title}</h2><ul>${part.lines.map((line) => `<li>${line}</li>`).join('')}</ul>`;
     report.innerHTML = `<h2>War concluded</h2><ul><li>${game.outcome.message ?? game.outcome.kind.replace('-', ' ')}</li></ul>`
-      + `<h2>${roll.title}</h2><ul>${roll.lines.map((line) => `<li>${line}</li>`).join('')}</ul>`
+      + section(reportFor(game, 'battle-report'))
+      + section(reportFor(game, 'rollcall'))
       + `<ul><li>Begin a new war to continue.</li></ul>`;
   }
 };
@@ -247,6 +253,31 @@ export const reportFor = (game, type) => {
     return {
       title: `Fleet orders, Stardate ${game.turn}`,
       lines: [...lines, 'Select a Federation ship on the tactical map to change its orders.'],
+    };
+  }
+  if (type === 'battle-report') {
+    const survivors = game.ships.filter((ship) => ship.status !== 'destroyed');
+    const command = getShip(game, game.playerShipId);
+    const federation = game.ships.filter((ship) => ship.faction === FACTIONS.FEDERATION);
+    const losses = federation.filter((ship) => ship.status === 'destroyed').length;
+    const best = (list, pick) => list.reduce((top, ship) => (!top || pick(ship) > pick(top) ? ship : top), null);
+    const topGun = best(game.ships, (ship) => ship.kills);
+    const punished = best(survivors, (ship) => ship.shotsTaken);
+    const clumsy = best(game.ships, (ship) => ship.collisions ?? 0);
+    return {
+      title: 'Battle report',
+      lines: [
+        `Stardates elapsed: ${game.turn}.`,
+        `Federation losses: ${losses} of ${federation.length} hulls.`,
+        topGun?.kills
+          ? `Top gun: ${topGun.name} of the ${topGun.faction}, ${topGun.kills} credited kills.`
+          : 'No ship scored a kill.',
+        punished?.shotsTaken ? `Heaviest punishment taken: ${punished.name} absorbed ${punished.shotsTaken} volleys.` : null,
+        clumsy?.collisions ? `Most collisions: ${clumsy.name} with ${clumsy.collisions}.` : null,
+        command
+          ? `Your record, Captain Jason of the ${command.name}: ${command.kills} kills from ${command.shotsFired} volleys fired, ${command.shotsTaken} absorbed.`
+          : null,
+      ].filter(Boolean),
     };
   }
   const survivors = game.ships.filter((ship) => ship.status !== 'destroyed');

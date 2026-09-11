@@ -281,14 +281,17 @@ const weaponAction = (game, action, actor, type) => {
   return result(updated, `${actor.name} fires ${type} at ${found.target.name} for ${damage} damage.`, { events });
 };
 
+/** Counts a collision on both hulls; the battle report names the clumsiest captain. */
+const collided = (ship) => ({ ...ship, collisions: (ship.collisions ?? 0) + 1 });
+
 export const resolveCollision = (game, actor) => {
   const collision = game.ships.find((ship) => ship.id !== actor.id && isActive(ship) && distance(ship, actor) < 1);
   if (!collision) return { game, messages: [], events: [] };
   const rng = seededRng(game);
   const destroyedId = rng.pick([actor.id, collision.id]);
   const survivorId = destroyedId === actor.id ? collision.id : actor.id;
-  const destroyed = destroyedShip(getShip(game, destroyedId));
-  const survivor = damageShip(getShip(game, survivorId), COLLISION_DAMAGE, rng);
+  const destroyed = collided(destroyedShip(getShip(game, destroyedId)));
+  const survivor = collided(damageShip(getShip(game, survivorId), COLLISION_DAMAGE, rng));
   const updated = advanceRandom({
     ...game,
     ships: game.ships.map((ship) => ship.id === destroyed.id ? destroyed : ship.id === survivor.id ? survivor : ship),

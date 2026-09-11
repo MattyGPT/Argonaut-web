@@ -1,8 +1,17 @@
-import { FACTIONS, GRID_SIZE, MISS_CHANCE, RANGES, SURRENDER } from './constants.js';
+import { DOCKING, FACTIONS, GRID_SIZE, MISS_CHANCE, RANGES, STALEMATE_ROUNDS, SURRENDER } from './constants.js';
 import { damageShip, fireEvent, resolveCollision, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
-import { describeOrder, distance, getShip, isStranded, strongestFederation } from './state.js';
+import {
+  crewCapacity,
+  describeOrder,
+  distance,
+  getShip,
+  isStranded,
+  isTractorHeld,
+  shieldCapacity,
+  strongestFederation,
+} from './state.js';
 
 const isActive = (ship) => ship?.status === 'active';
 const replaceShip = (game, replacement) => ({ ...game, ships: game.ships.map((ship) => ship.id === replacement.id ? replacement : ship) });
@@ -115,10 +124,11 @@ export const evaluateOutcome = (game) => {
   if (activeFederation.length === 0) {
     return { kind: 'alliance-win', message: victoryMessage('alliance-win', dominantEnemy(activeEnemies)) };
   }
-  // Both sides still have hulls, but nothing left can move or reach anyone, so no
-  // further round can change anything. The original ends this in a hopeless draw
-  // instead of playing out empty stardates.
-  if (isStranded(game)) {
+  // Both sides still have hulls, but nothing left can change anything: either no
+  // survivor can move or reach anyone, or the whole war zone has gone quiet for
+  // STALEMATE_ROUNDS stardates. The original ends this in a hopeless draw rather
+  // than playing out empty rounds.
+  if (isStranded(game) || (game.stalemateRounds ?? 0) >= STALEMATE_ROUNDS) {
     return { kind: 'hopeless-draw', message: victoryMessage('hopeless-draw') };
   }
   return { kind: 'active' };
@@ -182,6 +192,55 @@ const relayOrders = (game) => {
   };
 };
 
+/**
+ * Ships sitting near a healthy friendly starbase repair between rounds. The
+ * original had no way to recover damage, so a long war was a one-way ratchet
+ * downward; an extended war gives retreating and screening something to be for.
+ * Subsystem units stay lost — the dockyard can restore shield power and transfer
+ * crew, but it cannot rebuild a burnt-out mapper.
+ */
+export const resolveDocking = (game) => {
+  if (!game.extended) return { game, messages: [] };
+  const bases = game.ships.filter((ship) => isActive(ship)
+    && ship.className === 'Starbase'
+    && ship.shields >= shieldCapacity(ship) * DOCKING.minBaseCondition);
+  if (bases.length === 0) return { game, messages: [] };
+
+  const messages = [];
+  const ships = game.ships.map((ship) => {
+    if (!isActive(ship) || ship.className === 'Starbase' || isTractorHeld(game, ship)) return ship;
+    const base = bases.find((other) => other.faction === ship.faction && distance(other, ship) <= DOCKING.range);
+    if (!base) return ship;
+    const shields = Math.min(shieldCapacity(ship), ship.shields + Math.ceil(shieldCapacity(ship) * DOCKING.shieldRate));
+    const crew = Math.min(crewCapacity(ship), ship.crew + DOCKING.crewRate);
+    if (shields === ship.shields && crew === ship.crew) return ship;
+    const gains = [
+      shields > ship.shields ? `shields +${shields - ship.shields}` : null,
+      crew > ship.crew ? `${crew - ship.crew} crew transferred` : null,
+    ].filter(Boolean);
+    messages.push(`${ship.name} docks at ${base.name}: ${gains.join(', ')}.`);
+    return { ...ship, shields, crew };
+  });
+  return { game: { ...game, ships }, messages };
+};
+
+/**
+ * A fingerprint of everything that could make the war progress: where every hull
+ * sits, what it can still do, and who owns it. Two consecutive rounds with the
+ * same fingerprint mean nothing happened anywhere in the war zone.
+ */
+const warSignature = (game) => game.ships
+  .map((ship) => [
+    ship.id,
+    `${ship.x},${ship.y}`,
+    ship.status,
+    ship.faction,
+    `${ship.shields}/${ship.crew}`,
+    Object.values(ship.systems).join(''),
+    ship.tractorBy ?? '-',
+  ].join(':'))
+  .join('|');
+
 /** Runs one autopilot turn for the player's ship (backtick command / spectator mode). */
 export const resolveAutopilotTurn = (game) => {
   const shipId = game.playerShipId;
@@ -218,6 +277,9 @@ export const resolveComputerTurns = (initialGame) => {
       events.push(...(collision.events ?? []));
     }
   }
+  const docked = resolveDocking(game);
+  game = docked.game;
+  log.push(...docked.messages);
   const relay = relayOrders(game);
   game = relay.game;
   log.push(...relay.messages);
@@ -226,7 +288,18 @@ export const resolveComputerTurns = (initialGame) => {
   if (transfer.message) log.push(transfer.message);
   game = applySurrender(game);
   if (game.outcome) log.push(game.outcome.message);
+
+  // Count stardates in which nothing anywhere in the war zone changed, so a war
+  // that can no longer make progress ends instead of running empty rounds forever.
+  const signature = warSignature(game);
+  game = {
+    ...game,
+    warSignature: signature,
+    stalemateRounds: signature === game.warSignature ? (game.stalemateRounds ?? 0) + 1 : 0,
+  };
+
   const outcome = game.outcome ?? evaluateOutcome(game);
+  if (!game.outcome && outcome.kind !== 'active') log.push(outcome.message);
   return {
     ...game,
     turn: game.turn + 1,

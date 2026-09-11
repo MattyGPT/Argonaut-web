@@ -188,3 +188,24 @@ export const FLEET_ORDER_TUNING = Object.freeze({
   /** A ship on a screening post considers itself arrived inside this margin. */
   screenTolerance: 2,
 });
+
+/**
+ * Dockyard support at a friendly starbase, in an extended war: how close a ship
+ * must sit, what it recovers per stardate, and how healthy the base must be to
+ * spare it. The rates are deliberately slow — a gutted cruiser needs a dozen
+ * quiet stardates to refit, which is long enough that turtling loses.
+ */
+export const DOCKING = Object.freeze({
+  range: 8,
+  shieldRate: 0.08,
+  crewRate: 4,
+  minBaseCondition: 0.5,
+});
+
+/**
+ * Consecutive stardates in which nothing anywhere in the war zone changes before
+ * the war is called a hopeless draw. `isStranded` catches the provable cases at
+ * once; this is the net for every combination of orders and damage that leaves
+ * both sides unable, or unwilling, to ever close.
+ */
+export const STALEMATE_ROUNDS = 12;

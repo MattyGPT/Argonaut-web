@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { RANGES } from '../game/constants.js';
+import { DOCKING, RANGES, STALEMATE_ROUNDS } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { abbreviateNarrative, alertLevel, createGame, getShip, radioIntegrity } from '../game/state.js';
-import { applyPlayerAction, defaultTargetFor, eligibleTargets, orderTargets, weaponDamage } from '../game/actions.js';
+import { applyPlayerAction, defaultTargetFor, eligibleTargets, orderTargets, resolveCollision, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
-import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, transferCommandIfNeeded } from '../game/turns.js';
+import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDocking, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
 
 const withShips = (game, update) => ({ ...game, ships: game.ships.map(update) });
@@ -411,6 +411,44 @@ test('working engines mean the war is never hopeless', () => {
   assert.equal(evaluateOutcome(cornered('spread')).kind, 'active', 'mobile fleets in opposite corners can still close');
 });
 
+test('a fleet holding station that nothing can reach is a hopeless draw', () => {
+  const cornerGame = cornered('hold-stalemate', (ship) => ({
+    systems: { ...ship.systems, engines: ship.faction === 'Federation' ? 5 : 0 },
+  }));
+  const game = {
+    ...cornerGame,
+    extended: true,
+    orders: Object.fromEntries(cornerGame.ships
+      .filter((ship) => ship.faction === 'Federation')
+      .map((ship) => [ship.id, { type: 'hold', targetId: null }])),
+  };
+  // Without this the war runs forever: the holding ships have engines but will
+  // never use them, and the stranded enemy can never reach them.
+  assert.equal(evaluateOutcome(game).kind, 'hopeless-draw');
+  assert.equal(evaluateOutcome({ ...game, orders: {} }).kind, 'active', 'released from hold, the Federation can still close');
+});
+
+test('a war that stops changing is called a hopeless draw', () => {
+  const game = { ...cornered('stalemate-draw'), stalemateRounds: STALEMATE_ROUNDS };
+  assert.equal(evaluateOutcome(game).kind, 'hopeless-draw');
+  assert.equal(evaluateOutcome({ ...game, stalemateRounds: STALEMATE_ROUNDS - 1 }).kind, 'active');
+});
+
+test('a quiet round counts toward a stalemate', () => {
+  const frozen = cornered('stalemate-count', (ship) => ({
+    systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0 },
+  }));
+  const first = resolveComputerTurns(frozen);
+  assert.equal(first.stalemateRounds, 0, 'the first round has nothing to compare against');
+  assert.equal(resolveComputerTurns(first).stalemateRounds, 1);
+});
+
+test('a round in which the fleets move resets the stalemate count', () => {
+  const first = resolveComputerTurns(createGame({ seed: 'stalemate-reset' }));
+  const second = resolveComputerTurns({ ...first, stalemateRounds: 7 });
+  assert.equal(second.stalemateRounds, 0, 'the fleets are still closing, so the war is not stale');
+});
+
 test("roll call gives each ship's location and its distance from command", () => {
   const game = createGame({ seed: 'rollcall-columns' });
   const argo = getShip(game, 'fed-flagship');
@@ -813,4 +851,116 @@ test('an extended war played out under standing orders still resolves', () => {
   }
   assert.ok(game.outcome, 'the war must reach an outcome');
   assert.ok(game.turn > 1, 'and it must have taken more than one stardate');
+});
+
+// --- Extended war: dockyard support and the battle report ----------------------
+
+const crippled = (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 54, y: 50, shields: 10 } : ship);
+
+test('a damaged ship beside Xanadu repairs in an extended war', () => {
+  const game = extended('dock-repair', (ship) => (ship.id === 'fed-cruiser-1'
+    ? { ...ship, x: 54, y: 50, shields: 10, crew: 30 }
+    : ship));
+  const { game: after, messages } = resolveDocking(game);
+  const cruiser = getShip(after, 'fed-cruiser-1');
+  assert.equal(cruiser.shields, 10 + Math.ceil(70 * DOCKING.shieldRate));
+  assert.equal(cruiser.crew, 30 + DOCKING.crewRate);
+  assert.ok(messages.some((line) => /Bonhomme docks at Xanadu: shields \+\d+, \d+ crew transferred\./.test(line)));
+});
+
+test('a classic war has no dockyard support', () => {
+  const { game, messages } = resolveDocking(withShips(createGame({ seed: 'dock-classic' }), crippled));
+  assert.equal(getShip(game, 'fed-cruiser-1').shields, 10);
+  assert.deepEqual(messages, []);
+});
+
+test('docking needs the ship inside the dockyard ring', () => {
+  const game = extended('dock-far', (ship) => (ship.id === 'fed-cruiser-1'
+    ? { ...ship, x: 50 + DOCKING.range + 1, y: 50, shields: 10 }
+    : ship));
+  assert.equal(getShip(resolveDocking(game).game, 'fed-cruiser-1').shields, 10);
+});
+
+test('a ship held by a tractor beam cannot dock', () => {
+  const game = extended('dock-held', (ship) => (ship.id === 'fed-cruiser-1'
+    ? { ...ship, x: 54, y: 50, shields: 10, tractorBy: 'axis-flagship' }
+    : ship));
+  assert.equal(getShip(resolveDocking(game).game, 'fed-cruiser-1').shields, 10);
+});
+
+test('a crippled starbase cannot support the fleet', () => {
+  const game = extended('dock-crippled', (ship) => {
+    if (ship.id === 'xanadu') return { ...ship, shields: 10 };
+    return crippled(ship);
+  });
+  assert.equal(getShip(resolveDocking(game).game, 'fed-cruiser-1').shields, 10);
+});
+
+test('the dockyard restores shields and crew but not burnt-out subsystems', () => {
+  const game = extended('dock-systems', (ship) => (ship.id === 'fed-cruiser-1'
+    ? { ...ship, x: 54, y: 50, shields: 10, systems: { ...ship.systems, mapper: 0 } }
+    : ship));
+  const cruiser = getShip(resolveDocking(game).game, 'fed-cruiser-1');
+  assert.equal(cruiser.systems.mapper, 0);
+  assert.ok(cruiser.shields > 10);
+});
+
+test('docking stops at full shields and crew', () => {
+  const game = extended('dock-full', (ship) => (ship.id === 'fed-cruiser-1'
+    ? { ...ship, x: 54, y: 50, shields: 69, crew: 69 }
+    : ship));
+  const { game: after, messages } = resolveDocking(game);
+  const cruiser = getShip(after, 'fed-cruiser-1');
+  assert.equal(cruiser.shields, 70, 'shield capacity is a ceiling');
+  assert.equal(cruiser.crew, 70, 'so is the crew complement');
+  assert.ok(messages.some((line) => /Bonhomme docks at Xanadu: shields \+1, 1 crew transferred\./.test(line)));
+});
+
+test('docking resolves during the computer phase and reaches the narrative', () => {
+  const game = extended('dock-in-round', (ship) => {
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 52, y: 50, shields: 20 };
+    if (ship.faction === 'Federation') return ship;
+    return { ...ship, status: 'destroyed' };
+  });
+  const resolved = resolveComputerTurns(game);
+  assert.ok(resolved.log.some((line) => /Bonhomme docks at Xanadu: shields \+6\./.test(line)));
+  assert.equal(getShip(resolved, 'fed-cruiser-1').shields, 26);
+});
+
+test('the battle report names the top gun, the losses, and your own record', () => {
+  const base = createGame({ seed: 'battle-report' });
+  const game = {
+    ...base,
+    turn: 34,
+    ships: base.ships.map((ship) => {
+      if (ship.id === 'fed-scout') return { ...ship, status: 'destroyed' };
+      if (ship.id === 'axis-flagship') return { ...ship, kills: 5 };
+      if (ship.id === 'fed-flagship') return { ...ship, kills: 2, shotsFired: 9, shotsTaken: 4 };
+      return ship;
+    }),
+  };
+  const report = reportFor(game, 'battle-report');
+  assert.equal(report.title, 'Battle report');
+  assert.ok(report.lines.includes('Stardates elapsed: 34.'));
+  assert.ok(report.lines.some((line) => /Federation losses: 1 of 6 hulls/.test(line)));
+  assert.ok(report.lines.some((line) => /Top gun: Firebreather of the Axis, 5 credited kills/.test(line)));
+  assert.ok(report.lines.some((line) => /Your record, Captain Jason of the Argo: 2 kills from 9 volleys fired, 4 absorbed/.test(line)));
+});
+
+test('a war with no kills still reports', () => {
+  const report = reportFor(createGame({ seed: 'bloodless' }), 'battle-report');
+  assert.ok(report.lines.includes('No ship scored a kill.'));
+  assert.ok(!report.lines.some((line) => /Most collisions/.test(line)));
+});
+
+test('a collision is counted against both hulls', () => {
+  const game = withShips(createGame({ seed: 'collision-count' }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 10, y: 10 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 10, y: 10 };
+    return { ...ship, x: 90, y: 90 };
+  });
+  const { game: after } = resolveCollision(game, getShip(game, 'fed-flagship'));
+  assert.equal(getShip(after, 'fed-flagship').collisions, 1);
+  assert.equal(getShip(after, 'axis-flagship').collisions, 1);
+  assert.equal(createGame({ seed: 'collision-count' }).ships[0].collisions, 0);
 });
