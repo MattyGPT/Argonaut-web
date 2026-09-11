@@ -44,8 +44,8 @@ original ship names:
 - **Cabal** — Pequod, Queen Mab, Ragnarok, Saboteur, Terrorist
 
 The **New game** panel exposes the replay seed, the regional fleet setup, the
-optional tactical sound, and the extended war mode. Use the same seed to
-reproduce the opening state.
+optional tactical sound, the extended war mode, and — in an extended war — the
+scenario. Use the same seed to reproduce the opening state.
 
 ## Mechanics notes
 
@@ -156,6 +156,20 @@ you issue an order.
   computer phase back on the map — every alliance's beams, torpedoes, and kills,
   not just the ones that touched you — with that round's narrative beside it.
   Twenty autopilot decisions no longer arrive as one wall of text.
+- **Three ways to fight.** The New game panel picks a scenario, and the mission
+  panel carries its brief and live progress:
+  - *Cease hostilities* — the original objective. Destroy the opposing fleets
+    before they destroy Federation command.
+  - *Hold Xanadu* — the base must still be standing at stardate 20. Lose it and
+    the war is lost, whatever else survives. On autopilot, screening the base with
+    your whole fleet holds it about 6 wars in 40; leaving the fleet to its own
+    doctrine loses the base in 26 of 40. The dockyard is what makes it possible.
+  - *Hunt the hunter* — the captain hunting you is named at the outset; their hull
+    is not. Scan the enemy fleet to identify them, then end them. If the war kills
+    your hunter before you have identified them, you lose: you never learned who
+    was coming for you. It is a race, and the scanner is the whole game.
+
+  Wiping out an alliance still wins outright under any scenario.
 
 ## The tactical display
 
@@ -197,6 +211,6 @@ public release using the Argonaut title, story, names, and other game
 expression. The program does not include the original `.COM`, screenshots, or
 other original game assets.
 
-Captain names, fleet orders, alliance doctrines, the Xanadu dockyard, and the
-extended-war narrative are original to this remake — the manual names every ship
-but only one person, Captain Jason.
+Captain names, fleet orders, alliance doctrines, the Xanadu dockyard, the
+scenarios, and the extended-war narrative are original to this remake — the manual
+names every ship but only one person, Captain Jason.

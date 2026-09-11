@@ -72,13 +72,16 @@ compares the resulting fleets.
 | Kill narrative | ` destroyed.` wording | Destroy a hull in an extended war | Adds the destroying captain's name and kill tally, an ace announcement at two kills, and a grudge announcement on every third vendetta kill. A classic war's narrative is untouched — `killLines` returns nothing there. |
 | Round replay | — | Fight a round, then press **Replay round** | The computer phase's events and narrative are kept as `game.lastRound`, and `replayEffects` redraws every ship's beams, torpedoes, and explosions. The existing `playEffects` only ever drew the ones involving your own ship, so roughly twenty autopilot decisions arrived as one wall of text with nothing to look at. |
 | Impact juice | — | Take a hit; fall to RED | Phaser impacts flash, the map shakes when a volley lands on your command ship, and a klaxon sounds on the *transition* into RED rather than continuously. The shake and the effect animations are suppressed under `prefers-reduced-motion`. Cosmetic only — no rule reads any of it. |
+| Scenarios | The original had one objective: destroy your enemies before they destroy you | Pick a scenario in the New game panel of an extended war | Three, all extended-only — a classic war always fights to annihilation. `annihilation` is the original condition. `defend-xanadu` wins with Xanadu still standing at stardate 20 (`SCENARIOS`) and loses the moment the base is destroyed. `hunt-the-vendetta` wins by ending the hull that hunts you **after** a scan has identified its captain, and loses if that hull leaves the war unidentified. Standard annihilation outcomes are checked first, so wiping out an alliance still wins outright, and the objective is stored separately from `vendettaShipId` because boarding the hunter clears the vendetta. |
+| Mission panel | — | Fight any extended war | The report panel carries the scenario title, brief, and live progress. The hunt names your hunter's captain but never their hull, and never a position your sensors did not earn — the objective must not leak fog of war the way the `0` computer report does. |
+| Scenario measurement | — | Simulate 40 wars per order set | Hold Xanadu at 20 stardates is hard on autopilot: screening with the whole fleet held 6 of 40, three cruisers 6 of 40, and no orders at all 3 of 40, with the base falling in 26 of 40 unordered wars — most wars end by annihilation before the target stardate either way. Hunt the hunter turns entirely on the scan: never identifying the hunter lost 37 of 40, and identifying it won 37 of 40. |
 
 The balance numbers these rules use, along with the ones the table above cites,
 now live together in `game/constants.js` (`WEAPONS`, `MISS_CHANCE`, `RANGES`,
 `CRIPPLE`, `ALERT_THRESHOLDS`, `SURRENDER`, `AI_PURSUIT`, `FLEET_ORDER_TUNING`,
 `DOCKING`, `STALEMATE_ROUNDS`, `PERSONALITIES`, `CAPTAIN_NAMES`, `ACE_KILLS`,
-`VENDETTA`) instead of scattered through the modules, so retuning a row here means
-editing one file.
+`VENDETTA`, `SCENARIOS`) instead of scattered through the modules, so retuning a
+row here means editing one file.
 
 Future calibration should record a DOS input sequence and visible output beside
 the same web seed/action pair, then tune only the values needed to preserve the
