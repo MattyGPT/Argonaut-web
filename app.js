@@ -1,4 +1,5 @@
-import { applyPlayerAction, defaultTargetFor, eligibleTargets } from './game/actions.js';
+import { applyPlayerAction, defaultTargetFor, eligibleTargets, orderTargets } from './game/actions.js';
+import { SPECTATOR_TICK_MS, TARGETED_ORDERS } from './game/constants.js';
 import { createGame } from './game/state.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './game/turns.js';
 import { bindInput, promptForCoordinates, promptForTarget } from './ui/input.js';
@@ -72,7 +73,7 @@ const spectate = () => {
     showEvents(auto.events);
     runComputer();
     refresh();
-    if (game.resigned && !game.outcome && game.phase === 'player') setTimeout(step, 400);
+    if (game.resigned && !game.outcome && game.phase === 'player') setTimeout(step, SPECTATOR_TICK_MS);
     else spectating = false;
   };
   step();
@@ -83,8 +84,18 @@ const dispatch = async (action) => {
   if (spectating) return;
   if (action.type === 'map-select') {
     const ship = game.ships.find((entry) => entry.id === action.targetId);
+    const command = game.ships.find((entry) => entry.id === game.playerShipId);
+    // In an extended war, selecting one of your own hulls opens its order picker;
+    // selecting it again closes it.
+    if (game.extended && !game.outcome && !game.resigned
+      && ship.faction === command?.faction && ship.status !== 'destroyed') {
+      view = { ...view, report: null, orderShipId: view.orderShipId === ship.id ? null : ship.id };
+      refresh();
+      return;
+    }
     view = {
       ...view,
+      orderShipId: null,
       report: {
         title: ship.name,
         lines: [
@@ -100,8 +111,8 @@ const dispatch = async (action) => {
     return;
   }
 
-  if (['rollcall', 'statistics', 'shots', 'fullmap'].includes(action.type)) {
-    view = { ...view, report: reportFor(game, action.type) };
+  if (['rollcall', 'statistics', 'shots', 'fullmap', 'fleet'].includes(action.type)) {
+    view = { ...view, orderShipId: null, report: reportFor(game, action.type) };
     refresh();
     return;
   }
@@ -129,6 +140,24 @@ const dispatch = async (action) => {
   if (action.type === 'hyperspace' && action.x === undefined) {
     const values = await promptForCoordinates('Hyperspace destination', ['X', 'Y']);
     if (values) dispatch({ type: 'hyperspace', x: values[0], y: values[1] });
+    return;
+  }
+
+  // Escort, screen, and intercept need a second ship named alongside them.
+  if (action.type === 'orders' && TARGETED_ORDERS.includes(action.order?.type) && !action.targetId) {
+    const kind = action.order.type;
+    const candidates = orderTargets(game, action.shipId, kind);
+    if (candidates.length === 0) {
+      view = { ...view, entries: ['No active ship can be named for that order.'] };
+      refresh();
+      return;
+    }
+    const details = await promptForTarget(
+      `${kind[0].toUpperCase()}${kind.slice(1)} target`,
+      candidates,
+      { defaultId: candidates[0].id },
+    );
+    if (details) dispatch({ ...action, targetId: details.targetId });
     return;
   }
 
@@ -167,6 +196,7 @@ document.querySelector('#new-game').addEventListener('click', () => {
   document.querySelector('#new-seed').value = randomSeed();
   document.querySelector('#regional').checked = game.regional;
   document.querySelector('#sound').checked = game.sound;
+  document.querySelector('#extended').checked = game.extended;
   document.querySelector('#new-game-dialog').showModal();
 });
 
@@ -177,6 +207,7 @@ document.querySelector('#new-game-form').addEventListener('submit', () => {
       seed: document.querySelector('#new-seed').value || 'xanadu',
       regional: document.querySelector('#regional').checked,
       sound: document.querySelector('#sound').checked,
+      extended: document.querySelector('#extended').checked,
     });
     view = { entries: [`New war initialized with seed ${game.seed}.`] };
     refresh();

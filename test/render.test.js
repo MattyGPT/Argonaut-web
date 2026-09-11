@@ -76,3 +76,54 @@ test('the map overlay uses the shared weapon and engine ranges', () => {
   assert.match(field, /--d:60%/); // phaser reach 30, drawn as a diameter
   assert.match(field, /range-ring engines/);
 });
+
+test('an extended war shows an order picker for a selected Federation ship', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'order-panel', extended: true }), { orderShipId: 'fed-cruiser-1' });
+  const panel = read('#report').innerHTML;
+  assert.match(panel, /Orders: Bonhomme/);
+  assert.match(panel, /data-order="hold" data-order-ship="fed-cruiser-1"/);
+  assert.match(panel, /Standing orders: concentrate with the fleet/);
+});
+
+test('a classic war offers no order picker', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'order-panel-classic' }), { orderShipId: 'fed-cruiser-1' });
+  assert.ok(!/data-order=/.test(read('#report').innerHTML));
+});
+
+test('selecting an enemy hull never opens an order picker', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'order-panel-enemy', extended: true }), { orderShipId: 'axis-flagship' });
+  assert.ok(!/data-order=/.test(read('#report').innerHTML));
+});
+
+test('the top bar and legend mark an extended war', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'mode-badge', extended: true }));
+  assert.equal(read('#mode-readout').textContent, 'EXTENDED WAR');
+  assert.match(read('#legend-note').textContent, /click a Federation ship to order it/);
+  elements.clear();
+  renderGame(createGame({ seed: 'mode-badge-classic' }));
+  assert.equal(read('#mode-readout').textContent, '');
+});
+
+test('a ship under orders wears a pip on the map', () => {
+  elements.clear();
+  const game = {
+    ...createGame({ seed: 'order-pip', extended: true }),
+    orders: { 'fed-flagship': { type: 'hold', targetId: null } },
+  };
+  renderGame(game);
+  assert.match(read('#map-field').innerHTML, /class="ship Federation active has-order"/);
+});
+
+test('the fleet orders button only appears in an extended war', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'fleet-button', extended: true }));
+  assert.match(read('#console').innerHTML, /data-command="fleet"/);
+  elements.clear();
+  renderGame(createGame({ seed: 'fleet-button-classic' }));
+  assert.ok(!/data-command="fleet"/.test(read('#console').innerHTML));
+  assert.match(read('#console').innerHTML, /data-command="shots"/, 'every command has a button');
+});

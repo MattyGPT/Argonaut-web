@@ -121,3 +121,70 @@ export const SHIELD_PER_ENGINE = 5;
 
 /** Shots can miss. The same roll governs the player's volleys and the autopilots'. */
 export const MISS_CHANCE = 0.12;
+
+/**
+ * Volley damage. The mean is `base + perUnit x live units`, rolled at ±spread.
+ * The spreads hold the manual's ratio of (max - min) to (max + min): 0.818 for
+ * phasers, 0.875 for photons, so average damage and war length are unchanged.
+ */
+export const WEAPONS = Object.freeze({
+  phasers: Object.freeze({ base: 12, perUnit: 4, spread: 0.25 }),
+  photons: Object.freeze({ base: 24, perUnit: 9, spread: 0.267 }),
+});
+
+/** Tractor beam pull per working tractor unit. */
+export const TRACTOR_PULL_PER_UNIT = 5;
+
+/** Self-destruct sprays shrapnel this far beyond its blast radius. */
+export const SHRAPNEL_EXTRA_RANGE = 15;
+
+/** Xanadu's self-destruct blast; every other ship uses RANGES.selfDestruct. */
+export const STARBASE_BLAST_RADIUS = 40;
+
+/** Damage the survivor of a collision takes; the other ship is destroyed. */
+export const COLLISION_DAMAGE = 120;
+
+/** Chance a hyperspace jump burns the ship up. */
+export const HYPERSPACE_BURN_CHANCE = 0.1;
+
+/** Fraction of shield capacity a successful jump costs, and its floor. */
+export const HYPERSPACE_SHIELD_LOSS = 0.12;
+export const HYPERSPACE_MIN_SHIELD_LOSS = 5;
+
+/** Crew moved by a transporter order when the player does not name a number. */
+export const DEFAULT_CREW_TRANSFER = 10;
+
+/** Alert level, as a fraction of the ship's own shield capacity. */
+export const ALERT_THRESHOLDS = Object.freeze({ red: 0.25, yellow: 0.55 });
+
+/** A fleet at or below this many ships and this fraction of opposing strength capitulates. */
+export const SURRENDER = Object.freeze({ maxShips: 2, strengthRatio: 0.15 });
+
+/**
+ * Autopilot pursuit: stop this short of the target, and wobble speed and heading
+ * by these fractions so fleets converge imperfectly and sometimes collide.
+ */
+export const AI_PURSUIT = Object.freeze({ standoff: 8, speedBase: 0.8, speedJitter: 0.5, headingDrift: 0.3 });
+
+/** Pacing of the spectator loop that plays out a resigned war. */
+export const SPECTATOR_TICK_MS = 400;
+
+/**
+ * Fleet orders, available only in an extended war. `focus` is the original's
+ * behavior — concentrate with the fleet — so it is also the default. The targeted
+ * orders need a second ship named alongside them.
+ */
+export const ORDER_TYPES = Object.freeze(['focus', 'hold', 'withdraw', 'escort', 'intercept', 'screen']);
+export const TARGETED_ORDERS = Object.freeze(['escort', 'intercept', 'screen']);
+
+/** How close an ordered ship stations itself, in map units. */
+export const FLEET_ORDER_TUNING = Object.freeze({
+  /** Escorts ride this far off the ship they are protecting. */
+  escortDistance: 8,
+  /** Interceptors stop short of the hull they are chasing, rather than ramming it. */
+  interceptStandoff: 12,
+  /** A screening ship posts itself this far from its ward, toward the threat. */
+  screenDistance: 10,
+  /** A ship on a screening post considers itself arrived inside this margin. */
+  screenTolerance: 2,
+});

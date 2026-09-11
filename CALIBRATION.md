@@ -3,14 +3,17 @@
 The supplied DOS executable remains the reference for behavior not fixed by
 the manual. This browser remake has intentionally chosen transparent, seeded
 rules rather than attempting to reproduce its machine-level random sequence.
+Where the manual and the executable disagree, the executable's own string table
+wins; the proclamations and report columns quoted below were recovered from a
+dump of that table in `ARGONAUT.COM`.
 
 | Scenario | DOS reference behavior from manual | Web scenario | Current implementation |
 | --- | --- | --- | --- |
 | Fleet roster | A battle cruiser, three cruisers, and scout per fleet; Xanadu participates | Any seed | 21 ships: five ships for each alliance plus Xanadu |
 | Starbase | Xanadu is heavily armored and armed but unable to move; it cannot hyperspace | Take command of Xanadu and order a move or a jump | 0 engine units, so `2` and `-` are both refused and no autopilot will navigate it; its self-destruct blast is doubled instead |
 | Ship names | The manual names every ship; the binary's glyph table confirms the roster | Any seed | Canonical names assigned by class and initial (Argo=A, Pequod=P, Xanadu=X, wreck=+) |
-| Hidden reports | Roll call (R), shot distribution (S), alliance statistics (L), full war-zone map (Bksp) | Press each key | All four implemented; statistics include shots for/against, credited kills, and chances of victory |
-| Victory wording | Distinct proclamations for triumph, mastery, draw, and annihilation | End the war each way | Canonical sentences attached to each outcome |
+| Hidden reports | Roll call (R), shot distribution (S), alliance statistics (L), full war-zone map (Bksp) | Press each key | All four implemented; statistics include shots for/against, credited kills, and chances of victory. The binary's roll call is a `Ship / Alliance / Location / Distance / Status / Course` table whose Status column carries only `Active`, `Vacant`, or `Dead` — it has no cause-of-elimination code, so the manual's "code indicating if and how a ship has been eliminated" is that three-state column. The remake prints Location and Distance beside it; Course is not tracked |
+| Victory wording | Four proclamations, all recovered from the binary's string table: "The Federation has triumphed.", "<Alliance> forces have won.", "The war has destroyed all four alliances.  No one wins.", and "The war has ended in a hopeless draw.  All survivors are stranded." | End the war each way | All four implemented. The hopeless draw is distinct from annihilation and fires only when both sides still have active hulls but none can act: every survivor is out of engines (so it can neither move nor hyperspace), no enemy sits inside its weapons', tractor's, or self-destruct reach, and no vacant hull sits inside transporter range. The manual gives no trigger, so the stranded test is a reconstruction |
 | Engine limit | A ship moves no more total units than available engines | Use `2`, enter a displacement | Capacity is 10 × working engine units; vector distance is enforced |
 | Weapon range | Phasers 30; photons 10; tractor 35 | Select `3`, `4`, or `5`, then a target | Euclidean range is enforced before the shot resolves. All three limits live in one shared `RANGES` table read by the player commands, the autopilots, and the map overlay |
 | Shield flush | Reinforcing shields flushes engine power | Use `1` | Requires working engines; gains 5 shields per engine unit ("Engines flushed for N units") |
@@ -35,6 +38,35 @@ rules rather than attempting to reproduce its machine-level random sequence.
 | Formation | Fleets concentrate fire; suicide missions and tight packs collide | Watch an alliance engage | Non-vendetta ships focus the enemy nearest their flagship |
 | Vendetta | One enemy ship hunts Captain Jason until he resigns or dies | Watch the vendetta ship; then board it with the transporter | It breaks formation to target the command ship, and the vendetta ends on resignation, death, or capture. The marker can never turn a ship against its own alliance or against itself |
 | Surrender | The autopilot may surrender if conditions collapse | Reduce a fleet to its last ships | A fleet down to 2 ships at <=15% of opposing strength capitulates |
+
+## Extended war (opt-in divergence)
+
+An extended war is chosen in the **New game** panel and recorded on the game
+state, so a save resumes in the mode it started in. Everything in the table above
+still holds; the additions below are deliberate departures from the original,
+which gave the player one hull and left the rest of the Federation to the same
+autopilot as its enemies.
+
+A classic war never reads these fields. `extended` alone changes no ship's
+behavior until an order is issued, and a classic war's autopilot decisions are
+identical to the calibrated ones — a test plays the same seed both ways and
+compares the resulting fleets.
+
+| Addition | Behavior |
+| --- | --- |
+| Standing orders | Six per Federation hull: `focus` (the original's fleet concentration, and the default), `hold`, `withdraw`, `escort`, `screen`, `intercept`. Orders cost no turn and persist until changed. |
+| Order delivery | An order is acknowledged the same stardate when the command ship's radio reaches the hull, or when Xanadu — with working radio — can hear both ends. Otherwise it is queued and lands at the end of the next computer phase, one stardate late. |
+| Ordered navigation | Ordered ships move directly, without the seeded drift and overshoot that makes unordered autopilots clumsy. The clumsiness is left to fleet-default behavior so that issuing orders is worth something. |
+| Stale orders | An order naming a destroyed ship is dropped and that hull falls back to fleet behavior rather than idling. |
+| Your own hull | The command ship obeys its order whenever the autopilot has the conn: backtick for one turn, or the rest of the war after resigning. |
+| Fleet report | `F` lists every Federation hull with its standing orders and radio contact. |
+| Command buttons | `S` (shot distribution) and `Backspace` (war zone map) gained buttons, so every command is now reachable without the keyboard. |
+
+The balance numbers these rules use, along with the ones the table above cites,
+now live together in `game/constants.js` (`WEAPONS`, `MISS_CHANCE`, `RANGES`,
+`COLLISION_DAMAGE`, `ALERT_THRESHOLDS`, `SURRENDER`, `AI_PURSUIT`,
+`FLEET_ORDER_TUNING`) instead of scattered through the modules, so retuning a
+row here means editing one file.
 
 Future calibration should record a DOS input sequence and visible output beside
 the same web seed/action pair, then tune only the values needed to preserve the

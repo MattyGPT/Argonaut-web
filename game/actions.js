@@ -1,34 +1,35 @@
-import { GRID_SIZE, MISS_CHANCE, RANGES, SHIELD_PER_ENGINE } from './constants.js';
+import {
+  COLLISION_DAMAGE,
+  DEFAULT_CREW_TRANSFER,
+  GRID_SIZE,
+  HYPERSPACE_BURN_CHANCE,
+  HYPERSPACE_MIN_SHIELD_LOSS,
+  HYPERSPACE_SHIELD_LOSS,
+  MISS_CHANCE,
+  ORDER_TYPES,
+  RANGES,
+  SHIELD_PER_ENGINE,
+  SHRAPNEL_EXTRA_RANGE,
+  TARGETED_ORDERS,
+  TRACTOR_PULL_PER_UNIT,
+  WEAPONS,
+} from './constants.js';
 import { createRng } from './rng.js';
 import {
   alertLevel,
+  blastRadius,
   crewCapacity,
+  describeOrder,
   distance,
   engineCapacity,
   getLivingShips,
   getShip,
+  inRadioContact,
   isTractorHeld,
   shieldCapacity,
   systemRange,
   systemUnits,
 } from './state.js';
-
-const TRACTOR_PULL_PER_UNIT = 5;
-const SHRAPNEL_EXTRA_RANGE = 15;
-const STARBASE_BLAST_RADIUS = 40;
-const HYPERSPACE_BURN_CHANCE = 0.1;
-
-/**
- * The manual fixes absolute damage ranges (phasers 0.20-2.00, photons 0.20-3.00)
- * against the original's shield scale. The remake keeps its rescaled per-unit
- * damage as the MEAN of a symmetric seeded roll, so average damage per volley is
- * unchanged while shot to shot varies. The spreads hold the manual's ratio of
- * (max - min) to (max + min): 0.818 for phasers, 0.875 for photons.
- */
-const WEAPONS = Object.freeze({
-  phasers: Object.freeze({ base: 12, perUnit: 4, spread: 0.25 }),
-  photons: Object.freeze({ base: 24, perUnit: 9, spread: 0.267 }),
-});
 
 const isActive = (ship) => ship?.status === 'active';
 const unitName = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
@@ -132,6 +133,19 @@ export const damageShip = (ship, amount, rng = createRng('damage')) => {
     systems,
     ...(crew <= 0 ? { status: 'vacant', tractorBy: null } : {}),
   };
+};
+
+/**
+ * Ships a fleet order may name: enemies for an intercept, friendlies for escort
+ * and screen. Only active hulls can be given as a target.
+ */
+export const orderTargets = (game, shipId, orderType) => {
+  const actor = getShip(game, shipId);
+  if (!actor || !isActive(actor)) return [];
+  const candidates = getLivingShips(game).filter((ship) => isActive(ship) && ship.id !== actor.id);
+  return orderType === 'intercept'
+    ? candidates.filter((ship) => ship.faction !== actor.faction)
+    : candidates.filter((ship) => ship.faction === actor.faction);
 };
 
 export const eligibleTargets = (game, actionType) => {
@@ -274,7 +288,7 @@ export const resolveCollision = (game, actor) => {
   const destroyedId = rng.pick([actor.id, collision.id]);
   const survivorId = destroyedId === actor.id ? collision.id : actor.id;
   const destroyed = destroyedShip(getShip(game, destroyedId));
-  const survivor = damageShip(getShip(game, survivorId), 120, rng);
+  const survivor = damageShip(getShip(game, survivorId), COLLISION_DAMAGE, rng);
   const updated = advanceRandom({
     ...game,
     ships: game.ships.map((ship) => ship.id === destroyed.id ? destroyed : ship.id === survivor.id ? survivor : ship),
@@ -347,7 +361,7 @@ const transportAction = (game, action, actor) => {
   if (found.error) return invalid(game, found.error, found.requiresTarget);
   if (distance(actor, found.target) > systemRange(actor, 'transporter')) return invalid(game, `${found.target.name} is out of transporter range.`);
   if (isActive(found.target) && found.target.faction !== actor.faction) return invalid(game, 'Cannot transport onto a live enemy ship.');
-  const amount = Number(action.amount ?? 10);
+  const amount = Number(action.amount ?? DEFAULT_CREW_TRANSFER);
   if (!Number.isInteger(amount) || amount < 1) return invalid(game, 'Transport crew amount must be a positive whole number.');
   if (actor.crew <= amount) return invalid(game, 'Insufficient crew to complete that transport.');
   if (isActive(found.target)) {
@@ -373,13 +387,11 @@ const transportAction = (game, action, actor) => {
   return result(completeTurn(base), `${captured.name} is occupied by ${placed} crew${action.transferCommand ? '; command transferred.' : '.'}`);
 };
 
-const blastRadiusFor = (ship) => ship.className === 'Starbase' ? STARBASE_BLAST_RADIUS : RANGES.selfDestruct;
-
 const destroyedShip = (ship) => ({ ...ship, status: 'destroyed', crew: 0, shields: 0, tractorBy: null });
 
 const selfDestructAction = (game, actor) => {
   const rng = seededRng(game);
-  const blast = blastRadiusFor(actor);
+  const blast = blastRadius(actor);
   const shrapnel = blast + SHRAPNEL_EXTRA_RANGE;
   const messages = [`${actor.name} is self-destructing.  Blast range ${blast}.`];
   const victims = game.ships.map((ship) => {
@@ -415,11 +427,46 @@ const hyperspaceAction = (game, action, actor) => {
   if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x > GRID_SIZE || y < 0 || y > GRID_SIZE) {
     return invalid(game, 'Hyperspace destination must be valid map coordinates.');
   }
-  const shieldDamage = Math.max(5, Math.ceil(shieldCapacity(actor) * 0.12));
+  const shieldDamage = Math.max(HYPERSPACE_MIN_SHIELD_LOSS, Math.ceil(shieldCapacity(actor) * HYPERSPACE_SHIELD_LOSS));
   const relocated = { ...actor, x, y, shields: Math.max(0, actor.shields - shieldDamage), tractorBy: null };
   return result(
     completeTurn(advanceRandom(replaceShip(game, relocated))),
     `${actor.name} enters hyperspace and emerges at ${x},${y}; shields lose ${shieldDamage}.`,
+  );
+};
+
+/**
+ * Issues a standing fleet order. Orders cost no turn — but they travel by radio,
+ * so a ship out of contact (and out of Xanadu's relay) does not act on one until
+ * the next stardate.
+ */
+const setOrder = (game, action, actor) => {
+  if (!game.extended) return invalid(game, 'Fleet orders are only issued in an extended war.');
+  const ship = getShip(game, action.shipId);
+  if (!ship) return invalid(game, 'No such ship.');
+  if (ship.faction !== actor.faction) return invalid(game, 'Only Federation ships take your orders.');
+  if (!isActive(ship)) return invalid(game, `${ship.name} cannot take orders.`);
+  const type = action.order?.type;
+  if (!ORDER_TYPES.includes(type)) return invalid(game, `Unknown order: ${type}.`);
+
+  const order = { type, targetId: null };
+  if (TARGETED_ORDERS.includes(type)) {
+    const target = getShip(game, action.targetId);
+    if (!target || !isActive(target)) return invalid(game, 'That order needs an active ship to name.', true);
+    if (target.id === ship.id) return invalid(game, `${ship.name} cannot be ordered against itself.`);
+    const wantsFriendly = type !== 'intercept';
+    if (wantsFriendly && target.faction !== ship.faction) return invalid(game, 'Escort and screen name a friendly ship.');
+    if (!wantsFriendly && target.faction === ship.faction) return invalid(game, 'Intercept names an enemy ship.');
+    order.targetId = target.id;
+  }
+
+  const label = describeOrder(game, order);
+  const ordered = { ...game, orders: { ...(game.orders ?? {}), [ship.id]: order } };
+  if (ship.id === actor.id) return result(ordered, `${ship.name} will ${label}.`);
+  if (inRadioContact(game, actor, ship)) return result(ordered, `${ship.name} acknowledges: ${label}.`);
+  return result(
+    { ...game, pendingOrders: { ...(game.pendingOrders ?? {}), [ship.id]: order } },
+    `${ship.name} is out of radio contact; the order to ${label} will reach it next stardate.`,
   );
 };
 
@@ -466,6 +513,7 @@ export const applyPlayerAction = (game, action = {}) => {
       return result(game, 'Radio report ready.', { report: radioReport(game, actor) });
     }
     case 'transport': return transportAction(game, action, actor);
+    case 'orders': return setOrder(game, action, actor);
     case 'autopilot': return result(completeTurn(game), `${actor.name} autopilot holds course.`);
     case 'resign': {
       if (game.resigned) return invalid(game, 'You have already resigned command; the autopilot has the conn.');
