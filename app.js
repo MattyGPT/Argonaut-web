@@ -1,6 +1,7 @@
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, orderTargets } from './game/actions.js';
 import { SPECTATOR_TICK_MS, TARGETED_ORDERS } from './game/constants.js';
 import { alertLevel, createGame, getShip } from './game/state.js';
+import { scenarioFor } from './game/scenarios.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './game/turns.js';
 import { bindInput, promptForCoordinates, promptForTarget } from './ui/input.js';
 import { renderGame, reportFor } from './ui/render.js';
@@ -226,20 +227,34 @@ document.title = 'Argonaut Web';
 document.querySelector('#app-title').textContent = 'Argonaut Web';
 bindInput(document.querySelector('#game-root'), dispatch);
 
+/** Scenarios are an extended-war option, so the picker is only live in that mode. */
+const syncScenarioAvailability = () => {
+  const scenario = document.querySelector('#scenario');
+  const extended = document.querySelector('#extended').checked;
+  scenario.disabled = !extended;
+  if (!extended) scenario.value = 'annihilation';
+};
+
 document.querySelector('#new-game').addEventListener('click', () => {
   document.querySelector('#new-seed').value = randomSeed();
   document.querySelector('#regional').checked = game.regional;
   document.querySelector('#sound').checked = game.sound;
   document.querySelector('#extended').checked = game.extended;
+  document.querySelector('#scenario').value = game.scenario ?? 'annihilation';
+  syncScenarioAvailability();
   document.querySelector('#new-game-dialog').showModal();
 });
+
+document.querySelector('#extended').addEventListener('change', syncScenarioAvailability);
 
 /**
  * The opening narrative. An extended war names the captain who has sworn to hunt
  * you — but not the hull they command, which is what makes scanning worth doing.
  */
 const openingLines = (war) => {
+  const scenario = scenarioFor(war);
   const lines = [`New war initialized with seed ${war.seed}.`];
+  if (war.extended && scenario.id !== 'annihilation') lines.push(`${scenario.title}: ${scenario.brief}`);
   if (war.extended) {
     const hunter = getShip(war, war.vendettaShipId);
     lines.push(`Intelligence: a captain called ${hunter?.captain ?? 'an unnamed officer'} has sworn to hunt you down. Scan the enemy fleet to learn which hull they command.`);
@@ -255,6 +270,7 @@ document.querySelector('#new-game-form').addEventListener('submit', () => {
       regional: document.querySelector('#regional').checked,
       sound: document.querySelector('#sound').checked,
       extended: document.querySelector('#extended').checked,
+      scenario: document.querySelector('#scenario').value,
     });
     view = { entries: openingLines(game) };
     refresh();

@@ -195,3 +195,29 @@ test('the replay button stays hidden until a round has been fought', () => {
   });
   assert.equal(read('#replay-round').hidden, false);
 });
+
+test('the mission panel carries the scenario brief and progress', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'mission', extended: true, scenario: 'defend-xanadu' }));
+  const panel = read('#report').innerHTML;
+  assert.match(panel, /Hold Xanadu/);
+  assert.match(panel, /Hold until stardate \d+/);
+  assert.match(panel, /Xanadu: active at 50, 50/);
+});
+
+test('a classic war shows the original mission text', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'mission-classic' }));
+  const panel = read('#report').innerHTML;
+  assert.match(panel, /Mission status/);
+  assert.match(panel, /Cease hostilities near Xanadu/);
+});
+
+test('the top bar names the scenario being fought', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'scenario-badge', extended: true, scenario: 'hunt-the-vendetta' }));
+  assert.equal(read('#mode-readout').textContent, 'EXTENDED · HUNT THE HUNTER');
+  elements.clear();
+  renderGame(createGame({ seed: 'scenario-badge-plain', extended: true }));
+  assert.equal(read('#mode-readout').textContent, 'EXTENDED WAR');
+});

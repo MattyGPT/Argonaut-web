@@ -1,4 +1,5 @@
 import { DOCKING, FACTIONS, RANGES } from '../game/constants.js';
+import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
 import {
   abbreviateNarrative,
   alertLevel,
@@ -83,7 +84,9 @@ export const renderGame = (game, view = {}) => {
 
   document.querySelector('#seed-readout').textContent = `SEED ${game.seed}`;
   document.querySelector('#turn-readout').textContent = `Stardate ${game.turn}`;
-  document.querySelector('#mode-readout').textContent = game.extended ? 'EXTENDED WAR' : '';
+  document.querySelector('#mode-readout').textContent = game.extended
+    ? (scenarioFor(game).id === 'annihilation' ? 'EXTENDED WAR' : `EXTENDED · ${scenarioFor(game).title.toUpperCase()}`)
+    : '';
   document.querySelector('#legend-note').textContent = game.extended
     ? 'dashed rings = your phaser / photon / engine range · green ring = Xanadu dockyard range · red outline = enemy that can reach you · white pip = ship under orders · click a Federation ship to order it'
     : 'dashed rings = your phaser / photon / engine range · red outline = enemy that can reach you';
@@ -150,8 +153,8 @@ export const renderGame = (game, view = {}) => {
   const canOrder = Boolean(orderShip) && orderShip.faction === actor?.faction && orderShip.status !== 'destroyed';
 
   const activeReport = view.report ?? {
-    title: 'Mission status',
-    lines: ['Cease hostilities near Xanadu. Destroy the opposing fleets before they destroy Federation command.'],
+    title: scenarioFor(game).title,
+    lines: [scenarioFor(game).brief, ...scenarioProgress(game)],
   };
   report.innerHTML = canOrder
     ? orderPanel(game, actor, orderShip)

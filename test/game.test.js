@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, RANGES, STALEMATE_ROUNDS, VENDETTA } from '../game/constants.js';
+import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, RANGES, SCENARIOS, STALEMATE_ROUNDS, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
+import { scenarioProgress } from '../game/scenarios.js';
 import { abbreviateNarrative, alertLevel, createGame, distance, getShip, isAce, radioIntegrity, vendettaGrudge } from '../game/state.js';
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, killLines, orderTargets, resolveCollision, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
@@ -1279,4 +1280,90 @@ test('a completed round is kept for replay', () => {
   const resolved = resolveComputerTurns(createGame({ seed: 'last-round' }));
   assert.ok(Array.isArray(resolved.lastRound.events));
   assert.ok(resolved.lastRound.entries.length > 0, 'the round narrative is kept beside the events');
+});
+
+// --- Extended war: scenarios ----------------------------------------------------
+
+test('a classic war always fights to annihilation', () => {
+  assert.equal(createGame({ seed: 'scenario-classic', scenario: 'defend-xanadu' }).scenario, 'annihilation',
+    'a scenario is an extended-war option');
+  assert.equal(createGame({ seed: 'scenario-ext', extended: true, scenario: 'defend-xanadu' }).scenario, 'defend-xanadu');
+  assert.equal(createGame({ seed: 'scenario-junk', extended: true, scenario: 'nonsense' }).scenario, 'annihilation');
+});
+
+test('hold Xanadu is lost the moment the base falls', () => {
+  const game = withShips(
+    createGame({ seed: 'defend-lost', extended: true, scenario: 'defend-xanadu' }),
+    (ship) => (ship.id === 'xanadu' ? { ...ship, status: 'destroyed' } : ship),
+  );
+  const outcome = evaluateOutcome(game);
+  assert.equal(outcome.kind, 'scenario-loss');
+  assert.match(outcome.message, /Xanadu has fallen/);
+});
+
+test('hold Xanadu is won by outlasting the target stardate', () => {
+  const game = {
+    ...createGame({ seed: 'defend-won', extended: true, scenario: 'defend-xanadu' }),
+    turn: SCENARIOS['defend-xanadu'].stardates,
+  };
+  const outcome = evaluateOutcome(game);
+  assert.equal(outcome.kind, 'scenario-win');
+  assert.match(outcome.message, /Xanadu still stands/);
+  assert.equal(evaluateOutcome({ ...game, turn: game.turn - 1 }).kind, 'active', 'one stardate short is not enough');
+});
+
+test('wiping out the enemy still wins outright under a scenario', () => {
+  const game = createGame({ seed: 'defend-outright', extended: true, scenario: 'defend-xanadu' });
+  const wiped = withShips(game, (ship) => (ship.faction === 'Federation' ? ship : { ...ship, status: 'destroyed' }));
+  assert.equal(evaluateOutcome(wiped).kind, 'federation-win');
+});
+
+test('the hunt is lost if the hunter dies unidentified, won once you know them', () => {
+  const base = createGame({ seed: 'hunt', extended: true, scenario: 'hunt-the-vendetta' });
+  const hunterId = base.objectiveShipId;
+  assert.equal(hunterId, base.vendettaShipId, 'the objective is the hull hunting Captain Jason');
+
+  const dead = withShips(base, (ship) => (ship.id === hunterId ? { ...ship, status: 'destroyed' } : ship));
+  assert.equal(evaluateOutcome(dead).kind, 'scenario-loss');
+  assert.match(evaluateOutcome(dead).message, /died unidentified/);
+
+  const identified = { ...dead, scanned: { [hunterId]: true } };
+  assert.equal(evaluateOutcome(identified).kind, 'scenario-win');
+  assert.match(evaluateOutcome(identified).message, /The vendetta ends here/);
+});
+
+test('boarding the hunter wins the hunt even though the hull survives', () => {
+  const base = createGame({ seed: 'hunt-boarded', extended: true, scenario: 'hunt-the-vendetta' });
+  const hunterId = base.objectiveShipId;
+  const boarded = {
+    ...withShips(base, (ship) => (ship.id === hunterId ? { ...ship, faction: 'Federation' } : ship)),
+    scanned: { [hunterId]: true },
+  };
+  assert.equal(evaluateOutcome(boarded).kind, 'scenario-win');
+  assert.match(evaluateOutcome(boarded).message, /flies Federation colours/);
+});
+
+test('the hunt remembers its target after the vendetta is cleared', () => {
+  const base = createGame({ seed: 'hunt-cleared', extended: true, scenario: 'hunt-the-vendetta' });
+  const game = { ...base, vendettaShipId: null };
+  assert.equal(game.objectiveShipId, base.objectiveShipId, 'boarding clears the vendetta, not the objective');
+  assert.equal(evaluateOutcome(game).kind, 'active');
+});
+
+test('the mission panel names the hunter but not their hull until you scan', () => {
+  const base = createGame({ seed: 'hunt-progress', extended: true, scenario: 'hunt-the-vendetta' });
+  const hunter = getShip(base, base.objectiveShipId);
+  const hidden = scenarioProgress(base).join(' ');
+  assert.ok(hidden.includes(hunter.captain), 'the captain is named');
+  assert.ok(!hidden.includes(hunter.name), 'the hull is not — that is what scanning is for');
+  const revealed = scenarioProgress({ ...base, scanned: { [hunter.id]: true } }).join(' ');
+  assert.ok(revealed.includes(hunter.name));
+  assert.ok(!revealed.includes(`${hunter.x}, ${hunter.y}`), 'and it never gives away a position the sensors did not earn');
+});
+
+test('hold Xanadu reports its progress against the target stardate', () => {
+  const game = { ...createGame({ seed: 'defend-progress', extended: true, scenario: 'defend-xanadu' }), turn: 7 };
+  const lines = scenarioProgress(game).join(' ');
+  assert.match(lines, /Xanadu: active at 50, 50/);
+  assert.match(lines, /Hold until stardate 20\.  Now stardate 7\./);
 });

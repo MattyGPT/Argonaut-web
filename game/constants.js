@@ -288,3 +288,30 @@ export const ACE_KILLS = 2;
  * hunting Jason gets more dangerous the longer you leave it alive.
  */
 export const VENDETTA = Object.freeze({ killsPerStep: 3, damagePerStep: 0.25 });
+
+/**
+ * Objectives an extended war can be fought for. `annihilation` is the original's
+ * only condition — the conflict ends when a side is wiped out — so it is the default
+ * and the only one a classic war ever uses. The scenario logic lives in
+ * `game/scenarios.js`; this is the data half.
+ */
+export const SCENARIOS = Object.freeze({
+  annihilation: Object.freeze({
+    id: 'annihilation',
+    title: 'Mission status',
+    brief: 'Cease hostilities near Xanadu. Destroy the opposing fleets before they destroy Federation command.',
+  }),
+  'defend-xanadu': Object.freeze({
+    id: 'defend-xanadu',
+    title: 'Hold Xanadu',
+    brief: 'Xanadu must still be standing when the stardate reaches the target. Lose the base and the war is lost, whatever else survives.',
+    stardates: 20,
+  }),
+  'hunt-the-vendetta': Object.freeze({
+    id: 'hunt-the-vendetta',
+    title: 'Hunt the hunter',
+    brief: 'One enemy captain has sworn to destroy you. Scan the enemy fleet to learn which hull they command, then end them — if the war kills your hunter before you identify them, you will never know who was coming for you.',
+  }),
+});
+
+export const SCENARIO_IDS = Object.freeze(Object.keys(SCENARIOS));

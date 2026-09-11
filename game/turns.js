@@ -2,6 +2,7 @@ import { DOCKING, FACTIONS, GRID_SIZE, MISS_CHANCE, RANGES, STALEMATE_ROUNDS, SU
 import { damageShip, detonate, fireEvent, flushShields, killLines, resolveCollision, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
+import { scenarioOutcome } from './scenarios.js';
 import {
   crewCapacity,
   describeOrder,
@@ -151,6 +152,11 @@ export const evaluateOutcome = (game) => {
   if (activeFederation.length === 0) {
     return { kind: 'alliance-win', message: victoryMessage('alliance-win', dominantEnemy(activeEnemies)) };
   }
+  // A scenario objective can end the war in either direction. It is checked after
+  // the annihilation outcomes, so wiping out an alliance still wins outright even
+  // if the objective would have failed on the same stardate.
+  const objective = scenarioOutcome(game);
+  if (objective) return objective;
   // Both sides still have hulls, but nothing left can change anything: either no
   // survivor can move or reach anyone, or the whole war zone has gone quiet for
   // STALEMATE_ROUNDS stardates. The original ends this in a hopeless draw rather

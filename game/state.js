@@ -7,6 +7,7 @@ import {
   FACTION_IDS,
   GRID_SIZE,
   RANGES,
+  SCENARIO_IDS,
   SHIP_NAMES,
   SHIP_TEMPLATES,
   STARBASE_BLAST_RADIUS,
@@ -91,7 +92,7 @@ const assignCaptains = (seed, count) => {
   return Array.from({ length: count }, (_, index) => deck[index % deck.length]);
 };
 
-export const createGame = ({ seed = 'xanadu', regional = false, sound = false, extended = false } = {}) => {
+export const createGame = ({ seed = 'xanadu', regional = false, sound = false, extended = false, scenario = 'annihilation' } = {}) => {
   const normalizedSeed = String(seed);
   const rng = createRng(normalizedSeed);
   const occupied = new Set([`${XANADU_POSITION.x},${XANADU_POSITION.y}`]);
@@ -106,6 +107,9 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
   const enemyFlagships = fleets.filter((ship) => ship.id.endsWith('-flagship') && ship.faction !== FACTIONS.FEDERATION);
   const roster = [...fleets, xanadu];
   const captains = assignCaptains(normalizedSeed, roster.length);
+  const vendettaShipId = rng.pick(enemyFlagships).id;
+  // A scenario is an extended-war option; a classic war always fights to annihilation.
+  const scenarioId = extended && SCENARIO_IDS.includes(scenario) ? scenario : 'annihilation';
 
   return {
     seed: normalizedSeed,
@@ -115,7 +119,11 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     phase: 'player',
     turn: 1,
     playerShipId: 'fed-flagship',
-    vendettaShipId: rng.pick(enemyFlagships).id,
+    vendettaShipId,
+    scenario: scenarioId,
+    // The hunt objective keeps its own reference, since boarding the hunter clears
+    // vendettaShipId and the war would otherwise forget what it was about.
+    objectiveShipId: scenarioId === 'hunt-the-vendetta' ? vendettaShipId : null,
     randomStep: 0,
     ships: roster.map((ship, index) => ({ ...ship, captain: captains[index] })),
     // Standing fleet orders, and orders still travelling because the radio could

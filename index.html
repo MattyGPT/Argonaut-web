@@ -112,7 +112,15 @@
           <input id="extended" type="checkbox">
           Extended war — fleet orders
         </label>
-        <p class="dialog-note">The same seed reproduces the initial war. An extended war keeps every original rule and adds standing orders for the rest of your fleet; a classic war plays exactly as calibrated.</p>
+        <label>
+          Scenario
+          <select id="scenario" disabled>
+            <option value="annihilation">Cease hostilities — annihilation</option>
+            <option value="defend-xanadu">Hold Xanadu</option>
+            <option value="hunt-the-vendetta">Hunt the hunter</option>
+          </select>
+        </label>
+        <p class="dialog-note">The same seed reproduces the initial war. An extended war keeps every original rule and adds standing orders for the rest of your fleet, alliance doctrines, and the scenarios; a classic war plays exactly as calibrated.</p>
         <div class="dialog-actions">
           <button value="cancel" class="secondary">Cancel</button>
           <button value="confirm">Begin</button>
