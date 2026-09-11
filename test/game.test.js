@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DOCKING, RANGES, STALEMATE_ROUNDS } from '../game/constants.js';
+import { CRIPPLE, DOCKING, RANGES, STALEMATE_ROUNDS } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
-import { abbreviateNarrative, alertLevel, createGame, getShip, radioIntegrity } from '../game/state.js';
+import { abbreviateNarrative, alertLevel, createGame, distance, getShip, radioIntegrity } from '../game/state.js';
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, orderTargets, resolveCollision, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDocking, transferCommandIfNeeded } from '../game/turns.js';
@@ -649,10 +649,14 @@ test('an extended war starts with the flag set and no orders issued', () => {
   assert.equal(createGame({ seed: 'extended-fresh' }).extended, false);
 });
 
-test('the extended flag alone changes nothing until an order is issued', () => {
-  const classic = resolveComputerTurns(createGame({ seed: 'parity' }));
-  const extendedWar = resolveComputerTurns(createGame({ seed: 'parity', extended: true }));
-  assert.deepEqual(extendedWar.ships, classic.ships, 'an extended war with no orders must play identically');
+test('an extended war gives captains a survival instinct a classic war lacks', () => {
+  const setup = (extended) => withShips(createGame({ seed: 'doctrine-flush', extended }), (ship) => {
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 10, y: 10, shields: 5 };
+    if (ship.faction === 'Federation') return { ...ship, x: 90, y: 90 };
+    return { ...ship, x: 95, y: 5 };
+  });
+  assert.equal(chooseAiAction(setup(true), 'axis-cruiser-1').type, 'shields', 'a hurt Axis captain flushes engines');
+  assert.equal(chooseAiAction(setup(false), 'axis-cruiser-1').type, 'move', 'a classic autopilot only ever pursues');
 });
 
 test('a classic war takes no fleet orders', () => {
@@ -751,15 +755,17 @@ test('a ship ordered to hold still fires at what comes to it', () => {
 });
 
 test('an intercept order engages the named ship over a nearer enemy', () => {
-  const game = extended('intercept', (ship) => {
+  const setup = (isExtended) => withShips(createGame({ seed: 'intercept', extended: isExtended }), (ship) => {
     if (ship.id === 'fed-flagship') return { ...ship, x: 10, y: 10 };
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 10, y: 12 };
     if (ship.id === 'axis-flagship') return { ...ship, x: 18, y: 12 };
     if (ship.id === 'cabal-flagship') return { ...ship, x: 30, y: 12 };
     return { ...ship, x: 90, y: 90 };
   });
-  assert.equal(chooseAiAction(game, 'fed-cruiser-1').targetId, 'axis-flagship', 'the fleet shoots the near target');
-  const ordered = { ...game, orders: { 'fed-cruiser-1': { type: 'intercept', targetId: 'cabal-flagship' } } };
+  assert.equal(chooseAiAction(setup(false), 'fed-cruiser-1').targetId, 'axis-flagship', 'a classic autopilot shoots the near target');
+  assert.notEqual(chooseAiAction(setup(true), 'fed-cruiser-1').targetId, 'cabal-flagship', 'fleet doctrine would not pick that target');
+
+  const ordered = { ...setup(true), orders: { 'fed-cruiser-1': { type: 'intercept', targetId: 'cabal-flagship' } } };
   const action = chooseAiAction(ordered, 'fed-cruiser-1');
   assert.equal(action.type, 'phasers');
   assert.equal(action.targetId, 'cabal-flagship');
@@ -963,4 +969,216 @@ test('a collision is counted against both hulls', () => {
   assert.equal(getShip(after, 'fed-flagship').collisions, 1);
   assert.equal(getShip(after, 'axis-flagship').collisions, 1);
   assert.equal(createGame({ seed: 'collision-count' }).ships[0].collisions, 0);
+});
+
+// --- Collisions: one destroyed, the other crippled -----------------------------
+
+const systemTotal = (ship) => Object.values(ship.systems).reduce((total, units) => total + units, 0);
+
+const ramGame = (seed, ids, point = { x: 10, y: 10 }) => withShips(createGame({ seed }), (ship) => (ids.includes(ship.id)
+  ? { ...ship, ...point }
+  : { ...ship, x: 90, y: 90 }));
+
+test('a collision destroys one hull and cripples the other, never both', () => {
+  // A scout's whole hull is 45 shields + 35 crew + 17 system units, well under the
+  // flat 120 damage the survivor used to take, so both ships died.
+  const game = ramGame('cripple-scout', ['fed-scout', 'axis-scout']);
+  const { game: after } = resolveCollision(game, getShip(game, 'fed-scout'));
+  const pair = ['fed-scout', 'axis-scout'].map((id) => getShip(after, id));
+  const destroyed = pair.filter((ship) => ship.status === 'destroyed');
+  const survivor = pair.find((ship) => ship.status !== 'destroyed');
+  assert.equal(destroyed.length, 1, 'exactly one hull is destroyed');
+  assert.equal(survivor.status, 'active', 'the other is crippled, not lost');
+  assert.equal(survivor.shields, 0, 'crippled means its shields are gone');
+
+  const before = getShip(game, survivor.id);
+  const expected = Math.ceil((before.crew + systemTotal(before)) * CRIPPLE.fraction);
+  const lost = (before.crew - survivor.crew) + (systemTotal(before) - systemTotal(survivor));
+  assert.equal(lost, expected, 'and about half its crew and subsystems are gone');
+});
+
+test('a tractor beam that drags a hull into another resolves the collision', () => {
+  const game = withShips(createGame({ seed: 'tow-ram' }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 10, y: 10 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 40, y: 10 };
+    if (ship.id === 'bloc-flagship') return { ...ship, x: 25, y: 10 }; // in the tow path
+    return { ...ship, x: 90, y: 90 };
+  });
+  const result = applyPlayerAction(game, { type: 'tractor', targetId: 'axis-flagship' });
+  const text = result.messages.join(' ');
+  assert.match(text, /has beamed Firebreather to 25, 10/);
+  assert.match(text, /Collision/, 'the towed hull lands on top of a third ship');
+  const hit = ['axis-flagship', 'bloc-flagship'].map((id) => getShip(result.game, id).status);
+  assert.ok(hit.includes('destroyed'), 'one of the two is destroyed');
+});
+
+test('hyperspacing onto another hull is a collision, not an overlap', () => {
+  const game = withShips(createGame({ seed: 'jump-ram' }), (ship) => (ship.id === 'axis-flagship'
+    ? { ...ship, x: 70, y: 70 }
+    : ship));
+  const result = applyPlayerAction(game, { type: 'hyperspace', x: 70, y: 70 });
+  const text = result.messages.join(' ');
+  assert.ok(/burnt up/.test(text) || /Collision/.test(text), 'a jump onto a hull either misjumps or collides');
+  if (!/burnt up/.test(text)) {
+    const statuses = ['fed-flagship', 'axis-flagship'].map((id) => getShip(result.game, id).status);
+    assert.ok(statuses.includes('destroyed'), 'one of the two hulls is gone');
+  }
+});
+
+test('a ship cannot end its move overlapping another live hull', () => {
+  const game = ramGame('pile-up', ['fed-flagship', 'axis-flagship', 'bloc-flagship']);
+  const { game: after, messages } = resolveCollision(game, getShip(game, 'fed-flagship'));
+  assert.ok(messages.length >= 1);
+  const actor = getShip(after, 'fed-flagship');
+  if (actor.status !== 'active') return;
+  const stillOverlapping = ['axis-flagship', 'bloc-flagship'].filter((id) => {
+    const other = getShip(after, id);
+    return other.status === 'active' && distance(actor, other) < 1;
+  });
+  assert.deepEqual(stillOverlapping, [], 'every overlap the actor is party to resolves');
+});
+
+// --- Extended war: alliance doctrines ------------------------------------------
+
+test('a gutted Axis captain takes the enemy fleet with it', () => {
+  const setup = (isExtended) => withShips(createGame({ seed: 'axis-suicide', extended: isExtended }), (ship) => {
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 5 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 55, y: 50 };
+    if (ship.id === 'fed-cruiser-2') return { ...ship, x: 50, y: 55 };
+    if (ship.id === 'fed-cruiser-3') return { ...ship, x: 45, y: 50 };
+    if (ship.id === 'fed-scout') return { ...ship, x: 50, y: 45 };
+    if (ship.faction === 'Axis') return { ...ship, x: 5, y: 5 };
+    return { ...ship, x: 95, y: 95 };
+  });
+  assert.equal(chooseAiAction(setup(true), 'axis-cruiser-1').type, 'self-destruct',
+    'four enemies inside the blast and none of its own');
+  assert.notEqual(chooseAiAction(setup(false), 'axis-cruiser-1').type, 'self-destruct',
+    'a classic autopilot never gives up its hull');
+});
+
+test('an Axis captain will not detonate over its own fleet', () => {
+  const game = extended('axis-restraint', (ship) => {
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 5 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 55, y: 50 };
+    if (ship.id === 'fed-cruiser-2') return { ...ship, x: 50, y: 55 };
+    if (ship.id === 'fed-cruiser-3') return { ...ship, x: 45, y: 50 };
+    if (ship.id === 'fed-scout') return { ...ship, x: 50, y: 45 };
+    if (ship.faction === 'Axis') return { ...ship, x: 52, y: 52 }; // four of its own inside the blast
+    return { ...ship, x: 95, y: 95 };
+  });
+  assert.notEqual(chooseAiAction(game, 'axis-cruiser-1').type, 'self-destruct');
+});
+
+test('an Axis captain with nothing in range closes to contact', () => {
+  const game = extended('axis-ram', (ship) => {
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 10, y: 10, systems: { ...ship.systems, phasers: 0, photons: 0, tractor: 0 } };
+    if (ship.faction === 'Federation') return { ...ship, x: 60, y: 10 };
+    return { ...ship, x: 90, y: 90 };
+  });
+  const action = chooseAiAction(game, 'axis-cruiser-1');
+  assert.equal(action.type, 'move');
+  assert.equal(action.dx, 40, 'a full burn at a hull 50 away: Axis fights from 5 units, not from range');
+  assert.equal(action.dy, 0);
+});
+
+test('a Bloc gunner backs off anything inside its minimum range', () => {
+  const game = extended('bloc-kite', (ship) => {
+    if (ship.id === 'bloc-cruiser-1') return { ...ship, x: 50, y: 50 };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 53, y: 50, shields: 1, crew: 1 };
+    return { ...ship, x: 95, y: 95 };
+  });
+  const action = chooseAiAction(game, 'bloc-cruiser-1');
+  assert.equal(action.type, 'move', 'it opens the range instead of trading photons at 3 units');
+  assert.ok(action.dx < 0);
+});
+
+test('a Bloc gunner will not tow a target it cannot shoot', () => {
+  const game = extended('bloc-notractor', (ship) => {
+    if (ship.id === 'bloc-cruiser-1') return { ...ship, x: 10, y: 10, systems: { ...ship.systems, phasers: 0, photons: 0 } };
+    if (ship.id === 'fed-scout') return { ...ship, x: 42, y: 10, shields: 1, crew: 1 };
+    return { ...ship, x: 95, y: 95 };
+  });
+  const action = chooseAiAction(game, 'bloc-cruiser-1');
+  assert.equal(action.type, 'move', 'no tractor: Bloc fights at the phaser edge and closes to it');
+});
+
+test('a Bloc gunner executes the wounded it can hit, not one across the map', () => {
+  const game = extended('bloc-focus', (ship) => {
+    if (ship.id === 'bloc-cruiser-1') return { ...ship, x: 10, y: 10 };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 30, y: 10, shields: 40 };
+    if (ship.id === 'fed-scout') return { ...ship, x: 90, y: 90, shields: 1, crew: 1 };
+    if (ship.faction === 'Bloc') return ship;
+    return { ...ship, x: 95, y: 5 };
+  });
+  const action = chooseAiAction(game, 'bloc-cruiser-1');
+  assert.equal(action.type, 'phasers');
+  assert.equal(action.targetId, 'fed-flagship', 'the crippled scout 113 units away is not worth the trip');
+});
+
+test('a Cabal trickster tows a target into another enemy rather than shooting it', () => {
+  const game = extended('cabal-tow', (ship) => {
+    if (ship.id === 'cabal-cruiser-1') return { ...ship, x: 10, y: 10 };
+    if (ship.id === 'cabal-flagship') return { ...ship, x: 26, y: 10 };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 25, y: 10 };
+    if (ship.id === 'bloc-scout') return { ...ship, x: 15, y: 10 }; // where the tow lands
+    if (ship.faction === 'Cabal') return ship;
+    return { ...ship, x: 95, y: 95 };
+  });
+  const action = chooseAiAction(game, 'cabal-cruiser-1');
+  assert.equal(action.type, 'tractor', 'a 10 unit tow puts the Argo on top of a Bloc scout');
+  assert.equal(action.targetId, 'fed-flagship');
+});
+
+test('a Cabal trickster will not tow a target onto its own hull', () => {
+  const game = extended('cabal-no-own-goal', (ship) => {
+    if (ship.id === 'cabal-cruiser-1') return { ...ship, x: 10, y: 10 };
+    if (ship.id === 'cabal-flagship') return { ...ship, x: 12, y: 10 };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 15, y: 10 };
+    if (ship.faction === 'Cabal') return ship;
+    return { ...ship, x: 95, y: 95 };
+  });
+  const action = chooseAiAction(game, 'cabal-cruiser-1');
+  assert.notEqual(action.type, 'tractor', 'that tow would land the Argo on the Cabal hull itself');
+  assert.equal(action.type, 'photons');
+});
+
+test('a Cabal trickster shoots when a tow would hit nothing', () => {
+  const game = extended('cabal-shoot', (ship) => {
+    if (ship.id === 'cabal-cruiser-1') return { ...ship, x: 10, y: 10 };
+    if (ship.id === 'cabal-flagship') return { ...ship, x: 20, y: 20 };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 30, y: 10 };
+    if (ship.faction === 'Cabal') return ship;
+    return { ...ship, x: 95, y: 95 };
+  });
+  assert.equal(chooseAiAction(game, 'cabal-cruiser-1').type, 'phasers',
+    'a tow from 20 units lands in empty space, so the volley is not wasted on it');
+});
+
+test('a Federation captain concentrates with the fleet and refits when hurt', () => {
+  const game = extended('fed-doctrine', (ship) => {
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 40, y: 50, shields: 20 };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 50, y: 50 };
+    if (ship.id === 'axis-scout') return { ...ship, x: 52, y: 50 };
+    if (ship.faction === 'Federation') return ship;
+    return { ...ship, x: 95, y: 5 };
+  });
+  // 20 of 70 shields is under the 35% discipline threshold, so it tops up first.
+  assert.equal(chooseAiAction(game, 'fed-cruiser-1').type, 'shields');
+
+  const healthy = withShips(game, (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, shields: 60 } : ship));
+  const action = chooseAiAction(healthy, 'fed-cruiser-1');
+  assert.equal(action.type, 'phasers');
+  assert.equal(action.targetId, 'axis-scout', 'the fleet concentrates on the enemy nearest the flagship');
+});
+
+test('the vendetta ship neither refits nor runs', () => {
+  const base = extended('vendetta-doctrine', (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 10, y: 10 };
+    if (ship.id === 'axis-cruiser-1' || ship.id === 'axis-cruiser-2') return { ...ship, x: 60, y: 60, shields: 3 };
+    return { ...ship, x: 95, y: 95 };
+  });
+  const hunting = { ...base, vendettaShipId: 'axis-cruiser-1' };
+  assert.equal(chooseAiAction(hunting, 'axis-cruiser-1').type, 'move', 'it keeps coming for Captain Jason');
+  const plain = { ...base, vendettaShipId: 'bloc-flagship' };
+  assert.equal(chooseAiAction(plain, 'axis-cruiser-2').type, 'shields', 'an ordinary Axis captain refits first');
 });

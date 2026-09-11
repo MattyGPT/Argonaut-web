@@ -1,5 +1,5 @@
 import {
-  COLLISION_DAMAGE,
+  CRIPPLE,
   DEFAULT_CREW_TRANSFER,
   GRID_SIZE,
   HYPERSPACE_BURN_CHANCE,
@@ -284,20 +284,55 @@ const weaponAction = (game, action, actor, type) => {
 /** Counts a collision on both hulls; the battle report names the clumsiest captain. */
 const collided = (ship) => ({ ...ship, collisions: (ship.collisions ?? 0) + 1 });
 
-export const resolveCollision = (game, actor) => {
-  const collision = game.ships.find((ship) => ship.id !== actor.id && isActive(ship) && distance(ship, actor) < 1);
-  if (!collision) return { game, messages: [], events: [] };
+/**
+ * Cripples a collision survivor: shields burned off and about half its crew and
+ * subsystems gone. The share is taken of what the ship actually has left, so it
+ * cannot reduce a hull to nothing — the survivor always lives, as the manual says.
+ */
+const cripple = (ship, rng) => {
+  const internals = ship.crew + Object.values(ship.systems).reduce((total, units) => total + units, 0);
+  return damageShip(ship, ship.shields + Math.ceil(internals * CRIPPLE.fraction), rng);
+};
+
+const oneCollision = (game, first, second) => {
   const rng = seededRng(game);
-  const destroyedId = rng.pick([actor.id, collision.id]);
-  const survivorId = destroyedId === actor.id ? collision.id : actor.id;
+  const destroyedId = rng.pick([first.id, second.id]);
   const destroyed = collided(destroyedShip(getShip(game, destroyedId)));
-  const survivor = collided(damageShip(getShip(game, survivorId), COLLISION_DAMAGE, rng));
+  const survivor = collided(cripple(getShip(game, destroyedId === first.id ? second.id : first.id), rng));
   const updated = advanceRandom({
     ...game,
     ships: game.ships.map((ship) => ship.id === destroyed.id ? destroyed : ship.id === survivor.id ? survivor : ship),
   });
   const events = [{ kind: 'explosion', fromId: survivor.id, toId: destroyed.id, x1: destroyed.x, y1: destroyed.y, x2: destroyed.x, y2: destroyed.y, hit: true }];
-  return { game: updated, messages: [`Collision: ${destroyed.name} is destroyed; ${survivor.name} is crippled.`], events };
+  return {
+    game: updated,
+    messages: [`Collision: ${destroyed.name} is destroyed; ${survivor.name} is crippled.`],
+    events,
+  };
+};
+
+/**
+ * Every collision at the actor's position, resolved one pair at a time. Only the
+ * first overlapping pair used to be handled, so a ship that arrived on top of two
+ * others passed through the second; and a hull destroyed in the first impact
+ * cannot collide again.
+ */
+export const resolveCollision = (game, actor) => {
+  const messages = [];
+  const events = [];
+  let next = game;
+  let current = actor;
+  for (const other of game.ships) {
+    if (other.id === current.id || !isActive(current)) continue;
+    const victim = getShip(next, other.id);
+    if (!isActive(victim) || distance(current, victim) >= 1) continue;
+    const resolved = oneCollision(next, current, victim);
+    next = resolved.game;
+    messages.push(...resolved.messages);
+    events.push(...resolved.events);
+    current = getShip(next, current.id);
+  }
+  return { game: next, messages, events };
 };
 
 const moveAction = (game, action, actor) => {
@@ -350,11 +385,15 @@ const tractorAction = (game, action, actor) => {
   if (found.error) return invalid(game, found.error, found.requiresTarget);
   if (distance(actor, found.target) > RANGES.tractor) return invalid(game, `${found.target.name} is out of tractor range.`);
   const { pull, position } = tractorLock(actor, found.target);
-  const updated = completeTurn(replaceShip(game, { ...found.target, tractorBy: actor.id, x: position.x, y: position.y }));
-  return result(updated, [
+  const pulled = { ...found.target, tractorBy: actor.id, x: position.x, y: position.y };
+  // A beam can drag a hull straight into another one, and that is a collision like
+  // any other — which makes towing an enemy into a friend a real tactic.
+  const collision = resolveCollision(completeTurn(replaceShip(game, pulled)), pulled);
+  return result(collision.game, [
     `${actor.name} locks a tractor beam on ${found.target.name}.`,
     `Tractor beam good for ${pull} units pull. ${actor.name} has beamed ${found.target.name} to ${position.x}, ${position.y}.`,
-  ]);
+    ...collision.messages,
+  ], { events: collision.events });
 };
 
 const transportAction = (game, action, actor) => {
@@ -392,7 +431,12 @@ const transportAction = (game, action, actor) => {
 
 const destroyedShip = (ship) => ({ ...ship, status: 'destroyed', crew: 0, shields: 0, tractorBy: null });
 
-const selfDestructAction = (game, actor) => {
+/**
+ * The blast itself, without ending a turn: everything inside the radius dies and a
+ * wider ring takes shrapnel. Shared by the player's `=` and by an Axis captain who
+ * would rather take the enemy fleet with them.
+ */
+export const detonate = (game, actor) => {
   const rng = seededRng(game);
   const blast = blastRadius(actor);
   const shrapnel = blast + SHRAPNEL_EXTRA_RANGE;
@@ -412,7 +456,12 @@ const selfDestructAction = (game, actor) => {
     }
     return ship;
   });
-  return result(completeTurn(advanceRandom({ ...game, ships: victims })), messages);
+  return { game: advanceRandom({ ...game, ships: victims }), messages };
+};
+
+const selfDestructAction = (game, actor) => {
+  const blast = detonate(game, actor);
+  return result(completeTurn(blast.game), blast.messages);
 };
 
 const hyperspaceAction = (game, action, actor) => {
@@ -432,10 +481,26 @@ const hyperspaceAction = (game, action, actor) => {
   }
   const shieldDamage = Math.max(HYPERSPACE_MIN_SHIELD_LOSS, Math.ceil(shieldCapacity(actor) * HYPERSPACE_SHIELD_LOSS));
   const relocated = { ...actor, x, y, shields: Math.max(0, actor.shields - shieldDamage), tractorBy: null };
+  // Materializing inside another hull is a collision like any other, which makes a
+  // jump onto an enemy a suicide ram.
+  const collision = resolveCollision(completeTurn(advanceRandom(replaceShip(game, relocated))), relocated);
   return result(
-    completeTurn(advanceRandom(replaceShip(game, relocated))),
-    `${actor.name} enters hyperspace and emerges at ${x},${y}; shields lose ${shieldDamage}.`,
+    collision.game,
+    [`${actor.name} enters hyperspace and emerges at ${x},${y}; shields lose ${shieldDamage}.`, ...collision.messages],
+    { events: collision.events },
   );
+};
+
+/**
+ * Engine power flushed into shields. Shared by the player's `1` and the
+ * autopilots', so an enemy captain reinforces its shields exactly as you do. Null
+ * when there are no engines to flush or the shields are already full.
+ */
+export const flushShields = (actor) => {
+  if (systemUnits(actor, 'engines') <= 0) return null;
+  const shields = Math.min(shieldCapacity(actor), actor.shields + systemUnits(actor, 'engines') * SHIELD_PER_ENGINE);
+  if (shields === actor.shields) return null;
+  return { ship: { ...actor, shields }, gained: shields - actor.shields };
 };
 
 /**
@@ -483,11 +548,13 @@ export const applyPlayerAction = (game, action = {}) => {
 
   switch (action.type) {
     case 'shields': {
-      if (systemUnits(actor, 'engines') <= 0) return invalid(game, `${actor.name} cannot flush engines for shield power.`);
-      const gain = systemUnits(actor, 'engines') * SHIELD_PER_ENGINE;
-      const shields = Math.min(shieldCapacity(actor), actor.shields + gain);
-      if (shields === actor.shields) return invalid(game, 'Shields are already at full strength.');
-      return result(completeTurn(replaceShip(game, { ...actor, shields })), `Engines flushed for ${shields - actor.shields} units of shield power.`);
+      const flushed = flushShields(actor);
+      if (!flushed) {
+        return invalid(game, systemUnits(actor, 'engines') <= 0
+          ? `${actor.name} cannot flush engines for shield power.`
+          : 'Shields are already at full strength.');
+      }
+      return result(completeTurn(replaceShip(game, flushed.ship)), `Engines flushed for ${flushed.gained} units of shield power.`);
     }
     case 'move': return moveAction(game, action, actor);
     case 'phasers': return weaponAction(game, action, actor, 'phasers');
