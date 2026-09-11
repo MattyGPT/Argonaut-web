@@ -7,6 +7,7 @@ import {
   engineCapacity,
   getShip,
   inRadioContact,
+  isAce,
   orderFor,
   pendingOrderFor,
   radioIntegrity,
@@ -124,7 +125,11 @@ export const renderGame = (game, view = {}) => {
     const threat = threats.has(ship.id) ? ' threat' : '';
     const standing = orderFor(game, ship.id) ?? pendingOrderFor(game, ship.id);
     const duty = standing && standing.type !== 'focus' ? describeOrder(game, standing) : null;
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}" style="--x:${ship.x};--y:${ship.y}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${duty ? ` — ${duty}` : ''}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${duty ? `, orders ${duty}` : ''}"><span class="glyph">${ship.name[0]}</span></button>`;
+    // A captain's name is intelligence: scanning reveals it, which is how you work
+    // out which hull has sworn to hunt you.
+    const captain = game.extended && game.scanned?.[ship.id] ? ship.captain : null;
+    const ace = captain && isAce(ship) ? ' ace' : '';
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}" style="--x:${ship.x};--y:${ship.y}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}"><span class="glyph">${ship.name[0]}</span></button>`;
   }).join('');
   map.innerHTML = ringHtml + shipHtml;
 
@@ -161,6 +166,8 @@ export const renderGame = (game, view = {}) => {
   document.querySelector('#log-meta').textContent = integrity >= 1
     ? 'Newest first'
     : `Newest first · radio at ${Math.round(integrity * 100)}%, traffic abbreviated`;
+  const replay = document.querySelector('#replay-round');
+  if (replay) replay.hidden = !(game.lastRound?.events?.length > 0);
 
   if (game.outcome) {
     const section = (part) => `<h2>${part.title}</h2><ul>${part.lines.map((line) => `<li>${line}</li>`).join('')}</ul>`;
@@ -264,14 +271,15 @@ export const reportFor = (game, type) => {
     const topGun = best(game.ships, (ship) => ship.kills);
     const punished = best(survivors, (ship) => ship.shotsTaken);
     const clumsy = best(game.ships, (ship) => ship.collisions ?? 0);
+    const gunner = topGun?.kills
+      ? `Top gun: ${game.extended ? `Captain ${topGun.captain} of the ${topGun.name}` : `${topGun.name} of the ${topGun.faction}`}, ${topGun.kills} credited kills.`
+      : 'No ship scored a kill.';
     return {
       title: 'Battle report',
       lines: [
         `Stardates elapsed: ${game.turn}.`,
         `Federation losses: ${losses} of ${federation.length} hulls.`,
-        topGun?.kills
-          ? `Top gun: ${topGun.name} of the ${topGun.faction}, ${topGun.kills} credited kills.`
-          : 'No ship scored a kill.',
+        gunner,
         punished?.shotsTaken ? `Heaviest punishment taken: ${punished.name} absorbed ${punished.shotsTaken} volleys.` : null,
         clumsy?.collisions ? `Most collisions: ${clumsy.name} with ${clumsy.collisions}.` : null,
         command

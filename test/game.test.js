@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CRIPPLE, DOCKING, RANGES, STALEMATE_ROUNDS } from '../game/constants.js';
+import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, RANGES, STALEMATE_ROUNDS, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
-import { abbreviateNarrative, alertLevel, createGame, distance, getShip, radioIntegrity } from '../game/state.js';
-import { applyPlayerAction, defaultTargetFor, eligibleTargets, orderTargets, resolveCollision, weaponDamage } from '../game/actions.js';
+import { abbreviateNarrative, alertLevel, createGame, distance, getShip, isAce, radioIntegrity, vendettaGrudge } from '../game/state.js';
+import { applyPlayerAction, defaultTargetFor, eligibleTargets, killLines, orderTargets, resolveCollision, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDocking, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
@@ -1181,4 +1181,102 @@ test('the vendetta ship neither refits nor runs', () => {
   assert.equal(chooseAiAction(hunting, 'axis-cruiser-1').type, 'move', 'it keeps coming for Captain Jason');
   const plain = { ...base, vendettaShipId: 'bloc-flagship' };
   assert.equal(chooseAiAction(plain, 'axis-cruiser-2').type, 'shields', 'an ordinary Axis captain refits first');
+});
+
+// --- Extended war: captains, aces, and the escalating vendetta ------------------
+
+test('every hull has a captain, dealt from the name list without repeats', () => {
+  const names = createGame({ seed: 'captains' }).ships.map((ship) => ship.captain);
+  assert.equal(names.length, 21);
+  assert.ok(names.every((name) => CAPTAIN_NAMES.includes(name)));
+  assert.equal(new Set(names).size, names.length, 'no two hulls share a captain');
+  assert.deepEqual(createGame({ seed: 'captains' }).ships.map((ship) => ship.captain), names, 'and the deal is seeded');
+  assert.notDeepEqual(createGame({ seed: 'other-captains' }).ships.map((ship) => ship.captain), names);
+});
+
+test('captains are dealt on their own stream, leaving the war exactly as it was', () => {
+  // The positions and the vendetta pick come from the war's RNG; captains must not
+  // draw from it, or every existing seed would deal a different war.
+  const game = createGame({ seed: 'captain-stream' });
+  assert.equal(game.ships.filter((ship) => ship.id.endsWith('-flagship')).length, 4);
+  assert.ok(game.vendettaShipId.endsWith('-flagship'));
+  assert.notEqual(game.vendettaShipId, 'fed-flagship', 'the hunter is always an enemy flagship');
+  assert.equal(getShip(game, 'xanadu').x, 50, 'Xanadu still sits at the centre');
+});
+
+test('two credited kills make an ace', () => {
+  assert.equal(isAce({ kills: ACE_KILLS }), true);
+  assert.equal(isAce({ kills: ACE_KILLS - 1 }), false);
+});
+
+test('the grudge only sharpens the vendetta hull’s volleys against your command ship', () => {
+  const base = createGame({ seed: 'grudge', extended: true });
+  const hunter = { ...getShip(base, base.vendettaShipId), kills: 7 };
+  const jason = getShip(base, base.playerShipId);
+  assert.equal(vendettaGrudge(base, hunter, jason), Math.floor(7 / VENDETTA.killsPerStep));
+  assert.equal(vendettaGrudge(base, hunter, getShip(base, 'bloc-flagship')), 0, 'only against Captain Jason');
+  assert.equal(vendettaGrudge(base, getShip(base, 'bloc-flagship'), jason), 0, 'only from the hull hunting you');
+
+  const classic = createGame({ seed: 'grudge' });
+  const classicHunter = { ...getShip(classic, classic.vendettaShipId), kills: 9 };
+  assert.equal(vendettaGrudge(classic, classicHunter, getShip(classic, classic.playerShipId)), 0,
+    'a classic war has no grudge');
+});
+
+test('a deeper grudge means a heavier volley, and none leaves the mean alone', () => {
+  const ship = getShip(createGame({ seed: 'grudge-damage' }), 'fed-flagship');
+  const mean = (grudge) => {
+    const rng = createRng('grudge-mean');
+    const rolls = Array.from({ length: 200 }, () => weaponDamage('phasers', ship, rng, grudge));
+    return rolls.reduce((total, roll) => total + roll, 0) / rolls.length;
+  };
+  const nominal = 12 + ship.systems.phasers * 4;
+  assert.ok(Math.abs(mean(0) - nominal) < 2, 'no grudge keeps the calibrated mean');
+  assert.ok(mean(2) > mean(0) * 1.4, 'two steps of grudge bites at least 40% harder');
+});
+
+test('scanning records the hull and names its captain in an extended war', () => {
+  const setup = (isExtended) => withShips(createGame({ seed: 'scan-captain', extended: isExtended }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 10, y: 10 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 15, y: 10 };
+    return ship;
+  });
+  const result = applyPlayerAction(setup(true), { type: 'scan', targetId: 'axis-flagship' });
+  assert.equal(result.game.scanned['axis-flagship'], true);
+  assert.ok(result.report.lines.some((line) => line === `Captain: ${getShip(setup(true), 'axis-flagship').captain}`));
+
+  const classic = applyPlayerAction(setup(false), { type: 'scan', targetId: 'axis-flagship' });
+  assert.ok(!classic.report.lines.some((line) => line.startsWith('Captain:')),
+    'a classic scan reports only what the manual lists');
+});
+
+test('kill lines name captains only in an extended war', () => {
+  const classic = createGame({ seed: 'kill-lines' });
+  const shooter = getShip(classic, 'axis-flagship');
+  const victim = getShip(classic, 'fed-cruiser-1');
+  assert.deepEqual(killLines(classic, shooter, victim), [], 'a classic narrative is unchanged');
+
+  const war = createGame({ seed: 'kill-lines', extended: true });
+  const lines = killLines(war, getShip(war, 'axis-flagship'), victim);
+  assert.equal(lines[0], 'Bonhomme is destroyed.');
+  assert.equal(lines[1], `Captain ${shooter.captain} of the Firebreather is credited with 1 kill.`);
+});
+
+test('a second kill makes an ace and every third deepens the vendetta', () => {
+  const game = createGame({ seed: 'kill-escalation', extended: true });
+  const hunter = getShip(game, game.vendettaShipId);
+  const victim = getShip(game, 'fed-cruiser-1');
+
+  const second = killLines(game, { ...hunter, kills: ACE_KILLS - 1 }, victim);
+  assert.ok(second.some((line) => /is now an ace/.test(line)));
+  assert.ok(!second.some((line) => /hunts you still/.test(line)));
+
+  const third = killLines(game, { ...hunter, kills: VENDETTA.killsPerStep - 1 }, victim);
+  assert.ok(third.some((line) => /hunts you still/.test(line)), 'the third kill escalates the grudge');
+});
+
+test('a completed round is kept for replay', () => {
+  const resolved = resolveComputerTurns(createGame({ seed: 'last-round' }));
+  assert.ok(Array.isArray(resolved.lastRound.events));
+  assert.ok(resolved.lastRound.entries.length > 0, 'the round narrative is kept beside the events');
 });

@@ -1,5 +1,5 @@
 import { DOCKING, FACTIONS, GRID_SIZE, MISS_CHANCE, RANGES, STALEMATE_ROUNDS, SURRENDER } from './constants.js';
-import { damageShip, detonate, fireEvent, flushShields, resolveCollision, tractorLock, weaponDamage } from './actions.js';
+import { damageShip, detonate, fireEvent, flushShields, killLines, resolveCollision, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
 import {
@@ -11,6 +11,7 @@ import {
   isTractorHeld,
   shieldCapacity,
   strongestFederation,
+  vendettaGrudge,
 } from './state.js';
 
 const isActive = (ship) => ship?.status === 'active';
@@ -49,7 +50,8 @@ const resolveAiAction = (game, shipId) => {
         events: [fireEvent(action.type, actor, target, false)],
       };
     }
-    const amount = weaponDamage(action.type, actor, rng);
+    const grudge = vendettaGrudge(game, actor, target);
+    const amount = weaponDamage(action.type, actor, rng, grudge);
     const before = target.status;
     const hit = damageShip(target, amount, rng);
     const kill = before === 'active' && hit.status !== 'active' ? 1 : 0;
@@ -65,7 +67,15 @@ const resolveAiAction = (game, shipId) => {
     });
     const events = [fireEvent(action.type, actor, target, true)];
     if (kill) events.push({ kind: 'explosion', fromId: actor.id, toId: victim.id, x1: victim.x, y1: victim.y, x2: victim.x, y2: victim.y, hit: true });
-    return { game: updated, messages: [`${actor.name} fires ${action.type} at ${target.name}.`], type: action.type, events };
+    return {
+      game: updated,
+      messages: [
+        `${actor.name} fires ${action.type} at ${target.name}.`,
+        ...(kill ? killLines(game, actor, target) : []),
+      ],
+      type: action.type,
+      events,
+    };
   }
   if (action.type === 'tractor') {
     const target = getShip(game, action.targetId);
@@ -324,5 +334,8 @@ export const resolveComputerTurns = (initialGame) => {
     outcome: outcome.kind === 'active' ? null : outcome,
     log: [...(game.log ?? []), ...log],
     events,
+    // Kept so the player can watch the round back: twenty autopilot decisions
+    // otherwise arrive as one wall of text.
+    lastRound: { events, entries: log },
   };
 };

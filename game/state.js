@@ -1,5 +1,7 @@
 import {
+  ACE_KILLS,
   ALERT_THRESHOLDS,
+  CAPTAIN_NAMES,
   ENGINE_MOVE_PER_UNIT,
   FACTIONS,
   FACTION_IDS,
@@ -10,6 +12,7 @@ import {
   STARBASE_BLAST_RADIUS,
   STARTING_FORMATIONS,
   SYSTEM_RANGE_PER_UNIT,
+  VENDETTA,
   XANADU_POSITION,
 } from './constants.js';
 import { createRng } from './rng.js';
@@ -73,6 +76,21 @@ const createFleet = (faction, rng, regional, occupied) => SHIP_ROSTER.map(([suff
   });
 });
 
+/**
+ * Captain names shuffled on their own seeded stream. Keeping it separate from the
+ * war's RNG means ship positions and the vendetta pick come out exactly as they did
+ * before captains existed.
+ */
+const assignCaptains = (seed, count) => {
+  const rng = createRng(`${seed}:captains`);
+  const deck = [...CAPTAIN_NAMES];
+  for (let index = deck.length - 1; index > 0; index -= 1) {
+    const swap = rng.integer(0, index);
+    [deck[index], deck[swap]] = [deck[swap], deck[index]];
+  }
+  return Array.from({ length: count }, (_, index) => deck[index % deck.length]);
+};
+
 export const createGame = ({ seed = 'xanadu', regional = false, sound = false, extended = false } = {}) => {
   const normalizedSeed = String(seed);
   const rng = createRng(normalizedSeed);
@@ -86,6 +104,8 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     ...XANADU_POSITION,
   });
   const enemyFlagships = fleets.filter((ship) => ship.id.endsWith('-flagship') && ship.faction !== FACTIONS.FEDERATION);
+  const roster = [...fleets, xanadu];
+  const captains = assignCaptains(normalizedSeed, roster.length);
 
   return {
     seed: normalizedSeed,
@@ -97,11 +117,13 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     playerShipId: 'fed-flagship',
     vendettaShipId: rng.pick(enemyFlagships).id,
     randomStep: 0,
-    ships: [...fleets, xanadu],
+    ships: roster.map((ship, index) => ({ ...ship, captain: captains[index] })),
     // Standing fleet orders, and orders still travelling because the radio could
     // not reach the ship that received them. Both are empty in a classic war.
     orders: {},
     pendingOrders: {},
+    // Hulls the player has scanned, which is what reveals who captains them.
+    scanned: {},
     outcome: null,
   };
 };
@@ -213,6 +235,22 @@ export const orderFor = (game, shipId) => (game.extended ? game.orders?.[shipId]
 
 /** The order still travelling to a ship out of radio contact, if any. */
 export const pendingOrderFor = (game, shipId) => (game.extended ? game.pendingOrders?.[shipId] ?? null : null);
+
+/** Whether a captain has enough credited kills to be called an ace. */
+export const isAce = (ship) => (ship?.kills ?? 0) >= ACE_KILLS;
+
+/**
+ * How much harder the vendetta captain's volleys bite your command ship right now.
+ * Zero for everyone else, and always zero in a classic war.
+ */
+export const vendettaGrudge = (game, shooter, target) => {
+  if (!game.extended || !game.vendettaShipId) return 0;
+  if (shooter?.id !== game.vendettaShipId || target?.id !== game.playerShipId) return 0;
+  return Math.floor((shooter.kills ?? 0) / VENDETTA.killsPerStep);
+};
+
+/** Reads a captain the way the narrative would: "Captain Vess of the Grendel". */
+export const captainOf = (ship) => `Captain ${ship?.captain ?? 'an unknown captain'} of the ${ship?.name ?? 'unknown'}`;
 
 /** Reads an order as the battle narrative would: "escort Bonhomme", "hold position". */
 export const describeOrder = (game, order) => {

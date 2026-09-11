@@ -266,3 +266,25 @@ export const PERSONALITIES = Object.freeze({
     fleetFocus: true,
   }),
 });
+
+/**
+ * Captains are this remake's own invention: the manual names every ship but only
+ * one person, Captain Jason. They are drawn from a separate seeded stream, so ship
+ * positions and the vendetta pick keep exactly the sequence they have always had.
+ */
+export const CAPTAIN_NAMES = Object.freeze([
+  'Vess', 'Okonkwo', 'Halvard', 'Mireille', 'Sadko', 'Quillon', 'Anwar', 'Bregitte',
+  'Castor', 'Delphine', 'Emeka', 'Farrow', 'Grieve', 'Haldane', 'Isola', 'Jory',
+  'Kalin', 'Lorca', 'Maren', 'Nabokov', 'Osgood', 'Petrova', 'Rask', 'Sorel',
+  'Tamlin', 'Ulric', 'Vasil', 'Wenli', 'Xantho', 'Yarri',
+]);
+
+/** Credited kills that make a captain an ace, worth a marker on the tactical map. */
+export const ACE_KILLS = 2;
+
+/**
+ * The vendetta deepens. Every `killsPerStep` kills the hunting captain scores, its
+ * volleys against your command ship bite `damagePerStep` harder — so the ship
+ * hunting Jason gets more dangerous the longer you leave it alive.
+ */
+export const VENDETTA = Object.freeze({ killsPerStep: 3, damagePerStep: 0.25 });

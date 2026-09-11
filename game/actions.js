@@ -1,4 +1,5 @@
 import {
+  ACE_KILLS,
   CRIPPLE,
   DEFAULT_CREW_TRANSFER,
   GRID_SIZE,
@@ -12,12 +13,14 @@ import {
   SHRAPNEL_EXTRA_RANGE,
   TARGETED_ORDERS,
   TRACTOR_PULL_PER_UNIT,
+  VENDETTA,
   WEAPONS,
 } from './constants.js';
 import { createRng } from './rng.js';
 import {
   alertLevel,
   blastRadius,
+  captainOf,
   crewCapacity,
   describeOrder,
   distance,
@@ -25,21 +28,46 @@ import {
   getLivingShips,
   getShip,
   inRadioContact,
+  isAce,
   isTractorHeld,
   shieldCapacity,
   systemRange,
   systemUnits,
+  vendettaGrudge,
 } from './state.js';
 
 const isActive = (ship) => ship?.status === 'active';
 const unitName = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
-/** Rolls one volley's damage. Shared by the player's shots and the autopilots'. */
-export const weaponDamage = (type, shooter, rng) => {
+/**
+ * Rolls one volley's damage. Shared by the player's shots and the autopilots'.
+ * `grudge` is the vendetta captain's escalation against your command ship; at zero
+ * the roll is exactly what it has always been, so a classic war is untouched.
+ */
+export const weaponDamage = (type, shooter, rng, grudge = 0) => {
   const { base, perUnit, spread } = WEAPONS[type];
-  const nominal = base + systemUnits(shooter, type) * perUnit;
+  const nominal = (base + systemUnits(shooter, type) * perUnit) * (1 + grudge * VENDETTA.damagePerStep);
   const low = nominal * (1 - spread);
   return Math.max(1, Math.round(low + rng.next() * nominal * 2 * spread));
+};
+
+/**
+ * What the narrative adds when a volley destroys a hull. Captains are named only in
+ * an extended war, so a classic war's log stays exactly as calibrated. `shooter`
+ * still carries its pre-kill tally here.
+ */
+export const killLines = (game, shooter, victim) => {
+  if (!game.extended) return [];
+  const credited = (shooter.kills ?? 0) + 1;
+  const lines = [
+    `${victim.name} is destroyed.`,
+    `${captainOf(shooter)} is credited with ${credited} kill${credited === 1 ? '' : 's'}.`,
+  ];
+  if (credited === ACE_KILLS) lines.push(`${captainOf(shooter)} is now an ace.`);
+  if (shooter.id === game.vendettaShipId && credited % VENDETTA.killsPerStep === 0) {
+    lines.push(`${captainOf(shooter)} hunts you still, and every kill makes those volleys bite harder.`);
+  }
+  return lines;
 };
 
 const replaceShip = (game, replacement) => ({
@@ -208,11 +236,16 @@ const computerReport = (game, actor) => {
   };
 };
 
-const scanReport = (target) => ({
+const scanReport = (game, target) => ({
   title: `Scan: ${target.name}`,
   lines: [
     `Class: ${target.className}`,
     `Affiliation: ${target.faction}`,
+    // Scanning is how you learn who is aboard — in an extended war that is the only
+    // way to work out which hull has sworn to hunt Captain Jason.
+    ...(game.extended
+      ? [`Captain: ${target.captain}${isAce(target) ? ` — an ace, ${target.kills} kills` : ''}`]
+      : []),
     `Status: ${target.status}`,
     `Shields: ${target.shields}`,
     `Crew: ${target.crew}`,
@@ -262,7 +295,8 @@ const weaponAction = (game, action, actor, type) => {
     const updated = completeTurn(advanceRandom(replaceShip(game, shooter)));
     return result(updated, `${actor.name} fires ${type} at ${found.target.name}. Missed!`, { events: [fireEvent(type, actor, found.target, false)] });
   }
-  const damage = weaponDamage(type, actor, rng);
+  const grudge = vendettaGrudge(game, actor, found.target);
+  const damage = weaponDamage(type, actor, rng, grudge);
   const before = found.target.status;
   const hit = damageShip(found.target, damage, rng);
   const kill = before === 'active' && hit.status !== 'active' ? 1 : 0;
@@ -278,7 +312,10 @@ const weaponAction = (game, action, actor, type) => {
   }));
   const events = [fireEvent(type, actor, found.target, true)];
   if (kill) events.push({ kind: 'explosion', fromId: actor.id, toId: victim.id, x1: victim.x, y1: victim.y, x2: victim.x, y2: victim.y, hit: true });
-  return result(updated, `${actor.name} fires ${type} at ${found.target.name} for ${damage} damage.`, { events });
+  return result(updated, [
+    `${actor.name} fires ${type} at ${found.target.name} for ${damage} damage.`,
+    ...(kill ? killLines(game, actor, found.target) : []),
+  ], { events });
 };
 
 /** Counts a collision on both hulls; the battle report names the clumsiest captain. */
@@ -570,7 +607,11 @@ export const applyPlayerAction = (game, action = {}) => {
       const found = targetFor(game, action, actor);
       if (found.error) return invalid(game, found.error, found.requiresTarget);
       if (distance(actor, found.target) > systemRange(actor, 'scanner')) return invalid(game, `${found.target.name} is out of scanner range.`);
-      return result(game, `Scan of ${found.target.name} complete.`, { report: scanReport(found.target) });
+      return result(
+        { ...game, scanned: { ...(game.scanned ?? {}), [found.target.id]: true } },
+        `Scan of ${found.target.name} complete.`,
+        { report: scanReport(game, found.target) },
+      );
     }
     case 'map': {
       const disabled = requiresSystem(game, actor, 'mapper');

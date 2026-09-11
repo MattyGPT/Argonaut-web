@@ -32,6 +32,17 @@ const drawBeam = (svg, e) => {
   line.setAttribute('vector-effect', 'non-scaling-stroke');
   svg.appendChild(line);
   setTimeout(() => line.remove(), 420);
+  if (e.hit) drawImpact(svg, to);
+};
+
+/** A short ring where a phaser landed, so hits read as impacts and not just lines. */
+const drawImpact = (svg, at) => {
+  const flash = document.createElementNS(SVG_NS, 'circle');
+  flash.setAttribute('cx', at.x);
+  flash.setAttribute('cy', at.y);
+  flash.setAttribute('class', 'fx-impact');
+  svg.appendChild(flash);
+  setTimeout(() => flash.remove(), 340);
 };
 
 const drawTorpedo = (svg, e) => {
@@ -64,15 +75,29 @@ const drawExplosion = (svg, e, small = false) => {
   setTimeout(() => boom.remove(), 560);
 };
 
+const draw = (svg, e) => {
+  if (e.kind === 'phasers') drawBeam(svg, e);
+  else if (e.kind === 'photons') drawTorpedo(svg, e);
+  else if (e.kind === 'explosion') drawExplosion(svg, e);
+};
+
 /** Draws beams/torpedoes/explosions for shots involving the command ship. */
 export const playEffects = (events, map, playerId) => {
   if (!map || !events?.length) return;
   const relevant = events.filter((e) => e.fromId === playerId || e.toId === playerId);
   if (!relevant.length) return;
   const svg = layer(map);
-  relevant.forEach((e, i) => setTimeout(() => {
-    if (e.kind === 'phasers') drawBeam(svg, e);
-    else if (e.kind === 'photons') drawTorpedo(svg, e);
-    else if (e.kind === 'explosion') drawExplosion(svg, e);
-  }, i * 160));
+  relevant.forEach((e, i) => setTimeout(() => draw(svg, e), i * 160));
+};
+
+/**
+ * Replays a whole round: every ship's volleys, not only the ones that touched you,
+ * paced slowly enough to follow. Returns how long the replay runs, in milliseconds.
+ */
+export const replayEffects = (events, map, stepMs = 420) => {
+  if (!map || !events?.length) return 0;
+  const svg = layer(map);
+  svg.innerHTML = '';
+  events.forEach((e, i) => setTimeout(() => draw(svg, e), i * stepMs));
+  return events.length * stepMs;
 };
