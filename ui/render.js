@@ -2,9 +2,13 @@ import { RANGES } from '../game/constants.js';
 import {
   abbreviateNarrative,
   alertLevel,
+  describeOrder,
   distance,
   engineCapacity,
   getShip,
+  inRadioContact,
+  orderFor,
+  pendingOrderFor,
   radioIntegrity,
   systemRange,
 } from '../game/state.js';
@@ -26,10 +30,48 @@ const commands = [
   ['autopilot', 'Autopilot', '`'],
   ['resign', 'Resign', 'Esc'],
   ['rollcall', 'Roll call', 'R'],
+  ['shots', 'Shots', 'S'],
   ['statistics', 'Statistics', 'L'],
+  ['fullmap', 'War zone', 'Bksp'],
 ];
 
+/** Fleet orders only exist in an extended war, so the button appears only there. */
+const commandList = (game) => (game.extended ? [...commands, ['fleet', 'Fleet orders', 'F']] : commands);
+
 const cap = (value) => value[0].toUpperCase() + value.slice(1);
+
+const ORDER_BUTTONS = Object.freeze([
+  ['focus', 'Focus with fleet'],
+  ['hold', 'Hold position'],
+  ['withdraw', 'Withdraw'],
+  ['escort', 'Escort…'],
+  ['screen', 'Screen…'],
+  ['intercept', 'Intercept…'],
+]);
+
+/**
+ * The order picker for one Federation hull. It renders into the existing report
+ * panel instead of adding a fifth one, so the layout stays map / console / report /
+ * narrative.
+ */
+const orderPanel = (game, actor, ship) => {
+  const standing = orderFor(game, ship.id);
+  const pending = pendingOrderFor(game, ship.id);
+  const contact = ship.id === actor?.id || inRadioContact(game, actor, ship);
+  const disabled = game.phase !== 'player' || game.resigned ? ' disabled' : '';
+  const lines = [
+    `Standing orders: ${describeOrder(game, pending ?? standing)}.`,
+    pending ? 'Out of radio contact — that order is still travelling and lands next stardate.' : null,
+    `${ship.className} at ${ship.x}, ${ship.y}; condition ${alertLevel(ship)}; shields ${ship.shields}; crew ${ship.crew}; ${ship.status}.`,
+    ship.id === actor?.id
+      ? 'Your own hull obeys these orders whenever the autopilot has the conn.'
+      : `Radio contact: ${contact ? 'yes' : 'no — orders arrive one stardate late'}.`,
+  ].filter(Boolean);
+  const buttons = ORDER_BUTTONS
+    .map(([type, label]) => `<button data-order="${type}" data-order-ship="${ship.id}"${standing?.type === type ? ' class="current"' : ''}${disabled}>${label}</button>`)
+    .join('');
+  return `<h2>Orders: ${ship.name}</h2><ul>${lines.map((line) => `<li>${line}</li>`).join('')}</ul><div class="order-grid">${buttons}</div>`;
+};
 
 export const renderGame = (game, view = {}) => {
   const actor = getShip(game, game.playerShipId);
@@ -40,6 +82,10 @@ export const renderGame = (game, view = {}) => {
 
   document.querySelector('#seed-readout').textContent = `SEED ${game.seed}`;
   document.querySelector('#turn-readout').textContent = `Stardate ${game.turn}`;
+  document.querySelector('#mode-readout').textContent = game.extended ? 'EXTENDED WAR' : '';
+  document.querySelector('#legend-note').textContent = game.extended
+    ? 'dashed rings = your phaser / photon / engine range · red outline = enemy that can reach you · white pip = ship under orders · click a Federation ship to order it'
+    : 'dashed rings = your phaser / photon / engine range · red outline = enemy that can reach you';
 
   const actorActive = Boolean(actor) && actor.status === 'active';
   const mapperRange = actorActive ? systemRange(actor, 'mapper') : Infinity;
@@ -71,7 +117,9 @@ export const renderGame = (game, view = {}) => {
       return `<span class="wreck" style="--x:${ship.x};--y:${ship.y}" title="${ship.name}: destroyed" aria-hidden="true">+</span>`;
     }
     const threat = threats.has(ship.id) ? ' threat' : '';
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}" style="--x:${ship.x};--y:${ship.y}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}"><span class="glyph">${ship.name[0]}</span></button>`;
+    const standing = orderFor(game, ship.id) ?? pendingOrderFor(game, ship.id);
+    const duty = standing && standing.type !== 'focus' ? describeOrder(game, standing) : null;
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}" style="--x:${ship.x};--y:${ship.y}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${duty ? ` — ${duty}` : ''}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${duty ? `, orders ${duty}` : ''}"><span class="glyph">${ship.name[0]}</span></button>`;
   }).join('');
   map.innerHTML = ringHtml + shipHtml;
 
@@ -86,13 +134,18 @@ export const renderGame = (game, view = {}) => {
       <div class="status-row"><span>Status</span><b>${actor.status}</b></div>
     </div>
     <div class="system-grid">${Object.entries(actor.systems).map(([name, amount]) => `<span>${cap(name)} <b>${amount}</b></span>`).join('')}</div>
-    <div class="command-grid">${commands.map(([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || game.resigned ? 'disabled' : ''}>${label}<kbd>${key}</kbd></button>`).join('')}</div>`;
+    <div class="command-grid">${commandList(game).map(([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || game.resigned ? 'disabled' : ''}>${label}<kbd>${key}</kbd></button>`).join('')}</div>`;
+
+  const orderShip = game.extended && !game.outcome && !game.resigned ? getShip(game, view.orderShipId) : null;
+  const canOrder = Boolean(orderShip) && orderShip.faction === actor?.faction && orderShip.status !== 'destroyed';
 
   const activeReport = view.report ?? {
     title: 'Mission status',
     lines: ['Cease hostilities near Xanadu. Destroy the opposing fleets before they destroy Federation command.'],
   };
-  report.innerHTML = `<h2>${activeReport.title}</h2><ul>${activeReport.lines.map((line) => `<li>${line}</li>`).join('')}</ul>`;
+  report.innerHTML = canOrder
+    ? orderPanel(game, actor, orderShip)
+    : `<h2>${activeReport.title}</h2><ul>${activeReport.lines.map((line) => `<li>${line}</li>`).join('')}</ul>`;
 
   const entries = view.entries?.length
     ? view.entries
@@ -138,9 +191,15 @@ const dispersion = (ships) => {
 
 export const reportFor = (game, type) => {
   if (type === 'rollcall') {
+    const command = getShip(game, game.playerShipId);
     return {
       title: `Roll call, Stardate ${game.turn}`,
-      lines: game.ships.map((ship) => `${ship.name} — ${ship.faction} ${ship.className}; ${statusLabel(ship)}; shields ${ship.shields}; crew ${ship.crew}.`),
+      // The original's roll call is a Ship / Alliance / Location / Distance / Status /
+      // Course table; Course is the one column the remake does not track.
+      lines: game.ships.map((ship) => {
+        const range = command ? distance(command, ship).toFixed(1) : '?';
+        return `${ship.name} — ${ship.faction} ${ship.className} at ${ship.x},${ship.y}, ${range} away; ${statusLabel(ship)}; shields ${ship.shields}; crew ${ship.crew}.`;
+      }),
     };
   }
   if (type === 'statistics') {
@@ -172,6 +231,22 @@ export const reportFor = (game, type) => {
     return {
       title: 'Shot distribution',
       lines: lines.length ? lines : ['No shots recorded.'],
+    };
+  }
+  if (type === 'fleet') {
+    const command = getShip(game, game.playerShipId);
+    const lines = game.ships
+      .filter((ship) => ship.faction === command?.faction && ship.status !== 'destroyed')
+      .map((ship) => {
+        const travelling = pendingOrderFor(game, ship.id);
+        const standing = travelling ?? orderFor(game, ship.id);
+        const reached = ship.id === command?.id || inRadioContact(game, command, ship);
+        const mark = travelling ? ' (order in transit)' : reached ? '' : ' (out of contact)';
+        return `${ship.name} — ${describeOrder(game, standing)}${mark}; condition ${alertLevel(ship)} at ${ship.x},${ship.y}.`;
+      });
+    return {
+      title: `Fleet orders, Stardate ${game.turn}`,
+      lines: [...lines, 'Select a Federation ship on the tactical map to change its orders.'],
     };
   }
   const survivors = game.ships.filter((ship) => ship.status !== 'destroyed');

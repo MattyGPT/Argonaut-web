@@ -1,8 +1,8 @@
-import { FACTIONS, GRID_SIZE, MISS_CHANCE, RANGES } from './constants.js';
+import { FACTIONS, GRID_SIZE, MISS_CHANCE, RANGES, SURRENDER } from './constants.js';
 import { damageShip, fireEvent, resolveCollision, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
-import { distance, getShip, strongestFederation } from './state.js';
+import { describeOrder, distance, getShip, isStranded, strongestFederation } from './state.js';
 
 const isActive = (ship) => ship?.status === 'active';
 const replaceShip = (game, replacement) => ({ ...game, ships: game.ships.map((ship) => ship.id === replacement.id ? replacement : ship) });
@@ -77,6 +77,7 @@ const dominantEnemy = (activeEnemies) => {
 };
 
 const victoryMessage = (kind, faction) => {
+  if (kind === 'hopeless-draw') return 'The war has ended in a hopeless draw.  All survivors are stranded.';
   if (kind === 'draw') return 'The war has destroyed all four alliances.  No one wins.';
   if (kind === 'federation-win') return 'The Federation has triumphed.  The galaxy will live in peace.';
   if (kind === 'alliance-win') return `${faction} forces have won.  The galaxy must suffer their eternal mastery.`;
@@ -114,6 +115,12 @@ export const evaluateOutcome = (game) => {
   if (activeFederation.length === 0) {
     return { kind: 'alliance-win', message: victoryMessage('alliance-win', dominantEnemy(activeEnemies)) };
   }
+  // Both sides still have hulls, but nothing left can move or reach anyone, so no
+  // further round can change anything. The original ends this in a hopeless draw
+  // instead of playing out empty stardates.
+  if (isStranded(game)) {
+    return { kind: 'hopeless-draw', message: victoryMessage('hopeless-draw') };
+  }
   return { kind: 'active' };
 };
 
@@ -133,10 +140,10 @@ export const applySurrender = (game) => {
   let next = game;
   for (const faction of factions) {
     const active = next.ships.filter((ship) => isActive(ship) && ship.faction === faction);
-    if (active.length === 0 || active.length > 2) continue;
+    if (active.length === 0 || active.length > SURRENDER.maxShips) continue;
     const mine = factionStrength(next, faction);
     const opposing = factions.filter((f) => f !== faction).reduce((total, f) => total + factionStrength(next, f), 0);
-    if (opposing === 0 || mine > opposing * 0.15) continue;
+    if (opposing === 0 || mine > opposing * SURRENDER.strengthRatio) continue;
     const winner = factions.filter((f) => f !== faction)
       .sort((a, b) => factionStrength(next, b) - factionStrength(next, a))[0];
     if (faction === FACTIONS.FEDERATION) {
@@ -152,6 +159,27 @@ export const applySurrender = (game) => {
     };
   }
   return next;
+};
+
+/**
+ * Orders issued to a ship out of radio contact wait a round. They arrive here,
+ * after every autopilot has acted, so the fleet moves on them from the next
+ * stardate onward.
+ */
+const relayOrders = (game) => {
+  const pending = game.pendingOrders ?? {};
+  const ids = Object.keys(pending);
+  if (ids.length === 0) return { game, messages: [] };
+  const messages = ids
+    .map((id) => {
+      const ship = getShip(game, id);
+      return ship && isActive(ship) ? `${ship.name} receives your order to ${describeOrder(game, pending[id])}.` : null;
+    })
+    .filter(Boolean);
+  return {
+    game: { ...game, orders: { ...(game.orders ?? {}), ...pending }, pendingOrders: {} },
+    messages,
+  };
 };
 
 /** Runs one autopilot turn for the player's ship (backtick command / spectator mode). */
@@ -190,6 +218,9 @@ export const resolveComputerTurns = (initialGame) => {
       events.push(...(collision.events ?? []));
     }
   }
+  const relay = relayOrders(game);
+  game = relay.game;
+  log.push(...relay.messages);
   const transfer = transferCommandIfNeeded(game);
   game = transfer.game;
   if (transfer.message) log.push(transfer.message);

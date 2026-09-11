@@ -1,10 +1,13 @@
 import {
+  ALERT_THRESHOLDS,
   ENGINE_MOVE_PER_UNIT,
   FACTIONS,
   FACTION_IDS,
   GRID_SIZE,
+  RANGES,
   SHIP_NAMES,
   SHIP_TEMPLATES,
+  STARBASE_BLAST_RADIUS,
   STARTING_FORMATIONS,
   SYSTEM_RANGE_PER_UNIT,
   XANADU_POSITION,
@@ -69,7 +72,7 @@ const createFleet = (faction, rng, regional, occupied) => SHIP_ROSTER.map(([suff
   });
 });
 
-export const createGame = ({ seed = 'xanadu', regional = false, sound = false } = {}) => {
+export const createGame = ({ seed = 'xanadu', regional = false, sound = false, extended = false } = {}) => {
   const normalizedSeed = String(seed);
   const rng = createRng(normalizedSeed);
   const occupied = new Set([`${XANADU_POSITION.x},${XANADU_POSITION.y}`]);
@@ -87,12 +90,17 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false } 
     seed: normalizedSeed,
     regional: Boolean(regional),
     sound: Boolean(sound),
+    extended: Boolean(extended),
     phase: 'player',
     turn: 1,
     playerShipId: 'fed-flagship',
     vendettaShipId: rng.pick(enemyFlagships).id,
     randomStep: 0,
     ships: [...fleets, xanadu],
+    // Standing fleet orders, and orders still travelling because the radio could
+    // not reach the ship that received them. Both are empty in a classic war.
+    orders: {},
+    pendingOrders: {},
     outcome: null,
   };
 };
@@ -116,6 +124,41 @@ export const systemUnits = (ship, system) => Math.max(0, ship?.systems?.[system]
 export const systemRange = (ship, system) => systemUnits(ship, system) * (SYSTEM_RANGE_PER_UNIT[system] ?? 0);
 export const engineCapacity = (ship) => systemUnits(ship, 'engines') * ENGINE_MOVE_PER_UNIT;
 
+/** Self-destruct blast radius; the Xanadu starbase's is doubled. */
+export const blastRadius = (ship) => ship?.className === 'Starbase' ? STARBASE_BLAST_RADIUS : RANGES.selfDestruct;
+
+/**
+ * Whether a ship can still change the war. Working engines mean it can close any
+ * distance, so its reach is unbounded; a stranded hull reaches only as far as its
+ * weapons, its tractor beam, and its own blast — and can still board a vacant hull
+ * inside transporter range.
+ */
+const canStillAct = (game, ship) => {
+  if (systemUnits(ship, 'engines') > 0) return true;
+  const reach = Math.max(
+    systemUnits(ship, 'phasers') > 0 ? RANGES.phasers : 0,
+    systemUnits(ship, 'photons') > 0 ? RANGES.photons : 0,
+    systemUnits(ship, 'tractor') > 0 ? RANGES.tractor : 0,
+    blastRadius(ship),
+  );
+  const hostileInRange = game.ships
+    .some((other) => other.status === 'active' && other.faction !== ship.faction && distance(ship, other) <= reach);
+  if (hostileInRange) return true;
+  return systemUnits(ship, 'transporter') > 0
+    && game.ships.some((other) => other.status === 'vacant' && distance(ship, other) <= systemRange(ship, 'transporter'));
+};
+
+/**
+ * True when no survivor can reach anything: every active ship is out of engines and
+ * has no enemy inside its weapons', tractor's, or blast reach. Nothing can ever
+ * happen again, which is the original's hopeless draw — distinct from the draw where
+ * all four alliances were destroyed.
+ */
+export const isStranded = (game) => {
+  const active = game.ships.filter((ship) => ship.status === 'active');
+  return active.length > 0 && active.every((ship) => !canStillAct(game, ship));
+};
+
 /**
  * The manual's alert level. Thresholds are a fraction of the ship's own shield
  * capacity, so a starbase and a scout read alike at equal damage.
@@ -124,8 +167,8 @@ export const alertLevel = (ship) => {
   const capacity = shieldCapacity(ship);
   if (!capacity) return 'RED';
   const ratio = (ship?.shields ?? 0) / capacity;
-  if (ratio < 0.25) return 'RED';
-  if (ratio < 0.55) return 'YELLOW';
+  if (ratio < ALERT_THRESHOLDS.red) return 'RED';
+  if (ratio < ALERT_THRESHOLDS.yellow) return 'YELLOW';
   return 'GREEN';
 };
 
@@ -144,6 +187,41 @@ export const radioIntegrity = (ship) => {
   const installed = templateFor(ship)?.systems?.radio ?? 0;
   if (installed <= 0) return 0;
   return systemUnits(ship, 'radio') / installed;
+};
+
+/**
+ * Whether an order can reach a ship this stardate. Contact comes from the sending
+ * ship's own radio hardware, with Xanadu relaying when it can hear both ends — so
+ * a damaged radio makes you a slower admiral, the same way it makes the battle
+ * narrative harder to read.
+ */
+export const inRadioContact = (game, from, to) => {
+  if (!from || !to) return false;
+  if (from.id === to.id) return true;
+  const hears = (relay, ship) => systemRange(relay, 'radio') > 0 && distance(relay, ship) <= systemRange(relay, 'radio');
+  if (hears(from, to)) return true;
+  const xanadu = getShip(game, 'xanadu');
+  return Boolean(xanadu) && xanadu.status === 'active' && hears(xanadu, from) && hears(xanadu, to);
+};
+
+/** The standing order a ship is acting on, or null when it follows fleet default. */
+export const orderFor = (game, shipId) => (game.extended ? game.orders?.[shipId] ?? null : null);
+
+/** The order still travelling to a ship out of radio contact, if any. */
+export const pendingOrderFor = (game, shipId) => (game.extended ? game.pendingOrders?.[shipId] ?? null : null);
+
+/** Reads an order as the battle narrative would: "escort Bonhomme", "hold position". */
+export const describeOrder = (game, order) => {
+  if (!order) return 'concentrate with the fleet';
+  const name = order.targetId ? getShip(game, order.targetId)?.name ?? 'that ship' : null;
+  switch (order.type) {
+    case 'hold': return 'hold position';
+    case 'withdraw': return 'withdraw toward Xanadu';
+    case 'escort': return `escort ${name}`;
+    case 'intercept': return `intercept ${name}`;
+    case 'screen': return `screen ${name}`;
+    default: return 'concentrate with the fleet';
+  }
 };
 
 /**

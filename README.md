@@ -25,12 +25,12 @@ npm test
 ## Controls
 
 `0–9` select the original system commands. `-` hyperspaces, `=` self-destructs,
-`Tab` passes, backtick runs autopilot, and `Escape` resigns. Buttons provide
-the same controls.
+`Tab` passes, backtick runs autopilot, and `Escape` resigns. Every command also
+has a button in the command panel.
 
 The original also had "hidden" information commands, kept here: `R` roll call,
 `S` shot distribution, `L` alliance statistics, and `Backspace` a full map of
-the war zone.
+the war zone. In an extended war, `F` lists your fleet and its standing orders.
 
 ## The fleets
 
@@ -43,8 +43,9 @@ original ship names:
 - **Bloc** — Killjoy, Laserblast, Mephisto, Notorious, Onerous
 - **Cabal** — Pequod, Queen Mab, Ragnarok, Saboteur, Terrorist
 
-The **New game** panel exposes the replay seed, the regional fleet setup, and
-the optional tactical sound. Use the same seed to reproduce the opening state.
+The **New game** panel exposes the replay seed, the regional fleet setup, the
+optional tactical sound, and the extended war mode. Use the same seed to
+reproduce the opening state.
 
 ## Mechanics notes
 
@@ -67,8 +68,9 @@ original executable:
 - Two ships occupying the same point collide — one is destroyed, the other
   crippled. This applies to your moves as well as the autopilots'.
 - If your command ship is lost, or you resign, command shifts to another
-  Federation ship and the war goes on. The conflict ends only when a side is
-  wiped out.
+  Federation ship and the war goes on. The conflict ends when a side is wiped
+  out — or, if every survivor is stranded out of engines and past reach of
+  anything, in a hopeless draw.
 
 ## Autopilot and the war without you
 
@@ -81,6 +83,37 @@ original executable:
   vendetta ship breaks formation to hunt your command ship.
 - An autopilot reduced to its last ships and badly outmatched will surrender
   ("has surrendered to") rather than fight to annihilation.
+
+## Extended war
+
+The original gave you one hull and left the rest of the Federation to the same
+autopilot as your enemies. An **extended war** — off by default, chosen in the
+**New game** panel — keeps every original rule and adds an admiral's layer on
+top. A classic war is untouched: the flag alone changes no ship's behavior until
+you issue an order.
+
+- Click any Federation hull on the tactical map (or press `F` for the fleet
+  report) to give it standing orders. Orders are free — they cost no turn — and
+  persist until you change them.
+- **Focus with fleet** is the original behavior: concentrate on the enemy nearest
+  your flagship. **Hold** keeps a ship stationary, though it still fires at
+  whatever comes into range. **Withdraw** falls back toward Xanadu, or toward
+  the fleet if the base has fallen, shooting on the way out. **Escort** rides
+  beside a friendly hull and attacks whatever menaces it. **Screen** posts a ship
+  between a ward — Xanadu, say — and the nearest threat. **Intercept** chases
+  one named enemy instead of following the fleet.
+- Orders travel by radio. If your command ship's radio reaches the hull, or
+  Xanadu can hear both ends, the order is acknowledged at once; otherwise it
+  lands one stardate late, and the narrative says so. Losing your radio — or
+  Xanadu — makes you a slower admiral.
+- Ordered ships navigate cleanly. The seeded drift and overshoot that makes
+  unordered autopilots clumsy, and occasionally collision-prone, is left to ships
+  following fleet default.
+- Your own command ship obeys its order whenever the autopilot has the conn:
+  backtick for a turn, or for the rest of the war after you resign.
+- An order naming a destroyed ship is dropped, and that hull returns to fleet
+  default rather than idling.
+- Ships under orders wear a white pip on the map.
 
 ## The tactical display
 

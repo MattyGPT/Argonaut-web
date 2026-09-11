@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { RANGES } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { abbreviateNarrative, alertLevel, createGame, getShip, radioIntegrity } from '../game/state.js';
-import { applyPlayerAction, defaultTargetFor, eligibleTargets, weaponDamage } from '../game/actions.js';
+import { applyPlayerAction, defaultTargetFor, eligibleTargets, orderTargets, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
@@ -376,6 +376,52 @@ test('victory outcomes carry the canonical proclamations', () => {
   assert.match(evaluateOutcome(draw).message, /No one wins/);
 });
 
+// One corner per alliance, 90 units apart: further than any stranded hull can
+// reach, and far enough that the four-way war has no adjacent enemies left.
+const CORNERS = {
+  Federation: { x: 5, y: 5 },
+  Axis: { x: 95, y: 5 },
+  Bloc: { x: 5, y: 95 },
+  Cabal: { x: 95, y: 95 },
+};
+
+const cornered = (seed, update) => withShips(createGame({ seed }), (ship) => ({
+  ...ship,
+  ...CORNERS[ship.faction],
+  ...(update ? update(ship) : {}),
+}));
+
+test('a frozen war ends in the hopeless draw the binary proclaims', () => {
+  const game = cornered('stranded', (ship) => ({ systems: { ...ship.systems, engines: 0 } }));
+  const outcome = evaluateOutcome(game);
+  assert.equal(outcome.kind, 'hopeless-draw');
+  assert.equal(outcome.message, 'The war has ended in a hopeless draw.  All survivors are stranded.');
+});
+
+test('a stranded hull that can still fire keeps the war going', () => {
+  const game = cornered('stranded-armed', (ship) => ({
+    systems: { ...ship.systems, engines: 0 },
+    ...(ship.id === 'axis-flagship' ? { x: 20, y: 5 } : {}),
+  }));
+  assert.equal(evaluateOutcome(game).kind, 'active', 'an enemy inside phaser reach can still end the war');
+});
+
+test('working engines mean the war is never hopeless', () => {
+  assert.equal(evaluateOutcome(createGame({ seed: 'fresh-war' })).kind, 'active');
+  assert.equal(evaluateOutcome(cornered('spread')).kind, 'active', 'mobile fleets in opposite corners can still close');
+});
+
+test("roll call gives each ship's location and its distance from command", () => {
+  const game = createGame({ seed: 'rollcall-columns' });
+  const argo = getShip(game, 'fed-flagship');
+  const line = reportFor(game, 'rollcall').lines.find((entry) => entry.startsWith('Argo'));
+  assert.match(line, new RegExp(`at ${argo.x},${argo.y}, 0\\.0 away`));
+  assert.match(line, /Active/);
+  const enemy = getShip(game, 'axis-flagship');
+  const enemyLine = reportFor(game, 'rollcall').lines.find((entry) => entry.startsWith('Firebreather'));
+  assert.match(enemyLine, new RegExp(`at ${enemy.x},${enemy.y}, ${Math.hypot(enemy.x - argo.x, enemy.y - argo.y).toFixed(1)} away`));
+});
+
 test('weapon damage varies from shot to shot inside the manual band', () => {
   const argo = getShip(createGame({ seed: 'variance' }), 'fed-flagship');
   const roll = (type, step) => weaponDamage(type, argo, createRng(`variance:${type}:${step}`));
@@ -551,4 +597,220 @@ test('resigning twice does not hand the successor over as well', () => {
   const twice = applyPlayerAction(once.game, { type: 'resign' });
   assert.match(twice.messages.join(' '), /already resigned/i);
   assert.equal(twice.game.playerShipId, once.game.playerShipId);
+});
+
+// --- Extended war: fleet orders -------------------------------------------------
+
+const extended = (seed, update) => withShips(createGame({ seed, extended: true }), update);
+
+test('an extended war starts with the flag set and no orders issued', () => {
+  const game = createGame({ seed: 'extended-fresh', extended: true });
+  assert.equal(game.extended, true);
+  assert.deepEqual(game.orders, {});
+  assert.deepEqual(game.pendingOrders, {});
+  assert.equal(createGame({ seed: 'extended-fresh' }).extended, false);
+});
+
+test('the extended flag alone changes nothing until an order is issued', () => {
+  const classic = resolveComputerTurns(createGame({ seed: 'parity' }));
+  const extendedWar = resolveComputerTurns(createGame({ seed: 'parity', extended: true }));
+  assert.deepEqual(extendedWar.ships, classic.ships, 'an extended war with no orders must play identically');
+});
+
+test('a classic war takes no fleet orders', () => {
+  const result = applyPlayerAction(createGame({ seed: 'classic-orders' }), {
+    type: 'orders', shipId: 'fed-scout', order: { type: 'hold' },
+  });
+  assert.match(result.messages.join(' '), /extended war/);
+  assert.deepEqual(result.game, createGame({ seed: 'classic-orders' }));
+});
+
+test('issuing an order costs no turn', () => {
+  const game = createGame({ seed: 'free-order', extended: true });
+  const result = applyPlayerAction(game, { type: 'orders', shipId: 'fed-scout', order: { type: 'hold' } });
+  assert.equal(result.game.phase, 'player', 'the captain still has an action this stardate');
+  assert.deepEqual(result.game.orders['fed-scout'], { type: 'hold', targetId: null });
+});
+
+test('orders validate the ship they name', () => {
+  const game = createGame({ seed: 'order-validation', extended: true });
+  const interceptFriendly = applyPlayerAction(game, {
+    type: 'orders', shipId: 'fed-scout', order: { type: 'intercept' }, targetId: 'fed-cruiser-1',
+  });
+  assert.match(interceptFriendly.messages.join(' '), /enemy ship/);
+  const escortEnemy = applyPlayerAction(game, {
+    type: 'orders', shipId: 'fed-scout', order: { type: 'escort' }, targetId: 'axis-flagship',
+  });
+  assert.match(escortEnemy.messages.join(' '), /friendly ship/);
+  const enemyHull = applyPlayerAction(game, { type: 'orders', shipId: 'axis-flagship', order: { type: 'hold' } });
+  assert.match(enemyHull.messages.join(' '), /Only Federation ships/);
+  const unknown = applyPlayerAction(game, { type: 'orders', shipId: 'fed-scout', order: { type: 'charge' } });
+  assert.match(unknown.messages.join(' '), /Unknown order/);
+});
+
+test('order targets are friendlies to protect and enemies to intercept', () => {
+  const game = createGame({ seed: 'order-targets', extended: true });
+  const escort = orderTargets(game, 'fed-scout', 'escort');
+  assert.ok(escort.every((ship) => ship.faction === 'Federation'));
+  assert.ok(escort.some((ship) => ship.id === 'xanadu'));
+  assert.ok(!escort.some((ship) => ship.id === 'fed-scout'), 'a ship cannot be its own ward');
+  const intercept = orderTargets(game, 'fed-scout', 'intercept');
+  assert.ok(intercept.length > 0);
+  assert.ok(intercept.every((ship) => ship.faction !== 'Federation'));
+});
+
+test('Xanadu relays an order your own radio cannot reach', () => {
+  const game = extended('relay', (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 5, y: 5 };
+    if (ship.id === 'fed-scout') return { ...ship, x: 95, y: 95 };
+    return ship;
+  });
+  const result = applyPlayerAction(game, { type: 'orders', shipId: 'fed-scout', order: { type: 'hold' } });
+  assert.match(result.messages.join(' '), /acknowledges/);
+  assert.deepEqual(result.game.orders['fed-scout'], { type: 'hold', targetId: null });
+});
+
+test('an order out of radio contact waits one stardate', () => {
+  const game = extended('radio-lag', (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 5, y: 5 };
+    if (ship.id === 'fed-scout') return { ...ship, x: 95, y: 95 };
+    if (ship.id === 'xanadu') return { ...ship, systems: { ...ship.systems, radio: 0 } };
+    return ship;
+  });
+  const result = applyPlayerAction(game, { type: 'orders', shipId: 'fed-scout', order: { type: 'hold' } });
+  assert.match(result.messages.join(' '), /out of radio contact/);
+  assert.equal(result.game.orders['fed-scout'], undefined);
+  assert.deepEqual(result.game.pendingOrders['fed-scout'], { type: 'hold', targetId: null });
+
+  const resolved = resolveComputerTurns(result.game);
+  assert.deepEqual(resolved.orders['fed-scout'], { type: 'hold', targetId: null });
+  assert.deepEqual(resolved.pendingOrders, {});
+  assert.ok(resolved.log.some((line) => /Empyreal receives your order to hold position/.test(line)));
+});
+
+test('a ship ordered to hold stays put instead of pursuing', () => {
+  const game = extended('hold', (ship) => {
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 10, y: 10 };
+    if (ship.faction === 'Federation') return { ...ship, x: 10, y: 14 };
+    return { ...ship, x: 90, y: 90 };
+  });
+  const ordered = { ...game, orders: { 'fed-cruiser-1': { type: 'hold', targetId: null } } };
+  assert.deepEqual(chooseAiAction(ordered, 'fed-cruiser-1'), { type: 'pass' });
+  assert.equal(chooseAiAction(game, 'fed-cruiser-1').type, 'move', 'unordered, the same ship pursues');
+});
+
+test('a ship ordered to hold still fires at what comes to it', () => {
+  const game = extended('hold-fire', (ship) => {
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 10, y: 10 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 30, y: 10 };
+    if (ship.faction === 'Federation') return ship;
+    return { ...ship, x: 95, y: 95 };
+  });
+  const ordered = { ...game, orders: { 'fed-cruiser-1': { type: 'hold', targetId: null } } };
+  const action = chooseAiAction(ordered, 'fed-cruiser-1');
+  assert.equal(action.type, 'phasers');
+  assert.equal(action.targetId, 'axis-flagship');
+});
+
+test('an intercept order engages the named ship over a nearer enemy', () => {
+  const game = extended('intercept', (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 10, y: 10 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 10, y: 12 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 18, y: 12 };
+    if (ship.id === 'cabal-flagship') return { ...ship, x: 30, y: 12 };
+    return { ...ship, x: 90, y: 90 };
+  });
+  assert.equal(chooseAiAction(game, 'fed-cruiser-1').targetId, 'axis-flagship', 'the fleet shoots the near target');
+  const ordered = { ...game, orders: { 'fed-cruiser-1': { type: 'intercept', targetId: 'cabal-flagship' } } };
+  const action = chooseAiAction(ordered, 'fed-cruiser-1');
+  assert.equal(action.type, 'phasers');
+  assert.equal(action.targetId, 'cabal-flagship');
+});
+
+test('a withdraw order runs for Xanadu', () => {
+  const game = extended('withdraw', (ship) => {
+    if (ship.id === 'fed-scout') return { ...ship, x: 80, y: 50 };
+    if (ship.faction === 'Federation') return ship;
+    return { ...ship, x: 80, y: 95 }; // every enemy past tractor reach, so nothing to shoot at
+  });
+  const ordered = { ...game, orders: { 'fed-scout': { type: 'withdraw', targetId: null } } };
+  const action = chooseAiAction(ordered, 'fed-scout');
+  assert.equal(action.type, 'move');
+  assert.ok(action.dx < 0, 'the scout falls back toward Xanadu at 50,50');
+  assert.equal(action.dy, 0);
+});
+
+test('a withdrawing ship still shoots at what is already in range', () => {
+  const game = extended('withdraw-fire', (ship) => {
+    if (ship.id === 'fed-scout') return { ...ship, x: 80, y: 50 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 88, y: 50 };
+    if (ship.faction === 'Federation') return ship;
+    return { ...ship, x: 5, y: 95 };
+  });
+  const ordered = { ...game, orders: { 'fed-scout': { type: 'withdraw', targetId: null } } };
+  assert.equal(chooseAiAction(ordered, 'fed-scout').type, 'photons');
+});
+
+test('a screening ship posts itself between its ward and the threat', () => {
+  const game = extended('screen', (ship) => {
+    if (ship.id === 'xanadu') return ship;
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 10, y: 10 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 90, y: 50 };
+    return { ...ship, x: 95, y: 95 };
+  });
+  const ordered = { ...game, orders: { 'fed-cruiser-1': { type: 'screen', targetId: 'xanadu' } } };
+  const action = chooseAiAction(ordered, 'fed-cruiser-1');
+  assert.equal(action.type, 'move');
+  assert.ok(action.dx > 0 && action.dy > 0, 'the post lies off Xanadu toward the Axis flagship');
+});
+
+test('an escort closes on its ward when nothing threatens it', () => {
+  const game = extended('escort', (ship) => {
+    if (ship.id === 'xanadu') return ship;
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 10, y: 10 };
+    if (ship.id === 'fed-scout') return { ...ship, x: 60, y: 60 };
+    return { ...ship, x: 95, y: 5 };
+  });
+  const ordered = { ...game, orders: { 'fed-cruiser-1': { type: 'escort', targetId: 'fed-scout' } } };
+  const action = chooseAiAction(ordered, 'fed-cruiser-1');
+  assert.equal(action.type, 'move');
+  assert.ok(action.dx > 0 && action.dy > 0);
+});
+
+test('an order whose ship is gone falls back to fleet behavior', () => {
+  const game = extended('stale-order', (ship) => (ship.id === 'axis-flagship'
+    ? { ...ship, status: 'destroyed' }
+    : ship));
+  const ordered = { ...game, orders: { 'fed-cruiser-1': { type: 'intercept', targetId: 'axis-flagship' } } };
+  assert.deepEqual(chooseAiAction(ordered, 'fed-cruiser-1'), chooseAiAction(game, 'fed-cruiser-1'));
+});
+
+test('the fleet report lists every hull with its standing orders', () => {
+  const game = {
+    ...createGame({ seed: 'fleet-report', extended: true }),
+    orders: { 'fed-scout': { type: 'hold', targetId: null } },
+  };
+  const report = reportFor(game, 'fleet');
+  assert.match(report.title, /Fleet orders, Stardate 1/);
+  assert.ok(report.lines.some((line) => /Empyreal — hold position/.test(line)));
+  assert.ok(report.lines.some((line) => /Argo — concentrate with the fleet/.test(line)));
+  assert.ok(!report.lines.some((line) => /Firebreather/.test(line)), 'only your own fleet takes orders');
+});
+
+test('an extended war played out under standing orders still resolves', () => {
+  let game = createGame({ seed: 'extended-full-war', extended: true });
+  game = {
+    ...game,
+    orders: {
+      'fed-cruiser-1': { type: 'hold', targetId: null },
+      'fed-cruiser-2': { type: 'screen', targetId: 'xanadu' },
+      'fed-cruiser-3': { type: 'escort', targetId: 'fed-flagship' },
+      'fed-scout': { type: 'withdraw', targetId: null },
+    },
+  };
+  for (let round = 0; round < 500 && !game.outcome; round += 1) {
+    game = resolveComputerTurns(resolveAutopilotTurn(game).game);
+  }
+  assert.ok(game.outcome, 'the war must reach an outcome');
+  assert.ok(game.turn > 1, 'and it must have taken more than one stardate');
 });

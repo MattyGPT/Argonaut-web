@@ -14,6 +14,8 @@ const keys = Object.freeze({
   Tab: 'pass',
   '`': 'autopilot',
   Escape: 'resign',
+  f: 'fleet',
+  F: 'fleet',
   r: 'rollcall',
   R: 'rollcall',
   s: 'shots',
@@ -25,6 +27,12 @@ const keys = Object.freeze({
 
 export const bindInput = (root, dispatch) => {
   root.addEventListener('click', (event) => {
+    // Order buttons live in the report panel and carry the ship they are for.
+    const orderButton = event.target.closest('[data-order]');
+    if (orderButton) {
+      dispatch({ type: 'orders', shipId: orderButton.dataset.orderShip, order: { type: orderButton.dataset.order } });
+      return;
+    }
     const command = event.target.closest('[data-command]')?.dataset.command;
     if (command) dispatch({ type: command });
     const ship = event.target.closest('[data-ship-id]')?.dataset.shipId;
