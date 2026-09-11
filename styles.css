@@ -228,6 +228,11 @@ h1 {
   border-color: var(--cyan);
 }
 
+.range-ring.dock {
+  border-color: var(--fed);
+  opacity: .7;
+}
+
 .wreck {
   position: absolute;
   left: calc(var(--x) * 1%);

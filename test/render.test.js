@@ -127,3 +127,31 @@ test('the fleet orders button only appears in an extended war', () => {
   assert.ok(!/data-command="fleet"/.test(read('#console').innerHTML));
   assert.match(read('#console').innerHTML, /data-command="shots"/, 'every command has a button');
 });
+
+test('an extended war draws the dockyard ring around Xanadu', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'dock-ring', extended: true }));
+  const field = read('#map-field').innerHTML;
+  assert.match(field, /range-ring dock/);
+  assert.match(field, /--x:50;--y:50;--d:16%/);
+});
+
+test('a classic war draws no dockyard ring', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'dock-ring-classic' }));
+  assert.ok(!/range-ring dock/.test(read('#map-field').innerHTML));
+});
+
+test('the war concluded panel carries a battle report and roll call', () => {
+  elements.clear();
+  const game = {
+    ...createGame({ seed: 'ended-report' }),
+    outcome: { kind: 'federation-win', message: 'The Federation has triumphed.' },
+  };
+  renderGame(game);
+  const panel = read('#report').innerHTML;
+  assert.match(panel, /War concluded/);
+  assert.match(panel, /Battle report/);
+  assert.match(panel, /Stardates elapsed: 1\./);
+  assert.match(panel, /Roll call/);
+});
