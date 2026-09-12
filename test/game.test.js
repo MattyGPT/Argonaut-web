@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, RANGES, SCENARIOS, STALEMATE_ROUNDS, VENDETTA } from '../game/constants.js';
+import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, LOG_LIMIT, RANGES, SCENARIOS, STALEMATE_ROUNDS, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioProgress } from '../game/scenarios.js';
-import { abbreviateNarrative, alertLevel, createGame, distance, getShip, isAce, radioIntegrity, vendettaGrudge } from '../game/state.js';
-import { applyPlayerAction, defaultTargetFor, eligibleTargets, killLines, orderTargets, resolveCollision, weaponDamage } from '../game/actions.js';
+import { abbreviateNarrative, alertLevel, appendLog, createGame, distance, engineCapacity, getShip, isAce, radioIntegrity, strongestFederation, vendettaGrudge } from '../game/state.js';
+import { applyPlayerAction, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveCollision, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDocking, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
@@ -1366,4 +1366,103 @@ test('hold Xanadu reports its progress against the target stardate', () => {
   const lines = scenarioProgress(game).join(' ');
   assert.match(lines, /Xanadu: active at 50, 50/);
   assert.match(lines, /Hold until stardate 20\.  Now stardate 7\./);
+});
+
+// --- Backlog: click to move, sensor honesty, command transfer, log growth -------
+
+const atOrigin = (seed, x = 10, y = 10) => withShips(createGame({ seed }), (ship) => (ship.id === 'fed-flagship' ? { ...ship, x, y } : ship));
+
+test('a click on the map becomes a legal engine maneuver', () => {
+  const game = atOrigin('click-move');
+  assert.deepEqual(maneuverTo(game, 40, 10), { dx: 30, dy: 0 });
+  assert.deepEqual(maneuverTo(game, 10, 25), { dx: 0, dy: 15 });
+});
+
+test('a click past the engine ring is clamped to it rather than refused', () => {
+  const game = atOrigin('click-clamp');
+  const capacity = engineCapacity(getShip(game, 'fed-flagship'));
+  const move = maneuverTo(game, 99, 10);
+  assert.equal(move.dx, capacity, 'a full burn toward the clicked point');
+  assert.equal(move.dy, 0);
+  const result = applyPlayerAction(game, { type: 'move', ...move });
+  assert.ok(!result.messages.some((line) => /engine capacity/.test(line)), 'and the move command accepts it');
+});
+
+test('rounding a diagonal click never exceeds engine capacity', () => {
+  const game = atOrigin('click-diagonal');
+  const capacity = engineCapacity(getShip(game, 'fed-flagship'));
+  for (const [x, y] of [[99, 99], [60, 11], [11, 60], [99, 10.6], [10.4, 99], [45, 12]]) {
+    const move = maneuverTo(game, x, y);
+    const span = Math.hypot(move.dx, move.dy);
+    assert.ok(span <= capacity, `clicking ${x},${y} produced a move of ${span} over capacity ${capacity}`);
+    assert.ok(span > 0, `clicking ${x},${y} must still move the ship`);
+    assert.ok(!applyPlayerAction(game, { type: 'move', ...move }).messages.some((line) => /engine capacity/.test(line)));
+  }
+});
+
+test('a click cannot maneuver a ship that is engineless, held, or not yours to move', () => {
+  const game = atOrigin('click-blocked');
+  const withFlagship = (changes) => ({ ...game, ships: game.ships.map((ship) => (ship.id === 'fed-flagship' ? { ...ship, ...changes } : ship)) });
+  assert.equal(maneuverTo(withFlagship({ systems: { ...getShip(game, 'fed-flagship').systems, engines: 0 } }), 40, 40), null);
+  assert.equal(maneuverTo(withFlagship({ tractorBy: 'axis-flagship' }), 40, 40), null, 'a tractor lock holds you fast');
+  assert.equal(maneuverTo({ ...game, phase: 'computer' }, 40, 40), null);
+  assert.equal(maneuverTo({ ...game, resigned: true }, 40, 40), null);
+  assert.equal(maneuverTo(game, 10, 10), null, 'clicking your own hull is not an order');
+});
+
+test('the computer report cannot see past the mapper', () => {
+  const game = withShips(createGame({ seed: 'computer-fog' }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 5, y: 5 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 95, y: 95 };
+    return { ...ship, x: 90, y: 90 };
+  });
+  const lines = applyPlayerAction(game, { type: 'computer' }).report.lines.join(' ');
+  assert.match(lines, /Nearest enemy: none within mapper range/, 'a standard command must not out-see the mapper');
+  assert.match(lines, /Distance to Xanadu/, 'your own base bearing is not sensor-limited');
+});
+
+test('the computer report names an enemy the mapper can actually see', () => {
+  const game = withShips(createGame({ seed: 'computer-sees' }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 5, y: 5 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 20, y: 5 };
+    return { ...ship, x: 90, y: 90 };
+  });
+  assert.match(applyPlayerAction(game, { type: 'computer' }).report.lines.join(' '), /Nearest enemy: Firebreather at 15\.0/);
+});
+
+test('command shifts to a hull that can move rather than to immobile Xanadu', () => {
+  const game = withShips(createGame({ seed: 'transfer-mobile' }), (ship) => (ship.id === 'fed-flagship'
+    ? { ...ship, status: 'destroyed' }
+    : ship));
+  const next = strongestFederation(game, 'fed-flagship');
+  assert.notEqual(next.id, 'xanadu');
+  assert.ok(next.systems.engines > 0, 'the successor can still maneuver');
+});
+
+test('command falls back to Xanadu when nothing else can move', () => {
+  const game = withShips(createGame({ seed: 'transfer-xanadu' }), (ship) => (ship.faction === 'Federation' && ship.id !== 'xanadu'
+    ? { ...ship, systems: { ...ship.systems, engines: 0 } }
+    : ship));
+  assert.equal(strongestFederation(game, 'fed-flagship').id, 'xanadu');
+});
+
+test('resigning hands over by the same rule as dying', () => {
+  const game = createGame({ seed: 'resign-mobile' });
+  const resigned = applyPlayerAction(game, { type: 'resign' });
+  assert.equal(resigned.game.playerShipId, strongestFederation(game, 'fed-flagship').id);
+  assert.notEqual(resigned.game.playerShipId, 'xanadu');
+});
+
+test('the battle narrative is bounded so a long war still saves', () => {
+  const long = Array.from({ length: LOG_LIMIT + 50 }, (_, index) => `line ${index}`);
+  const capped = appendLog(long, ['newest']);
+  assert.equal(capped.length, LOG_LIMIT);
+  assert.equal(capped[capped.length - 1], 'newest', 'the newest entries are the ones kept');
+  assert.equal(capped[0], 'line 51', 'and the oldest fall off the front');
+  assert.deepEqual(appendLog(null, ['first']), ['first']);
+});
+
+test('a resolved round cannot grow the narrative past the bound', () => {
+  const game = { ...createGame({ seed: 'log-war' }), log: Array.from({ length: LOG_LIMIT }, (_, index) => `old ${index}`) };
+  assert.ok(resolveComputerTurns(game).log.length <= LOG_LIMIT);
 });

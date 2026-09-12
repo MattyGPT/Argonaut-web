@@ -28,7 +28,7 @@ const commands = [
   ['radio', 'Radio', '9'],
   ['hyperspace', 'Hyperspace', '−'],
   ['self-destruct', 'Self-destruct', '='],
-  ['pass', 'Pass turn', 'Tab'],
+  ['pass', 'Pass turn', 'P'],
   ['autopilot', 'Autopilot', '`'],
   ['resign', 'Resign', 'Esc'],
   ['rollcall', 'Roll call', 'R'],
@@ -88,8 +88,8 @@ export const renderGame = (game, view = {}) => {
     ? (scenarioFor(game).id === 'annihilation' ? 'EXTENDED WAR' : `EXTENDED · ${scenarioFor(game).title.toUpperCase()}`)
     : '';
   document.querySelector('#legend-note').textContent = game.extended
-    ? 'dashed rings = your phaser / photon / engine range · green ring = Xanadu dockyard range · red outline = enemy that can reach you · white pip = ship under orders · click a Federation ship to order it'
-    : 'dashed rings = your phaser / photon / engine range · red outline = enemy that can reach you';
+    ? 'click empty space to maneuver · dashed rings = your phaser / photon / engine range · green ring = Xanadu dockyard range · red outline = enemy that can reach you · white pip = ship under orders · click a Federation ship to order it'
+    : 'click empty space to maneuver · dashed rings = your phaser / photon / engine range · red outline = enemy that can reach you';
 
   const actorActive = Boolean(actor) && actor.status === 'active';
   const mapperRange = actorActive ? systemRange(actor, 'mapper') : Infinity;
@@ -171,6 +171,20 @@ export const renderGame = (game, view = {}) => {
     : `Newest first · radio at ${Math.round(integrity * 100)}%, traffic abbreviated`;
   const replay = document.querySelector('#replay-round');
   if (replay) replay.hidden = !(game.lastRound?.events?.length > 0);
+
+  // One concise status region instead of a live region around the whole page. The
+  // map, console, report, and narrative all re-render every turn, so announcing all
+  // of it flooded a screen reader with the entire board on every keystroke.
+  const status = document.querySelector('#sr-status');
+  if (status) {
+    status.textContent = [
+      game.outcome?.message ?? null,
+      view.report?.title ?? null,
+      `Condition ${condition}.`,
+      `${actor.name} at ${actor.x}, ${actor.y}; shields ${actor.shields}, crew ${actor.crew}.`,
+      narrated[narrated.length - 1] ?? null,
+    ].filter(Boolean).join(' ');
+  }
 
   if (game.outcome) {
     const section = (part) => `<h2>${part.title}</h2><ul>${part.lines.map((line) => `<li>${line}</li>`).join('')}</ul>`;

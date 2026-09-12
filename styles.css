@@ -25,6 +25,19 @@ button, input, select {
   font: inherit;
 }
 
+/* The screen-reader status region: present to assistive tech, invisible on screen. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 button {
   cursor: pointer;
   border: 1px solid #39708e;
@@ -119,6 +132,7 @@ h1 {
   position: relative;
   aspect-ratio: 1.35;
   min-height: 320px;
+  cursor: crosshair;
   background-image: linear-gradient(#1a365311 1px, transparent 1px), linear-gradient(90deg, #1a365311 1px, transparent 1px), radial-gradient(circle at 20% 30%, #d8eeff 0 1px, transparent 2px), radial-gradient(circle at 80% 20%, #d8eeff 0 1px, transparent 2px), radial-gradient(circle at 43% 72%, #d8eeff 0 1px, transparent 2px);
   background-size: 10% 10%, 10% 10%, 100% 100%, 100% 100%, 100% 100%;
 }

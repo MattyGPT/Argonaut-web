@@ -315,3 +315,11 @@ export const SCENARIOS = Object.freeze({
 });
 
 export const SCENARIO_IDS = Object.freeze(Object.keys(SCENARIOS));
+
+/**
+ * How much of the battle narrative the game state keeps. Rendering only ever shows
+ * the newest 150 entries, and the whole log is serialized into localStorage after
+ * every action, so an uncapped array eventually overflows the quota and saving
+ * silently stops partway through a long war.
+ */
+export const LOG_LIMIT = 400;

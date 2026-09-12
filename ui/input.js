@@ -1,3 +1,5 @@
+import { GRID_SIZE } from '../game/constants.js';
+
 const keys = Object.freeze({
   '0': 'computer',
   '1': 'shields',
@@ -14,6 +16,8 @@ const keys = Object.freeze({
   Tab: 'pass',
   '`': 'autopilot',
   Escape: 'resign',
+  p: 'pass',
+  P: 'pass',
   f: 'fleet',
   F: 'fleet',
   r: 'rollcall',
@@ -24,6 +28,9 @@ const keys = Object.freeze({
   L: 'statistics',
   Backspace: 'fullmap',
 });
+
+/** Whether focus currently sits on something Tab is supposed to reach. */
+const isFocusable = (element) => Boolean(element?.matches?.('button, input, select, textarea, a[href], [tabindex]'));
 
 export const bindInput = (root, dispatch) => {
   root.addEventListener('click', (event) => {
@@ -37,6 +44,19 @@ export const bindInput = (root, dispatch) => {
     if (command) dispatch({ type: command });
     const ship = event.target.closest('[data-ship-id]')?.dataset.shipId;
     if (ship) dispatch({ type: 'map-select', targetId: ship });
+    if (command || ship) return;
+
+    // Clicking empty space on the tactical map is a maneuver order. The map is drawn
+    // in grid percentages, so the click offset converts straight to coordinates.
+    const map = event.target.closest('#map');
+    if (!map?.getBoundingClientRect) return;
+    const rect = map.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    dispatch({
+      type: 'map-click',
+      x: ((event.clientX - rect.left) / rect.width) * GRID_SIZE,
+      y: ((event.clientY - rect.top) / rect.height) * GRID_SIZE,
+    });
   });
 
   document.addEventListener('keydown', (event) => {
@@ -44,6 +64,11 @@ export const bindInput = (root, dispatch) => {
     // A modal prompt owns the keyboard. Without this guard Escape resigns command
     // instead of dismissing the dialog, and command keys fire behind the modal.
     if (document.querySelector('dialog[open]')) return;
+    // Tab is the original's "pass turn", but swallowing it traps keyboard users on
+    // whichever control they reached first — the command panel is twenty buttons that
+    // could not be tabbed through at all. Let Tab traverse whenever focus is already
+    // on a control or the user is going backwards; `P` passes from anywhere.
+    if (event.key === 'Tab' && (event.shiftKey || isFocusable(document.activeElement))) return;
     const command = keys[event.key];
     if (!command) return;
     event.preventDefault();
@@ -81,6 +106,27 @@ export const promptForTarget = (title, ships, options = {}) => new Promise((reso
     });
   };
   dialog.onclose = close;
+  dialog.showModal();
+});
+
+/** A yes/no prompt for the irreversible commands. Resolves false on any dismissal. */
+export const promptForConfirmation = (title, message) => new Promise((resolve) => {
+  const dialog = document.querySelector('#confirm-dialog');
+  const form = document.querySelector('#confirm-form');
+  document.querySelector('#confirm-title').textContent = title;
+  document.querySelector('#confirm-message').textContent = message;
+
+  let resolved = false;
+  form.onsubmit = () => {
+    resolved = true;
+    resolve(dialog.returnValue === 'confirm');
+  };
+  dialog.onclose = () => {
+    if (!resolved) {
+      resolved = true;
+      resolve(false);
+    }
+  };
   dialog.showModal();
 });
 

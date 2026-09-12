@@ -31,6 +31,7 @@ import {
   isAce,
   isTractorHeld,
   shieldCapacity,
+  strongestFederation,
   systemRange,
   systemUnits,
   vendettaGrudge,
@@ -176,6 +177,36 @@ export const orderTargets = (game, shipId, orderType) => {
     : candidates.filter((ship) => ship.faction === actor.faction);
 };
 
+/**
+ * Turns a clicked point on the tactical map into an engine displacement. The move is
+ * clamped to what the ship can actually reach this stardate, so clicking past the
+ * engine ring burns the full capacity toward that point instead of being refused —
+ * the ring is already drawn on the map, so the player can see the limit.
+ * Null when the ship cannot maneuver at all.
+ */
+export const maneuverTo = (game, x, y) => {
+  if (game.phase !== 'player' || game.outcome || game.resigned) return null;
+  const actor = getShip(game, game.playerShipId);
+  if (!isActive(actor) || systemUnits(actor, 'engines') <= 0 || isTractorHeld(game, actor)) return null;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const dx = x - actor.x;
+  const dy = y - actor.y;
+  const span = Math.hypot(dx, dy);
+  if (span < 0.5) return null; // a click on your own hull is not an order
+  const capacity = engineCapacity(actor);
+  const reach = Math.min(capacity, span);
+  let moveX = Math.round((dx / span) * reach);
+  let moveY = Math.round((dy / span) * reach);
+  // Rounding both legs independently can push the vector just past the capacity the
+  // move command enforces, which would refuse a click that looked perfectly legal.
+  const rounded = Math.hypot(moveX, moveY);
+  if (rounded > capacity) {
+    moveX = Math.trunc((moveX / rounded) * capacity);
+    moveY = Math.trunc((moveY / rounded) * capacity);
+  }
+  return { dx: moveX, dy: moveY };
+};
+
 export const eligibleTargets = (game, actionType) => {
   const actor = getShip(game, game.playerShipId);
   if (!actor) return [];
@@ -212,25 +243,31 @@ export const defaultTargetFor = (game, actionType) => {
 };
 
 const computerReport = (game, actor) => {
-  const active = game.ships.filter(isActive);
-  const allies = active.filter((ship) => ship.id !== actor.id && ship.faction === actor.faction);
-  const enemies = active.filter((ship) => ship.faction !== actor.faction);
+  // A standard command must not out-see the mapper. The hidden reports are the ones
+  // the manual says give information your enemies do not have; this one is not.
+  const mapperRange = systemRange(actor, 'mapper');
+  const mapped = game.ships.filter((ship) => isActive(ship)
+    && (ship.id === actor.id || distance(actor, ship) <= mapperRange));
+  const allies = mapped.filter((ship) => ship.id !== actor.id && ship.faction === actor.faction);
+  const enemies = mapped.filter((ship) => ship.faction !== actor.faction);
   const nearest = (ships) => ships
     .map((ship) => ({ ship, range: distance(actor, ship) }))
     .sort((a, b) => a.range - b.range)[0];
   const nearestEnemy = nearest(enemies);
   const nearestAlly = nearest(allies);
-  const counts = Object.entries(game.ships.reduce((totals, ship) => {
-    if (isActive(ship)) totals[ship.faction] = (totals[ship.faction] ?? 0) + 1;
+  const counts = Object.entries(mapped.reduce((totals, ship) => {
+    totals[ship.faction] = (totals[ship.faction] ?? 0) + 1;
     return totals;
-  }, {})).map(([faction, count]) => `${faction}: ${unitName(count, 'active ship')}`);
+  }, {})).map(([faction, count]) => `${faction}: ${unitName(count, 'ship')} on the mapper`);
   const xanadu = getShip(game, 'xanadu');
   return {
     title: 'Ship computer',
     lines: [
-      ...counts,
-      nearestEnemy ? `Nearest enemy: ${nearestEnemy.ship.name} at ${nearestEnemy.range.toFixed(1)}` : 'Nearest enemy: none',
-      nearestAlly ? `Nearest ally: ${nearestAlly.ship.name} at ${nearestAlly.range.toFixed(1)}` : 'Nearest ally: none',
+      ...(counts.length ? counts : ['Nothing on the mapper.']),
+      nearestEnemy ? `Nearest enemy: ${nearestEnemy.ship.name} at ${nearestEnemy.range.toFixed(1)}` : 'Nearest enemy: none within mapper range',
+      nearestAlly ? `Nearest ally: ${nearestAlly.ship.name} at ${nearestAlly.range.toFixed(1)}` : 'Nearest ally: none within mapper range',
+      // Your own base's bearing is not sensor-limited; the original's computer
+      // reports the distance to Xanadu unconditionally.
       xanadu ? `Distance to Xanadu: ${distance(actor, xanadu).toFixed(1)}` : 'Distance to Xanadu: unknown',
     ],
   };
@@ -628,9 +665,10 @@ export const applyPlayerAction = (game, action = {}) => {
     case 'autopilot': return result(completeTurn(game), `${actor.name} autopilot holds course.`);
     case 'resign': {
       if (game.resigned) return invalid(game, 'You have already resigned command; the autopilot has the conn.');
-      const successor = game.ships
-        .filter((ship) => isActive(ship) && ship.faction === actor.faction && ship.id !== actor.id)
-        .sort((a, b) => (b.shields + b.crew) - (a.shields + a.crew) || a.id.localeCompare(b.id))[0];
+      // The same rule as losing your ship, rather than a second copy of it that can
+      // drift — and it prefers a hull that can move, so resigning onto Xanadu is not
+      // the default outcome any more.
+      const successor = strongestFederation(game, actor.id);
       const resigned = { ...game, resigned: true, vendettaShipId: null };
       if (!successor) {
         return result(resigned, `Captain Jason of the ${actor.name} has resigned.`);

@@ -4,6 +4,7 @@ import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
 import { scenarioOutcome } from './scenarios.js';
 import {
+  appendLog,
   crewCapacity,
   describeOrder,
   distance,
@@ -338,7 +339,7 @@ export const resolveComputerTurns = (initialGame) => {
     turn: game.turn + 1,
     phase: outcome.kind === 'active' ? 'player' : 'ended',
     outcome: outcome.kind === 'active' ? null : outcome,
-    log: [...(game.log ?? []), ...log],
+    log: appendLog(game.log, log),
     events,
     // Kept so the player can watch the round back: twenty autopilot decisions
     // otherwise arrive as one wall of text.

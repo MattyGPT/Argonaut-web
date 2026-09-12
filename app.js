@@ -1,9 +1,9 @@
-import { applyPlayerAction, defaultTargetFor, eligibleTargets, orderTargets } from './game/actions.js';
+import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets } from './game/actions.js';
 import { SPECTATOR_TICK_MS, TARGETED_ORDERS } from './game/constants.js';
-import { alertLevel, createGame, getShip } from './game/state.js';
+import { alertLevel, appendLog, createGame, getShip } from './game/state.js';
 import { scenarioFor } from './game/scenarios.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './game/turns.js';
-import { bindInput, promptForCoordinates, promptForTarget } from './ui/input.js';
+import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget } from './ui/input.js';
 import { renderGame, reportFor } from './ui/render.js';
 import { playEffect, playEvent } from './ui/sound.js';
 import { playEffects, replayEffects } from './ui/fx.js';
@@ -91,7 +91,7 @@ const spectate = () => {
       return;
     }
     const auto = resolveAutopilotTurn(game);
-    game = { ...auto.game, log: [...(game.log ?? []), ...auto.messages] };
+    game = { ...auto.game, log: appendLog(game.log, auto.messages) };
     showEvents(auto.events);
     runComputer();
     refresh();
@@ -130,6 +130,20 @@ const dispatch = async (action) => {
       },
     };
     refresh();
+    return;
+  }
+
+  // Clicking empty space on the map is a maneuver order for the command ship.
+  if (action.type === 'map-click') {
+    if (game.phase !== 'player' || game.outcome || game.resigned) return;
+    const move = maneuverTo(game, action.x, action.y);
+    if (!move) {
+      const actor = getShip(game, game.playerShipId);
+      view = { ...view, entries: [`${actor?.name ?? 'Your ship'} cannot maneuver — no working engines, or held by a tractor beam.`] };
+      refresh();
+      return;
+    }
+    dispatch({ type: 'move', dx: move.dx, dy: move.dy });
     return;
   }
 
@@ -196,9 +210,21 @@ const dispatch = async (action) => {
     return;
   }
 
+  // Neither of these can be taken back: one destroys your ship and everything inside
+  // blast range, the other hands the Federation to the autopilot for the whole war.
+  if ((action.type === 'self-destruct' || action.type === 'resign') && !action.confirmed) {
+    if (game.phase !== 'player' || game.outcome || game.resigned) return;
+    const actor = getShip(game, game.playerShipId);
+    const [title, message] = action.type === 'self-destruct'
+      ? ['Self-destruct?', `${actor?.name ?? 'Your ship'} will be destroyed, along with every ship inside blast range — Federation hulls included.`]
+      : ['Resign command?', 'The autopilot takes the Federation for the rest of this war, and you cannot take command back.'];
+    if (await promptForConfirmation(title, message)) dispatch({ ...action, confirmed: true });
+    return;
+  }
+
   if (action.type === 'autopilot') {
     const auto = resolveAutopilotTurn(game);
-    game = { ...auto.game, log: [...(game.log ?? []), ...auto.messages] };
+    game = { ...auto.game, log: appendLog(game.log, auto.messages) };
     view = { ...view, entries: [] };
     showEvents(auto.events);
     runComputer();
@@ -209,7 +235,7 @@ const dispatch = async (action) => {
   const outcome = applyPlayerAction(game, action);
   const acted = outcome.game !== game;
   game = acted
-    ? { ...outcome.game, log: [...(outcome.game.log ?? game.log ?? []), ...outcome.messages] }
+    ? { ...outcome.game, log: appendLog(outcome.game.log ?? game.log, outcome.messages) }
     : game;
   view = {
     ...view,

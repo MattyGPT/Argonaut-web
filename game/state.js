@@ -6,6 +6,7 @@ import {
   FACTIONS,
   FACTION_IDS,
   GRID_SIZE,
+  LOG_LIMIT,
   RANGES,
   SCENARIO_IDS,
   SHIP_NAMES,
@@ -142,9 +143,19 @@ export const getLivingShips = (game) => game.ships.filter((ship) => ship.status 
 
 export const distance = (first, second) => Math.hypot(first.x - second.x, first.y - second.y);
 
-export const strongestFederation = (game, excludeId) => game.ships
-  .filter((ship) => ship.status === 'active' && ship.faction === FACTIONS.FEDERATION && ship.id !== excludeId)
-  .sort((a, b) => (b.shields + b.crew) - (a.shields + a.crew) || a.id.localeCompare(b.id))[0];
+/**
+ * The Federation hull command should shift to. Xanadu out-masses every ship afloat,
+ * so ranking on raw strength alone handed command to an immobile starbase — no move,
+ * no hyperspace — and froze the mid-game. Prefer a hull that can still maneuver, and
+ * fall back to the strongest of whatever is left only when nothing can move.
+ */
+export const strongestFederation = (game, excludeId) => {
+  const candidates = game.ships
+    .filter((ship) => ship.status === 'active' && ship.faction === FACTIONS.FEDERATION && ship.id !== excludeId);
+  const mobile = candidates.filter((ship) => systemUnits(ship, 'engines') > 0);
+  const pool = mobile.length > 0 ? mobile : candidates;
+  return [...pool].sort((a, b) => (b.shields + b.crew) - (a.shields + a.crew) || a.id.localeCompare(b.id))[0];
+};
 
 const templateFor = (ship) => Object.values(SHIP_TEMPLATES)
   .find((template) => template.className === ship?.className);
@@ -259,6 +270,9 @@ export const vendettaGrudge = (game, shooter, target) => {
 
 /** Reads a captain the way the narrative would: "Captain Vess of the Grendel". */
 export const captainOf = (ship) => `Captain ${ship?.captain ?? 'an unknown captain'} of the ${ship?.name ?? 'unknown'}`;
+
+/** Appends to the battle narrative, keeping it bounded so a long war still saves. */
+export const appendLog = (entries, additions) => [...(entries ?? []), ...additions].slice(-LOG_LIMIT);
 
 /** Reads an order as the battle narrative would: "escort Bonhomme", "hold position". */
 export const describeOrder = (game, order) => {
