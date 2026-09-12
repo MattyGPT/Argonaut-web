@@ -9,6 +9,8 @@ import {
   MISS_CHANCE,
   ORDER_TYPES,
   RANGES,
+  REFITS,
+  REFIT_OVER_TEMPLATE,
   SHIELD_PER_ENGINE,
   SHRAPNEL_EXTRA_RANGE,
   TARGETED_ORDERS,
@@ -24,20 +26,22 @@ import {
   crewCapacity,
   describeOrder,
   distance,
+  dockedAt,
   engineCapacity,
   getLivingShips,
   getShip,
   inRadioContact,
   isAce,
+  isActive,
   isTractorHeld,
   shieldCapacity,
   strongestFederation,
   systemRange,
   systemUnits,
+  templateSystems,
   vendettaGrudge,
 } from './state.js';
 
-const isActive = (ship) => ship?.status === 'active';
 const unitName = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
 /**
@@ -612,6 +616,38 @@ const setOrder = (game, action, actor) => {
   );
 };
 
+/**
+ * A one-time dockyard refit: extra system units rather than hull capacity, so
+ * nothing downstream needs a capacity override. The hull must be inside the
+ * dockyard ring, and one refit per hull per war keeps it a choice rather than a
+ * treadmill.
+ */
+const setRefit = (game, action, actor) => {
+  if (!game.extended) return invalid(game, 'Refits are an extended-war option.');
+  const ship = getShip(game, action.shipId);
+  if (!ship || ship.faction !== actor.faction || !isActive(ship)) return invalid(game, 'That hull cannot be refitted.');
+  if (game.refits?.[ship.id]) return invalid(game, `${ship.name} has already taken its refit this war.`);
+  const refit = REFITS[action.kind];
+  if (!refit) return invalid(game, `Unknown refit: ${action.kind}.`);
+  const base = dockedAt(game, ship);
+  if (!base) return invalid(game, `${ship.name} must be inside the dockyard ring to be refitted.`);
+  const template = templateSystems(ship);
+  for (const [system, units] of Object.entries(refit.systems)) {
+    if ((ship.systems[system] ?? 0) + units > (template[system] ?? 0) + REFIT_OVER_TEMPLATE) {
+      return invalid(game, `${ship.name} cannot carry more ${system}.`);
+    }
+  }
+  const systems = { ...ship.systems };
+  for (const [system, units] of Object.entries(refit.systems)) systems[system] = (systems[system] ?? 0) + units;
+  const updated = {
+    ...game,
+    refits: { ...(game.refits ?? {}), [ship.id]: action.kind },
+    ships: game.ships.map((entry) => (entry.id === ship.id ? { ...entry, systems } : entry)),
+  };
+  const detail = Object.entries(refit.systems).map(([system, units]) => `${system} +${units}`).join(', ');
+  return result(updated, `${ship.name} is refitted at ${base.name}: ${detail}.`);
+};
+
 export const applyPlayerAction = (game, action = {}) => {
   if (!game || !action.type) return invalid(game, 'Choose a command.');
   if (game.outcome || game.phase === 'ended') return invalid(game, 'The war has already ended.');
@@ -662,6 +698,7 @@ export const applyPlayerAction = (game, action = {}) => {
     }
     case 'transport': return transportAction(game, action, actor);
     case 'orders': return setOrder(game, action, actor);
+    case 'refit': return setRefit(game, action, actor);
     case 'autopilot': return result(completeTurn(game), `${actor.name} autopilot holds course.`);
     case 'resign': {
       if (game.resigned) return invalid(game, 'You have already resigned command; the autopilot has the conn.');

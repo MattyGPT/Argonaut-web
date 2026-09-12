@@ -1,10 +1,12 @@
-import { DOCKING, FACTIONS, RANGES } from '../game/constants.js';
+import { DOCKING, FACTIONS, RANGES, REFITS } from '../game/constants.js';
 import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
+import { drawMove } from './fx.js';
 import {
   abbreviateNarrative,
   alertLevel,
   describeOrder,
   distance,
+  dockedAt,
   engineCapacity,
   getShip,
   inRadioContact,
@@ -72,7 +74,42 @@ const orderPanel = (game, actor, ship) => {
   const buttons = ORDER_BUTTONS
     .map(([type, label]) => `<button data-order="${type}" data-order-ship="${ship.id}"${standing?.type === type ? ' class="current"' : ''}${disabled}>${label}</button>`)
     .join('');
-  return `<h2>Orders: ${ship.name}</h2><ul>${lines.map((line) => `<li>${line}</li>`).join('')}</ul><div class="order-grid">${buttons}</div>`;
+  const docked = dockedAt(game, ship);
+  const refitTaken = game.refits?.[ship.id];
+  if (docked) lines.push(`Docked at ${docked.name}: shields, crew, and one damaged subsystem recover each stardate.`);
+  if (refitTaken) lines.push(`Refitted this war: ${REFITS[refitTaken]?.label ?? refitTaken}.`);
+  const refitGrid = game.extended && docked && !refitTaken
+    ? `<div class="order-grid">${Object.entries(REFITS).map(([id, refit]) => `<button data-refit="${id}" data-refit-ship="${ship.id}"${disabled}>${refit.label}</button>`).join('')}</div>`
+    : '';
+  return `<h2>Orders: ${ship.name}</h2><ul>${lines.map((line) => `<li>${line}</li>`).join('')}</ul><div class="order-grid">${buttons}</div>${refitGrid}`;
+};
+
+/**
+ * Ships glide from where they were last drawn to where they are now, and leave a
+ * fading trail, so the computer phase reads as movement rather than teleporting.
+ * The map is rebuilt from an HTML string every render, so the animation is started
+ * by hand: park each hull at its remembered position, then step it to the new one.
+ */
+let moveMemory = { seed: null, positions: new Map() };
+
+const animateMoves = (map, game) => {
+  if (!map?.querySelectorAll) return;
+  if (moveMemory.seed !== game.seed) moveMemory = { seed: game.seed, positions: new Map() };
+  map.querySelectorAll('.ship[data-ship-id]').forEach((button) => {
+    const ship = getShip(game, button.dataset.shipId);
+    if (!ship) return;
+    const previous = moveMemory.positions.get(ship.id);
+    moveMemory.positions.set(ship.id, { x: ship.x, y: ship.y });
+    if (!previous || (previous.x === ship.x && previous.y === ship.y)) return;
+    drawMove(map, previous, ship);
+    button.style.left = `${previous.x}%`;
+    button.style.top = `${previous.y}%`;
+    // Two frames: the old position has to be committed before the transition target.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      button.style.left = `${ship.x}%`;
+      button.style.top = `${ship.y}%`;
+    }));
+  });
 };
 
 export const renderGame = (game, view = {}) => {
@@ -135,6 +172,7 @@ export const renderGame = (game, view = {}) => {
     return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}" style="--x:${ship.x};--y:${ship.y}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}"><span class="glyph">${ship.name[0]}</span></button>`;
   }).join('');
   map.innerHTML = ringHtml + shipHtml;
+  animateMoves(map, game);
 
   const condition = alertLevel(actor);
   consoleRoot.innerHTML = `

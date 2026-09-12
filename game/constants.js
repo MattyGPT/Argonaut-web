@@ -323,3 +323,20 @@ export const SCENARIO_IDS = Object.freeze(Object.keys(SCENARIOS));
  * silently stops partway through a long war.
  */
 export const LOG_LIMIT = 400;
+
+/**
+ * One-time refit choices at the dockyard, in an extended war. Each adds system units
+ * rather than touching hull capacity, so nothing downstream needs a capacity
+ * override; a hull may take one refit per war.
+ */
+export const REFITS = Object.freeze({
+  photons: Object.freeze({ label: 'Re-arm', systems: Object.freeze({ photons: 1 }) }),
+  phasers: Object.freeze({ label: 'Overcharge', systems: Object.freeze({ phasers: 1 }) }),
+  engines: Object.freeze({ label: 'Tune drive', systems: Object.freeze({ engines: 1 }) }),
+  sensors: Object.freeze({ label: 'Deep sensors', systems: Object.freeze({ scanner: 1, mapper: 1 }) }),
+});
+
+export const REFIT_IDS = Object.freeze(Object.keys(REFITS));
+
+/** A refit may not push a system this many units above its template complement. */
+export const REFIT_OVER_TEMPLATE = 2;

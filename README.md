@@ -179,9 +179,18 @@ you issue an order.
     was coming for you. It is a race, and the scanner is the whole game.
 
   Wiping out an alliance still wins outright under any scenario.
+- **The dockyard rebuilds hardware.** A hull inside the ring recovers shield power,
+  transferred crew, and one unit of its most-damaged subsystem each stardate — so a
+  burnt-out mapper is a wound now, not a permanent amputation.
+- **One refit per hull per war.** While docked, a Federation hull may take a single
+  refit from the order panel: an extra photon bay, an overcharged phaser bank, a
+  tuned drive, or deeper sensors. Refits add system units, never hull capacity.
 
 ## The tactical display
 
+- Ships glide between stardates instead of teleporting, and leave a fading dashed
+  trail, so you can watch the computer phase reposition the fleets. Both are
+  suppressed under `prefers-reduced-motion`.
 - Each ship is drawn as a circle bearing its initial (A=Argo, X=Xanadu,
   +=wreck), colored by alliance.
 - Dashed rings around your ship show phaser (red), photon (yellow), and engine
