@@ -25,8 +25,17 @@ npm test
 ## Controls
 
 `0–9` select the original system commands. `-` hyperspaces, `=` self-destructs,
-`Tab` passes, backtick runs autopilot, and `Escape` resigns. Every command also
-has a button in the command panel.
+`P` passes, backtick runs autopilot, and `Escape` resigns. `Tab` also passes, but
+only when no button has focus — swallowing it outright trapped keyboard users on
+the first control they reached, and the command panel has twenty of them. Every
+command has a button as well.
+
+You can also **click empty space on the tactical map** to maneuver. The click
+becomes an engine order toward that point, clamped to the engine ring already drawn
+around your ship, so you never have to work out ΔX and ΔY by hand; `2` still opens
+the coordinate prompt when you want exact numbers.
+
+`=` and `Escape` ask for confirmation first, because neither can be undone.
 
 The original also had "hidden" information commands, kept here: `R` roll call,
 `S` shot distribution, `L` alliance statistics, and `Backspace` a full map of
@@ -202,6 +211,12 @@ you issue an order.
 - **Impact juice** — phaser hits flash where they land and the map shakes when a
   volley lands on your command ship. Both are suppressed under
   `prefers-reduced-motion`, and nothing in the rules reads them.
+- **Screen readers** — the page is no longer one big live region, which announced
+  the entire board on every keystroke. A single concise status line reports your
+  condition, position, and the newest narrative entry instead.
+- **A bounded narrative** — the game keeps the last 400 entries rather than every
+  line ever printed, so a long war cannot outgrow browser storage and quietly stop
+  autosaving.
 
 ## Rights note
 

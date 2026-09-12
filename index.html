@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
+    <p id="sr-status" class="visually-hidden" role="status" aria-live="polite"></p>
     <header class="topbar">
       <div>
         <p class="eyebrow">FEDERATION TACTICAL COMMAND</p>
@@ -20,7 +21,7 @@
         <button id="new-game" class="secondary">New game</button>
       </div>
     </header>
-    <main id="game-root" aria-live="polite">
+    <main id="game-root">
       <section class="map-panel panel" aria-label="Tactical map">
         <div class="panel-title">
           <span>Tactical map</span>
@@ -29,7 +30,7 @@
             <span id="turn-readout"></span>
           </span>
         </div>
-        <div id="map" role="grid" aria-label="Space map">
+        <div id="map" role="group" aria-label="Space map">
           <div id="map-field"></div>
         </div>
         <div class="map-legend">
@@ -41,7 +42,7 @@
         </div>
       </section>
       <aside id="console" class="panel" aria-label="Command console"></aside>
-      <section id="report" class="panel report" aria-live="polite"></section>
+      <section id="report" class="panel report"></section>
       <section class="panel log-panel">
         <div class="panel-title">
           <span>Battle narrative</span>
@@ -87,6 +88,16 @@
             <input id="second-coordinate" type="number" required>
           </label>
         </div>
+        <div class="dialog-actions">
+          <button value="cancel" class="secondary">Cancel</button>
+          <button value="confirm">Confirm</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="confirm-dialog">
+      <form method="dialog" id="confirm-form">
+        <h2 id="confirm-title">Are you sure?</h2>
+        <p id="confirm-message" class="dialog-note"></p>
         <div class="dialog-actions">
           <button value="cancel" class="secondary">Cancel</button>
           <button value="confirm">Confirm</button>
