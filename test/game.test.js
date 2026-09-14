@@ -298,24 +298,63 @@ test('a collapsing enemy alliance stands down without ending the war', () => {
     return ship;
   });
   const result = applySurrender(game);
-  assert.ok(!result.outcome, 'an enemy surrender must not end the war');
-  assert.ok(result.ships.some((ship) => ship.id === 'bloc-cruiser-1' && ship.status === 'surrendered'));
+  assert.equal(result.game.outcome, null);
+  assert.deepEqual(result.events.map((event) => [event.kind, event.shipId, event.faction, event.surrenderedTo]), [
+    ['surrender', 'bloc-cruiser-1', 'Bloc', 'Federation'],
+  ]);
+  assert.ok(result.game.ships.some((ship) => ship.id === 'bloc-cruiser-1' && ship.status === 'surrendered'));
+});
+
+test('computer turns keep surrender events for the replay', () => {
+  const game = withShips(createGame({ seed: 'surrender' }), (ship) => {
+    if (ship.id === 'bloc-cruiser-1') return { ...ship, status: 'active', shields: 5, crew: 5 };
+    if (ship.faction === 'Bloc') return { ...ship, status: 'destroyed' };
+    return ship;
+  });
+  const result = resolveComputerTurns({ ...game, phase: 'computer' });
+  const surrendered = [['surrender', 'bloc-cruiser-1', 'Bloc', 'Federation']];
+  assert.deepEqual(result.events.filter((event) => event.kind === 'surrender')
+    .map((event) => [event.kind, event.shipId, event.faction, event.surrenderedTo]), surrendered);
+  assert.deepEqual(result.lastRound.events.filter((event) => event.kind === 'surrender')
+    .map((event) => [event.kind, event.shipId, event.faction, event.surrenderedTo]), surrendered);
+});
+
+test('computer self-destruction keeps every destruction event', () => {
+  const game = withShips(createGame({ seed: 'axis-suicide-events', extended: true }), (ship) => {
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 5 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 55, y: 50, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0 } };
+    if (ship.id === 'fed-cruiser-2') return { ...ship, x: 50, y: 55, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0 } };
+    if (ship.id === 'fed-cruiser-3') return { ...ship, x: 45, y: 50, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0 } };
+    if (ship.id === 'fed-scout') return { ...ship, x: 50, y: 45, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0 } };
+    if (ship.faction !== 'Federation') return { ...ship, status: 'destroyed' };
+    return { ...ship, x: 95, y: 95 };
+  });
+  const result = resolveComputerTurns({ ...game, phase: 'computer' });
+  assert.deepEqual(result.events.filter((event) => event.kind === 'destruction' && event.cause === 'self-destruct')
+    .map((event) => event.shipId).sort(), [
+    'axis-cruiser-1', 'fed-cruiser-1', 'fed-cruiser-2', 'fed-cruiser-3', 'fed-scout',
+  ]);
 });
 
 test('the resigned Federation autopilot surrenders when collapsed', () => {
   const base = withShips(createGame({ seed: 'fed-surrender' }), (ship) => {
     if (ship.id === 'fed-flagship') return { ...ship, status: 'active', shields: 5, crew: 5 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, status: 'active', shields: 5, crew: 5 };
     if (ship.faction === 'Federation') return { ...ship, status: 'destroyed' };
     return ship;
   });
   const result = applySurrender({ ...base, resigned: true });
-  assert.ok(result.outcome);
-  assert.match(result.outcome.message, /Federation has surrendered/);
-  assert.equal(applySurrender(base).outcome, null, 'an active player never auto-surrenders');
+  assert.ok(result.game.outcome);
+  assert.match(result.game.outcome.message, /Federation has surrendered/);
+  assert.deepEqual(result.events.map((event) => event.shipId), ['fed-flagship', 'fed-cruiser-1']);
+  assert.deepEqual(result.game.ships.filter((ship) => ship.faction === 'Federation').map((ship) => ship.status), [
+    'surrendered', 'surrendered', 'destroyed', 'destroyed', 'destroyed', 'destroyed',
+  ]);
+  assert.equal(applySurrender(base).game.outcome, null, 'an active player never auto-surrenders');
 });
 
 test('a fresh war does not surrender', () => {
-  assert.ok(!applySurrender(createGame({ seed: 'no-surrender' })).outcome);
+  assert.ok(!applySurrender(createGame({ seed: 'no-surrender' })).game.outcome);
 });
 
 test('computer actions are deterministic and a full seeded pass remains reproducible', () => {

@@ -1,5 +1,5 @@
 import { DOCKING, FACTIONS, GRID_SIZE, MISS_CHANCE, RANGES, STALEMATE_ROUNDS, SURRENDER } from './constants.js';
-import { damageShip, detonate, fireEvent, flushShields, killLines, resolveCollision, tractorLock, weaponDamage } from './actions.js';
+import { damageShip, detonate, fireEvent, flushShields, killLines, resolveCollision, terminalEvent, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
 import { scenarioOutcome } from './scenarios.js';
@@ -38,7 +38,7 @@ const resolveAiAction = (game, shipId) => {
   }
   if (action.type === 'self-destruct') {
     const blast = detonate(game, actor);
-    return { game: blast.game, messages: blast.messages, type: action.type };
+    return { game: blast.game, messages: blast.messages, events: blast.events, type: action.type };
   }
   if (['phasers', 'photons'].includes(action.type)) {
     const target = getShip(game, action.targetId);
@@ -173,6 +173,31 @@ const factionStrength = (game, faction) => game.ships
   .filter((ship) => isActive(ship) && ship.faction === faction)
   .reduce((total, ship) => total + ship.shields + ship.crew, 0);
 
+const surrenderWinner = (game, faction, active, factions) => {
+  if (faction === FACTIONS.FEDERATION && !game.resigned) return null;
+  if (active.length === 0 || active.length > SURRENDER.maxShips) return null;
+  const mine = factionStrength(game, faction);
+  const opposing = factions.filter((other) => other !== faction)
+    .reduce((total, other) => total + factionStrength(game, other), 0);
+  if (opposing === 0 || mine > opposing * SURRENDER.strengthRatio) return null;
+  return factions.filter((other) => other !== faction)
+    .sort((left, right) => factionStrength(game, right) - factionStrength(game, left))[0];
+};
+
+const markFactionSurrendered = (game, faction, winner) => ({
+  ...game,
+  phase: faction === FACTIONS.FEDERATION && game.resigned ? 'ended' : game.phase,
+  outcome: faction === FACTIONS.FEDERATION && game.resigned
+    ? { kind: 'alliance-win', message: `The Federation has surrendered to ${winner}.` }
+    : game.outcome,
+  ships: game.ships.map((ship) => isActive(ship) && ship.faction === faction
+    ? { ...ship, status: 'surrendered', tractorBy: null }
+    : ship),
+  log: faction === FACTIONS.FEDERATION && game.resigned
+    ? game.log
+    : [...(game.log ?? []), `${faction} has surrendered to ${winner}.  Its ships stand down.`],
+});
+
 /**
  * A fleet down to its last ships and badly outmatched capitulates
  * ("has surrendered to"). An enemy alliance that surrenders simply drops out of
@@ -180,30 +205,21 @@ const factionStrength = (game, faction) => game.ships
  * autopilot's surrender (after you resign) ends the game.
  */
 export const applySurrender = (game) => {
-  if (game.outcome) return game;
-  const factions = [...new Set(game.ships.map((ship) => ship.faction))];
+  if (game.outcome) return { game, events: [] };
   let next = game;
+  const events = [];
+  const factions = [...new Set(game.ships.map((ship) => ship.faction))];
   for (const faction of factions) {
     const active = next.ships.filter((ship) => isActive(ship) && ship.faction === faction);
-    if (active.length === 0 || active.length > SURRENDER.maxShips) continue;
-    const mine = factionStrength(next, faction);
-    const opposing = factions.filter((f) => f !== faction).reduce((total, f) => total + factionStrength(next, f), 0);
-    if (opposing === 0 || mine > opposing * SURRENDER.strengthRatio) continue;
-    const winner = factions.filter((f) => f !== faction)
-      .sort((a, b) => factionStrength(next, b) - factionStrength(next, a))[0];
-    if (faction === FACTIONS.FEDERATION) {
-      if (!next.resigned) continue; // only the autopilot may capitulate
-      return { ...next, phase: 'ended', outcome: { kind: 'alliance-win', message: `The Federation has surrendered to ${winner}.` } };
+    const winner = surrenderWinner(next, faction, active, factions);
+    if (!winner) continue;
+    for (const ship of active) {
+      events.push(terminalEvent('surrender', 'surrender', ship, { surrenderedTo: winner }));
     }
-    next = {
-      ...next,
-      ships: next.ships.map((ship) => isActive(ship) && ship.faction === faction
-        ? { ...ship, status: 'surrendered', tractorBy: null }
-        : ship),
-      log: [...(next.log ?? []), `${faction} has surrendered to ${winner}.  Its ships stand down.`],
-    };
+    next = markFactionSurrendered(next, faction, winner);
+    if (next.outcome) return { game: next, events };
   }
-  return next;
+  return { game: next, events };
 };
 
 /**
@@ -325,7 +341,9 @@ export const resolveComputerTurns = (initialGame) => {
   const transfer = transferCommandIfNeeded(game);
   game = transfer.game;
   if (transfer.message) log.push(transfer.message);
-  game = applySurrender(game);
+  const surrender = applySurrender(game);
+  game = surrender.game;
+  events.push(...surrender.events);
   if (game.outcome) log.push(game.outcome.message);
 
   // Count stardates in which nothing anywhere in the war zone changed, so a war
