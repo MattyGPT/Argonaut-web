@@ -99,10 +99,15 @@ test('a terminal card uses a cause-only narrative when no attacker is known', ()
   );
 });
 
-test('a paused battle disables command buttons', () => {
+test('a paused battle disables command, order, and ship-selection controls', () => {
   elements.clear();
-  renderGame(createGame({ seed: 'terminal-paused' }), { battlePaused: true });
+  renderGame(createGame({ seed: 'terminal-paused', extended: true }), {
+    battlePaused: true,
+    orderShipId: 'fed-cruiser-1',
+  });
   assert.match(read('#console').innerHTML, /data-command="phasers" disabled/);
+  assert.match(read('#report').innerHTML, /data-order="hold" data-order-ship="fed-cruiser-1" disabled/);
+  assert.match(read('#map-field').innerHTML, /data-ship-id="fed-flagship"[^>]* disabled/);
 });
 
 test('an intact radio passes the narrative through whole', () => {

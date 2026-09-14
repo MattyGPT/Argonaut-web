@@ -77,11 +77,11 @@ const ORDER_BUTTONS = Object.freeze([
  * panel instead of adding a fifth one, so the layout stays map / console / report /
  * narrative.
  */
-const orderPanel = (game, actor, ship) => {
+const orderPanel = (game, actor, ship, battlePaused) => {
   const standing = orderFor(game, ship.id);
   const pending = pendingOrderFor(game, ship.id);
   const contact = ship.id === actor?.id || inRadioContact(game, actor, ship);
-  const disabled = game.phase !== 'player' || game.resigned ? ' disabled' : '';
+  const disabled = game.phase !== 'player' || game.resigned || battlePaused ? ' disabled' : '';
   const lines = [
     `Standing orders: ${describeOrder(game, pending ?? standing)}.`,
     pending ? 'Out of radio contact — that order is still travelling and lands next stardate.' : null,
@@ -188,7 +188,7 @@ export const renderGame = (game, view = {}) => {
     // out which hull has sworn to hunt you.
     const captain = game.extended && game.scanned?.[ship.id] ? ship.captain : null;
     const ace = captain && isAce(ship) ? ' ace' : '';
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}" style="--x:${ship.x};--y:${ship.y}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}"><span class="glyph">${ship.name[0]}</span></button>`;
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}" style="--x:${ship.x};--y:${ship.y}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}"${view.battlePaused ? ' disabled' : ''}><span class="glyph">${ship.name[0]}</span></button>`;
   }).join('');
   map.innerHTML = ringHtml + shipHtml;
   animateMoves(map, game);
@@ -214,7 +214,7 @@ export const renderGame = (game, view = {}) => {
     lines: [scenarioFor(game).brief, ...scenarioProgress(game)],
   };
   report.innerHTML = canOrder
-    ? orderPanel(game, actor, orderShip)
+    ? orderPanel(game, actor, orderShip, view.battlePaused)
     : `<h2>${activeReport.title}</h2><ul>${activeReport.lines.map((line) => `<li>${line}</li>`).join('')}</ul>`;
 
   const entries = view.entries?.length
