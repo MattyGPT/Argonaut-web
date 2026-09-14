@@ -59,6 +59,9 @@ test('moving onto an enemy ship resolves a collision', () => {
   const fed = getShip(result.game, 'fed-flagship');
   const axis = getShip(result.game, 'axis-flagship');
   assert.ok(fed.status === 'destroyed' || axis.status === 'destroyed');
+  const destruction = result.events?.find((entry) => entry.kind === 'destruction');
+  assert.equal(destruction?.cause, 'collision');
+  assert.equal(destruction?.attackerId, fed.status === 'destroyed' ? 'axis-flagship' : 'fed-flagship');
 });
 
 test('phasers damage a nearby enemy without mutating the input game', () => {
@@ -76,6 +79,19 @@ test('weapon fire emits a fire event for the FX layer', () => {
   assert.equal(result.events[0].kind, 'phasers');
   assert.equal(result.events[0].fromId, 'fed-flagship');
   assert.equal(result.events[0].toId, 'axis-flagship');
+});
+
+test('a lethal weapon hit records the victim, faction, shooter, and weapon', () => {
+  const game = withShips(placedGame('phaser-hit-2'), (ship) => ship.id === 'axis-flagship'
+    ? { ...ship, shields: 0, crew: 0, systems: Object.fromEntries(Object.keys(ship.systems).map((name) => [name, 0])) }
+    : ship);
+  const result = applyPlayerAction(game, { type: 'phasers', targetId: 'axis-flagship' });
+  const event = result.events.find((entry) => entry.kind === 'destruction');
+  assert.deepEqual(event, {
+    kind: 'destruction', shipId: 'axis-flagship', shipName: 'Firebreather', faction: 'Axis',
+    x: 16, y: 10, cause: 'phasers',
+    attackerId: 'fed-flagship', attackerName: 'Argo', attackerFaction: 'Federation',
+  });
 });
 
 test('a seeded miss reports Missed! and deals no damage', () => {
@@ -110,6 +126,7 @@ test('self-destruct destroys the player ship and damages ships in its blast radi
   const game = placedGame('self-destruct');
   const result = applyPlayerAction(game, { type: 'self-destruct' });
   assert.equal(getShip(result.game, 'fed-flagship').status, 'destroyed');
+  assert.ok(result.events.some((entry) => entry.kind === 'destruction' && entry.shipId === 'fed-flagship' && entry.cause === 'self-destruct'));
   assert.ok(getShip(result.game, 'axis-flagship').shields < getShip(game, 'axis-flagship').shields);
 });
 
@@ -127,6 +144,10 @@ test('a seeded hyperspace misjump burns the ship up', () => {
   const result = applyPlayerAction(game, { type: 'hyperspace', x: 55, y: 55 });
   assert.match(result.messages.join(' '), /burnt up/i);
   assert.equal(getShip(result.game, 'fed-flagship').status, 'destroyed');
+  assert.deepEqual(result.events.find((entry) => entry.kind === 'destruction'), {
+    kind: 'destruction', shipId: 'fed-flagship', shipName: 'Argo', faction: 'Federation',
+    x: 10, y: 10, cause: 'hyperspace',
+  });
 });
 
 test('scanner range scales with live scanner units', () => {
@@ -277,24 +298,103 @@ test('a collapsing enemy alliance stands down without ending the war', () => {
     return ship;
   });
   const result = applySurrender(game);
-  assert.ok(!result.outcome, 'an enemy surrender must not end the war');
-  assert.ok(result.ships.some((ship) => ship.id === 'bloc-cruiser-1' && ship.status === 'surrendered'));
+  assert.equal(result.game.outcome, null);
+  assert.deepEqual(result.events.map((event) => [event.kind, event.shipId, event.faction, event.surrenderedTo]), [
+    ['surrender', 'bloc-cruiser-1', 'Bloc', 'Federation'],
+  ]);
+  assert.ok(result.game.ships.some((ship) => ship.id === 'bloc-cruiser-1' && ship.status === 'surrendered'));
+});
+
+test('computer turns keep surrender events for the replay', () => {
+  const game = withShips(createGame({ seed: 'surrender' }), (ship) => {
+    if (ship.id === 'bloc-cruiser-1') return { ...ship, status: 'active', shields: 5, crew: 5 };
+    if (ship.faction === 'Bloc') return { ...ship, status: 'destroyed' };
+    return ship;
+  });
+  const result = resolveComputerTurns({ ...game, phase: 'computer' });
+  const surrendered = [['surrender', 'bloc-cruiser-1', 'Bloc', 'Federation']];
+  assert.deepEqual(result.events.filter((event) => event.kind === 'surrender')
+    .map((event) => [event.kind, event.shipId, event.faction, event.surrenderedTo]), surrendered);
+  assert.deepEqual(result.lastRound.events.filter((event) => event.kind === 'surrender')
+    .map((event) => [event.kind, event.shipId, event.faction, event.surrenderedTo]), surrendered);
+});
+
+test('a lethal computer weapon hit records truthful destruction attribution for the replay', () => {
+  const disabled = { engines: 0, phasers: 0, photons: 0, tractor: 0, scanner: 0, mapper: 0, transporter: 0, radio: 0 };
+  const game = withShips(createGame({ seed: 'phaser-hit-2' }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 10, y: 10, shields: 0, crew: 0, systems: disabled };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 16, y: 10 };
+    return { ...ship, status: 'destroyed' };
+  });
+  const result = resolveComputerTurns({ ...game, phase: 'computer' });
+  const expected = {
+    kind: 'destruction', shipId: 'fed-flagship', shipName: 'Argo', faction: 'Federation',
+    x: 10, y: 10, cause: 'photons',
+    attackerId: 'axis-flagship', attackerName: 'Firebreather', attackerFaction: 'Axis',
+  };
+  assert.deepEqual(result.events.find((event) => event.kind === 'destruction'), expected);
+  assert.deepEqual(result.lastRound.events.find((event) => event.kind === 'destruction'), expected);
+});
+
+test('computer self-destruction keeps every destruction event', () => {
+  const game = withShips(createGame({ seed: 'axis-suicide-events', extended: true }), (ship) => {
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 5 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 55, y: 50, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0 } };
+    if (ship.id === 'fed-cruiser-2') return { ...ship, x: 50, y: 55, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0 } };
+    if (ship.id === 'fed-cruiser-3') return { ...ship, x: 45, y: 50, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0 } };
+    if (ship.id === 'fed-scout') return { ...ship, x: 50, y: 45, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0 } };
+    if (ship.faction !== 'Federation') return { ...ship, status: 'destroyed' };
+    return { ...ship, x: 95, y: 95 };
+  });
+  const result = resolveComputerTurns({ ...game, phase: 'computer' });
+  const destructions = result.events.filter((event) => event.kind === 'destruction' && event.cause === 'self-destruct');
+  assert.deepEqual(destructions, [
+    {
+      kind: 'destruction', shipId: 'fed-cruiser-1', shipName: 'Bonhomme', faction: 'Federation',
+      x: 55, y: 50, cause: 'self-destruct',
+      attackerId: 'axis-cruiser-1', attackerName: 'Grendel', attackerFaction: 'Axis',
+    },
+    {
+      kind: 'destruction', shipId: 'fed-cruiser-2', shipName: 'Crusader', faction: 'Federation',
+      x: 50, y: 55, cause: 'self-destruct',
+      attackerId: 'axis-cruiser-1', attackerName: 'Grendel', attackerFaction: 'Axis',
+    },
+    {
+      kind: 'destruction', shipId: 'fed-cruiser-3', shipName: 'Defender', faction: 'Federation',
+      x: 45, y: 50, cause: 'self-destruct',
+      attackerId: 'axis-cruiser-1', attackerName: 'Grendel', attackerFaction: 'Axis',
+    },
+    {
+      kind: 'destruction', shipId: 'fed-scout', shipName: 'Empyreal', faction: 'Federation',
+      x: 50, y: 45, cause: 'self-destruct',
+      attackerId: 'axis-cruiser-1', attackerName: 'Grendel', attackerFaction: 'Axis',
+    },
+    {
+      kind: 'destruction', shipId: 'axis-cruiser-1', shipName: 'Grendel', faction: 'Axis',
+      x: 50, y: 50, cause: 'self-destruct',
+    },
+  ]);
 });
 
 test('the resigned Federation autopilot surrenders when collapsed', () => {
   const base = withShips(createGame({ seed: 'fed-surrender' }), (ship) => {
     if (ship.id === 'fed-flagship') return { ...ship, status: 'active', shields: 5, crew: 5 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, status: 'active', shields: 5, crew: 5 };
     if (ship.faction === 'Federation') return { ...ship, status: 'destroyed' };
     return ship;
   });
   const result = applySurrender({ ...base, resigned: true });
-  assert.ok(result.outcome);
-  assert.match(result.outcome.message, /Federation has surrendered/);
-  assert.equal(applySurrender(base).outcome, null, 'an active player never auto-surrenders');
+  assert.ok(result.game.outcome);
+  assert.match(result.game.outcome.message, /Federation has surrendered/);
+  assert.deepEqual(result.events.map((event) => event.shipId), ['fed-flagship', 'fed-cruiser-1']);
+  assert.deepEqual(result.game.ships.filter((ship) => ship.faction === 'Federation').map((ship) => ship.status), [
+    'surrendered', 'surrendered', 'destroyed', 'destroyed', 'destroyed', 'destroyed',
+  ]);
+  assert.equal(applySurrender(base).game.outcome, null, 'an active player never auto-surrenders');
 });
 
 test('a fresh war does not surrender', () => {
-  assert.ok(!applySurrender(createGame({ seed: 'no-surrender' })).outcome);
+  assert.ok(!applySurrender(createGame({ seed: 'no-surrender' })).game.outcome);
 });
 
 test('computer actions are deterministic and a full seeded pass remains reproducible', () => {

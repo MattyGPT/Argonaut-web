@@ -4,11 +4,19 @@ import { alertLevel, appendLog, createGame, getShip } from './game/state.js';
 import { scenarioFor } from './game/scenarios.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './game/turns.js';
 import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget } from './ui/input.js';
+import {
+  ordinaryBattleEvents,
+  playReplayEvents,
+  playTerminalEvents,
+  whenPlaybackUnlocked,
+  withPlaybackLock,
+} from './ui/battle-events.js';
 import { renderGame, reportFor } from './ui/render.js';
 import { playEffect, playEvent } from './ui/sound.js';
 import { playEffects, replayEffects } from './ui/fx.js';
 
 const SAVE_KEY = 'argonaut-web-save-v1';
+const TERMINAL_EVENT_MS = 2500;
 
 const loadSave = () => {
   try {
@@ -63,21 +71,42 @@ const shake = () => {
 };
 
 const showEvents = (events) => {
-  if (!events?.length) return;
-  playEffects(events, document.querySelector('#map'), game.playerShipId);
-  if (events.some((e) => e.toId === game.playerShipId && e.hit)) shake();
+  const ordinary = ordinaryBattleEvents(events);
+  if (!ordinary.length) return;
+  playEffects(ordinary, document.querySelector('#map'), game.playerShipId);
+  if (ordinary.some((e) => e.toId === game.playerShipId && e.hit)) shake();
   if (game.sound) {
-    events
+    ordinary
       .filter((e) => e.fromId === game.playerShipId || e.toId === game.playerShipId)
       .forEach((e, i) => setTimeout(() => playEvent(e.hit ? e.kind : 'miss', true), i * 160));
   }
 };
 
-const runComputer = () => {
+let presentingTerminalEvents = false;
+let replayingRound = false;
+const playbackLocked = () => presentingTerminalEvents || replayingRound;
+const wait = (duration) => new Promise((resolve) => setTimeout(resolve, duration));
+const clearTerminalPresentation = () => {
+  view = { ...view, terminalEvent: null, battlePaused: replayingRound };
+  refresh();
+};
+
+const presentTerminalEvents = (events) => withPlaybackLock(
+  (locked) => { presentingTerminalEvents = locked; },
+  () => playTerminalEvents(events, (terminalEvent) => {
+    if (terminalEvent) playEffects([terminalEvent], document.querySelector('#map'), game.playerShipId);
+    view = { ...view, terminalEvent, battlePaused: Boolean(terminalEvent) || replayingRound };
+    refresh();
+  }, () => wait(TERMINAL_EVENT_MS)),
+  clearTerminalPresentation,
+);
+
+const runComputer = async () => {
   if (game.phase === 'computer' && !game.outcome) {
     game = resolveComputerTurns(game);
     view = { ...view, entries: [] };
     showEvents(game.events);
+    await presentTerminalEvents(game.events);
   }
 };
 
@@ -85,7 +114,7 @@ let spectating = false;
 const spectate = () => {
   if (spectating) return;
   spectating = true;
-  const step = () => {
+  const step = async () => {
     if (!game.resigned || game.outcome || game.phase !== 'player') {
       spectating = false;
       return;
@@ -93,7 +122,8 @@ const spectate = () => {
     const auto = resolveAutopilotTurn(game);
     game = { ...auto.game, log: appendLog(game.log, auto.messages) };
     showEvents(auto.events);
-    runComputer();
+    await presentTerminalEvents(auto.events);
+    await runComputer();
     refresh();
     if (game.resigned && !game.outcome && game.phase === 'player') setTimeout(step, SPECTATOR_TICK_MS);
     else spectating = false;
@@ -102,8 +132,8 @@ const spectate = () => {
 };
 
 const dispatch = async (action) => {
-  // The spectator loop mutates `game` on a timer; ignore input while it runs.
-  if (spectating) return;
+  // Automated turns and replay mutate the current presentation asynchronously.
+  if (spectating || playbackLocked()) return;
   if (action.type === 'map-select') {
     const ship = game.ships.find((entry) => entry.id === action.targetId);
     const command = game.ships.find((entry) => entry.id === game.playerShipId);
@@ -160,9 +190,27 @@ const dispatch = async (action) => {
       refresh();
       return;
     }
-    replayEffects(round.events, document.querySelector('#map'));
-    view = { ...view, entries: round.entries ?? [], report: null, orderShipId: null };
-    refresh();
+    replayingRound = true;
+    try {
+      view = {
+        ...view,
+        entries: round.entries ?? [],
+        report: null,
+        orderShipId: null,
+        battlePaused: true,
+      };
+      refresh();
+      await playReplayEvents(
+        round.events,
+        (event) => replayEffects([event], document.querySelector('#map')),
+        (event) => presentTerminalEvents([event]),
+        wait,
+      );
+    } finally {
+      replayingRound = false;
+      view = { ...view, terminalEvent: null, battlePaused: false };
+      refresh();
+    }
     return;
   }
 
@@ -227,7 +275,8 @@ const dispatch = async (action) => {
     game = { ...auto.game, log: appendLog(game.log, auto.messages) };
     view = { ...view, entries: [] };
     showEvents(auto.events);
-    runComputer();
+    await presentTerminalEvents(auto.events);
+    await runComputer();
     refresh();
     return;
   }
@@ -244,7 +293,8 @@ const dispatch = async (action) => {
   };
   if (!['phasers', 'photons'].includes(action.type)) playEffect('command', game.sound);
   showEvents(outcome.events);
-  runComputer();
+  await presentTerminalEvents(outcome.events);
+  await runComputer();
   refresh();
   if (game.resigned) spectate();
 };
@@ -261,7 +311,7 @@ const syncScenarioAvailability = () => {
   if (!extended) scenario.value = 'annihilation';
 };
 
-document.querySelector('#new-game').addEventListener('click', () => {
+document.querySelector('#new-game').addEventListener('click', whenPlaybackUnlocked(playbackLocked, () => {
   document.querySelector('#new-seed').value = randomSeed();
   document.querySelector('#regional').checked = game.regional;
   document.querySelector('#sound').checked = game.sound;
@@ -269,7 +319,7 @@ document.querySelector('#new-game').addEventListener('click', () => {
   document.querySelector('#scenario').value = game.scenario ?? 'annihilation';
   syncScenarioAvailability();
   document.querySelector('#new-game-dialog').showModal();
-});
+}));
 
 document.querySelector('#extended').addEventListener('change', syncScenarioAvailability);
 
@@ -288,7 +338,7 @@ const openingLines = (war) => {
   return lines;
 };
 
-document.querySelector('#new-game-form').addEventListener('submit', () => {
+document.querySelector('#new-game-form').addEventListener('submit', whenPlaybackUnlocked(playbackLocked, () => {
   const dialog = document.querySelector('#new-game-dialog');
   if (dialog.returnValue === 'confirm') {
     game = createGame({
@@ -301,7 +351,7 @@ document.querySelector('#new-game-form').addEventListener('submit', () => {
     view = { entries: openingLines(game) };
     refresh();
   }
-});
+}));
 
 const THEME_KEY = 'argonaut-web-theme';
 let theme = 'modern';

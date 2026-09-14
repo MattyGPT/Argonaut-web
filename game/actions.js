@@ -101,6 +101,22 @@ export const fireEvent = (kind, shooter, target, hit) => ({
   hit,
 });
 
+export const terminalEvent = (kind, cause, ship, options = {}) => ({
+  kind,
+  shipId: ship.id,
+  shipName: ship.name,
+  faction: ship.faction,
+  x: ship.x,
+  y: ship.y,
+  cause,
+  ...(options.attacker ? {
+    attackerId: options.attacker.id,
+    attackerName: options.attacker.name,
+    attackerFaction: options.attacker.faction,
+  } : {}),
+  ...(options.surrenderedTo ? { surrenderedTo: options.surrenderedTo } : {}),
+});
+
 const invalid = (game, message, requiresTarget = false) => result(game, message, { requiresTarget });
 
 const usableActor = (game) => {
@@ -352,7 +368,10 @@ const weaponAction = (game, action, actor, type) => {
     }),
   }));
   const events = [fireEvent(type, actor, found.target, true)];
-  if (kill) events.push({ kind: 'explosion', fromId: actor.id, toId: victim.id, x1: victim.x, y1: victim.y, x2: victim.x, y2: victim.y, hit: true });
+  if (kill) {
+    events.push({ kind: 'explosion', fromId: actor.id, toId: victim.id, x1: victim.x, y1: victim.y, x2: victim.x, y2: victim.y, hit: true });
+    if (hit.status === 'destroyed') events.push(terminalEvent('destruction', type, victim, { attacker: actor }));
+  }
   return result(updated, [
     `${actor.name} fires ${type} at ${found.target.name} for ${damage} damage.`,
     ...(kill ? killLines(game, actor, found.target) : []),
@@ -381,7 +400,10 @@ const oneCollision = (game, first, second) => {
     ...game,
     ships: game.ships.map((ship) => ship.id === destroyed.id ? destroyed : ship.id === survivor.id ? survivor : ship),
   });
-  const events = [{ kind: 'explosion', fromId: survivor.id, toId: destroyed.id, x1: destroyed.x, y1: destroyed.y, x2: destroyed.x, y2: destroyed.y, hit: true }];
+  const events = [
+    { kind: 'explosion', fromId: survivor.id, toId: destroyed.id, x1: destroyed.x, y1: destroyed.y, x2: destroyed.x, y2: destroyed.y, hit: true },
+    terminalEvent('destruction', 'collision', destroyed, { attacker: survivor }),
+  ];
   return {
     game: updated,
     messages: [`Collision: ${destroyed.name} is destroyed; ${survivor.name} is crippled.`],
@@ -428,7 +450,7 @@ const moveAction = (game, action, actor) => {
   if (x < 0 || x > GRID_SIZE || y < 0 || y > GRID_SIZE) return invalid(game, 'Movement would leave the tactical map.');
   const movedActor = { ...actor, x, y };
   const collision = resolveCollision(replaceShip(game, movedActor), movedActor);
-  return result(completeTurn(collision.game), [`${actor.name} moves to ${x},${y}.`, ...collision.messages]);
+  return result(completeTurn(collision.game), [`${actor.name} moves to ${x},${y}.`, ...collision.messages], { events: collision.events });
 };
 
 const pullToward = (actor, target, pull) => {
@@ -519,27 +541,34 @@ export const detonate = (game, actor) => {
   const blast = blastRadius(actor);
   const shrapnel = blast + SHRAPNEL_EXTRA_RANGE;
   const messages = [`${actor.name} is self-destructing.  Blast range ${blast}.`];
+  const events = [];
   const victims = game.ships.map((ship) => {
-    if (ship.id === actor.id) return destroyedShip(ship);
+    if (ship.id === actor.id) {
+      events.push(terminalEvent('destruction', 'self-destruct', ship));
+      return destroyedShip(ship);
+    }
     if (!isActive(ship)) return ship;
     const range = distance(actor, ship);
     if (range <= blast) {
       messages.push(`${ship.name} falls within blast range.`);
+      events.push(terminalEvent('destruction', 'self-destruct', ship, { attacker: actor }));
       return destroyedShip(ship);
     }
     if (range <= shrapnel) {
       const damage = 10 + rng.integer(5, 25);
       messages.push(`${ship.name} has been hit by shrapnel.  Damage to shields: ${damage} units.`);
-      return damageShip(ship, damage, rng);
+      const damaged = damageShip(ship, damage, rng);
+      if (damaged.status === 'destroyed') events.push(terminalEvent('destruction', 'self-destruct', damaged, { attacker: actor }));
+      return damaged;
     }
     return ship;
   });
-  return { game: advanceRandom({ ...game, ships: victims }), messages };
+  return { game: advanceRandom({ ...game, ships: victims }), messages, events };
 };
 
 const selfDestructAction = (game, actor) => {
   const blast = detonate(game, actor);
-  return result(completeTurn(blast.game), blast.messages);
+  return result(completeTurn(blast.game), blast.messages, { events: blast.events });
 };
 
 const hyperspaceAction = (game, action, actor) => {
@@ -550,6 +579,7 @@ const hyperspaceAction = (game, action, actor) => {
     return result(
       completeTurn(advanceRandom(replaceShip(game, destroyedShip(actor)))),
       `${actor.name} has burnt up trying to hyperspace.`,
+      { events: [terminalEvent('destruction', 'hyperspace', actor)] },
     );
   }
   const x = action.x === undefined ? rng.integer(1, GRID_SIZE - 1) : Number(action.x);

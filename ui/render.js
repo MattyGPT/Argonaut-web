@@ -44,6 +44,25 @@ const commandList = (game) => (game.extended ? [...commands, ['fleet', 'Fleet or
 
 const cap = (value) => value[0].toUpperCase() + value.slice(1);
 
+const terminalHeading = (event) => event.kind === 'destruction' ? 'SHIP DESTROYED' : 'SHIP SURRENDERED';
+
+const terminalDescription = (event) => {
+  const victim = `${event.shipName} · ${event.faction}`;
+  if (event.kind === 'surrender') {
+    return event.surrenderedTo ? `${victim} — surrendered to ${event.surrenderedTo}.` : `${victim} — surrendered.`;
+  }
+  if (event.attackerName) {
+    const attacker = `${event.attackerName}${event.attackerFaction ? ` · ${event.attackerFaction}` : ''}`;
+    return `${victim} — destroyed by ${attacker} using ${event.cause}.`;
+  }
+  return `${victim} — destroyed by ${event.cause}.`;
+};
+
+export const terminalNarrative = (event) => {
+  if (!event) return '';
+  return `<li class="terminal-event ${event.faction}"><strong>${terminalHeading(event)}</strong><span>${terminalDescription(event)}</span></li>`;
+};
+
 const ORDER_BUTTONS = Object.freeze([
   ['focus', 'Focus with fleet'],
   ['hold', 'Hold position'],
@@ -58,11 +77,11 @@ const ORDER_BUTTONS = Object.freeze([
  * panel instead of adding a fifth one, so the layout stays map / console / report /
  * narrative.
  */
-const orderPanel = (game, actor, ship) => {
+const orderPanel = (game, actor, ship, battlePaused) => {
   const standing = orderFor(game, ship.id);
   const pending = pendingOrderFor(game, ship.id);
   const contact = ship.id === actor?.id || inRadioContact(game, actor, ship);
-  const disabled = game.phase !== 'player' || game.resigned ? ' disabled' : '';
+  const disabled = game.phase !== 'player' || game.resigned || battlePaused ? ' disabled' : '';
   const lines = [
     `Standing orders: ${describeOrder(game, pending ?? standing)}.`,
     pending ? 'Out of radio contact — that order is still travelling and lands next stardate.' : null,
@@ -169,7 +188,7 @@ export const renderGame = (game, view = {}) => {
     // out which hull has sworn to hunt you.
     const captain = game.extended && game.scanned?.[ship.id] ? ship.captain : null;
     const ace = captain && isAce(ship) ? ' ace' : '';
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}" style="--x:${ship.x};--y:${ship.y}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}"><span class="glyph">${ship.name[0]}</span></button>`;
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}" style="--x:${ship.x};--y:${ship.y}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}"${view.battlePaused ? ' disabled' : ''}><span class="glyph">${ship.name[0]}</span></button>`;
   }).join('');
   map.innerHTML = ringHtml + shipHtml;
   animateMoves(map, game);
@@ -185,7 +204,7 @@ export const renderGame = (game, view = {}) => {
       <div class="status-row"><span>Status</span><b>${actor.status}</b></div>
     </div>
     <div class="system-grid">${Object.entries(actor.systems).map(([name, amount]) => `<span>${cap(name)} <b>${amount}</b></span>`).join('')}</div>
-    <div class="command-grid">${commandList(game).map(([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || game.resigned ? 'disabled' : ''}>${label}<kbd>${key}</kbd></button>`).join('')}</div>`;
+    <div class="command-grid">${commandList(game).map(([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || game.resigned || view.battlePaused ? 'disabled' : ''}>${label}<kbd>${key}</kbd></button>`).join('')}</div>`;
 
   const orderShip = game.extended && !game.outcome && !game.resigned ? getShip(game, view.orderShipId) : null;
   const canOrder = Boolean(orderShip) && orderShip.faction === actor?.faction && orderShip.status !== 'destroyed';
@@ -195,7 +214,7 @@ export const renderGame = (game, view = {}) => {
     lines: [scenarioFor(game).brief, ...scenarioProgress(game)],
   };
   report.innerHTML = canOrder
-    ? orderPanel(game, actor, orderShip)
+    ? orderPanel(game, actor, orderShip, view.battlePaused)
     : `<h2>${activeReport.title}</h2><ul>${activeReport.lines.map((line) => `<li>${line}</li>`).join('')}</ul>`;
 
   const entries = view.entries?.length
@@ -203,7 +222,7 @@ export const renderGame = (game, view = {}) => {
     : game.log?.length ? game.log : ['Tactical systems online. Choose a command.'];
   const integrity = radioIntegrity(actor);
   const narrated = abbreviateNarrative(entries, integrity, actor.name);
-  log.innerHTML = narrated.slice(-150).reverse().map((entry) => `<li>${entry}</li>`).join('');
+  log.innerHTML = terminalNarrative(view.terminalEvent) + narrated.slice(-150).reverse().map((entry) => `<li>${entry}</li>`).join('');
   document.querySelector('#log-meta').textContent = integrity >= 1
     ? 'Newest first'
     : `Newest first · radio at ${Math.round(integrity * 100)}%, traffic abbreviated`;
@@ -218,6 +237,7 @@ export const renderGame = (game, view = {}) => {
     status.textContent = [
       game.outcome?.message ?? null,
       view.report?.title ?? null,
+      view.terminalEvent ? `${terminalHeading(view.terminalEvent)}. ${terminalDescription(view.terminalEvent)}` : null,
       `Condition ${condition}.`,
       `${actor.name} at ${actor.x}, ${actor.y}; shields ${actor.shields}, crew ${actor.crew}.`,
       narrated[narrated.length - 1] ?? null,

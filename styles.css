@@ -327,6 +327,30 @@ h1 {
   stroke: var(--axis);
 }
 
+.fx-terminal-destruction {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  animation: fx-terminal-destruction 2.5s ease-out forwards;
+}
+
+.fx-terminal-surrender {
+  animation: fx-terminal-surrender 2.5s ease-out forwards;
+}
+
+.fx-terminal-surrender circle {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-dasharray: 2 1.25;
+}
+
+.fx-terminal-surrender path {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+
 @keyframes fx-fade {
   from {
     opacity: .95;
@@ -345,6 +369,26 @@ h1 {
     r: 6;
     opacity: 0;
   };
+}
+
+@keyframes fx-terminal-destruction {
+  from {
+    r: 1;
+    opacity: 1;
+  }
+  to {
+    r: 12;
+    opacity: .25;
+  }
+}
+
+@keyframes fx-terminal-surrender {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: .45;
+  }
 }
 
 #console {
@@ -463,6 +507,35 @@ h1 {
 
 #log li:first-child {
   color: #effaff;
+}
+
+#log .terminal-event {
+  display: grid;
+  gap: .25rem;
+  border-left: 3px solid currentColor;
+  background: #0b1d2d;
+  font-size: .8rem;
+}
+
+#log .terminal-event.Federation {
+  color: var(--fed);
+}
+
+#log .terminal-event.Axis {
+  color: var(--axis);
+}
+
+#log .terminal-event.Bloc {
+  color: var(--bloc);
+}
+
+#log .terminal-event.Cabal {
+  color: var(--cabal);
+}
+
+.terminal-event strong {
+  font-size: .72rem;
+  letter-spacing: .1em;
 }
 
 dialog {
@@ -784,7 +857,10 @@ body.classic .ship.has-order::before {
   .fx-impact,
   .fx-boom,
   .fx-move,
-  .fx-phaser {
+  .fx-phaser,
+  .fx-terminal-destruction,
+  .fx-terminal-surrender,
+  .terminal-event {
     animation-duration: .01s;
   }
 }

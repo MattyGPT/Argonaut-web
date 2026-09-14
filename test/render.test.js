@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../game/state.js';
-import { renderGame } from '../ui/render.js';
+import { renderGame, terminalNarrative } from '../ui/render.js';
 
 // render.js only touches the document inside renderGame, so a bare element stub
 // is enough to exercise it under node --test, keeping the suite dependency-free.
@@ -60,6 +60,54 @@ test('a damaged radio abbreviates the narrative and says so in the header', () =
   renderGame(game);
   assert.equal(read('#log').innerHTML, '<li>Firebreather fires phasers at …</li>');
   assert.match(read('#log-meta').textContent, /radio at 50%, traffic abbreviated/);
+});
+
+test('a terminal card stays whole while damaged radio traffic is abbreviated', () => {
+  elements.clear();
+  const base = createGame({ seed: 'terminal-card' });
+  const event = {
+    kind: 'destruction',
+    shipId: 'axis-flagship',
+    shipName: 'Firebreather',
+    faction: 'Axis',
+    x: 16,
+    y: 10,
+    cause: 'phasers',
+    attackerId: 'fed-flagship',
+    attackerName: 'Argo',
+    attackerFaction: 'Federation',
+  };
+  const game = withFlagship({ ...base, log: [TRAFFIC] }, {
+    systems: { ...base.ships.find((ship) => ship.id === 'fed-flagship').systems, radio: 1 },
+  });
+
+  renderGame(game, { terminalEvent: event });
+
+  const log = read('#log').innerHTML;
+  assert.match(log, /class="terminal-event Axis"/);
+  assert.match(log, /Firebreather · Axis/);
+  assert.match(log, /Argo · Federation/);
+  assert.match(log, /phasers/);
+  assert.match(log, /<li>Firebreather fires phasers at …<\/li>/);
+  assert.match(read('#sr-status').textContent, /SHIP DESTROYED\. Firebreather · Axis — destroyed by Argo · Federation using phasers\./);
+});
+
+test('a terminal card uses a cause-only narrative when no attacker is known', () => {
+  assert.match(
+    terminalNarrative({ kind: 'destruction', shipName: 'Argo', faction: 'Federation', cause: 'hyperspace' }),
+    /Argo · Federation — destroyed by hyperspace\./,
+  );
+});
+
+test('a paused battle disables command, order, and ship-selection controls', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'terminal-paused', extended: true }), {
+    battlePaused: true,
+    orderShipId: 'fed-cruiser-1',
+  });
+  assert.match(read('#console').innerHTML, /data-command="phasers" disabled/);
+  assert.match(read('#report').innerHTML, /data-order="hold" data-order-ship="fed-cruiser-1" disabled/);
+  assert.match(read('#map-field').innerHTML, /data-ship-id="fed-flagship"[^>]* disabled/);
 });
 
 test('an intact radio passes the narrative through whole', () => {
@@ -189,11 +237,32 @@ test('the replay button stays hidden until a round has been fought', () => {
   assert.equal(read('#replay-round').hidden, true);
 
   elements.clear();
-  renderGame({
+  const terminalEvent = {
+    kind: 'destruction',
+    shipId: 'axis-flagship',
+    shipName: 'Firebreather',
+    faction: 'Axis',
+    x: 16,
+    y: 10,
+    cause: 'phasers',
+    attackerId: 'fed-flagship',
+    attackerName: 'Argo',
+    attackerFaction: 'Federation',
+  };
+  const replayable = {
     ...createGame({ seed: 'replay-shown' }),
-    lastRound: { events: [{ kind: 'explosion', x2: 5, y2: 5, hit: true }], entries: ['A round.'] },
-  });
+    lastRound: {
+      events: [{ kind: 'explosion', x2: 5, y2: 5, hit: true }, terminalEvent],
+      entries: ['A round.'],
+    },
+  };
+  renderGame(replayable, { terminalEvent });
   assert.equal(read('#replay-round').hidden, false);
+  assert.match(read('#log').innerHTML, /class="terminal-event Axis"/);
+
+  renderGame(replayable, { terminalEvent: null });
+  assert.equal(read('#replay-round').hidden, false);
+  assert.doesNotMatch(read('#log').innerHTML, /class="terminal-event/);
 });
 
 test('the mission panel carries the scenario brief and progress', () => {
