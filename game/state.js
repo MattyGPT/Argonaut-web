@@ -2,6 +2,7 @@ import {
   ACE_KILLS,
   ALERT_THRESHOLDS,
   CAPTAIN_NAMES,
+  DOCKING,
   ENGINE_MOVE_PER_UNIT,
   FACTIONS,
   FACTION_IDS,
@@ -133,11 +134,16 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     pendingOrders: {},
     // Hulls the player has scanned, which is what reveals who captains them.
     scanned: {},
+    // The one-time dockyard refit each hull has taken, if any.
+    refits: {},
     outcome: null,
   };
 };
 
 export const getShip = (game, id) => game.ships.find((ship) => ship.id === id);
+
+/** Whether a hull is still in the fight. */
+export const isActive = (ship) => ship?.status === 'active';
 
 export const getLivingShips = (game) => game.ships.filter((ship) => ship.status !== 'destroyed');
 
@@ -266,6 +272,22 @@ export const vendettaGrudge = (game, shooter, target) => {
   if (!game.extended || !game.vendettaShipId) return 0;
   if (shooter?.id !== game.vendettaShipId || target?.id !== game.playerShipId) return 0;
   return Math.floor((shooter.kills ?? 0) / VENDETTA.killsPerStep);
+};
+
+/** The template's system complement, for measuring what a hull has lost. */
+export const templateSystems = (ship) => ({ ...(templateFor(ship)?.systems ?? {}) });
+
+/**
+ * The friendly starbase this hull is docked at, if any — close enough, and healthy
+ * enough to spare the resources. Starbases and tractor-held hulls never dock.
+ */
+export const dockedAt = (game, ship) => {
+  if (!isActive(ship) || ship?.className === 'Starbase' || isTractorHeld(game, ship)) return null;
+  return game.ships.find((other) => isActive(other)
+    && other.className === 'Starbase'
+    && other.faction === ship.faction
+    && other.shields >= shieldCapacity(other) * DOCKING.minBaseCondition
+    && distance(other, ship) <= DOCKING.range) ?? null;
 };
 
 /** Reads a captain the way the narrative would: "Captain Vess of the Grendel". */

@@ -8,15 +8,16 @@ import {
   crewCapacity,
   describeOrder,
   distance,
+  dockedAt,
   getShip,
+  isActive,
   isStranded,
-  isTractorHeld,
   shieldCapacity,
   strongestFederation,
+  templateSystems,
   vendettaGrudge,
 } from './state.js';
 
-const isActive = (ship) => ship?.status === 'active';
 const replaceShip = (game, replacement) => ({ ...game, ships: game.ships.map((ship) => ship.id === replacement.id ? replacement : ship) });
 const rngFor = (game) => createRng(`${game.seed}:${game.randomStep ?? 0}`);
 const advanceRandom = (game) => ({ ...game, randomStep: (game.randomStep ?? 0) + 1 });
@@ -235,25 +236,29 @@ const relayOrders = (game) => {
  */
 export const resolveDocking = (game) => {
   if (!game.extended) return { game, messages: [] };
-  const bases = game.ships.filter((ship) => isActive(ship)
-    && ship.className === 'Starbase'
-    && ship.shields >= shieldCapacity(ship) * DOCKING.minBaseCondition);
-  if (bases.length === 0) return { game, messages: [] };
-
   const messages = [];
   const ships = game.ships.map((ship) => {
-    if (!isActive(ship) || ship.className === 'Starbase' || isTractorHeld(game, ship)) return ship;
-    const base = bases.find((other) => other.faction === ship.faction && distance(other, ship) <= DOCKING.range);
+    const base = dockedAt(game, ship);
     if (!base) return ship;
     const shields = Math.min(shieldCapacity(ship), ship.shields + Math.ceil(shieldCapacity(ship) * DOCKING.shieldRate));
     const crew = Math.min(crewCapacity(ship), ship.crew + DOCKING.crewRate);
-    if (shields === ship.shields && crew === ship.crew) return ship;
+    // The dockyard also rebuilds hardware, one unit per stardate, starting with the
+    // system that has lost the most.
+    const systems = { ...ship.systems };
+    const template = templateSystems(ship);
+    const damaged = Object.keys(template)
+      .filter((name) => systems[name] < template[name])
+      .sort((a, b) => (template[b] - systems[b]) - (template[a] - systems[a]) || a.localeCompare(b));
+    const repaired = damaged[0] ?? null;
+    if (repaired) systems[repaired] += 1;
+    if (shields === ship.shields && crew === ship.crew && !repaired) return ship;
     const gains = [
       shields > ship.shields ? `shields +${shields - ship.shields}` : null,
       crew > ship.crew ? `${crew - ship.crew} crew transferred` : null,
+      repaired ? `${repaired} +1` : null,
     ].filter(Boolean);
     messages.push(`${ship.name} docks at ${base.name}: ${gains.join(', ')}.`);
-    return { ...ship, shields, crew };
+    return { ...ship, shields, crew, systems };
   });
   return { game: { ...game, ships }, messages };
 };

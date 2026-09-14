@@ -903,13 +903,19 @@ test('a crippled starbase cannot support the fleet', () => {
   assert.equal(getShip(resolveDocking(game).game, 'fed-cruiser-1').shields, 10);
 });
 
-test('the dockyard restores shields and crew but not burnt-out subsystems', () => {
+test('the dockyard rebuilds one damaged subsystem per stardate, worst first', () => {
   const game = extended('dock-systems', (ship) => (ship.id === 'fed-cruiser-1'
-    ? { ...ship, x: 54, y: 50, shields: 10, systems: { ...ship.systems, mapper: 0 } }
+    ? { ...ship, x: 54, y: 50, shields: 10, systems: { ...ship.systems, mapper: 0, radio: 0 } }
     : ship));
-  const cruiser = getShip(resolveDocking(game).game, 'fed-cruiser-1');
-  assert.equal(cruiser.systems.mapper, 0);
-  assert.ok(cruiser.shields > 10);
+  const first = getShip(resolveDocking(game).game, 'fed-cruiser-1');
+  // Cruiser template is mapper 2, radio 1, so the mapper's deficit of 2 is the worst.
+  assert.equal(first.systems.mapper, 1);
+  assert.equal(first.systems.radio, 0);
+  assert.ok(first.shields > 10, 'shields still recover alongside the hardware');
+
+  const second = getShip(resolveDocking(resolveDocking(game).game).game, 'fed-cruiser-1');
+  assert.equal(second.systems.mapper, 2, 'and it works down the list on later stardates');
+  assert.equal(second.systems.radio, 0);
 });
 
 test('docking stops at full shields and crew', () => {
@@ -921,6 +927,40 @@ test('docking stops at full shields and crew', () => {
   assert.equal(cruiser.shields, 70, 'shield capacity is a ceiling');
   assert.equal(cruiser.crew, 70, 'so is the crew complement');
   assert.ok(messages.some((line) => /Bonhomme docks at Xanadu: shields \+1, 1 crew transferred\./.test(line)));
+});
+
+test('a docked hull may take one refit, and only one', () => {
+  const game = extended('refit-once', (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 54, y: 50 } : ship));
+  const first = applyPlayerAction(game, { type: 'refit', shipId: 'fed-cruiser-1', kind: 'photons' });
+  assert.equal(getShip(first.game, 'fed-cruiser-1').systems.photons, 3, 'the cruiser template carries 2 photon bays');
+  assert.equal(first.game.refits['fed-cruiser-1'], 'photons');
+  assert.match(first.messages.join(' '), /is refitted at Xanadu: photons \+1/);
+
+  const second = applyPlayerAction(first.game, { type: 'refit', shipId: 'fed-cruiser-1', kind: 'phasers' });
+  assert.match(second.messages.join(' '), /already taken its refit/);
+  assert.equal(getShip(second.game, 'fed-cruiser-1').systems.phasers, 4, 'and the second refit is refused');
+});
+
+test('a refit needs the dockyard ring', () => {
+  const game = extended('refit-afloat', (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 20, y: 20 } : ship));
+  const result = applyPlayerAction(game, { type: 'refit', shipId: 'fed-cruiser-1', kind: 'engines' });
+  assert.match(result.messages.join(' '), /inside the dockyard ring/);
+  assert.equal(getShip(result.game, 'fed-cruiser-1').systems.engines, 4);
+});
+
+test('a refit cannot push a system past its cap', () => {
+  const game = extended('refit-cap', (ship) => (ship.id === 'fed-cruiser-1'
+    ? { ...ship, x: 54, y: 50, systems: { ...ship.systems, photons: 4 } }
+    : ship));
+  const result = applyPlayerAction(game, { type: 'refit', shipId: 'fed-cruiser-1', kind: 'photons' });
+  assert.match(result.messages.join(' '), /cannot carry more photons/);
+  assert.equal(getShip(result.game, 'fed-cruiser-1').systems.photons, 4);
+});
+
+test('refits are an extended-war option', () => {
+  const game = withShips(createGame({ seed: 'refit-classic' }), (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 54, y: 50 } : ship));
+  const result = applyPlayerAction(game, { type: 'refit', shipId: 'fed-cruiser-1', kind: 'photons' });
+  assert.match(result.messages.join(' '), /extended-war option/);
 });
 
 test('docking resolves during the computer phase and reaches the narrative', () => {

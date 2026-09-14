@@ -38,6 +38,13 @@ button, input, select {
   border: 0;
 }
 
+/* Author display rules (dialog label, label.check) otherwise beat the user-agent
+   rule for [hidden], which is how the transporter's Crew field and Transfer
+   checkbox leaked into the weapon target dialogs. */
+[hidden] {
+  display: none !important;
+}
+
 button {
   cursor: pointer;
   border: 1px solid #39708e;
@@ -165,6 +172,12 @@ h1 {
   transform: translate(-50%, -50%) scale(1.22);
   outline: 2px solid white;
   z-index: 2;
+}
+
+/* Ships glide between stardates instead of teleporting, and leave a fading trail,
+   so you can see where the fleet went during the computer phase. */
+.ship {
+  transition: left .55s ease-in-out, top .55s ease-in-out;
 }
 
 .ship.Federation, .Federation {
@@ -727,6 +740,14 @@ body.classic .ship.has-order::before {
   animation: fx-impact .34s ease-out forwards;
 }
 
+.fx-move {
+  stroke: #7d94a8;
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+  vector-effect: non-scaling-stroke;
+  animation: fx-fade .9s ease-out forwards;
+}
+
 @keyframes fx-impact {
   from {
     r: .4;
@@ -756,8 +777,13 @@ body.classic .ship.has-order::before {
     animation: none;
   }
 
+  .ship {
+    transition: none;
+  }
+
   .fx-impact,
   .fx-boom,
+  .fx-move,
   .fx-phaser {
     animation-duration: .01s;
   }

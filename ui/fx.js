@@ -91,6 +91,24 @@ export const playEffects = (events, map, playerId) => {
 };
 
 /**
+ * A fading dashed line from where a hull was to where it is now, so a repositioning
+ * stays legible after the ship has finished gliding.
+ */
+export const drawMove = (map, from, to) => {
+  if (!map) return;
+  const svg = layer(map);
+  const line = document.createElementNS(SVG_NS, 'line');
+  line.setAttribute('x1', from.x);
+  line.setAttribute('y1', from.y);
+  line.setAttribute('x2', to.x);
+  line.setAttribute('y2', to.y);
+  line.setAttribute('class', 'fx-move');
+  line.setAttribute('vector-effect', 'non-scaling-stroke');
+  svg.appendChild(line);
+  setTimeout(() => line.remove(), 900);
+};
+
+/**
  * Replays a whole round: every ship's volleys, not only the ones that touched you,
  * paced slowly enough to follow. Returns how long the replay runs, in milliseconds.
  */

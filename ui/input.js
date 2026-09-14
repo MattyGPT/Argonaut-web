@@ -34,6 +34,12 @@ const isFocusable = (element) => Boolean(element?.matches?.('button, input, sele
 
 export const bindInput = (root, dispatch) => {
   root.addEventListener('click', (event) => {
+    // Refit choices live beside the order picker and carry the hull they are for.
+    const refitButton = event.target.closest('[data-refit]');
+    if (refitButton) {
+      dispatch({ type: 'refit', shipId: refitButton.dataset.refitShip, kind: refitButton.dataset.refit });
+      return;
+    }
     // Order buttons live in the report panel and carry the ship they are for.
     const orderButton = event.target.closest('[data-order]');
     if (orderButton) {
