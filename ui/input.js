@@ -82,6 +82,15 @@ export const bindInput = (root, dispatch) => {
   });
 };
 
+/**
+ * Whether the button that submitted a `method="dialog"` form was its Confirm.
+ * Every button in these dialogs is a submit button — Cancel just carries
+ * `value="cancel"` — so the form submits whichever is pressed, and the submitter
+ * is what tells them apart. With no submitter at all the answer is no, which
+ * fails closed: a prompt that cannot be read is a prompt that does nothing.
+ */
+const submittedConfirm = (event) => event?.submitter?.value === 'confirm';
+
 export const promptForTarget = (title, ships, options = {}) => new Promise((resolve) => {
   const dialog = document.querySelector('#target-dialog');
   const form = document.querySelector('#target-form');
@@ -98,13 +107,16 @@ export const promptForTarget = (title, ships, options = {}) => new Promise((reso
 
   let resolved = false;
   const close = () => {
-    if (!resolved && dialog.returnValue !== 'confirm') {
+    if (!resolved) {
       resolved = true;
       resolve(null);
     }
   };
-  form.onsubmit = () => {
+  form.onsubmit = (event) => {
     resolved = true;
+    // The select always carries a value, so dismissing this prompt used to fire
+    // the command at whichever target had been preselected for it.
+    if (!submittedConfirm(event)) return resolve(null);
     resolve({
       targetId: select.value,
       amount: Number(document.querySelector('#crew-amount').value),
@@ -123,9 +135,9 @@ export const promptForConfirmation = (title, message) => new Promise((resolve) =
   document.querySelector('#confirm-message').textContent = message;
 
   let resolved = false;
-  form.onsubmit = () => {
+  form.onsubmit = (event) => {
     resolved = true;
-    resolve(dialog.returnValue === 'confirm');
+    resolve(submittedConfirm(event));
   };
   dialog.onclose = () => {
     if (!resolved) {
@@ -144,15 +156,21 @@ export const promptForCoordinates = (title, labels) => new Promise((resolve) => 
   document.querySelector('#second-coordinate-label').childNodes[0].textContent = labels[1];
 
   let resolved = false;
-  form.onsubmit = () => {
+  form.onsubmit = (event) => {
     resolved = true;
+    // An empty number field reads as Number('') === 0, so dismissing this prompt
+    // used to resolve [0, 0] — a legal zero-length move that passed the turn.
+    if (!submittedConfirm(event)) return resolve(null);
     resolve([
       Number(document.querySelector('#first-coordinate').value),
       Number(document.querySelector('#second-coordinate').value),
     ]);
   };
   dialog.onclose = () => {
-    if (!resolved && dialog.returnValue !== 'confirm') resolve(null);
+    if (!resolved) {
+      resolved = true;
+      resolve(null);
+    }
   };
   dialog.showModal();
 });

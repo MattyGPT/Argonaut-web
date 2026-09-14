@@ -12,6 +12,7 @@ import {
   REFITS,
   REFIT_OVER_TEMPLATE,
   SHIELD_PER_ENGINE,
+  SHRAPNEL_DAMAGE,
   SHRAPNEL_EXTRA_RANGE,
   TARGETED_ORDERS,
   TRACTOR_PULL_PER_UNIT,
@@ -555,7 +556,7 @@ export const detonate = (game, actor) => {
       return destroyedShip(ship);
     }
     if (range <= shrapnel) {
-      const damage = 10 + rng.integer(5, 25);
+      const damage = SHRAPNEL_DAMAGE.base + rng.integer(SHRAPNEL_DAMAGE.min, SHRAPNEL_DAMAGE.max);
       messages.push(`${ship.name} has been hit by shrapnel.  Damage to shields: ${damage} units.`);
       const damaged = damageShip(ship, damage, rng);
       if (damaged.status === 'destroyed') events.push(terminalEvent('destruction', 'self-destruct', damaged, { attacker: actor }));

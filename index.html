@@ -89,7 +89,9 @@
           </label>
         </div>
         <div class="dialog-actions">
-          <button value="cancel" class="secondary">Cancel</button>
+          <!-- Without formnovalidate this submits, and the required fields above
+               fail validation, so the dialog could never be dismissed. -->
+          <button value="cancel" class="secondary" formnovalidate>Cancel</button>
           <button value="confirm">Confirm</button>
         </div>
       </form>

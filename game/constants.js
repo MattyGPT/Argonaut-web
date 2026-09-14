@@ -14,11 +14,20 @@ export const FACTION_IDS = Object.freeze({
   [FACTIONS.CABAL]: 'cabal',
 });
 
+/**
+ * Hull complements. Shields and crew are double what the weapon table was tuned
+ * against, so a volley takes half as big a bite and a battle runs roughly twice
+ * as long. The gunnery itself is untouched and still matches the manual's damage
+ * figures — see the "Weapon damage" and "Hull complements" rows in CALIBRATION.md.
+ *
+ * Subsystem complements are deliberately *not* doubled: they set weapon output
+ * and sensor reach, so scaling them would have raised damage back out again.
+ */
 export const SHIP_TEMPLATES = Object.freeze({
   'battle-cruiser': Object.freeze({
     className: 'Battle cruiser',
-    shields: 100,
-    crew: 100,
+    shields: 200,
+    crew: 200,
     systems: Object.freeze({
       engines: 5,
       phasers: 5,
@@ -32,8 +41,8 @@ export const SHIP_TEMPLATES = Object.freeze({
   }),
   cruiser: Object.freeze({
     className: 'Cruiser',
-    shields: 70,
-    crew: 70,
+    shields: 140,
+    crew: 140,
     systems: Object.freeze({
       engines: 4,
       phasers: 4,
@@ -47,8 +56,8 @@ export const SHIP_TEMPLATES = Object.freeze({
   }),
   scout: Object.freeze({
     className: 'Scout',
-    shields: 45,
-    crew: 35,
+    shields: 90,
+    crew: 70,
     systems: Object.freeze({
       engines: 6,
       phasers: 2,
@@ -62,8 +71,8 @@ export const SHIP_TEMPLATES = Object.freeze({
   }),
   starbase: Object.freeze({
     className: 'Starbase',
-    shields: 160,
-    crew: 160,
+    shields: 320,
+    crew: 320,
     systems: Object.freeze({
       engines: 0,
       phasers: 6,
@@ -137,6 +146,14 @@ export const TRACTOR_PULL_PER_UNIT = 5;
 
 /** Self-destruct sprays shrapnel this far beyond its blast radius. */
 export const SHRAPNEL_EXTRA_RANGE = 15;
+
+/**
+ * Shrapnel damage in that outer ring, as `base` plus a roll from `min` to `max`.
+ * Doubled alongside the hull complements: unlike the blast, which destroys
+ * outright whatever it covers, shrapnel is a flat number, so leaving it alone
+ * would have made the outer ring decorative against a 200-shield battle cruiser.
+ */
+export const SHRAPNEL_DAMAGE = Object.freeze({ base: 20, min: 10, max: 50 });
 
 /** Xanadu's self-destruct blast; every other ship uses RANGES.selfDestruct. */
 export const STARBASE_BLAST_RADIUS = 40;
@@ -305,7 +322,11 @@ export const SCENARIOS = Object.freeze({
     id: 'defend-xanadu',
     title: 'Hold Xanadu',
     brief: 'Xanadu must still be standing when the stardate reaches the target. Lose the base and the war is lost, whatever else survives.',
-    stardates: 20,
+    // Raised from 20 when the hull complements doubled: a 320-shield base survived
+    // to 20 in 26 of 60 unordered wars, which made the objective trivial. At 30 the
+    // measured spread is 20 of 60 screening against 11 of 60 unordered, close to the
+    // 2:1 ratio the scenario was originally tuned to.
+    stardates: 30,
   }),
   'hunt-the-vendetta': Object.freeze({
     id: 'hunt-the-vendetta',

@@ -35,7 +35,10 @@ becomes an engine order toward that point, clamped to the engine ring already dr
 around your ship, so you never have to work out ΔX and ΔY by hand; `2` still opens
 the coordinate prompt when you want exact numbers.
 
-`=` and `Escape` ask for confirmation first, because neither can be undone.
+`-`, `=`, and `Escape` ask for confirmation first, because none of them can be
+undone. Hyperspace takes no destination: you commit to the jump and emerge
+wherever it takes you, your shields weakened on arrival. That makes it a way out
+of a fight you are losing rather than a way to get somewhere in particular.
 
 The original also had "hidden" information commands, kept here: `R` roll call,
 `S` shot distribution, `L` alliance statistics, and `Backspace` a full map of
@@ -65,6 +68,12 @@ original executable:
 - Weapons can miss — yours and the enemy's alike, at the same rate — and every
   volley rolls its own damage inside a fixed band instead of hitting for the
   same number each time.
+- **Battles are attritional.** Every hull carries twice the shields and crew the
+  gunnery table was tuned against, so a kill takes some fourteen volleys across a
+  fleet engagement rather than eight, and a war runs about twenty-five stardates
+  instead of sixteen. Because subsystem damage only begins once the shields are
+  down, doubling them also doubles the time a ship spends fighting intact rather
+  than crippled. The guns themselves are unchanged.
 - The tractor beam (`5`) locks and pulls its target toward you, and enemy beams
   pull you just as hard. A lock ends when the ship holding it dies; hyperspace
   (`-`) also shakes one off, but can burn a ship up.
@@ -172,10 +181,10 @@ you issue an order.
   panel carries its brief and live progress:
   - *Cease hostilities* — the original objective. Destroy the opposing fleets
     before they destroy Federation command.
-  - *Hold Xanadu* — the base must still be standing at stardate 20. Lose it and
+  - *Hold Xanadu* — the base must still be standing at stardate 30. Lose it and
     the war is lost, whatever else survives. On autopilot, screening the base with
-    your whole fleet holds it about 6 wars in 40; leaving the fleet to its own
-    doctrine loses the base in 26 of 40. The dockyard is what makes it possible.
+    your whole fleet holds it about 20 wars in 60; leaving the fleet to its own
+    doctrine holds only 11. The dockyard is what makes it possible.
   - *Hunt the hunter* — the captain hunting you is named at the outset; their hull
     is not. Scan the enemy fleet to identify them, then end them. If the war kills
     your hunter before you have identified them, you lose: you never learned who
