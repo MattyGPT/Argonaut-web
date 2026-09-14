@@ -1,19 +1,39 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bindInput } from '../ui/input.js';
+import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget } from '../ui/input.js';
 
-// input.js only touches the document inside bindInput, so stubbing the two
-// listener registrations is enough to drive the keydown handler directly.
+// bindInput only reads `dialog[open]` and `activeElement`, so stubbing those two
+// is enough to drive its keydown handler directly. The dialog prompts read a
+// dozen more selectors, so everything else resolves to a shared element stub that
+// tests can seed with values and read the assigned handlers back from.
 let openDialog = null;
 let keyHandler = null;
 let clickHandler = null;
+
+const elements = new Map();
+const element = (selector) => {
+  if (!elements.has(selector)) {
+    elements.set(selector, {
+      value: '',
+      checked: false,
+      hidden: false,
+      innerHTML: '',
+      textContent: '',
+      options: [],
+      childNodes: [{}],
+      showModal: () => {},
+      close: () => {},
+    });
+  }
+  return elements.get(selector);
+};
 
 globalThis.document = {
   activeElement: null,
   addEventListener: (type, handler) => {
     if (type === 'keydown') keyHandler = handler;
   },
-  querySelector: (selector) => (selector === 'dialog[open]' ? openDialog : null),
+  querySelector: (selector) => (selector === 'dialog[open]' ? openDialog : element(selector)),
 };
 
 const bind = () => {
@@ -136,4 +156,73 @@ test('clicking a ship selects it without also issuing a maneuver', () => {
   const dispatched = bind();
   click('[data-ship-id]', { shipId: 'fed-flagship' });
   assert.deepEqual(dispatched, [{ type: 'map-select', targetId: 'fed-flagship' }]);
+});
+
+// --- Dialog prompts -----------------------------------------------------------
+// Every button in these dialogs is a submit button, so Cancel submits too. Each
+// helper has to tell the two apart or a dismissed prompt performs the command.
+
+/** Presses a dialog button by the value it carries. */
+const submit = (formSelector, value) => element(formSelector).onsubmit({ submitter: { value } });
+
+const FLEET = [{ id: 'axis-flagship', name: 'Firebreather', faction: 'Axis', status: 'active' }];
+
+test('cancelling the coordinate prompt resolves nothing rather than a zero move', async () => {
+  element('#first-coordinate').value = '';
+  element('#second-coordinate').value = '';
+  const pending = promptForCoordinates('Engine maneuver', ['Δ X', 'Δ Y']);
+  submit('#coordinate-form', 'cancel');
+  element('#coordinate-dialog').onclose();
+  assert.equal(await pending, null, 'an empty field is Number("") === 0, which used to pass the turn');
+});
+
+test('confirming the coordinate prompt resolves the entered displacement', async () => {
+  element('#first-coordinate').value = '12';
+  element('#second-coordinate').value = '-4';
+  const pending = promptForCoordinates('Engine maneuver', ['Δ X', 'Δ Y']);
+  submit('#coordinate-form', 'confirm');
+  element('#coordinate-dialog').onclose();
+  assert.deepEqual(await pending, [12, -4]);
+});
+
+test('dismissing the coordinate prompt without submitting resolves nothing', async () => {
+  const pending = promptForCoordinates('Engine maneuver', ['Δ X', 'Δ Y']);
+  element('#coordinate-dialog').onclose();
+  assert.equal(await pending, null);
+});
+
+test('cancelling a target prompt does not fire at the preselected target', async () => {
+  element('#target-select').value = 'axis-flagship';
+  const pending = promptForTarget('Phasers target', FLEET, { defaultId: 'axis-flagship' });
+  submit('#target-form', 'cancel');
+  element('#target-dialog').onclose();
+  assert.equal(await pending, null, 'the select always has a value, so this used to shoot it');
+});
+
+test('confirming a target prompt resolves the chosen target and its options', async () => {
+  element('#target-select').value = 'axis-flagship';
+  element('#crew-amount').value = '10';
+  element('#transfer-command').checked = true;
+  const pending = promptForTarget('Transporter target', FLEET, { amount: true, transfer: true });
+  submit('#target-form', 'confirm');
+  element('#target-dialog').onclose();
+  assert.deepEqual(await pending, { targetId: 'axis-flagship', amount: 10, transferCommand: true });
+});
+
+test('a confirmation resolves true only for its Confirm button', async () => {
+  const cancelled = promptForConfirmation('Self-destruct?', 'Everything in blast range dies.');
+  submit('#confirm-form', 'cancel');
+  element('#confirm-dialog').onclose();
+  assert.equal(await cancelled, false);
+
+  const confirmed = promptForConfirmation('Self-destruct?', 'Everything in blast range dies.');
+  submit('#confirm-form', 'confirm');
+  element('#confirm-dialog').onclose();
+  assert.equal(await confirmed, true);
+});
+
+test('dismissing a confirmation without submitting resolves false', async () => {
+  const pending = promptForConfirmation('Resign command?', 'The autopilot takes the Federation.');
+  element('#confirm-dialog').onclose();
+  assert.equal(await pending, false);
 });
