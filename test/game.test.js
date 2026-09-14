@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, RANGES, SCENARIOS, STALEMATE_ROUNDS, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioProgress } from '../game/scenarios.js';
-import { abbreviateNarrative, alertLevel, appendLog, createGame, distance, engineCapacity, getShip, isAce, radioIntegrity, strongestFederation, vendettaGrudge } from '../game/state.js';
+import { abbreviateNarrative, alertLevel, appendLog, createGame, crewCapacity, distance, engineCapacity, getShip, isAce, radioIntegrity, shieldCapacity, strongestFederation, vendettaGrudge } from '../game/state.js';
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveCollision, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDocking, transferCommandIfNeeded } from '../game/turns.js';
@@ -212,7 +212,8 @@ test('transport rejects active enemy ships but reinforces a friendly crew', () =
   assert.match(enemy.messages.join(' '), /live enemy/i);
   const friendly = applyPlayerAction(game, { type: 'transport', targetId: 'fed-cruiser-1', amount: 5 });
   assert.equal(getShip(friendly.game, 'fed-cruiser-1').crew, 25);
-  assert.equal(getShip(friendly.game, 'fed-flagship').crew, 95);
+  assert.equal(getShip(friendly.game, 'fed-flagship').crew, getShip(game, 'fed-flagship').crew - 5,
+    'and exactly the transferred crew left the flagship');
 });
 
 test('transport captures a vacant ship and can transfer player command', () => {
@@ -612,6 +613,21 @@ test('the damage band keeps the tuned mean, so wars last as long as before', () 
   meanOf('photons', 51);
 });
 
+test('a hull outlasts a sustained peer bombardment, so battles are attritional', () => {
+  const argo = getShip(createGame({ seed: 'attrition' }), 'fed-flagship');
+  const meanVolley = (type) => {
+    const rolls = Array.from({ length: 200 }, (_, step) => weaponDamage(type, argo, createRng(`attrition:${type}:${step}`)));
+    return rolls.reduce((total, amount) => total + amount, 0) / rolls.length;
+  };
+  // Total damage a battle cruiser must absorb before it is gone: its shields, and
+  // then the crew and hardware behind them. Expressed as a ratio rather than a
+  // shield count, so retuning the hulls again cannot make the test pass by accident.
+  const hull = shieldCapacity(argo) + crewCapacity(argo);
+  const photonVolleys = hull / meanVolley('photons');
+  assert.ok(photonVolleys >= 6,
+    `a battle cruiser now falls to ${photonVolleys.toFixed(1)} photon volleys; it was meant to take at least six`);
+});
+
 test('the radio report gives allied condition as well as location', () => {
   const game = withShips(placedGame('radio-condition'), (ship) => ship.id === 'fed-cruiser-1'
     ? { ...ship, x: 15, y: 10, shields: 10 }
@@ -643,11 +659,11 @@ test('alert level is proportional to shield capacity and named as the manual nam
   const argo = getShip(game, 'fed-flagship');
   const xanadu = getShip(game, 'xanadu');
   assert.equal(alertLevel(argo), 'GREEN');
-  assert.equal(alertLevel({ ...argo, shields: 40 }), 'YELLOW');
-  assert.equal(alertLevel({ ...argo, shields: 10 }), 'RED');
-  // The same 80 shields are comfortable in a battle cruiser, worrying in a starbase.
-  assert.equal(alertLevel({ ...argo, shields: 80 }), 'GREEN');
-  assert.equal(alertLevel({ ...xanadu, shields: 80 }), 'YELLOW');
+  assert.equal(alertLevel({ ...argo, shields: 80 }), 'YELLOW');
+  assert.equal(alertLevel({ ...argo, shields: 20 }), 'RED');
+  // The same 160 shields are comfortable in a battle cruiser, worrying in a starbase.
+  assert.equal(alertLevel({ ...argo, shields: 160 }), 'GREEN');
+  assert.equal(alertLevel({ ...xanadu, shields: 160 }), 'YELLOW');
 });
 
 test('an autopilot tractor beam drags its target toward the shooter', () => {
@@ -997,7 +1013,7 @@ test('a damaged ship beside Xanadu repairs in an extended war', () => {
     : ship));
   const { game: after, messages } = resolveDocking(game);
   const cruiser = getShip(after, 'fed-cruiser-1');
-  assert.equal(cruiser.shields, 10 + Math.ceil(70 * DOCKING.shieldRate));
+  assert.equal(cruiser.shields, 10 + Math.ceil(shieldCapacity(cruiser) * DOCKING.shieldRate));
   assert.equal(cruiser.crew, 30 + DOCKING.crewRate);
   assert.ok(messages.some((line) => /Bonhomme docks at Xanadu: shields \+\d+, \d+ crew transferred\./.test(line)));
 });
@@ -1047,12 +1063,12 @@ test('the dockyard rebuilds one damaged subsystem per stardate, worst first', ()
 
 test('docking stops at full shields and crew', () => {
   const game = extended('dock-full', (ship) => (ship.id === 'fed-cruiser-1'
-    ? { ...ship, x: 54, y: 50, shields: 69, crew: 69 }
+    ? { ...ship, x: 54, y: 50, shields: 139, crew: 139 }
     : ship));
   const { game: after, messages } = resolveDocking(game);
   const cruiser = getShip(after, 'fed-cruiser-1');
-  assert.equal(cruiser.shields, 70, 'shield capacity is a ceiling');
-  assert.equal(cruiser.crew, 70, 'so is the crew complement');
+  assert.equal(cruiser.shields, 140, 'shield capacity is a ceiling');
+  assert.equal(cruiser.crew, 140, 'so is the crew complement');
   assert.ok(messages.some((line) => /Bonhomme docks at Xanadu: shields \+1, 1 crew transferred\./.test(line)));
 });
 
@@ -1097,8 +1113,8 @@ test('docking resolves during the computer phase and reaches the narrative', () 
     return { ...ship, status: 'destroyed' };
   });
   const resolved = resolveComputerTurns(game);
-  assert.ok(resolved.log.some((line) => /Bonhomme docks at Xanadu: shields \+6\./.test(line)));
-  assert.equal(getShip(resolved, 'fed-cruiser-1').shields, 26);
+  assert.ok(resolved.log.some((line) => /Bonhomme docks at Xanadu: shields \+12\./.test(line)));
+  assert.equal(getShip(resolved, 'fed-cruiser-1').shields, 32);
 });
 
 test('the battle report names the top gun, the losses, and your own record', () => {
@@ -1532,7 +1548,7 @@ test('hold Xanadu reports its progress against the target stardate', () => {
   const game = { ...createGame({ seed: 'defend-progress', extended: true, scenario: 'defend-xanadu' }), turn: 7 };
   const lines = scenarioProgress(game).join(' ');
   assert.match(lines, /Xanadu: active at 50, 50/);
-  assert.match(lines, /Hold until stardate 20\.  Now stardate 7\./);
+  assert.ok(lines.includes(`Hold until stardate ${SCENARIOS['defend-xanadu'].stardates}.  Now stardate 7.`), lines);
 });
 
 // --- Backlog: click to move, sensor honesty, command transfer, log growth -------
