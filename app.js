@@ -4,7 +4,13 @@ import { alertLevel, appendLog, createGame, getShip } from './game/state.js';
 import { scenarioFor } from './game/scenarios.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './game/turns.js';
 import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget } from './ui/input.js';
-import { playTerminalEvents } from './ui/battle-events.js';
+import {
+  ordinaryBattleEvents,
+  playReplayEvents,
+  playTerminalEvents,
+  whenPlaybackUnlocked,
+  withPlaybackLock,
+} from './ui/battle-events.js';
 import { renderGame, reportFor } from './ui/render.js';
 import { playEffect, playEvent } from './ui/sound.js';
 import { playEffects, replayEffects } from './ui/fx.js';
@@ -65,26 +71,30 @@ const shake = () => {
 };
 
 const showEvents = (events) => {
-  if (!events?.length) return;
-  playEffects(events, document.querySelector('#map'), game.playerShipId);
-  if (events.some((e) => e.toId === game.playerShipId && e.hit)) shake();
+  const ordinary = ordinaryBattleEvents(events);
+  if (!ordinary.length) return;
+  playEffects(ordinary, document.querySelector('#map'), game.playerShipId);
+  if (ordinary.some((e) => e.toId === game.playerShipId && e.hit)) shake();
   if (game.sound) {
-    events
+    ordinary
       .filter((e) => e.fromId === game.playerShipId || e.toId === game.playerShipId)
       .forEach((e, i) => setTimeout(() => playEvent(e.hit ? e.kind : 'miss', true), i * 160));
   }
 };
 
 let presentingTerminalEvents = false;
+let replayingRound = false;
+const playbackLocked = () => presentingTerminalEvents || replayingRound;
+const wait = (duration) => new Promise((resolve) => setTimeout(resolve, duration));
 
-const presentTerminalEvents = async (events) => {
-  presentingTerminalEvents = true;
-  await playTerminalEvents(events, (terminalEvent) => {
-    view = { ...view, terminalEvent, battlePaused: Boolean(terminalEvent) };
+const presentTerminalEvents = (events) => withPlaybackLock(
+  (locked) => { presentingTerminalEvents = locked; },
+  () => playTerminalEvents(events, (terminalEvent) => {
+    if (terminalEvent) playEffects([terminalEvent], document.querySelector('#map'), game.playerShipId);
+    view = { ...view, terminalEvent, battlePaused: Boolean(terminalEvent) || replayingRound };
     refresh();
-  }, () => new Promise((resolve) => setTimeout(resolve, TERMINAL_EVENT_MS)));
-  presentingTerminalEvents = false;
-};
+  }, () => wait(TERMINAL_EVENT_MS)),
+);
 
 const runComputer = async () => {
   if (game.phase === 'computer' && !game.outcome) {
@@ -117,8 +127,8 @@ const spectate = () => {
 };
 
 const dispatch = async (action) => {
-  // Both automated loops mutate `game` asynchronously; ignore input while either runs.
-  if (spectating || presentingTerminalEvents) return;
+  // Automated turns and replay mutate the current presentation asynchronously.
+  if (spectating || playbackLocked()) return;
   if (action.type === 'map-select') {
     const ship = game.ships.find((entry) => entry.id === action.targetId);
     const command = game.ships.find((entry) => entry.id === game.playerShipId);
@@ -175,9 +185,27 @@ const dispatch = async (action) => {
       refresh();
       return;
     }
-    replayEffects(round.events, document.querySelector('#map'));
-    view = { ...view, entries: round.entries ?? [], report: null, orderShipId: null };
-    await presentTerminalEvents(round.events);
+    replayingRound = true;
+    try {
+      view = {
+        ...view,
+        entries: round.entries ?? [],
+        report: null,
+        orderShipId: null,
+        battlePaused: true,
+      };
+      refresh();
+      await playReplayEvents(
+        round.events,
+        (event) => replayEffects([event], document.querySelector('#map')),
+        (event) => presentTerminalEvents([event]),
+        wait,
+      );
+    } finally {
+      replayingRound = false;
+      view = { ...view, terminalEvent: null, battlePaused: false };
+      refresh();
+    }
     return;
   }
 
@@ -278,7 +306,7 @@ const syncScenarioAvailability = () => {
   if (!extended) scenario.value = 'annihilation';
 };
 
-document.querySelector('#new-game').addEventListener('click', () => {
+document.querySelector('#new-game').addEventListener('click', whenPlaybackUnlocked(playbackLocked, () => {
   document.querySelector('#new-seed').value = randomSeed();
   document.querySelector('#regional').checked = game.regional;
   document.querySelector('#sound').checked = game.sound;
@@ -286,7 +314,7 @@ document.querySelector('#new-game').addEventListener('click', () => {
   document.querySelector('#scenario').value = game.scenario ?? 'annihilation';
   syncScenarioAvailability();
   document.querySelector('#new-game-dialog').showModal();
-});
+}));
 
 document.querySelector('#extended').addEventListener('change', syncScenarioAvailability);
 
@@ -305,7 +333,7 @@ const openingLines = (war) => {
   return lines;
 };
 
-document.querySelector('#new-game-form').addEventListener('submit', () => {
+document.querySelector('#new-game-form').addEventListener('submit', whenPlaybackUnlocked(playbackLocked, () => {
   const dialog = document.querySelector('#new-game-dialog');
   if (dialog.returnValue === 'confirm') {
     game = createGame({
@@ -318,7 +346,7 @@ document.querySelector('#new-game-form').addEventListener('submit', () => {
     view = { entries: openingLines(game) };
     refresh();
   }
-});
+}));
 
 const THEME_KEY = 'argonaut-web-theme';
 let theme = 'modern';

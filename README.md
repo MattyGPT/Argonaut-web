@@ -165,8 +165,9 @@ you issue an order.
   computer phase back on the map — every alliance's beams, torpedoes, and kills,
   not just the ones that touched you — with that round's narrative beside it.
   Terminal markers and unabridged ship-loss or surrender cards replay from the
-  same stored events, even through a damaged radio. Twenty autopilot decisions
-  no longer arrive as one wall of text.
+  same stored events, even through a damaged radio. Commands stay locked until
+  the final replay effect or card completes. Twenty autopilot decisions no
+  longer arrive as one wall of text.
 - **Three ways to fight.** The New game panel picks a scenario, and the mission
   panel carries its brief and live progress:
   - *Cease hostilities* — the original objective. Destroy the opposing fleets
