@@ -86,6 +86,10 @@ let presentingTerminalEvents = false;
 let replayingRound = false;
 const playbackLocked = () => presentingTerminalEvents || replayingRound;
 const wait = (duration) => new Promise((resolve) => setTimeout(resolve, duration));
+const clearTerminalPresentation = () => {
+  view = { ...view, terminalEvent: null, battlePaused: replayingRound };
+  refresh();
+};
 
 const presentTerminalEvents = (events) => withPlaybackLock(
   (locked) => { presentingTerminalEvents = locked; },
@@ -94,6 +98,7 @@ const presentTerminalEvents = (events) => withPlaybackLock(
     view = { ...view, terminalEvent, battlePaused: Boolean(terminalEvent) || replayingRound };
     refresh();
   }, () => wait(TERMINAL_EVENT_MS)),
+  clearTerminalPresentation,
 );
 
 const runComputer = async () => {

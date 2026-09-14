@@ -21,10 +21,13 @@ export const playReplayEvents = async (events, playEffect, presentTerminalEvent,
   }
 };
 
-export const withPlaybackLock = async (setLocked, play) => {
+export const withPlaybackLock = async (setLocked, play, onFailure = () => {}) => {
   setLocked(true);
   try {
     return await play();
+  } catch (error) {
+    onFailure();
+    throw error;
   } finally {
     setLocked(false);
   }

@@ -75,18 +75,25 @@ test('replay awaits each effect duration and terminal presentation in event orde
   await playback;
 });
 
-test('a playback lock is always released when playback fails', async () => {
+test('a failed playback releases its lock and clears the presented terminal state', async () => {
   const states = [];
+  let view = { terminalEvent: { kind: 'destruction' }, battlePaused: true };
+  let refreshes = 0;
   const withPlaybackLock = battleEvents.withPlaybackLock ?? ((_setLocked, play) => play());
 
   await assert.rejects(
     withPlaybackLock((locked) => states.push(locked), async () => {
       throw new Error('render failed');
+    }, () => {
+      view = { ...view, terminalEvent: null, battlePaused: false };
+      refreshes += 1;
     }),
     /render failed/,
   );
 
   assert.deepEqual(states, [true, false]);
+  assert.deepEqual(view, { terminalEvent: null, battlePaused: false });
+  assert.equal(refreshes, 1);
 });
 
 test('direct input handlers do nothing while playback is locked', () => {
