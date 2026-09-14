@@ -319,6 +319,23 @@ test('computer turns keep surrender events for the replay', () => {
     .map((event) => [event.kind, event.shipId, event.faction, event.surrenderedTo]), surrendered);
 });
 
+test('a lethal computer weapon hit records truthful destruction attribution for the replay', () => {
+  const disabled = { engines: 0, phasers: 0, photons: 0, tractor: 0, scanner: 0, mapper: 0, transporter: 0, radio: 0 };
+  const game = withShips(createGame({ seed: 'phaser-hit-2' }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 10, y: 10, shields: 0, crew: 0, systems: disabled };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 16, y: 10 };
+    return { ...ship, status: 'destroyed' };
+  });
+  const result = resolveComputerTurns({ ...game, phase: 'computer' });
+  const expected = {
+    kind: 'destruction', shipId: 'fed-flagship', shipName: 'Argo', faction: 'Federation',
+    x: 10, y: 10, cause: 'photons',
+    attackerId: 'axis-flagship', attackerName: 'Firebreather', attackerFaction: 'Axis',
+  };
+  assert.deepEqual(result.events.find((event) => event.kind === 'destruction'), expected);
+  assert.deepEqual(result.lastRound.events.find((event) => event.kind === 'destruction'), expected);
+});
+
 test('computer self-destruction keeps every destruction event', () => {
   const game = withShips(createGame({ seed: 'axis-suicide-events', extended: true }), (ship) => {
     if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 5 };
@@ -330,9 +347,32 @@ test('computer self-destruction keeps every destruction event', () => {
     return { ...ship, x: 95, y: 95 };
   });
   const result = resolveComputerTurns({ ...game, phase: 'computer' });
-  assert.deepEqual(result.events.filter((event) => event.kind === 'destruction' && event.cause === 'self-destruct')
-    .map((event) => event.shipId).sort(), [
-    'axis-cruiser-1', 'fed-cruiser-1', 'fed-cruiser-2', 'fed-cruiser-3', 'fed-scout',
+  const destructions = result.events.filter((event) => event.kind === 'destruction' && event.cause === 'self-destruct');
+  assert.deepEqual(destructions, [
+    {
+      kind: 'destruction', shipId: 'fed-cruiser-1', shipName: 'Bonhomme', faction: 'Federation',
+      x: 55, y: 50, cause: 'self-destruct',
+      attackerId: 'axis-cruiser-1', attackerName: 'Grendel', attackerFaction: 'Axis',
+    },
+    {
+      kind: 'destruction', shipId: 'fed-cruiser-2', shipName: 'Crusader', faction: 'Federation',
+      x: 50, y: 55, cause: 'self-destruct',
+      attackerId: 'axis-cruiser-1', attackerName: 'Grendel', attackerFaction: 'Axis',
+    },
+    {
+      kind: 'destruction', shipId: 'fed-cruiser-3', shipName: 'Defender', faction: 'Federation',
+      x: 45, y: 50, cause: 'self-destruct',
+      attackerId: 'axis-cruiser-1', attackerName: 'Grendel', attackerFaction: 'Axis',
+    },
+    {
+      kind: 'destruction', shipId: 'fed-scout', shipName: 'Empyreal', faction: 'Federation',
+      x: 50, y: 45, cause: 'self-destruct',
+      attackerId: 'axis-cruiser-1', attackerName: 'Grendel', attackerFaction: 'Axis',
+    },
+    {
+      kind: 'destruction', shipId: 'axis-cruiser-1', shipName: 'Grendel', faction: 'Axis',
+      x: 50, y: 50, cause: 'self-destruct',
+    },
   ]);
 });
 

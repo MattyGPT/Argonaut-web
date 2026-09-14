@@ -69,7 +69,10 @@ const resolveAiAction = (game, shipId) => {
       }),
     });
     const events = [fireEvent(action.type, actor, target, true)];
-    if (kill) events.push({ kind: 'explosion', fromId: actor.id, toId: victim.id, x1: victim.x, y1: victim.y, x2: victim.x, y2: victim.y, hit: true });
+    if (kill) {
+      events.push({ kind: 'explosion', fromId: actor.id, toId: victim.id, x1: victim.x, y1: victim.y, x2: victim.x, y2: victim.y, hit: true });
+      if (hit.status === 'destroyed') events.push(terminalEvent('destruction', action.type, victim, { attacker: actor }));
+    }
     return {
       game: updated,
       messages: [
