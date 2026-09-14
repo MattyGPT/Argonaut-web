@@ -337,9 +337,10 @@ const openingLines = (war) => {
   return lines;
 };
 
-document.querySelector('#new-game-form').addEventListener('submit', whenPlaybackUnlocked(playbackLocked, () => {
-  const dialog = document.querySelector('#new-game-dialog');
-  if (dialog.returnValue === 'confirm') {
+document.querySelector('#new-game-form').addEventListener('submit', whenPlaybackUnlocked(playbackLocked, (event) => {
+  // method="dialog" sets dialog.returnValue only as the default action, after this
+  // handler runs, so read the clicked button instead of the stale returnValue.
+  if (event.submitter?.value === 'confirm') {
     game = createGame({
       seed: document.querySelector('#new-seed').value || 'xanadu',
       regional: document.querySelector('#regional').checked,
