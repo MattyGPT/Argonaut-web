@@ -45,6 +45,16 @@ let view = { entries: ['Tactical systems online. Choose a command.'] };
 
 const targetActions = new Set(['phasers', 'photons', 'tractor', 'scan', 'transport']);
 
+/**
+ * Commands that ask first, because none of them can be taken back. Each yields the
+ * dialog's title and body for the ship holding the conn.
+ */
+const CONFIRMATIONS = new Map([
+  ['self-destruct', (actor) => ['Self-destruct?', `${actor?.name ?? 'Your ship'} will be destroyed, along with every ship inside blast range — Federation hulls included.`]],
+  ['resign', () => ['Resign command?', 'The autopilot takes the Federation for the rest of this war, and you cannot take command back.']],
+  ['hyperspace', (actor) => ['Hyperspace?', `${actor?.name ?? 'Your ship'} will emerge at a random point in the war zone with its shields weakened by the jump — and the jump itself can burn the ship up.`]],
+]);
+
 const refresh = () => {
   renderGame(game, view);
   warnOnRedAlert();
@@ -234,12 +244,6 @@ const dispatch = async (action) => {
     return;
   }
 
-  if (action.type === 'hyperspace' && action.x === undefined) {
-    const values = await promptForCoordinates('Hyperspace destination', ['X', 'Y']);
-    if (values) dispatch({ type: 'hyperspace', x: values[0], y: values[1] });
-    return;
-  }
-
   // Escort, screen, and intercept need a second ship named alongside them.
   if (action.type === 'orders' && TARGETED_ORDERS.includes(action.order?.type) && !action.targetId) {
     const kind = action.order.type;
@@ -258,14 +262,9 @@ const dispatch = async (action) => {
     return;
   }
 
-  // Neither of these can be taken back: one destroys your ship and everything inside
-  // blast range, the other hands the Federation to the autopilot for the whole war.
-  if ((action.type === 'self-destruct' || action.type === 'resign') && !action.confirmed) {
+  if (CONFIRMATIONS.has(action.type) && !action.confirmed) {
     if (game.phase !== 'player' || game.outcome || game.resigned) return;
-    const actor = getShip(game, game.playerShipId);
-    const [title, message] = action.type === 'self-destruct'
-      ? ['Self-destruct?', `${actor?.name ?? 'Your ship'} will be destroyed, along with every ship inside blast range — Federation hulls included.`]
-      : ['Resign command?', 'The autopilot takes the Federation for the rest of this war, and you cannot take command back.'];
+    const [title, message] = CONFIRMATIONS.get(action.type)(getShip(game, game.playerShipId));
     if (await promptForConfirmation(title, message)) dispatch({ ...action, confirmed: true });
     return;
   }

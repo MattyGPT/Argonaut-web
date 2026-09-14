@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, LOG_LIMIT, RANGES, SCENARIOS, STALEMATE_ROUNDS, VENDETTA } from '../game/constants.js';
+import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, RANGES, SCENARIOS, STALEMATE_ROUNDS, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioProgress } from '../game/scenarios.js';
 import { abbreviateNarrative, alertLevel, appendLog, createGame, distance, engineCapacity, getShip, isAce, radioIntegrity, strongestFederation, vendettaGrudge } from '../game/state.js';
@@ -148,6 +148,33 @@ test('a seeded hyperspace misjump burns the ship up', () => {
     kind: 'destruction', shipId: 'fed-flagship', shipName: 'Argo', faction: 'Federation',
     x: 10, y: 10, cause: 'hyperspace',
   });
+});
+
+test('a hyperspace that names no destination emerges somewhere inside the war zone', () => {
+  const game = placedGame('hyperspace-random');
+  const argo = getShip(applyPlayerAction(game, { type: 'hyperspace' }).game, 'fed-flagship');
+  assert.equal(argo.status, 'active', 'this seed must survive the jump for the landing to be checked');
+  assert.ok(Number.isInteger(argo.x) && Number.isInteger(argo.y), `landed on ${argo.x},${argo.y}, which is not a whole coordinate`);
+  assert.ok(argo.x > 0 && argo.x < GRID_SIZE && argo.y > 0 && argo.y < GRID_SIZE, `landed at ${argo.x},${argo.y}, outside the war zone`);
+  assert.ok(argo.x !== 10 || argo.y !== 10, 'and it is not still sitting where it jumped from');
+  assert.ok(argo.shields < getShip(game, 'fed-flagship').shields, 'an unaimed jump still costs shields');
+  const again = getShip(applyPlayerAction(game, { type: 'hyperspace' }).game, 'fed-flagship');
+  assert.deepEqual([again.x, again.y], [argo.x, argo.y], 'the same seed lands in the same place, so a jump stays reproducible');
+});
+
+test('the unaimed destination follows the seed rather than one fixed point', () => {
+  const landings = ['jump-a', 'jump-b', 'jump-c', 'jump-d', 'jump-e', 'jump-f']
+    .map((seed) => getShip(applyPlayerAction(placedGame(seed), { type: 'hyperspace' }).game, 'fed-flagship'))
+    .filter((ship) => ship.status === 'active')
+    .map((ship) => `${ship.x},${ship.y}`);
+  assert.ok(landings.length >= 2, 'at least two of the jumps must survive to be compared');
+  assert.ok(new Set(landings).size > 1, `every surviving jump landed in the same place: ${landings.join(' ')}`);
+});
+
+test('a coordinate-free misjump still burns the ship up', () => {
+  const result = applyPlayerAction(placedGame('burn-up'), { type: 'hyperspace' });
+  assert.match(result.messages.join(' '), /burnt up/i);
+  assert.equal(getShip(result.game, 'fed-flagship').status, 'destroyed');
 });
 
 test('scanner range scales with live scanner units', () => {

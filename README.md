@@ -35,7 +35,10 @@ becomes an engine order toward that point, clamped to the engine ring already dr
 around your ship, so you never have to work out ΔX and ΔY by hand; `2` still opens
 the coordinate prompt when you want exact numbers.
 
-`=` and `Escape` ask for confirmation first, because neither can be undone.
+`-`, `=`, and `Escape` ask for confirmation first, because none of them can be
+undone. Hyperspace takes no destination: you commit to the jump and emerge
+wherever it takes you, your shields weakened on arrival. That makes it a way out
+of a fight you are losing rather than a way to get somewhere in particular.
 
 The original also had "hidden" information commands, kept here: `R` roll call,
 `S` shot distribution, `L` alliance statistics, and `Backspace` a full map of
