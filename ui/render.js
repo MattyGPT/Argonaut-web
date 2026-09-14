@@ -44,6 +44,25 @@ const commandList = (game) => (game.extended ? [...commands, ['fleet', 'Fleet or
 
 const cap = (value) => value[0].toUpperCase() + value.slice(1);
 
+const terminalHeading = (event) => event.kind === 'destruction' ? 'SHIP DESTROYED' : 'SHIP SURRENDERED';
+
+const terminalDescription = (event) => {
+  const victim = `${event.shipName} · ${event.faction}`;
+  if (event.kind === 'surrender') {
+    return event.surrenderedTo ? `${victim} — surrendered to ${event.surrenderedTo}.` : `${victim} — surrendered.`;
+  }
+  if (event.attackerName) {
+    const attacker = `${event.attackerName}${event.attackerFaction ? ` · ${event.attackerFaction}` : ''}`;
+    return `${victim} — destroyed by ${attacker} using ${event.cause}.`;
+  }
+  return `${victim} — destroyed by ${event.cause}.`;
+};
+
+export const terminalNarrative = (event) => {
+  if (!event) return '';
+  return `<li class="terminal-event ${event.faction}"><strong>${terminalHeading(event)}</strong><span>${terminalDescription(event)}</span></li>`;
+};
+
 const ORDER_BUTTONS = Object.freeze([
   ['focus', 'Focus with fleet'],
   ['hold', 'Hold position'],
@@ -185,7 +204,7 @@ export const renderGame = (game, view = {}) => {
       <div class="status-row"><span>Status</span><b>${actor.status}</b></div>
     </div>
     <div class="system-grid">${Object.entries(actor.systems).map(([name, amount]) => `<span>${cap(name)} <b>${amount}</b></span>`).join('')}</div>
-    <div class="command-grid">${commandList(game).map(([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || game.resigned ? 'disabled' : ''}>${label}<kbd>${key}</kbd></button>`).join('')}</div>`;
+    <div class="command-grid">${commandList(game).map(([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || game.resigned || view.battlePaused ? 'disabled' : ''}>${label}<kbd>${key}</kbd></button>`).join('')}</div>`;
 
   const orderShip = game.extended && !game.outcome && !game.resigned ? getShip(game, view.orderShipId) : null;
   const canOrder = Boolean(orderShip) && orderShip.faction === actor?.faction && orderShip.status !== 'destroyed';
@@ -203,7 +222,7 @@ export const renderGame = (game, view = {}) => {
     : game.log?.length ? game.log : ['Tactical systems online. Choose a command.'];
   const integrity = radioIntegrity(actor);
   const narrated = abbreviateNarrative(entries, integrity, actor.name);
-  log.innerHTML = narrated.slice(-150).reverse().map((entry) => `<li>${entry}</li>`).join('');
+  log.innerHTML = terminalNarrative(view.terminalEvent) + narrated.slice(-150).reverse().map((entry) => `<li>${entry}</li>`).join('');
   document.querySelector('#log-meta').textContent = integrity >= 1
     ? 'Newest first'
     : `Newest first · radio at ${Math.round(integrity * 100)}%, traffic abbreviated`;
@@ -218,6 +237,7 @@ export const renderGame = (game, view = {}) => {
     status.textContent = [
       game.outcome?.message ?? null,
       view.report?.title ?? null,
+      view.terminalEvent ? `${terminalHeading(view.terminalEvent)}. ${terminalDescription(view.terminalEvent)}` : null,
       `Condition ${condition}.`,
       `${actor.name} at ${actor.x}, ${actor.y}; shields ${actor.shields}, crew ${actor.crew}.`,
       narrated[narrated.length - 1] ?? null,

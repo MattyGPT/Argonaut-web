@@ -1,4 +1,7 @@
+import { isTerminalEvent } from './battle-events.js';
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
+const TERMINAL_EFFECT_MS = 2500;
 
 const layer = (map) => {
   let el = map.querySelector('svg.fx-layer');
@@ -75,19 +78,47 @@ const drawExplosion = (svg, e, small = false) => {
   setTimeout(() => boom.remove(), 560);
 };
 
+const drawTerminal = (svg, event) => {
+  const marker = document.createElementNS(SVG_NS, event.kind === 'destruction' ? 'circle' : 'g');
+  marker.setAttribute('class', `fx-terminal-${event.kind}${event.faction ? ` ${event.faction}` : ''}`);
+  if (event.kind === 'destruction') {
+    marker.setAttribute('cx', event.x);
+    marker.setAttribute('cy', event.y);
+    marker.setAttribute('r', 1);
+    marker.setAttribute('vector-effect', 'non-scaling-stroke');
+  } else {
+    const halo = document.createElementNS(SVG_NS, 'circle');
+    halo.setAttribute('cx', event.x);
+    halo.setAttribute('cy', event.y);
+    halo.setAttribute('r', 3);
+    halo.setAttribute('vector-effect', 'non-scaling-stroke');
+    const flag = document.createElementNS(SVG_NS, 'path');
+    flag.setAttribute('d', `M ${event.x} ${event.y + 3} V ${event.y - 3} L ${event.x + 3} ${event.y - 2} L ${event.x} ${event.y - 1}`);
+    flag.setAttribute('vector-effect', 'non-scaling-stroke');
+    marker.appendChild(halo);
+    marker.appendChild(flag);
+  }
+  svg.appendChild(marker);
+  setTimeout(() => marker.remove(), TERMINAL_EFFECT_MS);
+};
+
 const draw = (svg, e) => {
   if (e.kind === 'phasers') drawBeam(svg, e);
   else if (e.kind === 'photons') drawTorpedo(svg, e);
   else if (e.kind === 'explosion') drawExplosion(svg, e);
+  else if (isTerminalEvent(e)) drawTerminal(svg, e);
 };
 
 /** Draws beams/torpedoes/explosions for shots involving the command ship. */
 export const playEffects = (events, map, playerId) => {
   if (!map || !events?.length) return;
-  const relevant = events.filter((e) => e.fromId === playerId || e.toId === playerId);
+  const relevant = events.filter((e) => isTerminalEvent(e) || e.fromId === playerId || e.toId === playerId);
   if (!relevant.length) return;
   const svg = layer(map);
-  relevant.forEach((e, i) => setTimeout(() => draw(svg, e), i * 160));
+  relevant.forEach((e, i) => {
+    if (isTerminalEvent(e)) draw(svg, e);
+    else setTimeout(() => draw(svg, e), i * 160);
+  });
 };
 
 /**
