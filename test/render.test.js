@@ -237,11 +237,32 @@ test('the replay button stays hidden until a round has been fought', () => {
   assert.equal(read('#replay-round').hidden, true);
 
   elements.clear();
-  renderGame({
+  const terminalEvent = {
+    kind: 'destruction',
+    shipId: 'axis-flagship',
+    shipName: 'Firebreather',
+    faction: 'Axis',
+    x: 16,
+    y: 10,
+    cause: 'phasers',
+    attackerId: 'fed-flagship',
+    attackerName: 'Argo',
+    attackerFaction: 'Federation',
+  };
+  const replayable = {
     ...createGame({ seed: 'replay-shown' }),
-    lastRound: { events: [{ kind: 'explosion', x2: 5, y2: 5, hit: true }], entries: ['A round.'] },
-  });
+    lastRound: {
+      events: [{ kind: 'explosion', x2: 5, y2: 5, hit: true }, terminalEvent],
+      entries: ['A round.'],
+    },
+  };
+  renderGame(replayable, { terminalEvent });
   assert.equal(read('#replay-round').hidden, false);
+  assert.match(read('#log').innerHTML, /class="terminal-event Axis"/);
+
+  renderGame(replayable, { terminalEvent: null });
+  assert.equal(read('#replay-round').hidden, false);
+  assert.doesNotMatch(read('#log').innerHTML, /class="terminal-event/);
 });
 
 test('the mission panel carries the scenario brief and progress', () => {

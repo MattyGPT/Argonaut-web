@@ -164,7 +164,9 @@ you issue an order.
 - **Replay the round.** The button in the battle narrative header plays the last
   computer phase back on the map — every alliance's beams, torpedoes, and kills,
   not just the ones that touched you — with that round's narrative beside it.
-  Twenty autopilot decisions no longer arrive as one wall of text.
+  Terminal markers and unabridged ship-loss or surrender cards replay from the
+  same stored events, even through a damaged radio. Twenty autopilot decisions
+  no longer arrive as one wall of text.
 - **Three ways to fight.** The New game panel picks a scenario, and the mission
   panel carries its brief and live progress:
   - *Cease hostilities* — the original objective. Destroy the opposing fleets
@@ -220,6 +222,9 @@ you issue an order.
 - **Impact juice** — phaser hits flash where they land and the map shakes when a
   volley lands on your command ship. Both are suppressed under
   `prefers-reduced-motion`, and nothing in the rules reads them.
+- **Terminal events** — every ship loss and surrender receives an automatically
+  paced, faction-labelled map marker and unabridged narrative card for 2.5
+  seconds, then combat resumes without a click.
 - **Screen readers** — the page is no longer one big live region, which announced
   the entire board on every keystroke. A single concise status line reports your
   condition, position, and the newest narrative entry instead.

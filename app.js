@@ -4,11 +4,13 @@ import { alertLevel, appendLog, createGame, getShip } from './game/state.js';
 import { scenarioFor } from './game/scenarios.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './game/turns.js';
 import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget } from './ui/input.js';
+import { playTerminalEvents } from './ui/battle-events.js';
 import { renderGame, reportFor } from './ui/render.js';
 import { playEffect, playEvent } from './ui/sound.js';
 import { playEffects, replayEffects } from './ui/fx.js';
 
 const SAVE_KEY = 'argonaut-web-save-v1';
+const TERMINAL_EVENT_MS = 2500;
 
 const loadSave = () => {
   try {
@@ -73,11 +75,23 @@ const showEvents = (events) => {
   }
 };
 
-const runComputer = () => {
+let presentingTerminalEvents = false;
+
+const presentTerminalEvents = async (events) => {
+  presentingTerminalEvents = true;
+  await playTerminalEvents(events, (terminalEvent) => {
+    view = { ...view, terminalEvent, battlePaused: Boolean(terminalEvent) };
+    refresh();
+  }, () => new Promise((resolve) => setTimeout(resolve, TERMINAL_EVENT_MS)));
+  presentingTerminalEvents = false;
+};
+
+const runComputer = async () => {
   if (game.phase === 'computer' && !game.outcome) {
     game = resolveComputerTurns(game);
     view = { ...view, entries: [] };
     showEvents(game.events);
+    await presentTerminalEvents(game.events);
   }
 };
 
@@ -85,7 +99,7 @@ let spectating = false;
 const spectate = () => {
   if (spectating) return;
   spectating = true;
-  const step = () => {
+  const step = async () => {
     if (!game.resigned || game.outcome || game.phase !== 'player') {
       spectating = false;
       return;
@@ -93,7 +107,8 @@ const spectate = () => {
     const auto = resolveAutopilotTurn(game);
     game = { ...auto.game, log: appendLog(game.log, auto.messages) };
     showEvents(auto.events);
-    runComputer();
+    await presentTerminalEvents(auto.events);
+    await runComputer();
     refresh();
     if (game.resigned && !game.outcome && game.phase === 'player') setTimeout(step, SPECTATOR_TICK_MS);
     else spectating = false;
@@ -102,8 +117,8 @@ const spectate = () => {
 };
 
 const dispatch = async (action) => {
-  // The spectator loop mutates `game` on a timer; ignore input while it runs.
-  if (spectating) return;
+  // Both automated loops mutate `game` asynchronously; ignore input while either runs.
+  if (spectating || presentingTerminalEvents) return;
   if (action.type === 'map-select') {
     const ship = game.ships.find((entry) => entry.id === action.targetId);
     const command = game.ships.find((entry) => entry.id === game.playerShipId);
@@ -162,7 +177,7 @@ const dispatch = async (action) => {
     }
     replayEffects(round.events, document.querySelector('#map'));
     view = { ...view, entries: round.entries ?? [], report: null, orderShipId: null };
-    refresh();
+    await presentTerminalEvents(round.events);
     return;
   }
 
@@ -227,7 +242,8 @@ const dispatch = async (action) => {
     game = { ...auto.game, log: appendLog(game.log, auto.messages) };
     view = { ...view, entries: [] };
     showEvents(auto.events);
-    runComputer();
+    await presentTerminalEvents(auto.events);
+    await runComputer();
     refresh();
     return;
   }
@@ -244,7 +260,8 @@ const dispatch = async (action) => {
   };
   if (!['phasers', 'photons'].includes(action.type)) playEffect('command', game.sound);
   showEvents(outcome.events);
-  runComputer();
+  await presentTerminalEvents(outcome.events);
+  await runComputer();
   refresh();
   if (game.resigned) spectate();
 };
