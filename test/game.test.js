@@ -59,6 +59,9 @@ test('moving onto an enemy ship resolves a collision', () => {
   const fed = getShip(result.game, 'fed-flagship');
   const axis = getShip(result.game, 'axis-flagship');
   assert.ok(fed.status === 'destroyed' || axis.status === 'destroyed');
+  const destruction = result.events?.find((entry) => entry.kind === 'destruction');
+  assert.equal(destruction?.cause, 'collision');
+  assert.equal(destruction?.attackerId, fed.status === 'destroyed' ? 'axis-flagship' : 'fed-flagship');
 });
 
 test('phasers damage a nearby enemy without mutating the input game', () => {
@@ -76,6 +79,19 @@ test('weapon fire emits a fire event for the FX layer', () => {
   assert.equal(result.events[0].kind, 'phasers');
   assert.equal(result.events[0].fromId, 'fed-flagship');
   assert.equal(result.events[0].toId, 'axis-flagship');
+});
+
+test('a lethal weapon hit records the victim, faction, shooter, and weapon', () => {
+  const game = withShips(placedGame('phaser-hit-2'), (ship) => ship.id === 'axis-flagship'
+    ? { ...ship, shields: 0, crew: 0, systems: Object.fromEntries(Object.keys(ship.systems).map((name) => [name, 0])) }
+    : ship);
+  const result = applyPlayerAction(game, { type: 'phasers', targetId: 'axis-flagship' });
+  const event = result.events.find((entry) => entry.kind === 'destruction');
+  assert.deepEqual(event, {
+    kind: 'destruction', shipId: 'axis-flagship', shipName: 'Firebreather', faction: 'Axis',
+    x: 16, y: 10, cause: 'phasers',
+    attackerId: 'fed-flagship', attackerName: 'Argo', attackerFaction: 'Federation',
+  });
 });
 
 test('a seeded miss reports Missed! and deals no damage', () => {
@@ -110,6 +126,7 @@ test('self-destruct destroys the player ship and damages ships in its blast radi
   const game = placedGame('self-destruct');
   const result = applyPlayerAction(game, { type: 'self-destruct' });
   assert.equal(getShip(result.game, 'fed-flagship').status, 'destroyed');
+  assert.ok(result.events.some((entry) => entry.kind === 'destruction' && entry.shipId === 'fed-flagship' && entry.cause === 'self-destruct'));
   assert.ok(getShip(result.game, 'axis-flagship').shields < getShip(game, 'axis-flagship').shields);
 });
 
@@ -127,6 +144,10 @@ test('a seeded hyperspace misjump burns the ship up', () => {
   const result = applyPlayerAction(game, { type: 'hyperspace', x: 55, y: 55 });
   assert.match(result.messages.join(' '), /burnt up/i);
   assert.equal(getShip(result.game, 'fed-flagship').status, 'destroyed');
+  assert.deepEqual(result.events.find((entry) => entry.kind === 'destruction'), {
+    kind: 'destruction', shipId: 'fed-flagship', shipName: 'Argo', faction: 'Federation',
+    x: 10, y: 10, cause: 'hyperspace',
+  });
 });
 
 test('scanner range scales with live scanner units', () => {
