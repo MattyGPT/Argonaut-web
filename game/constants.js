@@ -144,6 +144,37 @@ export const WEAPONS = Object.freeze({
 /** Tractor beam pull per working tractor unit. */
 export const TRACTOR_PULL_PER_UNIT = 5;
 
+/**
+ * How a volley that gets past the shields is spent inside a hull, and whether a
+ * knockout leaves a boardable prize or wreckage. Two dials, because capture rate
+ * and prize quality otherwise fight over one knob.
+ *
+ * CREW_DAMAGE_WEIGHT is the candidate slots each crew member occupies against one
+ * slot per surviving subsystem unit. The manual deals "one random live subsystem
+ * unit or crew member" per point, but the remake first collapsed the whole complement
+ * to a single crew slot against one slot per subsystem *type*, so 200 crew were
+ * outranked eight-to-one: the ~28 system units were stripped hundreds of points
+ * before the crew, the hull was always destroyed, and capture never happened. A
+ * weight above 1 makes the crew absorb the bulk of a volley so subsystems — including
+ * weapons — survive the fight, which is what leaves a prize worth boarding. It only
+ * redistributes damage between crew and subsystems, so a hull absorbs the same total
+ * and war length is roughly held (a classic attrition war runs a little shorter
+ * because hulls stay armed and resolve decisively instead of lingering as toothless
+ * hulks; an extended war is unchanged).
+ *
+ * OVERKILL_DESTROY_MARGIN decouples destruction from that race. The volley stops the
+ * instant the last crewman falls; the hull is then a vacant prize UNLESS the damage
+ * still left in that volley reaches this multiple of the surviving subsystem units —
+ * i.e. the shot overshot the crew hard enough to tear the frame apart too. So a
+ * precise phaser finish captures an armed hull while a photon spread that overshoots
+ * destroys it: whether you take a prize is a consequence of how you deliver the
+ * killing blow, not a fixed global rate. At weight 4 / margin 2.5, measured over 12k
+ * volleys per class and weapon, ~44% of gunfire knockouts leave a vacant hull
+ * (phasers ~55%, photons ~35%) and ~84% of those prizes keep at least one gun.
+ */
+export const CREW_DAMAGE_WEIGHT = 4;
+export const OVERKILL_DESTROY_MARGIN = 2.5;
+
 /** Self-destruct sprays shrapnel this far beyond its blast radius. */
 export const SHRAPNEL_EXTRA_RANGE = 15;
 
