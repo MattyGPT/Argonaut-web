@@ -130,6 +130,24 @@ test('self-destruct destroys the player ship and damages ships in its blast radi
   assert.ok(getShip(result.game, 'axis-flagship').shields < getShip(game, 'axis-flagship').shields);
 });
 
+test('self-destruct credits the detonator with each enemy hull the blast destroys', () => {
+  const game = withShips(createGame({ seed: 'self-destruct-kills' }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 50, y: 50 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 55, y: 50 };
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 55 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 45, y: 50 };
+    return { ...ship, x: 0, y: 0 };
+  });
+  const result = applyPlayerAction(game, { type: 'self-destruct' });
+  const detonator = getShip(result.game, 'fed-flagship');
+  assert.equal(detonator.status, 'destroyed');
+  assert.equal(getShip(result.game, 'axis-flagship').status, 'destroyed');
+  assert.equal(getShip(result.game, 'axis-cruiser-1').status, 'destroyed');
+  assert.equal(getShip(result.game, 'fed-cruiser-1').status, 'destroyed', 'the blast still destroys friendlies');
+  // Two enemy hulls are credited; the friendly caught in the same blast is not.
+  assert.equal(detonator.kills, 2);
+});
+
 test('hyperspace relocates the ship and damages its shields', () => {
   const game = placedGame('hyperspace');
   const result = applyPlayerAction(game, { type: 'hyperspace', x: 55, y: 55 });
@@ -457,6 +475,9 @@ test('computer self-destruction keeps every destruction event', () => {
       x: 50, y: 50, cause: 'self-destruct',
     },
   ]);
+  // Grendel took four Federation hulls with it; the autopilot detonator is credited
+  // with each enemy kill exactly as the player's `=` would be.
+  assert.equal(getShip(result, 'axis-cruiser-1').kills, 4);
 });
 
 test('the resigned Federation autopilot surrenders when collapsed', () => {
