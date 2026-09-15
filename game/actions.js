@@ -1,5 +1,6 @@
 import {
   ACE_KILLS,
+  CREW_DAMAGE_WEIGHT,
   CRIPPLE,
   DEFAULT_CREW_TRANSFER,
   GRID_SIZE,
@@ -8,6 +9,7 @@ import {
   HYPERSPACE_SHIELD_LOSS,
   MISS_CHANCE,
   ORDER_TYPES,
+  OVERKILL_DESTROY_MARGIN,
   RANGES,
   REFITS,
   REFIT_OVER_TEMPLATE,
@@ -65,8 +67,13 @@ export const weaponDamage = (type, shooter, rng, grudge = 0) => {
 export const killLines = (game, shooter, victim) => {
   if (!game.extended) return [];
   const credited = (shooter.kills ?? 0) + 1;
+  // A hull whose crew is killed but whose subsystems survive goes dark rather than
+  // breaking up: it is a vacant prize the winner can board, not wreckage.
+  const fate = victim.status === 'vacant'
+    ? `${victim.name} is adrift, its crew dead.`
+    : `${victim.name} is destroyed.`;
   const lines = [
-    `${victim.name} is destroyed.`,
+    fate,
     `${captainOf(shooter)} is credited with ${credited} kill${credited === 1 ? '' : 's'}.`,
   ];
   if (credited === ACE_KILLS) lines.push(`${captainOf(shooter)} is now an ace.`);
@@ -151,7 +158,12 @@ const requiresSystem = (game, actor, system) => systemUnits(actor, system) > 0
 
 /**
  * Applies combat damage without changing its ship argument. Shields absorb damage
- * first; exposed damage randomly removes one live subsystem unit or crew member.
+ * first; each exposed point then removes one crew member or one live subsystem unit,
+ * weighted by CREW_DAMAGE_WEIGHT so the crew takes the bulk and the subsystems survive
+ * to make a prize worth boarding. When the last crewman dies the volley stops: the hull
+ * is left `vacant` and capturable unless its overkill reaches OVERKILL_DESTROY_MARGIN x
+ * the surviving subsystems, which tears the frame apart (`destroyed`). A hull with
+ * neither crew nor subsystems left is destroyed outright.
  */
 export const damageShip = (ship, amount, rng = createRng('damage')) => {
   if (!isActive(ship) || !Number.isFinite(amount) || amount <= 0) return ship;
@@ -163,16 +175,39 @@ export const damageShip = (ship, amount, rng = createRng('damage')) => {
   let systems = { ...ship.systems };
 
   while (remaining > 0) {
-    const candidates = [
-      ...(crew > 0 ? ['crew'] : []),
-      ...Object.keys(systems).filter((name) => systems[name] > 0),
-    ];
-    if (candidates.length === 0) {
+    const live = Object.keys(systems).filter((name) => systems[name] > 0);
+    const systemUnits = live.reduce((total, name) => total + systems[name], 0);
+    // Each crew member holds CREW_DAMAGE_WEIGHT candidate slots against one per
+    // surviving subsystem unit, so a volley can kill the crew before the hull is
+    // stripped — see the constant. Without the weight the complement is outranked
+    // by the subsystems and every knockout guts the ship instead of leaving a prize.
+    const crewSlots = crew > 0 ? crew * CREW_DAMAGE_WEIGHT : 0;
+    const slots = crewSlots + systemUnits;
+    if (slots === 0) {
       return { ...ship, shields, crew: 0, systems, status: 'destroyed', tractorBy: null };
     }
-    const hit = rng.pick(candidates);
-    if (hit === 'crew') crew -= 1;
-    else systems = { ...systems, [hit]: systems[hit] - 1 };
+    const roll = rng.next() * slots;
+    if (roll < crewSlots) {
+      crew -= 1;
+      // The volley stops the instant the last crewman falls. The hull is a boardable
+      // prize unless this shot overshot the crew hard enough to tear the frame apart
+      // too: leftover damage at or past OVERKILL_DESTROY_MARGIN x the surviving
+      // subsystems breaks it up. So a precise phaser finish captures an armed hull
+      // while a photon spread that overshoots destroys it — see the constant.
+      if (crew === 0) {
+        const overkill = remaining - 1;
+        const shattered = systemUnits === 0 || overkill >= OVERKILL_DESTROY_MARGIN * systemUnits;
+        return { ...ship, shields, crew: 0, systems, status: shattered ? 'destroyed' : 'vacant', tractorBy: null };
+      }
+    } else {
+      let offset = roll - crewSlots;
+      let hit = live[live.length - 1];
+      for (const name of live) {
+        if (offset < systems[name]) { hit = name; break; }
+        offset -= systems[name];
+      }
+      systems = { ...systems, [hit]: systems[hit] - 1 };
+    }
     remaining -= 1;
   }
 
@@ -369,13 +404,15 @@ const weaponAction = (game, action, actor, type) => {
     }),
   }));
   const events = [fireEvent(type, actor, found.target, true)];
-  if (kill) {
+  // A hull whose crew is killed but whose frame survives goes dark as a vacant
+  // prize, not wreckage: only outright destruction draws the blast and the marker.
+  if (hit.status === 'destroyed') {
     events.push({ kind: 'explosion', fromId: actor.id, toId: victim.id, x1: victim.x, y1: victim.y, x2: victim.x, y2: victim.y, hit: true });
-    if (hit.status === 'destroyed') events.push(terminalEvent('destruction', type, victim, { attacker: actor }));
+    events.push(terminalEvent('destruction', type, victim, { attacker: actor }));
   }
   return result(updated, [
     `${actor.name} fires ${type} at ${found.target.name} for ${damage} damage.`,
-    ...(kill ? killLines(game, actor, found.target) : []),
+    ...(kill ? killLines(game, actor, victim) : []),
   ], { events });
 };
 

@@ -69,15 +69,17 @@ const resolveAiAction = (game, shipId) => {
       }),
     });
     const events = [fireEvent(action.type, actor, target, true)];
-    if (kill) {
+    // A hull whose crew is killed but whose frame survives goes dark as a vacant
+    // prize, not wreckage: only outright destruction draws the blast and the marker.
+    if (hit.status === 'destroyed') {
       events.push({ kind: 'explosion', fromId: actor.id, toId: victim.id, x1: victim.x, y1: victim.y, x2: victim.x, y2: victim.y, hit: true });
-      if (hit.status === 'destroyed') events.push(terminalEvent('destruction', action.type, victim, { attacker: actor }));
+      events.push(terminalEvent('destruction', action.type, victim, { attacker: actor }));
     }
     return {
       game: updated,
       messages: [
         `${actor.name} fires ${action.type} at ${target.name}.`,
-        ...(kill ? killLines(game, actor, target) : []),
+        ...(kill ? killLines(game, actor, victim) : []),
       ],
       type: action.type,
       events,

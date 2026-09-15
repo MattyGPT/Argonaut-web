@@ -4,7 +4,7 @@ import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, RANGE
 import { createRng } from '../game/rng.js';
 import { scenarioProgress } from '../game/scenarios.js';
 import { abbreviateNarrative, alertLevel, appendLog, createGame, crewCapacity, distance, engineCapacity, getShip, isAce, radioIntegrity, shieldCapacity, strongestFederation, vendettaGrudge } from '../game/state.js';
-import { applyPlayerAction, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveCollision, weaponDamage } from '../game/actions.js';
+import { applyPlayerAction, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveCollision, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDocking, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
@@ -626,6 +626,58 @@ test('a hull outlasts a sustained peer bombardment, so battles are attritional',
   const photonVolleys = hull / meanVolley('photons');
   assert.ok(photonVolleys >= 6,
     `a battle cruiser now falls to ${photonVolleys.toFixed(1)} photon volleys; it was meant to take at least six`);
+});
+
+const systemUnitsLeft = (ship) => Object.values(ship.systems).reduce((total, units) => total + units, 0);
+
+test('a measured finish kills the crew and leaves a boardable prize, weapons intact', () => {
+  const argo = getShip(createGame({ seed: 'capture-model' }), 'fed-flagship');
+  // Shields down and the crew worn thin, then one measured volley: the weighted crew
+  // absorbs it and dies while the overkill falls far short of tearing the frame apart,
+  // so the hull survives to be boarded. This was impossible before the re-weight, when
+  // the subsystems were always stripped first and a knockout was never capturable.
+  const hull = { ...argo, shields: 0, crew: 30 };
+  let vacant = 0;
+  for (let seed = 0; seed < 400; seed++) {
+    const out = damageShip(hull, 50, createRng(`capture:${seed}`));
+    if (out.status === 'vacant') {
+      vacant++;
+      assert.equal(out.crew, 0, 'a vacant hull has no crew');
+      assert.ok(systemUnitsLeft(out) > 0, 'a captured hull keeps working subsystems');
+    }
+  }
+  assert.ok(vacant > 280, `a measured finish should usually leave a prize; got ${vacant}/400 vacant`);
+});
+
+test('a volley that overshoots the crew tears the hull apart instead of leaving a prize', () => {
+  const argo = getShip(createGame({ seed: 'overkill' }), 'fed-flagship');
+  // The same worn hull, but the killing blow carries far more than the frame can soak,
+  // so it is destroyed rather than left vacant.
+  const out = damageShip({ ...argo, shields: 0, crew: 30 }, 500, createRng('overkill'));
+  assert.equal(out.status, 'destroyed');
+});
+
+test('phasers capture where photons destroy, so taking a prize is a choice of fire', () => {
+  const argo = getShip(createGame({ seed: 'agency' }), 'fed-flagship');
+  const captureRate = (weapon) => {
+    let vacant = 0;
+    const trials = 250;
+    for (let seed = 0; seed < trials; seed++) {
+      const rng = createRng(`agency:${weapon}:${seed}`);
+      let ship = { ...argo, systems: { ...argo.systems }, status: 'active' };
+      let guard = 0;
+      while (ship.status === 'active' && guard++ < 1000) {
+        ship = damageShip(ship, weaponDamage(weapon, argo, rng), rng);
+      }
+      if (ship.status === 'vacant') vacant++;
+    }
+    return vacant / trials;
+  };
+  const phasers = captureRate('phasers');
+  const photons = captureRate('photons');
+  assert.ok(phasers > photons,
+    `precise fire should capture more often than heavy fire (phasers ${phasers.toFixed(2)}, photons ${photons.toFixed(2)})`);
+  assert.ok(phasers > 0.2, `phasers should capture a meaningful share of hulls (got ${phasers.toFixed(2)})`);
 });
 
 test('the radio report gives allied condition as well as location', () => {
