@@ -1,4 +1,5 @@
 import { DOCKING, FACTIONS, RANGES, REFITS } from '../game/constants.js';
+import { shipCommands } from '../game/actions.js';
 import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
 import { drawMove } from './fx.js';
 import {
@@ -11,6 +12,7 @@ import {
   getShip,
   inRadioContact,
   isAce,
+  isActive,
   orderFor,
   pendingOrderFor,
   radioIntegrity,
@@ -73,34 +75,75 @@ const ORDER_BUTTONS = Object.freeze([
 ]);
 
 /**
- * The order picker for one Federation hull. It renders into the existing report
- * panel instead of adding a fifth one, so the layout stays map / console / report /
- * narrative.
+ * The context menu that grows out of a clicked hull: what your command ship can
+ * actually do to it, plus — in an extended war — the standing orders and dockyard
+ * refits a Federation hull can be given. Commands whose hardware is dead or whose
+ * range does not reach are simply absent, so every button in the menu lands.
  */
-const orderPanel = (game, actor, ship, battlePaused) => {
-  const standing = orderFor(game, ship.id);
-  const pending = pendingOrderFor(game, ship.id);
-  const contact = ship.id === actor?.id || inRadioContact(game, actor, ship);
-  const disabled = game.phase !== 'player' || game.resigned || battlePaused ? ' disabled' : '';
+const shipMenu = (game, actor, ship) => {
+  const disabled = game.phase !== 'player' ? ' disabled' : '';
+  const own = ship.id === actor?.id;
+  const captain = game.extended && game.scanned?.[ship.id] ? ship.captain : null;
   const lines = [
-    `Standing orders: ${describeOrder(game, pending ?? standing)}.`,
-    pending ? 'Out of radio contact — that order is still travelling and lands next stardate.' : null,
-    `${ship.className} at ${ship.x}, ${ship.y}; condition ${alertLevel(ship)}; shields ${ship.shields}; crew ${ship.crew}; ${ship.status}.`,
-    ship.id === actor?.id
-      ? 'Your own hull obeys these orders whenever the autopilot has the conn.'
-      : `Radio contact: ${contact ? 'yes' : 'no — orders arrive one stardate late'}.`,
-  ].filter(Boolean);
-  const buttons = ORDER_BUTTONS
-    .map(([type, label]) => `<button data-order="${type}" data-order-ship="${ship.id}"${standing?.type === type ? ' class="current"' : ''}${disabled}>${label}</button>`)
+    `${ship.faction} ${ship.className.toLowerCase()} · ${ship.status}`,
+    `${own ? 'your command ship' : `${distance(actor, ship).toFixed(1)} away`} · shields ${ship.shields} · crew ${ship.crew}`,
+    ...(captain ? [`Captain ${captain}${isAce(ship) ? ` · an ace, ${ship.kills} kills` : ''}`] : []),
+  ];
+  const commands = shipCommands(game, ship.id)
+    .map(({ type, label }) => `<button data-ship-command="${type}" data-ship-target="${ship.id}"${disabled}>${label}</button>`)
     .join('');
-  const docked = dockedAt(game, ship);
-  const refitTaken = game.refits?.[ship.id];
-  if (docked) lines.push(`Docked at ${docked.name}: shields, crew, and one damaged subsystem recover each stardate.`);
-  if (refitTaken) lines.push(`Refitted this war: ${REFITS[refitTaken]?.label ?? refitTaken}.`);
-  const refitGrid = game.extended && docked && !refitTaken
-    ? `<div class="order-grid">${Object.entries(REFITS).map(([id, refit]) => `<button data-refit="${id}" data-refit-ship="${ship.id}"${disabled}>${refit.label}</button>`).join('')}</div>`
-    : '';
-  return `<h2>Orders: ${ship.name}</h2><ul>${lines.map((line) => `<li>${line}</li>`).join('')}</ul><div class="order-grid">${buttons}</div>${refitGrid}`;
+  let orders = '';
+  const canOrder = game.extended && game.phase === 'player' && isActive(ship) && ship.faction === actor?.faction;
+  if (canOrder) {
+    const standing = orderFor(game, ship.id);
+    const pending = pendingOrderFor(game, ship.id);
+    const contact = own || inRadioContact(game, actor, ship);
+    const orderLines = [
+      `Standing orders: ${describeOrder(game, pending ?? standing)}.`,
+      pending
+        ? 'An order is still travelling to this hull.'
+        : (contact ? null : 'Out of radio contact — orders arrive one stardate late.'),
+      ...(own ? ['Your own hull obeys these orders whenever the autopilot has the conn.'] : []),
+    ].filter(Boolean);
+    const buttons = ORDER_BUTTONS
+      .map(([type, label]) => `<button data-order="${type}" data-order-ship="${ship.id}"${standing?.type === type ? ' class="current"' : ''}${disabled}>${label}</button>`)
+      .join('');
+    const docked = dockedAt(game, ship);
+    const refitTaken = game.refits?.[ship.id];
+    const refitGrid = docked && !refitTaken
+      ? `<p class="menu-sub">One refit at ${docked.name}, once per war:</p><div class="order-grid">${Object.entries(REFITS).map(([id, refit]) => `<button data-refit="${id}" data-refit-ship="${ship.id}"${disabled}>${refit.label}</button>`).join('')}</div>`
+      : '';
+    orders = `<p class="menu-sub">${orderLines.join(' ')}</p><div class="order-grid">${buttons}</div>${refitGrid}`;
+  }
+  const note = commands || orders
+    ? ''
+    : `<p class="menu-sub">${own ? 'Your command ship — open another hull to act on it.' : 'Nothing can reach this hull.'}</p>`;
+  return `<h3>${ship.name}</h3><ul class="menu-info">${lines.map((line) => `<li>${line}</li>`).join('')}</ul>${commands ? `<div class="menu-grid">${commands}</div>` : ''}${orders}${note}`;
+};
+
+/**
+ * Parks the menu beside the hull it grew from, flipping to the other side near a
+ * map edge and clamping so it never leaves the map or covers its own ship. The
+ * tail keeps pointing at the hull's row once the box has been clamped.
+ */
+const placeShipMenu = (menu, map, ship) => {
+  const rect = map?.getBoundingClientRect?.();
+  if (!rect?.width || !rect?.height) return;
+  const px = (ship.x / 100) * rect.width;
+  const py = (ship.y / 100) * rect.height;
+  const gap = 16;
+  let side = 'right';
+  let left = px + gap;
+  if (left + menu.offsetWidth > rect.width - 4) {
+    side = 'left';
+    left = px - gap - menu.offsetWidth;
+  }
+  left = Math.max(4, Math.min(left, rect.width - menu.offsetWidth - 4));
+  const top = Math.max(4, Math.min(py - menu.offsetHeight / 2, rect.height - menu.offsetHeight - 4));
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+  menu.dataset.side = side;
+  menu.style.setProperty('--tail-y', `${Math.max(10, Math.min(py - top, menu.offsetHeight - 10))}px`);
 };
 
 /**
@@ -144,8 +187,8 @@ export const renderGame = (game, view = {}) => {
     ? (scenarioFor(game).id === 'annihilation' ? 'EXTENDED WAR' : `EXTENDED · ${scenarioFor(game).title.toUpperCase()}`)
     : '';
   document.querySelector('#legend-note').textContent = game.extended
-    ? 'click empty space to maneuver · dashed rings = your phaser / photon / engine range · green ring = Xanadu dockyard range · red outline = enemy that can reach you · white pip = ship under orders · click a Federation ship to order it'
-    : 'click empty space to maneuver · dashed rings = your phaser / photon / engine range · red outline = enemy that can reach you';
+    ? 'click a ship for its commands · click empty space to maneuver · dashed rings = your phaser / photon / engine range · green ring = Xanadu dockyard range · red outline = enemy that can reach you · white pip = ship under orders'
+    : 'click a ship for its commands · click empty space to maneuver · dashed rings = your phaser / photon / engine range · red outline = enemy that can reach you';
 
   const actorActive = Boolean(actor) && actor.status === 'active';
   const mapperRange = actorActive ? systemRange(actor, 'mapper') : Infinity;
@@ -193,6 +236,26 @@ export const renderGame = (game, view = {}) => {
   map.innerHTML = ringHtml + shipHtml;
   animateMoves(map, game);
 
+  // The context menu lives over the map field, beside the hull it grew from. It is
+  // gone whenever that hull is gone, hidden by fog, or the war is not taking orders.
+  const contextShip = view.contextShipId ? getShip(game, view.contextShipId) : null;
+  const menuShip = contextShip && contextShip.status !== 'destroyed' && isVisible(contextShip)
+    && !game.outcome && !game.resigned && !view.battlePaused
+    ? contextShip
+    : null;
+  const menu = document.querySelector('#ship-menu');
+  if (menu) {
+    const wasOpen = menu.hasAttribute?.('open');
+    menu.innerHTML = menuShip ? shipMenu(game, actor, menuShip) : '';
+    if (menuShip) {
+      menu.setAttribute?.('open', '');
+      placeShipMenu(menu, document.querySelector('#map'), menuShip);
+      if (!wasOpen) menu.querySelector?.('button')?.focus?.();
+    } else {
+      menu.removeAttribute?.('open');
+    }
+  }
+
   const condition = alertLevel(actor);
   consoleRoot.innerHTML = `
     <div class="panel-title"><span>Command console</span><span class="alert-${condition.toLowerCase()}">Condition: ${condition}</span></div>
@@ -206,16 +269,11 @@ export const renderGame = (game, view = {}) => {
     <div class="system-grid">${Object.entries(actor.systems).map(([name, amount]) => `<span>${cap(name)} <b>${amount}</b></span>`).join('')}</div>
     <div class="command-grid">${commandList(game).map(([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || game.resigned || view.battlePaused ? 'disabled' : ''}>${label}<kbd>${key}</kbd></button>`).join('')}</div>`;
 
-  const orderShip = game.extended && !game.outcome && !game.resigned ? getShip(game, view.orderShipId) : null;
-  const canOrder = Boolean(orderShip) && orderShip.faction === actor?.faction && orderShip.status !== 'destroyed';
-
   const activeReport = view.report ?? {
     title: scenarioFor(game).title,
     lines: [scenarioFor(game).brief, ...scenarioProgress(game)],
   };
-  report.innerHTML = canOrder
-    ? orderPanel(game, actor, orderShip, view.battlePaused)
-    : `<h2>${activeReport.title}</h2><ul>${activeReport.lines.map((line) => `<li>${line}</li>`).join('')}</ul>`;
+  report.innerHTML = `<h2>${activeReport.title}</h2><ul>${activeReport.lines.map((line) => `<li>${line}</li>`).join('')}</ul>`;
 
   const entries = view.entries?.length
     ? view.entries

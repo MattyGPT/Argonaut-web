@@ -35,6 +35,16 @@ becomes an engine order toward that point, clamped to the engine ring already dr
 around your ship, so you never have to work out ΔX and ΔY by hand; `2` still opens
 the coordinate prompt when you want exact numbers.
 
+**Clicking any hull** opens a context menu that grows out of it, carrying every
+command your command ship can actually perform on that hull: fire phasers, fire
+photons, and lock a tractor beam inside their ranges; scan inside sensor reach;
+beam crew to a friendly hull — or board a vacant one — inside transporter reach.
+A command whose hardware is burnt out or whose range does not reach is simply not
+offered, so every button in the menu lands. In an extended war a Federation hull's
+menu also carries its standing orders and its one dockyard refit. `Escape` or a
+click elsewhere on the map puts the menu away, and clicking the same hull again
+toggles it; issuing a command from it spends your stardate as usual.
+
 `-`, `=`, and `Escape` ask for confirmation first, because none of them can be
 undone. Hyperspace takes no destination: you commit to the jump and emerge
 wherever it takes you, your shields weakened on arrival. That makes it a way out
@@ -114,9 +124,9 @@ autopilot as your enemies. An **extended war** — off by default, chosen in the
 top. A classic war is untouched: the flag alone changes no ship's behavior until
 you issue an order.
 
-- Click any Federation hull on the tactical map (or press `F` for the fleet
-  report) to give it standing orders. Orders are free — they cost no turn — and
-  persist until you change them.
+- Open a Federation hull's ship menu by clicking it on the tactical map (or press
+  `F` for the fleet report) to give it standing orders. Orders are free — they
+  cost no turn — and persist until you change them.
 - **Focus with fleet** is the original behavior: concentrate on the enemy nearest
   your flagship. **Hold** keeps a ship stationary, though it still fires at
   whatever comes into range. **Withdraw** falls back toward Xanadu, or toward
@@ -209,6 +219,8 @@ you issue an order.
   (cyan) reach. Enemies that can reach you are outlined in red.
 - The visual map is limited by your mapper (fog of war). `Backspace` shows the
   whole war zone; `7` lists exact local positions.
+- Clicking a hull opens its context menu beside it, flipping sides and clamping at
+  the map edge so it stays on the map, with a tail that keeps pointing at the hull.
 - Weapon and tractor prompts preselect the nearest sensible target; confirm or
   pick another.
 - The battle narrative keeps a scrolling, newest-first log of your actions and

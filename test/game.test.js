@@ -4,7 +4,7 @@ import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, RANGE
 import { createRng } from '../game/rng.js';
 import { scenarioProgress } from '../game/scenarios.js';
 import { abbreviateNarrative, alertLevel, appendLog, createGame, crewCapacity, distance, engineCapacity, getShip, isAce, radioIntegrity, shieldCapacity, strongestFederation, vendettaGrudge } from '../game/state.js';
-import { applyPlayerAction, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveCollision, weaponDamage } from '../game/actions.js';
+import { applyPlayerAction, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveCollision, shipCommands, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDocking, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
@@ -240,6 +240,61 @@ test('eligible weapon targets exclude friendly ships', () => {
   const ids = eligibleTargets(game, 'phasers').map((ship) => ship.id);
   assert.ok(ids.includes('axis-flagship'));
   assert.ok(!ids.includes('fed-cruiser-1'));
+});
+
+test('the ship menu lists every command that can land on a close enemy', () => {
+  const game = placedGame('menu-close');
+  assert.deepEqual(
+    shipCommands(game, 'axis-flagship').map((entry) => entry.type),
+    ['phasers', 'photons', 'tractor', 'scan'],
+  );
+});
+
+test('commands out of range are absent from the ship menu', () => {
+  const game = withShips(placedGame('menu-mid'), (ship) => ship.id === 'axis-flagship'
+    ? { ...ship, x: 25, y: 10 }
+    : ship);
+  assert.deepEqual(
+    shipCommands(game, 'axis-flagship').map((entry) => entry.type),
+    ['phasers', 'tractor', 'scan'],
+    'photons reach 10 and the target sits 15 away',
+  );
+});
+
+test('a hull beyond every reach offers nothing', () => {
+  const game = withShips(placedGame('menu-far'), (ship) => ship.id === 'axis-flagship'
+    ? { ...ship, x: 90, y: 90 }
+    : ship);
+  assert.deepEqual(shipCommands(game, 'axis-flagship'), [], 'the scanner reaches 40, not 113');
+});
+
+test('a friendly hull offers scan and crew transfer, not weapons', () => {
+  const game = withShips(placedGame('menu-friendly'), (ship) => ship.id === 'fed-cruiser-1'
+    ? { ...ship, x: 12, y: 10 }
+    : ship);
+  assert.deepEqual(
+    shipCommands(game, 'fed-cruiser-1').map((entry) => entry.type),
+    ['scan', 'transport'],
+  );
+});
+
+test('a vacant hull offers boarding and scan only', () => {
+  const game = withShips(placedGame('menu-vacant'), (ship) => ship.id === 'axis-flagship'
+    ? { ...ship, status: 'vacant' }
+    : ship);
+  assert.deepEqual(
+    shipCommands(game, 'axis-flagship').map((entry) => entry.type),
+    ['scan', 'transport'],
+  );
+});
+
+test('your own hull, wrecks, and strangers offer nothing', () => {
+  const game = withShips(placedGame('menu-wreck'), (ship) => ship.id === 'axis-flagship'
+    ? { ...ship, status: 'destroyed' }
+    : ship);
+  assert.deepEqual(shipCommands(game, 'fed-flagship'), []);
+  assert.deepEqual(shipCommands(game, 'axis-flagship'), []);
+  assert.deepEqual(shipCommands(game, 'no-such-ship'), []);
 });
 
 test('an enemy in photon range chooses photons when they are available', () => {

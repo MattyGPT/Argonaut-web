@@ -7,6 +7,7 @@ import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget
 // dozen more selectors, so everything else resolves to a shared element stub that
 // tests can seed with values and read the assigned handlers back from.
 let openDialog = null;
+let openMenu = null;
 let keyHandler = null;
 let clickHandler = null;
 
@@ -33,13 +34,18 @@ globalThis.document = {
   addEventListener: (type, handler) => {
     if (type === 'keydown') keyHandler = handler;
   },
-  querySelector: (selector) => (selector === 'dialog[open]' ? openDialog : element(selector)),
+  querySelector: (selector) => {
+    if (selector === 'dialog[open]') return openDialog;
+    if (selector === '#ship-menu[open]') return openMenu;
+    return element(selector);
+  },
 };
 
 const bind = () => {
   const dispatched = [];
   keyHandler = null;
   clickHandler = null;
+  openMenu = null;
   document.activeElement = null;
   bindInput(
     { addEventListener: (type, handler) => { if (type === 'click') clickHandler = handler; } },
@@ -156,6 +162,36 @@ test('clicking a ship selects it without also issuing a maneuver', () => {
   const dispatched = bind();
   click('[data-ship-id]', { shipId: 'fed-flagship' });
   assert.deepEqual(dispatched, [{ type: 'map-select', targetId: 'fed-flagship' }]);
+});
+
+test('a ship-menu command carries the hull it was opened for', () => {
+  openDialog = null;
+  const dispatched = bind();
+  click('[data-ship-command]', { shipCommand: 'phasers', shipTarget: 'axis-flagship' });
+  assert.deepEqual(dispatched, [{ type: 'phasers', targetId: 'axis-flagship' }]);
+});
+
+test('clicking the menu body is not a maneuver', () => {
+  openDialog = null;
+  const dispatched = bind();
+  click('#ship-menu', {});
+  assert.deepEqual(dispatched, [], 'the popover chrome must never fire an engine order');
+});
+
+test('an open ship menu absorbs the next map click instead of maneuvering', () => {
+  openDialog = null;
+  const dispatched = bind();
+  openMenu = {};
+  clickMap(200, 150, { left: 0, top: 0, width: 400, height: 300 });
+  assert.deepEqual(dispatched, [{ type: 'menu-close' }]);
+});
+
+test('Escape closes an open ship menu instead of resigning', () => {
+  openDialog = null;
+  const dispatched = bind();
+  openMenu = {};
+  press('Escape');
+  assert.deepEqual(dispatched, [{ type: 'menu-close' }]);
 });
 
 // --- Dialog prompts -----------------------------------------------------------

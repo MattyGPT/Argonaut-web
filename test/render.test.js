@@ -20,6 +20,16 @@ const withFlagship = (game, changes) => ({
   ships: game.ships.map((ship) => ship.id === 'fed-flagship' ? { ...ship, ...changes } : ship),
 });
 
+/** Parks two hulls at a known range so menu contents do not depend on the seed. */
+const withPair = (game, firstId, first, secondId, second) => ({
+  ...game,
+  ships: game.ships.map((ship) => {
+    if (ship.id === firstId) return { ...ship, ...first };
+    if (ship.id === secondId) return { ...ship, ...second };
+    return ship;
+  }),
+});
+
 const TRAFFIC = 'Firebreather fires phasers at Bonhomme for 32 damage.';
 
 test('a healthy command ship reports GREEN on the console', () => {
@@ -99,14 +109,14 @@ test('a terminal card uses a cause-only narrative when no attacker is known', ()
   );
 });
 
-test('a paused battle disables command, order, and ship-selection controls', () => {
+test('a paused battle disables command and ship-selection controls and hides the ship menu', () => {
   elements.clear();
   renderGame(createGame({ seed: 'terminal-paused', extended: true }), {
     battlePaused: true,
-    orderShipId: 'fed-cruiser-1',
+    contextShipId: 'fed-cruiser-1',
   });
   assert.match(read('#console').innerHTML, /data-command="phasers" disabled/);
-  assert.match(read('#report').innerHTML, /data-order="hold" data-order-ship="fed-cruiser-1" disabled/);
+  assert.equal(read('#ship-menu').innerHTML, '', 'no menu may offer commands during playback');
   assert.match(read('#map-field').innerHTML, /data-ship-id="fed-flagship"[^>]* disabled/);
 });
 
@@ -127,30 +137,76 @@ test('the map overlay uses the shared weapon and engine ranges', () => {
 
 test('an extended war shows an order picker for a selected Federation ship', () => {
   elements.clear();
-  renderGame(createGame({ seed: 'order-panel', extended: true }), { orderShipId: 'fed-cruiser-1' });
-  const panel = read('#report').innerHTML;
-  assert.match(panel, /Orders: Bonhomme/);
-  assert.match(panel, /data-order="hold" data-order-ship="fed-cruiser-1"/);
-  assert.match(panel, /Standing orders: concentrate with the fleet/);
+  const game = withPair(createGame({ seed: 'order-panel', extended: true }),
+    'fed-flagship', { x: 10, y: 10 }, 'fed-cruiser-1', { x: 14, y: 10 });
+  renderGame(game, { contextShipId: 'fed-cruiser-1' });
+  const menu = read('#ship-menu').innerHTML;
+  assert.match(menu, /<h3>Bonhomme<\/h3>/);
+  assert.match(menu, /data-order="hold" data-order-ship="fed-cruiser-1"/);
+  assert.match(menu, /Standing orders: concentrate with the fleet/);
 });
 
 test('a classic war offers no order picker', () => {
   elements.clear();
-  renderGame(createGame({ seed: 'order-panel-classic' }), { orderShipId: 'fed-cruiser-1' });
-  assert.ok(!/data-order=/.test(read('#report').innerHTML));
+  const game = withPair(createGame({ seed: 'order-panel-classic' }),
+    'fed-flagship', { x: 10, y: 10 }, 'fed-cruiser-1', { x: 14, y: 10 });
+  renderGame(game, { contextShipId: 'fed-cruiser-1' });
+  assert.ok(!/data-order=/.test(read('#ship-menu').innerHTML));
 });
 
 test('selecting an enemy hull never opens an order picker', () => {
   elements.clear();
-  renderGame(createGame({ seed: 'order-panel-enemy', extended: true }), { orderShipId: 'axis-flagship' });
-  assert.ok(!/data-order=/.test(read('#report').innerHTML));
+  const game = withPair(createGame({ seed: 'order-panel-enemy', extended: true }),
+    'fed-flagship', { x: 10, y: 10 }, 'axis-flagship', { x: 16, y: 10 });
+  renderGame(game, { contextShipId: 'axis-flagship' });
+  const menu = read('#ship-menu').innerHTML;
+  assert.ok(!/data-order=/.test(menu));
+  assert.match(menu, /data-ship-command="phasers" data-ship-target="axis-flagship"/);
+});
+
+test('the ship menu offers exactly the commands that can reach the target', () => {
+  elements.clear();
+  const game = withPair(createGame({ seed: 'ship-menu' }),
+    'fed-flagship', { x: 10, y: 10 }, 'axis-flagship', { x: 25, y: 10 });
+  renderGame(game, { contextShipId: 'axis-flagship' });
+  const menu = read('#ship-menu').innerHTML;
+  assert.match(menu, /data-ship-command="phasers"/);
+  assert.match(menu, /data-ship-command="tractor"/);
+  assert.match(menu, /data-ship-command="scan"/);
+  assert.ok(!/data-ship-command="photons"/.test(menu), 'photons reach 10 and the target sits 15 away');
+});
+
+test('no ship menu is rendered without a selected hull', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'ship-menu-none' }));
+  assert.equal(read('#ship-menu').innerHTML, '');
+});
+
+test('a hull nothing can reach says so instead of offering dead buttons', () => {
+  elements.clear();
+  const game = withPair(createGame({ seed: 'ship-menu-far' }),
+    'fed-flagship', { x: 10, y: 10 }, 'axis-flagship', { x: 45, y: 45 });
+  renderGame(game, { contextShipId: 'axis-flagship' });
+  const menu = read('#ship-menu').innerHTML;
+  assert.ok(!/data-ship-command=/.test(menu));
+  assert.match(menu, /Nothing can reach this hull/);
+});
+
+test('a vacant hull offers boarding, not weapons', () => {
+  elements.clear();
+  const game = withPair(createGame({ seed: 'ship-menu-vacant' }),
+    'fed-flagship', { x: 10, y: 10 }, 'axis-flagship', { x: 16, y: 10, status: 'vacant' });
+  renderGame(game, { contextShipId: 'axis-flagship' });
+  const menu = read('#ship-menu').innerHTML;
+  assert.match(menu, /data-ship-command="transport"[^>]*>Board ship/);
+  assert.ok(!/data-ship-command="phasers"/.test(menu), 'weapons cannot fire on a vacant hull');
 });
 
 test('the top bar and legend mark an extended war', () => {
   elements.clear();
   renderGame(createGame({ seed: 'mode-badge', extended: true }));
   assert.equal(read('#mode-readout').textContent, 'EXTENDED WAR');
-  assert.match(read('#legend-note').textContent, /click a Federation ship to order it/);
+  assert.match(read('#legend-note').textContent, /click a ship for its commands/);
   elements.clear();
   renderGame(createGame({ seed: 'mode-badge-classic' }));
   assert.equal(read('#mode-readout').textContent, '');

@@ -298,6 +298,38 @@ export const defaultTargetFor = (game, actionType) => {
   return sorted[0].id;
 };
 
+/**
+ * The commands a clicked hull offers in its ship menu: everything your command
+ * ship can actually do to it right now — the right kind of target, working
+ * hardware, and inside the reach of the system involved. A command that could
+ * not land never appears as a button, so the menu reads as a list of what the
+ * situation allows rather than a list of refusals.
+ */
+export const shipCommands = (game, targetId) => {
+  const actor = getShip(game, game.playerShipId);
+  const target = getShip(game, targetId);
+  if (!isActive(actor) || !target || target.status === 'destroyed' || target.id === actor.id) return [];
+  const reach = distance(actor, target);
+  const hostile = target.faction !== actor.faction;
+  const commands = [];
+  const offer = (type, label, available, range) => {
+    if (available && reach <= range) commands.push({ type, label });
+  };
+  if (hostile && isActive(target)) {
+    offer('phasers', 'Fire phasers', systemUnits(actor, 'phasers') > 0, RANGES.phasers);
+    offer('photons', 'Fire photons', systemUnits(actor, 'photons') > 0, RANGES.photons);
+    offer('tractor', 'Tractor beam', systemUnits(actor, 'tractor') > 0, RANGES.tractor);
+  }
+  offer('scan', 'Scan', systemUnits(actor, 'scanner') > 0, systemRange(actor, 'scanner'));
+  if (!hostile && isActive(target)) {
+    offer('transport', 'Transport crew', systemUnits(actor, 'transporter') > 0, systemRange(actor, 'transporter'));
+  }
+  if (target.status === 'vacant') {
+    offer('transport', 'Board ship', systemUnits(actor, 'transporter') > 0, systemRange(actor, 'transporter'));
+  }
+  return commands;
+};
+
 const computerReport = (game, actor) => {
   // A standard command must not out-see the mapper. The hidden reports are the ones
   // the manual says give information your enemies do not have; this one is not.
