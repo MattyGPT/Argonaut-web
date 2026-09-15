@@ -31,7 +31,7 @@ const drawBeam = (svg, e) => {
   line.setAttribute('y1', e.y1);
   line.setAttribute('x2', to.x);
   line.setAttribute('y2', to.y);
-  line.setAttribute('class', `fx-phaser${e.hit ? '' : ' miss'}`);
+  line.setAttribute('class', `fx-phaser${e.focus ? ' focused' : ''}${e.hit ? '' : ' miss'}`);
   line.setAttribute('vector-effect', 'non-scaling-stroke');
   svg.appendChild(line);
   setTimeout(() => line.remove(), 420);

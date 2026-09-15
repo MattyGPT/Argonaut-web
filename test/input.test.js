@@ -245,6 +245,45 @@ test('confirming a target prompt resolves the chosen target and its options', as
   assert.deepEqual(await pending, { targetId: 'axis-flagship', amount: 10, transferCommand: true });
 });
 
+test('a target prompt without precision options keeps the called-shot dials hidden', async () => {
+  element('#target-select').value = 'axis-flagship';
+  const pending = promptForTarget('Phasers target', FLEET, { defaultId: 'axis-flagship' });
+  assert.equal(element('#focus-label').hidden, true);
+  assert.equal(element('#power-label').hidden, true);
+  assert.equal(element('#power-readout').hidden, true);
+  submit('#target-form', 'confirm');
+  element('#target-dialog').onclose();
+  const details = await pending;
+  assert.equal(details.focus, undefined, 'no dials, no dial values on the action');
+  assert.equal(details.power, undefined);
+});
+
+test('a precision phaser prompt resolves the called system, the power, and a live readout', async () => {
+  element('#target-select').value = 'axis-flagship';
+  const pending = promptForTarget('Phasers target', FLEET, {
+    defaultId: 'axis-flagship',
+    precision: { systems: ['engines', 'phasers'], power: 60, focus: 'engines', nominal: 32 },
+  });
+  assert.equal(element('#focus-label').hidden, false);
+  assert.equal(element('#phaser-power').value, '60', 'the dial opens where the war left it');
+  assert.match(element('#power-readout').textContent, /standard spread/);
+  // The stub select does not parse its options out of innerHTML the way a browser
+  // does, so the test seeds them the way the prompt's markup would.
+  element('#focus-select').options = [{ value: 'standard' }, { value: 'engines' }, { value: 'phasers' }];
+  element('#focus-select').value = 'engines';
+  element('#focus-select').onchange();
+  assert.match(element('#power-readout').textContent, /up to 8 damage to engines, no crew losses/);
+  element('#phaser-power').value = '40';
+  element('#phaser-power').oninput();
+  assert.match(element('#power-readout').textContent, /up to 5 damage to engines/);
+  submit('#target-form', 'confirm');
+  element('#target-dialog').onclose();
+  const details = await pending;
+  assert.equal(details.targetId, 'axis-flagship');
+  assert.equal(details.focus, 'engines');
+  assert.equal(details.power, 40);
+});
+
 test('a confirmation resolves true only for its Confirm button', async () => {
   const cancelled = promptForConfirmation('Self-destruct?', 'Everything in blast range dies.');
   submit('#confirm-form', 'cancel');

@@ -16,6 +16,7 @@ import {
   SHIELD_PER_ENGINE,
   SHRAPNEL_DAMAGE,
   SHRAPNEL_EXTRA_RANGE,
+  SURGICAL_DAMAGE_FACTOR,
   TARGETED_ORDERS,
   TRACTOR_PULL_PER_UNIT,
   VENDETTA,
@@ -98,7 +99,7 @@ const result = (game, messages, options = {}) => ({
   ...(options.events ? { events: options.events } : {}),
 });
 
-export const fireEvent = (kind, shooter, target, hit) => ({
+export const fireEvent = (kind, shooter, target, hit, details = {}) => ({
   kind,
   fromId: shooter.id,
   toId: target.id,
@@ -107,6 +108,9 @@ export const fireEvent = (kind, shooter, target, hit) => ({
   x2: target.x,
   y2: target.y,
   hit,
+  // Called system and power percentage, so the FX layer and the round replay
+  // draw a focused beam as something distinct from a standard volley.
+  ...details,
 });
 
 export const terminalEvent = (kind, cause, ship, options = {}) => ({
@@ -165,7 +169,7 @@ const requiresSystem = (game, actor, system) => systemUnits(actor, system) > 0
  * the surviving subsystems, which tears the frame apart (`destroyed`). A hull with
  * neither crew nor subsystems left is destroyed outright.
  */
-export const damageShip = (ship, amount, rng = createRng('damage')) => {
+export const damageShip = (ship, amount, rng = createRng('damage'), options = {}) => {
   if (!isActive(ship) || !Number.isFinite(amount) || amount <= 0) return ship;
 
   let remaining = Math.floor(amount);
@@ -173,6 +177,15 @@ export const damageShip = (ship, amount, rng = createRng('damage')) => {
   remaining = Math.max(0, remaining - ship.shields);
   let crew = ship.crew;
   let systems = { ...ship.systems };
+
+  // A called volley burns only the system it was called to: no crew casualties,
+  // and the beam checks fire once that system is dead, so whatever damage the
+  // roll left over is lost. Shields still absorb the volley first, as always.
+  if (options.focus) {
+    const burn = Math.min(remaining, systems[options.focus] ?? 0);
+    if (burn > 0) systems = { ...systems, [options.focus]: systems[options.focus] - burn };
+    return { ...ship, shields, crew, systems };
+  }
 
   while (remaining > 0) {
     const live = Object.keys(systems).filter((name) => systems[name] > 0);
@@ -405,6 +418,19 @@ const radioReport = (game, actor) => {
   };
 };
 
+/**
+ * Reads the precision-fire dials off a weapon action. Only a precision war gives
+ * the player them, and only phasers can be throttled or called — photons scatter
+ * by nature — so anything else falls back to a standard volley at full power,
+ * exactly what a classic war has always fired.
+ */
+const precisionSettings = (game, action, type, target) => {
+  if (!game.precision || type !== 'phasers') return { power: 100, focus: null };
+  const power = Number.isFinite(action.power) ? Math.max(0, Math.min(100, action.power)) : 100;
+  const focus = action.focus && Object.keys(target.systems).includes(action.focus) ? action.focus : null;
+  return { power, focus };
+};
+
 const weaponAction = (game, action, actor, type) => {
   const disabled = requiresSystem(game, actor, type);
   if (disabled) return disabled;
@@ -413,17 +439,26 @@ const weaponAction = (game, action, actor, type) => {
   const range = RANGES[type];
   const targetDistance = distance(actor, found.target);
   if (targetDistance > range) return invalid(game, `${found.target.name} is out of range for ${type}.`);
+  const { power, focus } = precisionSettings(game, action, type, found.target);
+  const details = {
+    ...(focus ? { focus } : {}),
+    ...(power !== 100 ? { power } : {}),
+  };
   const rng = seededRng(game);
   const shooterMissed = rng.next() < MISS_CHANCE;
   if (shooterMissed) {
     const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
     const updated = completeTurn(advanceRandom(replaceShip(game, shooter)));
-    return result(updated, `${actor.name} fires ${type} at ${found.target.name}. Missed!`, { events: [fireEvent(type, actor, found.target, false)] });
+    return result(updated, `${actor.name} fires ${type} at ${found.target.name}. Missed!`, { events: [fireEvent(type, actor, found.target, false, details)] });
   }
   const grudge = vendettaGrudge(game, actor, found.target);
-  const damage = weaponDamage(type, actor, rng, grudge);
+  const roll = weaponDamage(type, actor, rng, grudge);
+  const damage = focus
+    ? Math.round(roll * (power / 100) * SURGICAL_DAMAGE_FACTOR)
+    : Math.round(roll * (power / 100));
+  const calledUnits = focus ? found.target.systems[focus] : 0;
   const before = found.target.status;
-  const hit = damageShip(found.target, damage, rng);
+  const hit = damageShip(found.target, damage, rng, focus ? { focus } : {});
   const kill = before === 'active' && hit.status !== 'active' ? 1 : 0;
   const shooter = { ...actor, shotsFired: actor.shotsFired + 1, kills: actor.kills + kill };
   const victim = { ...hit, shotsTaken: hit.shotsTaken + 1 };
@@ -435,15 +470,22 @@ const weaponAction = (game, action, actor, type) => {
       return ship;
     }),
   }));
-  const events = [fireEvent(type, actor, found.target, true)];
+  const events = [fireEvent(type, actor, found.target, true, details)];
   // A hull whose crew is killed but whose frame survives goes dark as a vacant
   // prize, not wreckage: only outright destruction draws the blast and the marker.
   if (hit.status === 'destroyed') {
     events.push({ kind: 'explosion', fromId: actor.id, toId: victim.id, x1: victim.x, y1: victim.y, x2: victim.x, y2: victim.y, hit: true });
     events.push(terminalEvent('destruction', type, victim, { attacker: actor }));
   }
+  const powerNote = power !== 100 ? ` at ${power}% power` : '';
   return result(updated, [
-    `${actor.name} fires ${type} at ${found.target.name} for ${damage} damage.`,
+    focus
+      ? `${actor.name} fires a focused phaser beam${powerNote} at ${found.target.name}'s ${focus} for ${damage} damage.`
+      : `${actor.name} fires ${type} at ${found.target.name}${powerNote} for ${damage} damage.`,
+    ...(focus && calledUnits > 0 && hit.systems[focus] === 0
+      ? [`${found.target.name}'s ${focus} are disabled.`]
+      : []),
+    ...(focus && calledUnits === 0 ? [`${found.target.name} has no ${focus} left to burn.`] : []),
     ...(kill ? killLines(game, actor, victim) : []),
   ], { events });
 };

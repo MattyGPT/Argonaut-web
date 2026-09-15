@@ -57,6 +57,18 @@ test('the alert level tracks the fraction of shields, not a flat number', () => 
   assert.match(read('#console').innerHTML, /Condition: YELLOW/);
 });
 
+test('the console carries the precision-fire dials while they are off default', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'render-precision', precision: true }), { precision: { power: 60, focus: 'engines' } });
+  assert.match(read('#console').innerHTML, /Phasers set to 60% power, called to engines/);
+});
+
+test('the console stays silent about precision fire at full power and standard targeting', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'render-precision-default', precision: true }), { precision: { power: 100, focus: null } });
+  assert.ok(!/Phasers set to/.test(read('#console').innerHTML));
+});
+
 test('a damaged radio abbreviates the narrative and says so in the header', () => {
   elements.clear();
   const base = createGame({ seed: 'render-radio' });

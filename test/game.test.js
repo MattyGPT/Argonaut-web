@@ -6,7 +6,7 @@ import { scenarioProgress } from '../game/scenarios.js';
 import { abbreviateNarrative, alertLevel, appendLog, createGame, crewCapacity, distance, engineCapacity, getShip, isAce, radioIntegrity, shieldCapacity, strongestFederation, vendettaGrudge } from '../game/state.js';
 import { applyPlayerAction, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveCollision, shipCommands, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
-import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDocking, transferCommandIfNeeded } from '../game/turns.js';
+import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
 
 const withShips = (game, update) => ({ ...game, ships: game.ships.map(update) });
@@ -1615,7 +1615,7 @@ test('the hunt is lost if the hunter dies unidentified, won once you know them',
 
   const dead = withShips(base, (ship) => (ship.id === hunterId ? { ...ship, status: 'destroyed' } : ship));
   assert.equal(evaluateOutcome(dead).kind, 'scenario-loss');
-  assert.match(evaluateOutcome(dead).message, /died unidentified/);
+  assert.match(evaluateOutcome(dead).message, /never learned who commanded it/);
 
   const identified = { ...dead, scanned: { [hunterId]: true } };
   assert.equal(evaluateOutcome(identified).kind, 'scenario-win');
@@ -1755,4 +1755,134 @@ test('the battle narrative is bounded so a long war still saves', () => {
 test('a resolved round cannot grow the narrative past the bound', () => {
   const game = { ...createGame({ seed: 'log-war' }), log: Array.from({ length: LOG_LIMIT }, (_, index) => `old ${index}`) };
   assert.ok(resolveComputerTurns(game).log.length <= LOG_LIMIT);
+});
+
+// --- Precision fire: the power dial and called shots ---------------------------
+
+const precisionGame = (seed) => withShips(createGame({ seed, precision: true }), (ship) => {
+  if (ship.id === 'fed-flagship') return { ...ship, x: 10, y: 10 };
+  if (ship.id === 'axis-flagship') return { ...ship, x: 16, y: 10 };
+  return { ...ship, x: 90, y: 90 };
+});
+
+const gutted = (ship) => (ship.id === 'axis-flagship'
+  ? { ...ship, shields: 0, crew: 120, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0 } }
+  : ship);
+
+test('precision fire is a war option, off by default', () => {
+  assert.equal(createGame({ seed: 'precision-flag' }).precision, false);
+  assert.equal(createGame({ seed: 'precision-flag', precision: true }).precision, true);
+});
+
+test('the power dial scales a standard phaser volley', () => {
+  const game = precisionGame('dial');
+  const before = getShip(game, 'axis-flagship').shields;
+  const result = applyPlayerAction(game, { type: 'phasers', targetId: 'axis-flagship', power: 50 });
+  const dealt = before - getShip(result.game, 'axis-flagship').shields;
+  // A battle cruiser's phasers roll 24-40; half of that band is 12-20.
+  assert.ok(dealt >= 12 && dealt <= 20, `a half-power volley dealt ${dealt}`);
+});
+
+test('a classic war ignores the power dial and called systems', () => {
+  const game = placedGame('classic-ignores');
+  const plain = applyPlayerAction(game, { type: 'phasers', targetId: 'axis-flagship' });
+  const dialed = applyPlayerAction(game, { type: 'phasers', targetId: 'axis-flagship', power: 50, focus: 'engines' });
+  assert.deepEqual(dialed.game, plain.game);
+  assert.deepEqual(dialed.messages, plain.messages);
+});
+
+test('a called volley burns only the called system and spares the crew', () => {
+  const game = withShips(precisionGame('called'), (ship) => (ship.id === 'axis-flagship' ? { ...ship, shields: 0 } : ship));
+  const before = getShip(game, 'axis-flagship');
+  const result = applyPlayerAction(game, { type: 'phasers', targetId: 'axis-flagship', focus: 'engines' });
+  const after = getShip(result.game, 'axis-flagship');
+  assert.equal(after.crew, before.crew, 'a surgical strike takes no crew');
+  assert.equal(after.systems.engines, 0, 'a full-power surgical volley burns out five engine units');
+  assert.equal(after.systems.phasers, before.systems.phasers, 'untouched systems stay untouched');
+  assert.equal(after.status, 'active', 'a disabled hull is not a dead hull');
+  assert.match(result.messages.join(' '), /focused phaser beam/);
+  assert.match(result.messages.join(' '), /engines are disabled/);
+});
+
+test('a called volley checks fire once the called system is dead', () => {
+  const game = withShips(precisionGame('check-fire'), (ship) => (ship.id === 'axis-flagship'
+    ? { ...ship, shields: 0, systems: { ...ship.systems, engines: 2 } }
+    : ship));
+  const before = getShip(game, 'axis-flagship');
+  const result = applyPlayerAction(game, { type: 'phasers', targetId: 'axis-flagship', focus: 'engines' });
+  const after = getShip(result.game, 'axis-flagship');
+  assert.equal(after.systems.engines, 0);
+  assert.equal(after.crew, before.crew, 'leftover damage is lost, not spent on crew');
+  assert.equal(after.systems.phasers, before.systems.phasers, 'leftover damage is lost, not spent at random');
+});
+
+test('a called volley into shields spends itself on the shields', () => {
+  const game = withShips(precisionGame('called-shields'), (ship) => (ship.id === 'axis-flagship' ? { ...ship, shields: 100 } : ship));
+  const result = applyPlayerAction(game, { type: 'phasers', targetId: 'axis-flagship', focus: 'engines' });
+  const after = getShip(result.game, 'axis-flagship');
+  // The surgical roll is 40% of 24-40, i.e. 10-16, and shields absorb all of it.
+  assert.ok(after.shields >= 84 && after.shields <= 90, `shields took the whole volley: ${after.shields}`);
+  assert.equal(after.systems.engines, 5, 'nothing reaches the internals through shields');
+});
+
+test('photons scatter and can never be called', () => {
+  const game = precisionGame('photons-scatter');
+  const plain = applyPlayerAction(game, { type: 'photons', targetId: 'axis-flagship' });
+  const called = applyPlayerAction(game, { type: 'photons', targetId: 'axis-flagship', focus: 'engines' });
+  assert.deepEqual(called.game, plain.game);
+});
+
+test('a throttled finishing blow captures instead of shattering', () => {
+  const argo = getShip(createGame({ seed: 'finish' }), 'fed-flagship');
+  // A hull worn to a skeleton crew, finished at 40% power: the overkill left in
+  // such a volley can never reach the margin that tears a frame apart, so every
+  // knockout it scores is a boardable prize.
+  let vacant = 0;
+  for (let step = 0; step < 400; step += 1) {
+    const roll = weaponDamage('phasers', argo, createRng(`finish-roll-${step}`));
+    const out = damageShip({ ...argo, shields: 0, crew: 4 }, Math.round(roll * 0.4), createRng(`finish-${step}`));
+    assert.notEqual(out.status, 'destroyed', 'a throttled finish never tears the frame apart');
+    if (out.crew === 0) {
+      assert.equal(out.status, 'vacant');
+      vacant += 1;
+    }
+  }
+  assert.ok(vacant > 150, `a throttled finish should often leave a prize; got ${vacant}/400`);
+});
+
+test('a disabled hull strikes its colors at stardate end in a precision war', () => {
+  const game = withShips(createGame({ seed: 'colors', precision: true }), gutted);
+  const out = resolveDisabledSurrender(game);
+  const after = getShip(out.game, 'axis-flagship');
+  assert.equal(after.status, 'vacant');
+  assert.equal(after.crew, 0, 'the crew takes to escape pods');
+  assert.equal(out.events[0]?.kind, 'surrender');
+  assert.match(out.messages.join(' '), /strikes its colors/);
+});
+
+test('a disabled hull fights on in a classic war', () => {
+  const game = withShips(createGame({ seed: 'colors-classic' }), gutted);
+  assert.deepEqual(resolveDisabledSurrender(game).game, game);
+});
+
+test('your command ship never surrenders the conn, until you resign', () => {
+  const game = withShips(createGame({ seed: 'conn', precision: true }), (ship) => (ship.id === 'fed-flagship'
+    ? { ...ship, shields: 0, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0 } }
+    : ship));
+  assert.deepEqual(resolveDisabledSurrender(game).game, game, 'the player decides when Captain Jason is done');
+  const resigned = resolveDisabledSurrender({ ...game, resigned: true });
+  assert.equal(getShip(resigned.game, 'fed-flagship').status, 'vacant');
+});
+
+test('a starbase with burnt-out guns is a fortress, not a derelict', () => {
+  const game = withShips(createGame({ seed: 'base-fortress', precision: true }), (ship) => (ship.id === 'xanadu'
+    ? { ...ship, systems: { ...ship.systems, phasers: 0, photons: 0 } }
+    : ship));
+  assert.deepEqual(resolveDisabledSurrender(game).game, game);
+});
+
+test('a hull that struck its colors is a prize your transporter can board', () => {
+  const out = resolveDisabledSurrender(withShips(precisionGame('prize'), gutted));
+  const commands = shipCommands(out.game, 'axis-flagship');
+  assert.ok(commands.some((command) => command.type === 'transport' && /Board/.test(command.label)));
 });

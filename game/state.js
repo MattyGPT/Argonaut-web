@@ -94,7 +94,7 @@ const assignCaptains = (seed, count) => {
   return Array.from({ length: count }, (_, index) => deck[index % deck.length]);
 };
 
-export const createGame = ({ seed = 'xanadu', regional = false, sound = false, extended = false, scenario = 'annihilation' } = {}) => {
+export const createGame = ({ seed = 'xanadu', regional = false, sound = false, extended = false, scenario = 'annihilation', precision = false } = {}) => {
   const normalizedSeed = String(seed);
   const rng = createRng(normalizedSeed);
   const occupied = new Set([`${XANADU_POSITION.x},${XANADU_POSITION.y}`]);
@@ -118,6 +118,9 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     regional: Boolean(regional),
     sound: Boolean(sound),
     extended: Boolean(extended),
+    // Precision fire: called phaser shots and the power dial, for the player's
+    // volleys only. Off by default, so a classic war plays exactly as calibrated.
+    precision: Boolean(precision),
     phase: 'player',
     turn: 1,
     playerShipId: 'fed-flagship',

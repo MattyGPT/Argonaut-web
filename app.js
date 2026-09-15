@@ -1,6 +1,6 @@
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets } from './game/actions.js';
-import { SPECTATOR_TICK_MS, TARGETED_ORDERS } from './game/constants.js';
-import { alertLevel, appendLog, createGame, getShip } from './game/state.js';
+import { SPECTATOR_TICK_MS, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
+import { alertLevel, appendLog, createGame, getShip, systemUnits } from './game/state.js';
 import { scenarioFor } from './game/scenarios.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './game/turns.js';
 import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget } from './ui/input.js';
@@ -43,6 +43,13 @@ const randomSeed = () => `war-${Math.random().toString(36).slice(2, 8)}`;
 let game = loadSave() ?? createGame({ seed: randomSeed() });
 let view = { entries: ['Tactical systems online. Choose a command.'] };
 
+/**
+ * The precision-fire dials as last set in this war's phaser prompts, so a player
+ * who works a target at 60% does not re-dial it for every volley. Fresh war,
+ * fresh dials.
+ */
+let precisionSettings = { power: 100, focus: null };
+
 const targetActions = new Set(['phasers', 'photons', 'tractor', 'scan', 'transport']);
 
 /**
@@ -56,7 +63,7 @@ const CONFIRMATIONS = new Map([
 ]);
 
 const refresh = () => {
-  renderGame(game, view);
+  renderGame(game, { ...view, precision: game.precision ? precisionSettings : null });
   warnOnRedAlert();
   save();
 };
@@ -213,9 +220,13 @@ const dispatch = async (action) => {
   }
 
   // Transport needs a crew count even when the ship menu has already named the
-  // hull, so the prompt opens with the clicked ship preselected.
+  // hull, so the prompt opens with the clicked ship preselected. In a precision
+  // war phaser fire goes through the prompt even with a named target, because
+  // the power dial and the called system ride along with the shot.
+  const precisionPrompt = action.type === 'phasers' && game.precision && action.power === undefined;
   if (targetActions.has(action.type)
-    && (!action.targetId || (action.type === 'transport' && action.amount === undefined))) {
+    && (!action.targetId || precisionPrompt || (action.type === 'transport' && action.amount === undefined))) {
+    const actor = getShip(game, game.playerShipId);
     const details = await promptForTarget(
       action.type === 'transport' ? 'Transporter target' : `${action.type} target`,
       eligibleTargets(game, action.type),
@@ -223,9 +234,20 @@ const dispatch = async (action) => {
         amount: action.type === 'transport',
         transfer: action.type === 'transport',
         defaultId: action.targetId ?? defaultTargetFor(game, action.type),
+        ...(precisionPrompt ? {
+          precision: {
+            systems: Object.keys(actor?.systems ?? {}),
+            power: precisionSettings.power,
+            focus: precisionSettings.focus,
+            nominal: WEAPONS.phasers.base + WEAPONS.phasers.perUnit * systemUnits(actor, 'phasers'),
+          },
+        } : {}),
       },
     );
-    if (details) dispatch({ ...action, ...details });
+    if (details) {
+      if (precisionPrompt) precisionSettings = { power: details.power, focus: details.focus ?? null };
+      dispatch({ ...action, ...details });
+    }
     return;
   }
 
@@ -308,6 +330,7 @@ document.querySelector('#new-game').addEventListener('click', whenPlaybackUnlock
   document.querySelector('#new-seed').value = randomSeed();
   document.querySelector('#regional').checked = game.regional;
   document.querySelector('#sound').checked = game.sound;
+  document.querySelector('#precision').checked = game.precision;
   document.querySelector('#extended').checked = game.extended;
   document.querySelector('#scenario').value = game.scenario ?? 'annihilation';
   syncScenarioAvailability();
@@ -339,9 +362,11 @@ document.querySelector('#new-game-form').addEventListener('submit', whenPlayback
       seed: document.querySelector('#new-seed').value || 'xanadu',
       regional: document.querySelector('#regional').checked,
       sound: document.querySelector('#sound').checked,
+      precision: document.querySelector('#precision').checked,
       extended: document.querySelector('#extended').checked,
       scenario: document.querySelector('#scenario').value,
     });
+    precisionSettings = { power: 100, focus: null };
     view = { entries: openingLines(game) };
     refresh();
   }

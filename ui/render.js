@@ -267,7 +267,10 @@ export const renderGame = (game, view = {}) => {
       <div class="status-row"><span>Status</span><b>${actor.status}</b></div>
     </div>
     <div class="system-grid">${Object.entries(actor.systems).map(([name, amount]) => `<span>${cap(name)} <b>${amount}</b></span>`).join('')}</div>
-    <div class="command-grid">${commandList(game).map(([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || game.resigned || view.battlePaused ? 'disabled' : ''}>${label}<kbd>${key}</kbd></button>`).join('')}</div>`;
+    <div class="command-grid">${commandList(game).map(([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || game.resigned || view.battlePaused ? 'disabled' : ''}>${label}<kbd>${key}</kbd></button>`).join('')}</div>
+    ${view.precision && (view.precision.power !== 100 || view.precision.focus)
+      ? `<p class="console-note">Phasers set to ${view.precision.power}% power${view.precision.focus ? `, called to ${view.precision.focus}` : ''}.</p>`
+      : ''}`;
 
   const activeReport = view.report ?? {
     title: scenarioFor(game).title,
