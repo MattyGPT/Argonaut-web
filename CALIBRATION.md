@@ -81,13 +81,35 @@ compares the resulting fleets.
 | Mission panel | — | Fight any extended war | The report panel carries the scenario title, brief, and live progress. The hunt names your hunter's captain but never their hull, and never a position your sensors did not earn — the objective must not leak fog of war the way the `0` computer report does. |
 | Scenario measurement | — | Simulate 60 wars per order set | Hold Xanadu at the retuned target of 30 stardates: screening with the whole fleet held 20 of 60, and no orders at all 11 of 60 — close to the 2:1 ratio the objective was originally tuned to. The target moved from 20 because doubling Xanadu's shields had made it trivial: at 20 those same fleets held 30 and 26 of 60, so issuing orders barely mattered. The base still falls in most wars (50 of 60 unordered, 52 of 60 screening; when it falls, the median stardate is 14). The three-cruiser screen was not re-measured. Hunt the hunter was not re-measured either — it turns on the scan rather than on attrition, though a longer war does give more stardates in which to get inside scanner range: never identifying the hunter lost 37 of 40, and identifying it won 37 of 40. |
 
+## Precision fire (opt-in divergence)
+
+Precision fire is chosen in the **New game** panel and recorded as `precision`
+on the game state, so a save resumes with the dials it started with. It is
+available in any war, classic or extended, and touches only the player's phaser
+volleys: enemy captains and your own autopilot always fire standard volleys.
+A war with the flag off never reads these rules — the power dial and called
+system are ignored on arrival and the surrender sweep does not run; a test
+fires the same dialed action into an unflagged war and compares the games.
+
+| Addition | Original behavior | How to see it | What the remake does |
+| --- | --- | --- | --- |
+| Power dial | A phaser volley always fired at full output | Fire phasers in a precision war | The prompt's slider (0–100, default 100, sticky for the war) scales the rolled volley by `power / 100`. The roll itself is untouched, so at 100% the band is exactly the calibrated one, and the dial's use is the finishing blow: a throttled volley's overkill cannot reach the `OVERKILL_DESTROY_MARGIN` that shatters a hull, so a measured finish leaves a boardable prize. |
+| Called subsystem shots | Subsystem damage fell at random, and because crew hold four candidate slots each it was almost always a late-fight phenomenon | Call a system in the phaser prompt | A called volley deals `SURGICAL_DAMAGE_FACTOR` (0.4) of the rolled volley, spends every penetrating point on the called system, takes no crew, and checks fire once that system is dead, losing the leftover damage. Shields still absorb the volley first, so calling is a post-shields tool: strip shields with standard fire, then operate. Photons scatter and can never be called. The no-crew rule is load-bearing — with the 4x crew weight, any volley that still rolled crew damage would barely touch the called system. |
+| Disabled surrender | A hull burnt out of engines and guns fought on as a hulk | Burn out a hull's engines, phasers, and photons in a precision war | At stardate end an active hull with crew left but none of those three systems strikes its colors: the crew takes to escape pods and the hull is left `vacant`, boardable through the unchanged transporter rule — a capture path that kills no one. Starbases are exempt (a base never had engines, so burnt-out guns leave it a fortress) and so is your command ship while you have the conn. It resolves after the dockyard, so a disabled hull that limped home is repaired rather than surrendered, and before the fleet capitulation check, so a hull that struck its colors no longer counts toward its alliance's strength. |
+
+Measured over 400 seeded volleys: a 40%-power finishing blow against a hull
+worn to four crew left a boardable prize 174 times and destroyed the hull zero
+times — the rest simply did not finish the crew. Whole-war simulation of
+precision wars has not been run: the dials are player-only, and the autopilot
+wars those simulations measure never read them.
+
 The balance numbers these rules use, along with the ones the table above cites,
 now live together in `game/constants.js` (`SHIP_TEMPLATES`, `WEAPONS`,
 `MISS_CHANCE`, `RANGES`, `SHRAPNEL_DAMAGE`, `CRIPPLE`, `ALERT_THRESHOLDS`,
 `SURRENDER`, `AI_PURSUIT`, `FLEET_ORDER_TUNING`,
 `DOCKING`, `STALEMATE_ROUNDS`, `PERSONALITIES`, `CAPTAIN_NAMES`, `ACE_KILLS`,
-`VENDETTA`, `SCENARIOS`) instead of scattered through the modules, so retuning a
-row here means editing one file.
+`VENDETTA`, `SCENARIOS`, `SURGICAL_DAMAGE_FACTOR`) instead of scattered through
+the modules, so retuning a row here means editing one file.
 
 Future calibration should record a DOS input sequence and visible output beside
 the same web seed/action pair, then tune only the values needed to preserve the

@@ -228,6 +228,32 @@ export const applySurrender = (game) => {
 };
 
 /**
+ * Precision fire makes disabling a hull achievable on purpose, so a hull left
+ * with crew aboard but no engines and no guns — unable to fight, flee, or flush
+ * shields — strikes its colors at stardate end instead of fighting on as a
+ * hulk: the crew takes to escape pods and the hull is left vacant to board.
+ * Only a precision war sees this; a classic war's hulks behave exactly as
+ * calibrated. A starbase is exempt — it never had engines, so burnt-out guns
+ * leave it a fortress, not a derelict — and your command ship never surrenders
+ * while you have the conn.
+ */
+export const resolveDisabledSurrender = (game) => {
+  if (!game.precision || game.outcome) return { game, messages: [], events: [] };
+  const messages = [];
+  const events = [];
+  const ships = game.ships.map((ship) => {
+    if (!isActive(ship) || ship.crew <= 0 || ship.className === 'Starbase') return ship;
+    if (!game.resigned && ship.id === game.playerShipId) return ship;
+    if (ship.systems.engines > 0 || ship.systems.phasers > 0 || ship.systems.photons > 0) return ship;
+    messages.push(`${ship.name} is disabled and strikes its colors.  Its crew takes to escape pods.`);
+    events.push(terminalEvent('surrender', 'disabled', ship));
+    return { ...ship, status: 'vacant', crew: 0, tractorBy: null };
+  });
+  if (messages.length === 0) return { game, messages, events };
+  return { game: { ...game, ships }, messages, events };
+};
+
+/**
  * Orders issued to a ship out of radio contact wait a round. They arrive here,
  * after every autopilot has acted, so the fleet moves on them from the next
  * stardate onward.
@@ -340,6 +366,13 @@ export const resolveComputerTurns = (initialGame) => {
   const docked = resolveDocking(game);
   game = docked.game;
   log.push(...docked.messages);
+  // After the dockyard, so a disabled hull that limped home keeps fighting;
+  // before the fleet capitulation check, so a hull that struck its colors no
+  // longer counts toward its alliance's strength.
+  const colors = resolveDisabledSurrender(game);
+  game = colors.game;
+  log.push(...colors.messages);
+  events.push(...colors.events);
   const relay = relayOrders(game);
   game = relay.game;
   log.push(...relay.messages);

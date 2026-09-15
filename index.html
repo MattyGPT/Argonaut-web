@@ -72,6 +72,15 @@
           <input id="transfer-command" type="checkbox">
           Transfer command
         </label>
+        <label id="focus-label" hidden>
+          Called system
+          <select id="focus-select"></select>
+        </label>
+        <label id="power-label" hidden>
+          Phaser power
+          <input id="phaser-power" type="range" min="0" max="100" step="5" value="100">
+        </label>
+        <p id="power-readout" class="dialog-note" hidden></p>
         <div class="dialog-actions">
           <button value="cancel" class="secondary">Cancel</button>
           <button value="confirm">Confirm</button>
@@ -125,6 +134,10 @@
           Tactical sound
         </label>
         <label class="check">
+          <input id="precision" type="checkbox">
+          Precision fire — called shots and phaser power
+        </label>
+        <label class="check">
           <input id="extended" type="checkbox">
           Extended war — fleet orders
         </label>
@@ -136,7 +149,7 @@
             <option value="hunt-the-vendetta">Hunt the hunter</option>
           </select>
         </label>
-        <p class="dialog-note">The same seed reproduces the initial war. An extended war keeps every original rule and adds standing orders for the rest of your fleet, alliance doctrines, and the scenarios; a classic war plays exactly as calibrated.</p>
+        <p class="dialog-note">The same seed reproduces the initial war. Precision fire gives your phaser volleys a power dial and called subsystem shots, and lets a hull burnt out of engines and guns strike its colors; the enemy still fires standard volleys. An extended war keeps every original rule and adds standing orders for the rest of your fleet, alliance doctrines, and the scenarios; a classic war plays exactly as calibrated.</p>
         <div class="dialog-actions">
           <button value="cancel" class="secondary">Cancel</button>
           <button value="confirm">Begin</button>

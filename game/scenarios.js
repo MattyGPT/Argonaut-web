@@ -37,7 +37,10 @@ export const scenarioOutcome = (game) => {
     if (!game.scanned?.[hunter.id]) {
       return {
         kind: 'scenario-loss',
-        message: `${hunter.name} is out of the war and you never learned who commanded it.  The hunter died unidentified.`,
+        // A hunter can leave the war without dying — a disabled hull strikes its
+        // colors in a precision war — so the loss names what was never learned
+        // rather than how the hull left.
+        message: `${hunter.name} is out of the war and you never learned who commanded it.  You will never know who was coming for you.`,
       };
     }
     if (boarded) {

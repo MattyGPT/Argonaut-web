@@ -1,4 +1,4 @@
-import { GRID_SIZE } from '../game/constants.js';
+import { GRID_SIZE, SURGICAL_DAMAGE_FACTOR, WEAPONS } from '../game/constants.js';
 
 const keys = Object.freeze({
   '0': 'computer',
@@ -127,6 +127,39 @@ export const promptForTarget = (title, ships, options = {}) => new Promise((reso
   document.querySelector('#amount-label').hidden = !options.amount;
   document.querySelector('#command-transfer-label').hidden = !options.transfer;
 
+  // Precision fire adds two dials to a phaser prompt: the system the beam is
+  // called to, and the power it is fired at. Both stay hidden unless the war
+  // option is on and the prompt was opened for phasers.
+  const precision = options.precision ?? null;
+  const focusLabel = document.querySelector('#focus-label');
+  const powerLabel = document.querySelector('#power-label');
+  const readout = document.querySelector('#power-readout');
+  const focusSelect = document.querySelector('#focus-select');
+  const powerSlider = document.querySelector('#phaser-power');
+  focusLabel.hidden = !precision;
+  powerLabel.hidden = !precision;
+  readout.hidden = !precision;
+  if (precision) {
+    focusSelect.innerHTML = ['standard', ...precision.systems]
+      .map((name) => `<option value="${name}">${name === 'standard' ? 'Standard targeting' : name[0].toUpperCase() + name.slice(1)}</option>`)
+      .join('');
+    focusSelect.value = [...focusSelect.options].some((option) => option.value === precision.focus)
+      ? precision.focus
+      : 'standard';
+    powerSlider.value = String(Number.isFinite(precision.power) ? precision.power : 100);
+    const describe = () => {
+      const power = Number(powerSlider.value);
+      const scaled = precision.nominal * (power / 100);
+      const { spread } = WEAPONS.phasers;
+      readout.textContent = focusSelect.value === 'standard'
+        ? `≈ ${Math.max(0, Math.round(scaled * (1 - spread)))}–${Math.round(scaled * (1 + spread))} damage, standard spread.`
+        : `≈ up to ${Math.round(scaled * SURGICAL_DAMAGE_FACTOR)} damage to ${focusSelect.value}, no crew losses.`;
+    };
+    powerSlider.oninput = describe;
+    focusSelect.onchange = describe;
+    describe();
+  }
+
   let resolved = false;
   const close = () => {
     if (!resolved) {
@@ -143,6 +176,10 @@ export const promptForTarget = (title, ships, options = {}) => new Promise((reso
       targetId: select.value,
       amount: Number(document.querySelector('#crew-amount').value),
       transferCommand: document.querySelector('#transfer-command').checked,
+      ...(precision ? {
+        focus: focusSelect.value === 'standard' ? null : focusSelect.value,
+        power: Number(powerSlider.value),
+      } : {}),
     });
   };
   dialog.onclose = close;

@@ -141,6 +141,17 @@ export const WEAPONS = Object.freeze({
   photons: Object.freeze({ base: 24, perUnit: 9, spread: 0.267 }),
 });
 
+/**
+ * Precision fire, a war option: a phaser volley may be throttled by a power
+ * percentage and called to a single subsystem. A called volley trades raw
+ * damage for control — this fraction of the rolled volley, every penetrating
+ * point of it spent on the called system with no crew casualties, stopping once
+ * that system is dead — so burning out a hull's engines or guns takes a couple
+ * of volleys instead of killing two hundred crew, and leaves the hull boardable.
+ * Photons scatter by nature and can never be called.
+ */
+export const SURGICAL_DAMAGE_FACTOR = 0.4;
+
 /** Tractor beam pull per working tractor unit. */
 export const TRACTOR_PULL_PER_UNIT = 5;
 

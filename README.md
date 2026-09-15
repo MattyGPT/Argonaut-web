@@ -66,8 +66,9 @@ original ship names:
 - **Cabal** — Pequod, Queen Mab, Ragnarok, Saboteur, Terrorist
 
 The **New game** panel exposes the replay seed, the regional fleet setup, the
-optional tactical sound, the extended war mode, and — in an extended war — the
-scenario. Use the same seed to reproduce the opening state.
+optional tactical sound, the precision fire mode, the extended war mode, and —
+in an extended war — the scenario. Use the same seed to reproduce the opening
+state.
 
 ## Mechanics notes
 
@@ -207,6 +208,35 @@ you issue an order.
 - **One refit per hull per war.** While docked, a Federation hull may take a single
   refit from the order panel: an extra photon bay, an overcharged phaser bank, a
   tuned drive, or deeper sensors. Refits add system units, never hull capacity.
+
+## Precision fire
+
+**Precision fire** — off by default, chosen in the **New game** panel, available
+in any war — gives your phaser volleys two dials in the firing prompt:
+
+- **Called system.** Name a subsystem instead of standard targeting. A called
+  volley deals 40% of the rolled damage, spends all of it on that system, takes
+  no crew, and checks fire once the system is dead. Shields absorb it first as
+  ever, so the play is to strip shields with standard fire and then operate: a
+  couple of called volleys burn out a hull's engines or guns and leave it
+  intact, crew alive.
+- **Phaser power.** A 0–100 slider on every phaser volley, defaulting to full.
+  Output already scales with your live phaser units, so the dial is a fraction
+  of what your banks can currently put out. Its use is the finishing blow: a
+  throttled volley never carries the overkill that shatters a hull, so a
+  measured finish leaves a boardable prize instead of wreckage.
+
+A hull with crew left but no engines, phasers, or photons strikes its colors at
+stardate end — crew away in escape pods, hull left adrift for your transporter
+to board — so disabling becomes a capture path that kills no one. Your command
+ship never surrenders while you have the conn, and a starbase is exempt: a base
+with burnt-out guns is a fortress, not a derelict.
+
+The enemy still fires standard volleys, and a war with the flag off plays
+exactly as calibrated — the dials are ignored on arrival there. A non-default
+setting is carried on the console (`Phasers set to 60% power, called to
+engines.`), and a called shot draws as a thinner, coherent beam, live and in
+the round replay.
 
 ## The tactical display
 

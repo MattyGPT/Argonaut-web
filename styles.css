@@ -408,6 +408,12 @@ body.classic #ship-menu .menu-sub {
   animation: fx-fade .42s ease-out forwards;
 }
 
+/* A called shot draws as a thinner, coherent beam than a standard volley. */
+.fx-phaser.focused {
+  stroke: var(--cyan);
+  stroke-width: 1.2;
+}
+
 .fx-phaser.miss {
   stroke: #93a9ba;
   opacity: .6;
@@ -699,6 +705,13 @@ dialog input[type=checkbox] {
   width: auto;
 }
 
+dialog input[type=range] {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--cyan);
+}
+
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
@@ -716,6 +729,12 @@ dialog input[type=checkbox] {
   color: #93b4c8;
   font-size: .75rem;
   line-height: 1.5;
+}
+
+.console-note {
+  color: var(--cyan);
+  font-size: .72rem;
+  margin-top: .6rem;
 }
 
 @media(max-width:760px) {
