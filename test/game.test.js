@@ -812,6 +812,31 @@ test('the player tractor beam pulls by the same amount as the autopilot beam', (
   assert.equal(firebreather.tractorBy, 'fed-flagship');
 });
 
+test('a tractor beam cannot budge the Xanadu starbase', () => {
+  const game = withShips(createGame({ seed: 'tow-xanadu' }), (ship, index) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 40, y: 50 };
+    // Make the base a legal hostile target so the immovable guard is what refuses it.
+    if (ship.id === 'xanadu') return { ...ship, faction: 'Axis' };
+    return { ...ship, x: 90 + (index % 5), y: 90 + Math.floor(index / 5) };
+  });
+  const result = applyPlayerAction(game, { type: 'tractor', targetId: 'xanadu' });
+  assert.match(result.messages.join(' '), /too massive/i);
+  const xanadu = getShip(result.game, 'xanadu');
+  assert.equal(xanadu.x, 50, 'the base never moves');
+  assert.equal(xanadu.y, 50);
+  assert.equal(xanadu.tractorBy, null, 'a starbase is never held by a tractor lock');
+});
+
+test('an autopilot will not tractor the immovable Xanadu starbase', () => {
+  const game = withShips(createGame({ seed: 'ai-no-tow-base' }), (ship, index) => {
+    // Park an Axis hull 33 units off Xanadu: past phaser reach (30) but inside tractor reach (35).
+    if (ship.id === 'axis-flagship') return { ...ship, x: 50, y: 83 };
+    if (ship.id === 'xanadu') return ship;
+    return { ...ship, x: 5 + (index % 5), y: 5 + Math.floor(index / 5) };
+  });
+  assert.notEqual(chooseAiAction(game, 'axis-flagship').type, 'tractor');
+});
+
 test('a tractor lock dies with the ship that cast it', () => {
   const game = withShips(placedGame('stale-lock'), (ship) => {
     if (ship.id === 'fed-flagship') return { ...ship, tractorBy: 'axis-flagship' };
