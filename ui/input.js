@@ -40,12 +40,21 @@ export const bindInput = (root, dispatch) => {
       dispatch({ type: 'refit', shipId: refitButton.dataset.refitShip, kind: refitButton.dataset.refit });
       return;
     }
-    // Order buttons live in the report panel and carry the ship they are for.
+    // Order buttons live in the ship menu and carry the ship they are for.
     const orderButton = event.target.closest('[data-order]');
     if (orderButton) {
       dispatch({ type: 'orders', shipId: orderButton.dataset.orderShip, order: { type: orderButton.dataset.order } });
       return;
     }
+    // Ship-menu commands carry the hull they were opened for, so they skip the
+    // target prompt the console buttons need.
+    const menuCommand = event.target.closest('[data-ship-command]');
+    if (menuCommand) {
+      dispatch({ type: menuCommand.dataset.shipCommand, targetId: menuCommand.dataset.shipTarget });
+      return;
+    }
+    // The menu body is not empty space: clicking it may never become a maneuver.
+    if (event.target.closest('#ship-menu')) return;
     const command = event.target.closest('[data-command]')?.dataset.command;
     if (command) dispatch({ type: command });
     const ship = event.target.closest('[data-ship-id]')?.dataset.shipId;
@@ -56,6 +65,12 @@ export const bindInput = (root, dispatch) => {
     // in grid percentages, so the click offset converts straight to coordinates.
     const map = event.target.closest('#map');
     if (!map?.getBoundingClientRect) return;
+    // An open ship menu takes the next map click the way any popover does: it closes
+    // instead of firing a maneuver at the point the player clicked to dismiss it.
+    if (document.querySelector('#ship-menu[open]')) {
+      dispatch({ type: 'menu-close' });
+      return;
+    }
     const rect = map.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
     dispatch({
@@ -70,6 +85,13 @@ export const bindInput = (root, dispatch) => {
     // A modal prompt owns the keyboard. Without this guard Escape resigns command
     // instead of dismissing the dialog, and command keys fire behind the modal.
     if (document.querySelector('dialog[open]')) return;
+    // An open ship menu takes Escape the same way: it closes, and the resign
+    // confirmation stays out of a keystroke that meant "put the popover away".
+    if (event.key === 'Escape' && document.querySelector('#ship-menu[open]')) {
+      event.preventDefault();
+      dispatch({ type: 'menu-close' });
+      return;
+    }
     // Tab is the original's "pass turn", but swallowing it traps keyboard users on
     // whichever control they reached first — the command panel is twenty buttons that
     // could not be tabbed through at all. Let Tab traverse whenever focus is already

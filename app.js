@@ -146,29 +146,17 @@ const dispatch = async (action) => {
   if (spectating || playbackLocked()) return;
   if (action.type === 'map-select') {
     const ship = game.ships.find((entry) => entry.id === action.targetId);
-    const command = game.ships.find((entry) => entry.id === game.playerShipId);
-    // In an extended war, selecting one of your own hulls opens its order picker;
-    // selecting it again closes it.
-    if (game.extended && !game.outcome && !game.resigned
-      && ship.faction === command?.faction && ship.status !== 'destroyed') {
-      view = { ...view, report: null, orderShipId: view.orderShipId === ship.id ? null : ship.id };
-      refresh();
-      return;
-    }
-    view = {
-      ...view,
-      orderShipId: null,
-      report: {
-        title: ship.name,
-        lines: [
-          `Alliance: ${ship.faction}`,
-          `Status: ${ship.status}`,
-          `Coordinates: ${ship.x}, ${ship.y}`,
-          `Shields: ${ship.shields}`,
-          `Crew: ${ship.crew}`,
-        ],
-      },
-    };
+    if (!ship || ship.status === 'destroyed') return;
+    // Clicking a hull opens the context menu that grows out of it; clicking the
+    // same hull again puts the menu away.
+    view = { ...view, contextShipId: view.contextShipId === ship.id ? null : ship.id };
+    refresh();
+    return;
+  }
+
+  if (action.type === 'menu-close') {
+    if (!view.contextShipId) return;
+    view = { ...view, contextShipId: null };
     refresh();
     return;
   }
@@ -188,7 +176,7 @@ const dispatch = async (action) => {
   }
 
   if (['rollcall', 'statistics', 'shots', 'fullmap', 'fleet'].includes(action.type)) {
-    view = { ...view, orderShipId: null, report: reportFor(game, action.type) };
+    view = { ...view, contextShipId: null, report: reportFor(game, action.type) };
     refresh();
     return;
   }
@@ -206,7 +194,7 @@ const dispatch = async (action) => {
         ...view,
         entries: round.entries ?? [],
         report: null,
-        orderShipId: null,
+        contextShipId: null,
         battlePaused: true,
       };
       refresh();
@@ -224,14 +212,17 @@ const dispatch = async (action) => {
     return;
   }
 
-  if (targetActions.has(action.type) && !action.targetId) {
+  // Transport needs a crew count even when the ship menu has already named the
+  // hull, so the prompt opens with the clicked ship preselected.
+  if (targetActions.has(action.type)
+    && (!action.targetId || (action.type === 'transport' && action.amount === undefined))) {
     const details = await promptForTarget(
       action.type === 'transport' ? 'Transporter target' : `${action.type} target`,
       eligibleTargets(game, action.type),
       {
         amount: action.type === 'transport',
         transfer: action.type === 'transport',
-        defaultId: defaultTargetFor(game, action.type),
+        defaultId: action.targetId ?? defaultTargetFor(game, action.type),
       },
     );
     if (details) dispatch({ ...action, ...details });
@@ -272,7 +263,7 @@ const dispatch = async (action) => {
   if (action.type === 'autopilot') {
     const auto = resolveAutopilotTurn(game);
     game = { ...auto.game, log: appendLog(game.log, auto.messages) };
-    view = { ...view, entries: [] };
+    view = { ...view, contextShipId: null, entries: [] };
     showEvents(auto.events);
     await presentTerminalEvents(auto.events);
     await runComputer();
@@ -289,6 +280,9 @@ const dispatch = async (action) => {
     ...view,
     entries: acted || outcome.report ? [] : outcome.messages,
     ...(outcome.report ? { report: outcome.report } : {}),
+    // Orders and refits are free actions issued from the ship menu, so it stays
+    // open to issue another; anything that spends the stardate puts it away.
+    ...(['orders', 'refit'].includes(action.type) ? {} : { contextShipId: null }),
   };
   if (!['phasers', 'photons'].includes(action.type)) playEffect('command', game.sound);
   showEvents(outcome.events);

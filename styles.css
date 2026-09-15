@@ -271,6 +271,108 @@ h1 {
   pointer-events: none;
 }
 
+/* The context menu that grows out of a clicked hull. It is placed in pixels by
+   render.js beside the ship, so it can flip sides and clamp to the map edge. */
+#ship-menu {
+  position: absolute;
+  z-index: 3;
+  min-width: 10.5rem;
+  max-width: 16rem;
+  padding: .55rem .6rem .6rem;
+  background: linear-gradient(145deg, rgba(15, 33, 52, .98), rgba(7, 15, 28, .98));
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  box-shadow: 0 12px 38px #0009;
+  cursor: default;
+}
+
+#ship-menu:not([open]) {
+  display: none;
+}
+
+/* The tail tying the menu to the hull it came from. */
+#ship-menu::before {
+  content: "";
+  position: absolute;
+  top: calc(var(--tail-y, 1.2rem) - 5px);
+  width: 9px;
+  height: 9px;
+  background: #0f2134;
+  transform: rotate(45deg);
+}
+
+#ship-menu[data-side="right"]::before {
+  left: -5px;
+  border-left: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+#ship-menu[data-side="left"]::before {
+  right: -5px;
+  border-right: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+}
+
+#ship-menu h3 {
+  margin: 0 0 .1rem;
+  color: var(--cyan);
+  font-size: .8rem;
+}
+
+#ship-menu .menu-info {
+  margin: 0 0 .45rem;
+  padding: 0;
+  list-style: none;
+  color: #b9d0df;
+  font-size: .7rem;
+  line-height: 1.5;
+}
+
+#ship-menu .menu-sub {
+  margin: .45rem 0 .3rem;
+  color: #7f9fb3;
+  font-size: .68rem;
+  line-height: 1.5;
+}
+
+#ship-menu .menu-grid {
+  display: grid;
+  gap: .3rem;
+}
+
+#ship-menu .menu-grid button,
+#ship-menu .order-grid button {
+  min-height: 1.9rem;
+  padding: .3rem .5rem;
+  font-size: .72rem;
+  text-align: left;
+}
+
+#ship-menu .order-grid {
+  margin-top: 0;
+}
+
+body.classic #ship-menu {
+  background: #000;
+  border-color: #145014;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+body.classic #ship-menu::before {
+  background: #000;
+  border-color: #145014;
+}
+
+body.classic #ship-menu h3 {
+  color: #38ff38;
+}
+
+body.classic #ship-menu .menu-info,
+body.classic #ship-menu .menu-sub {
+  color: #9fdf9f;
+}
+
 .map-legend {
   display: flex;
   flex-wrap: wrap;
