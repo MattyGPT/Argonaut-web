@@ -656,6 +656,9 @@ export const detonate = (game, actor) => {
   const shrapnel = blast + SHRAPNEL_EXTRA_RANGE;
   const messages = [`${actor.name} is self-destructing.  Blast range ${blast}.`];
   const events = [];
+  // The detonator's captain is credited with every enemy hull the blast finishes off,
+  // exactly as a weapon kill is; friendlies caught in the same blast are not.
+  let kills = 0;
   const victims = game.ships.map((ship) => {
     if (ship.id === actor.id) {
       events.push(terminalEvent('destruction', 'self-destruct', ship));
@@ -666,18 +669,27 @@ export const detonate = (game, actor) => {
     if (range <= blast) {
       messages.push(`${ship.name} falls within blast range.`);
       events.push(terminalEvent('destruction', 'self-destruct', ship, { attacker: actor }));
+      if (ship.faction !== actor.faction) kills += 1;
       return destroyedShip(ship);
     }
     if (range <= shrapnel) {
       const damage = SHRAPNEL_DAMAGE.base + rng.integer(SHRAPNEL_DAMAGE.min, SHRAPNEL_DAMAGE.max);
       messages.push(`${ship.name} has been hit by shrapnel.  Damage to shields: ${damage} units.`);
       const damaged = damageShip(ship, damage, rng);
-      if (damaged.status === 'destroyed') events.push(terminalEvent('destruction', 'self-destruct', damaged, { attacker: actor }));
+      if (damaged.status === 'destroyed') {
+        events.push(terminalEvent('destruction', 'self-destruct', damaged, { attacker: actor }));
+        if (ship.faction !== actor.faction) kills += 1;
+      }
       return damaged;
     }
     return ship;
   });
-  return { game: advanceRandom({ ...game, ships: victims }), messages, events };
+  // Fold the tally into the detonator's own record: it is destroyed, but its kills
+  // still count toward aces, the top gun, and the alliance statistics.
+  const ships = victims.map((ship) => ship.id === actor.id
+    ? { ...ship, kills: (ship.kills ?? 0) + kills }
+    : ship);
+  return { game: advanceRandom({ ...game, ships }), messages, events };
 };
 
 const selfDestructAction = (game, actor) => {
