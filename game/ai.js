@@ -6,6 +6,7 @@ import {
   distance,
   engineCapacity,
   getShip,
+  isImmovable,
   isTractorHeld,
   orderFor,
   shieldCapacity,
@@ -31,7 +32,7 @@ const nearestTo = (from, ships) => ships
 const engage = (actor, target, range, noTractor = false) => {
   if (systemUnits(actor, 'photons') > 0 && range <= RANGES.photons) return { type: 'photons', targetId: target.id };
   if (systemUnits(actor, 'phasers') > 0 && range <= RANGES.phasers) return { type: 'phasers', targetId: target.id };
-  if (!noTractor && systemUnits(actor, 'tractor') > 0 && range <= RANGES.tractor) return { type: 'tractor', targetId: target.id };
+  if (!noTractor && systemUnits(actor, 'tractor') > 0 && range <= RANGES.tractor && !isImmovable(target)) return { type: 'tractor', targetId: target.id };
   return null;
 };
 
@@ -240,7 +241,7 @@ const doctrineAction = (game, actor) => {
   // when the tow lands you on another enemy, so both hulls in that collision belong
   // to someone else. Towing you onto a Cabal ship is a coin flip it will not take.
   if (doctrine.tractorFirst && systemUnits(actor, 'tractor') > 0 && range <= RANGES.tractor
-    && !isTractorHeld(game, target)) {
+    && !isTractorHeld(game, target) && !isImmovable(target)) {
     const { position } = tractorLock(actor, target);
     const wreck = game.ships.some((ship) => ship.id !== target.id && isActive(ship)
       && ship.faction !== actor.faction && distance(position, ship) < 1);

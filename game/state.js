@@ -148,6 +148,13 @@ export const getShip = (game, id) => game.ships.find((ship) => ship.id === id);
 /** Whether a hull is still in the fight. */
 export const isActive = (ship) => ship?.status === 'active';
 
+/**
+ * Whether a hull is far too massive for a tractor beam to budge. A starbase is
+ * anchored and out-masses anything afloat, so no beam — friendly or enemy — can
+ * tow it, and it never ends up held by a tractor lock.
+ */
+export const isImmovable = (ship) => ship?.className === 'Starbase';
+
 export const getLivingShips = (game) => game.ships.filter((ship) => ship.status !== 'destroyed');
 
 export const distance = (first, second) => Math.hypot(first.x - second.x, first.y - second.y);

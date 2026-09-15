@@ -37,6 +37,7 @@ import {
   inRadioContact,
   isAce,
   isActive,
+  isImmovable,
   isTractorHeld,
   shieldCapacity,
   strongestFederation,
@@ -331,7 +332,7 @@ export const shipCommands = (game, targetId) => {
   if (hostile && isActive(target)) {
     offer('phasers', 'Fire phasers', systemUnits(actor, 'phasers') > 0, RANGES.phasers);
     offer('photons', 'Fire photons', systemUnits(actor, 'photons') > 0, RANGES.photons);
-    offer('tractor', 'Tractor beam', systemUnits(actor, 'tractor') > 0, RANGES.tractor);
+    offer('tractor', 'Tractor beam', systemUnits(actor, 'tractor') > 0 && !isImmovable(target), RANGES.tractor);
   }
   offer('scan', 'Scan', systemUnits(actor, 'scanner') > 0, systemRange(actor, 'scanner'));
   if (!hostile && isActive(target)) {
@@ -596,6 +597,7 @@ const tractorAction = (game, action, actor) => {
   const found = hostileTarget(game, action, actor);
   if (found.error) return invalid(game, found.error, found.requiresTarget);
   if (distance(actor, found.target) > RANGES.tractor) return invalid(game, `${found.target.name} is out of tractor range.`);
+  if (isImmovable(found.target)) return invalid(game, `${found.target.name} is far too massive for the tractor beam to move.`);
   const { pull, position } = tractorLock(actor, found.target);
   const pulled = { ...found.target, tractorBy: actor.id, x: position.x, y: position.y };
   // A beam can drag a hull straight into another one, and that is a collision like

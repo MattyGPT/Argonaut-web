@@ -11,6 +11,7 @@ import {
   dockedAt,
   getShip,
   isActive,
+  isImmovable,
   isStranded,
   shieldCapacity,
   strongestFederation,
@@ -87,7 +88,7 @@ const resolveAiAction = (game, shipId) => {
   }
   if (action.type === 'tractor') {
     const target = getShip(game, action.targetId);
-    if (!isActive(target) || distance(actor, target) > RANGES.tractor) {
+    if (!isActive(target) || isImmovable(target) || distance(actor, target) > RANGES.tractor) {
       return { game, messages: [`${actor.name} holds position.`], type: 'pass' };
     }
     const { pull, position } = tractorLock(actor, target);
