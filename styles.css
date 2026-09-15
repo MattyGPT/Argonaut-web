@@ -591,11 +591,20 @@ body.classic #ship-menu .menu-sub {
   min-height: 0;
 }
 
+/* The out-of-flow list keeps the narrative's height out of grid track sizing;
+   in flow, every new entry stretched the rows and pushed the report down. */
+.log-scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
 #log {
+  position: absolute;
+  inset: 0;
   list-style: none;
   margin: 0;
   padding: 0;
-  flex: 1;
   overflow-y: auto;
 }
 
@@ -721,6 +730,15 @@ dialog input[type=checkbox] {
   }
   #map {
     min-height: 300px;
+  }
+  /* Stacked layout has no side-by-side rows to fill, so bring the list back
+     into flow and cap it instead of letting a long war stretch the page. */
+  .log-scroll {
+    position: static;
+  }
+  #log {
+    position: static;
+    max-height: 60vh;
   }
   .command-grid {
     grid-template-columns: repeat(3, 1fr);
