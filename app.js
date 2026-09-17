@@ -3,7 +3,7 @@ import { SPECTATOR_TICK_MS, GRID_SIZE, TARGETED_ORDERS, WEAPONS } from './game/c
 import { alertLevel, appendLog, createGame, getShip, systemUnits } from './game/state.js';
 import { scenarioFor } from './game/scenarios.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './game/turns.js';
-import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget } from './ui/input.js';
+import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget, promptForTowDestination } from './ui/input.js';
 import { cameraWindow, centerOn, clampCamera, makeCamera, panBy, zoomAt } from './ui/camera.js';
 import {
   ordinaryBattleEvents,
@@ -242,6 +242,20 @@ const dispatch = async (action) => {
       view = { ...view, terminalEvent: null, battlePaused: false };
       refresh();
     }
+    return;
+  }
+
+  // A directed tractor tow (Reimagined): the ship menu names the victim, this picks
+  // where to haul it — a hull to slam into, or a coordinate — then fires the ordinary
+  // tractor action with that destination so the rules stay in one place.
+  if (action.type === 'tractor-direct') {
+    if (!game.reimagined || game.phase !== 'player' || game.outcome || game.resigned) return;
+    const victim = getShip(game, action.targetId);
+    if (!victim || victim.status === 'destroyed') return;
+    const candidates = game.ships.filter((ship) => ship.status !== 'destroyed' && ship.id !== victim.id);
+    const dest = await promptForTowDestination(candidates, victim.name);
+    if (!dest) return;
+    dispatch({ type: 'tractor', targetId: action.targetId, towardX: dest.x, towardY: dest.y });
     return;
   }
 

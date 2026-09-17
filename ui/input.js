@@ -236,3 +236,41 @@ export const promptForCoordinates = (title, labels) => new Promise((resolve) => 
   };
   dialog.showModal();
 });
+
+/**
+ * A directed tractor tow's destination: a hull to slam the target into, or a
+ * coordinate. Resolves null on any dismissal or an empty destination, so a tow is
+ * never aimed somewhere by accident.
+ */
+export const promptForTowDestination = (ships, victimName) => new Promise((resolve) => {
+  const dialog = document.querySelector('#tow-dialog');
+  const form = document.querySelector('#tow-form');
+  const hull = document.querySelector('#tow-hull');
+  const xInput = document.querySelector('#tow-x');
+  const yInput = document.querySelector('#tow-y');
+  document.querySelector('#tow-title').textContent = `Direct the tow — ${victimName}`;
+  hull.innerHTML = '<option value="">— use coordinates —</option>'
+    + ships.map((ship) => `<option value="${ship.id}">${ship.name} (${ship.x}, ${ship.y})</option>`).join('');
+  xInput.value = '';
+  yInput.value = '';
+
+  let resolved = false;
+  form.onsubmit = (event) => {
+    resolved = true;
+    if (!submittedConfirm(event)) return resolve(null);
+    if (hull.value) {
+      const target = ships.find((ship) => ship.id === hull.value);
+      return resolve(target ? { x: target.x, y: target.y } : null);
+    }
+    // An empty coordinate field reads as 0, so require both before aiming at a point.
+    if (xInput.value === '' || yInput.value === '') return resolve(null);
+    resolve({ x: Number(xInput.value), y: Number(yInput.value) });
+  };
+  dialog.onclose = () => {
+    if (!resolved) {
+      resolved = true;
+      resolve(null);
+    }
+  };
+  dialog.showModal();
+});

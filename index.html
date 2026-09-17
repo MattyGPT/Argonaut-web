@@ -125,6 +125,32 @@
         </div>
       </form>
     </dialog>
+    <dialog id="tow-dialog">
+      <form method="dialog" id="tow-form">
+        <h2 id="tow-title">Direct the tow</h2>
+        <p class="dialog-note">Aim the beam: pick a hull to slam the target into, or enter a destination. The tow spends your normal tractor pull — you choose the direction, not the distance.</p>
+        <label>
+          Ram a hull
+          <select id="tow-hull">
+            <option value="">— use coordinates —</option>
+          </select>
+        </label>
+        <div class="coordinate-inputs">
+          <label>
+            Destination X
+            <input id="tow-x" type="number">
+          </label>
+          <label>
+            Destination Y
+            <input id="tow-y" type="number">
+          </label>
+        </div>
+        <div class="dialog-actions">
+          <button value="cancel" class="secondary" formnovalidate>Cancel</button>
+          <button value="confirm">Tow</button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="new-game-dialog">
       <form method="dialog" id="new-game-form">
         <h2>Begin a new war</h2>
@@ -212,7 +238,7 @@
               <li><b>Tactical sound</b> adds phaser, photon, explosion, and miss effects, plus a klaxon on the way into RED alert.</li>
               <li><b>Precision fire</b> gives your phaser volleys a power dial and called subsystem shots.</li>
               <li><b>Extended war</b> adds standing orders for your fleet, alliance doctrines, the Xanadu dockyard, and three scenarios.</li>
-              <li><b>Argonaut Reimagined</b> is an expansion mode under active development. It carries the extended war and opens on a much wider 240-unit battlefield that the map becomes a pannable, zoomable viewport into — wheel or <kbd>+</kbd>/<kbd>-</kbd> to zoom, arrow keys or the minimap to pan, <kbd>⌖</kbd> to re-center on your flagship. Engine reach scales with the field while weapon ranges stay at their classic units, leaving room to screen, flank, and disengage. A classic or extended war is untouched.</li>
+              <li><b>Argonaut Reimagined</b> is an expansion mode under active development. It carries the extended war and opens on a much wider 240-unit battlefield that the map becomes a pannable, zoomable viewport into — wheel or <kbd>+</kbd>/<kbd>-</kbd> to zoom, arrow keys or the minimap to pan, <kbd>⌖</kbd> to re-center on your flagship. Engine reach scales with the field while weapon ranges stay at their classic units, leaving room to screen, flank, and disengage. It also adds the <b>directed tractor beam</b>: open an enemy in range and pick <b>Direct tow…</b> to haul it toward a coordinate or slam it into another hull — a deliberate tractor-ram for the same pull budget (you choose the direction, not the distance). A classic or extended war is untouched.</li>
             </ul>
             <figure class="guide-figure">
               <img src="assets/guide/new-game.png" alt="The New game dialog with fields for seed, regional formations, tactical sound, precision fire, extended war, and scenario." loading="lazy">

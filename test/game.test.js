@@ -1984,3 +1984,74 @@ test('engine reach scales with the field, so a wide war closes at the same pace'
   assert.equal(engineCapacity(flagship), 50, 'the calibrated reach on the classic 100-unit field');
   assert.equal(engineCapacity(flagship, REIMAGINED_GRID_SIZE), 120, 'the same hull crosses the 240-unit field in the same number of turns');
 });
+
+// --- Round 22b: the directed tractor beam (Reimagined) ---
+
+const towGame = (seed, opts = {}) => withShips(createGame({ seed, ...opts }), (ship) => {
+  if (ship.id === 'fed-flagship') return { ...ship, x: 50, y: 120 };
+  if (ship.id === 'axis-flagship') return { ...ship, x: 70, y: 120 };
+  return { ...ship, x: 5, y: 5 };
+});
+
+test('a directed tow hauls the target toward the named point, not the caster', () => {
+  const game = towGame('directed-tow', { reimagined: true });
+  // A battle cruiser's beam pulls 3 tractor units x 5 = 15.
+  const standard = applyPlayerAction(game, { type: 'tractor', targetId: 'axis-flagship' });
+  assert.equal(getShip(standard.game, 'axis-flagship').x, 55, 'a standard tow reels the target in toward the caster');
+
+  const directed = applyPlayerAction(game, { type: 'tractor', targetId: 'axis-flagship', towardX: 70, towardY: 200 });
+  const hauled = getShip(directed.game, 'axis-flagship');
+  assert.equal(hauled.x, 70, 'aiming straight down the field leaves x alone');
+  assert.equal(hauled.y, 135, 'the target is hauled 15 units toward the destination, away from the caster');
+});
+
+test('a directed tow can slam the target into another hull', () => {
+  const game = withShips(createGame({ seed: 'tow-ram-directed', reimagined: true }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 50, y: 120 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 70, y: 120 };
+    if (ship.id === 'bloc-flagship') return { ...ship, x: 80, y: 120 };
+    return { ...ship, x: 5, y: 5 };
+  });
+  const out = applyPlayerAction(game, { type: 'tractor', targetId: 'axis-flagship', towardX: 80, towardY: 120 });
+  const victim = getShip(out.game, 'axis-flagship');
+  const wall = getShip(out.game, 'bloc-flagship');
+  assert.ok(victim.status === 'destroyed' || wall.status === 'destroyed',
+    'hauling a hull onto another resolves a collision');
+});
+
+test('a directed tow clamps its destination to the field', () => {
+  const game = withShips(createGame({ seed: 'tow-clamp', reimagined: true }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 120, y: 120 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 140, y: 120 };
+    return { ...ship, x: 5, y: 5 };
+  });
+  const out = applyPlayerAction(game, { type: 'tractor', targetId: 'axis-flagship', towardX: 9999, towardY: 120 });
+  const victim = getShip(out.game, 'axis-flagship');
+  assert.equal(victim.x, 155, 'hauled 15 units toward the clamped far edge');
+  assert.ok(victim.x <= REIMAGINED_GRID_SIZE);
+});
+
+test('a classic war ignores a directed tow and pulls toward the caster', () => {
+  const setup = () => withShips(createGame({ seed: 'tow-classic' }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 30, y: 50 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 50, y: 50 };
+    return { ...ship, x: 5, y: 5 };
+  });
+  const plain = applyPlayerAction(setup(), { type: 'tractor', targetId: 'axis-flagship' });
+  const directed = applyPlayerAction(setup(), { type: 'tractor', targetId: 'axis-flagship', towardX: 50, towardY: 90 });
+  assert.deepEqual(directed.game, plain.game, 'without the Reimagined flag the destination is ignored');
+  assert.equal(getShip(plain.game, 'axis-flagship').x, 35, 'the target still reels in toward the caster');
+});
+
+test('the ship menu offers a directed tow only in a Reimagined war', () => {
+  const setup = (opts) => withShips(createGame({ seed: 'tow-cmd', ...opts }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 50, y: 50 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 60, y: 50 };
+    return ship;
+  });
+  const reimagined = shipCommands(setup({ reimagined: true }), 'axis-flagship');
+  assert.ok(reimagined.some((command) => command.type === 'tractor-direct'), 'a Reimagined war offers the directed tow');
+  const classic = shipCommands(setup({}), 'axis-flagship');
+  assert.ok(!classic.some((command) => command.type === 'tractor-direct'), 'a classic war does not');
+  assert.ok(classic.some((command) => command.type === 'tractor'), 'the standard tractor beam is still offered');
+});

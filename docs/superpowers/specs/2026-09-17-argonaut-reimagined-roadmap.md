@@ -143,7 +143,8 @@ combat mechanics — a clean checkpoint. **Next: Phase 1, power management (14a)
 | 22b | **Directed tractor beam** | Aim the tow at a coordinate or a hull to slam into | Tow vector follows the named point; collision resolves; pull budget unchanged |
 | 23 | Directional shields | Fore/aft/port/starboard arcs + facing | Arc damage; AI faces threat; largest single chunk |
 
-**22b — Directed tractor beam** (Matt's addition). Today `5` locks a target and
+**22b — Directed tractor beam** (Matt's addition). ✅ **Shipped (PR #25).** Today `5`
+locks a target and
 reels it straight toward the caster by the full `TRACTOR_PULL_PER_UNIT × units`
 budget. The directed beam keeps that budget but lets the player choose the
 *direction*: after locking, name a destination — an `(x, y)` coordinate, or a hull
