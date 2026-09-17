@@ -1,17 +1,20 @@
+import { GRID_SIZE } from '../game/constants.js';
 import { isTerminalEvent } from './battle-events.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const TERMINAL_EFFECT_MS = 2500;
 
-const layer = (map) => {
+const layer = (map, grid = GRID_SIZE) => {
   let el = map.querySelector('svg.fx-layer');
   if (!el) {
     el = document.createElementNS(SVG_NS, 'svg');
     el.setAttribute('class', 'fx-layer');
-    el.setAttribute('viewBox', '0 0 100 100');
     el.setAttribute('preserveAspectRatio', 'none');
     map.appendChild(el);
   }
+  // The FX layer is drawn in map units, so its viewBox tracks the war's field —
+  // wider in a Reimagined war — and beams, trails, and bursts land on their hulls.
+  el.setAttribute('viewBox', `0 0 ${grid} ${grid}`);
   return el;
 };
 
@@ -110,11 +113,11 @@ const draw = (svg, e) => {
 };
 
 /** Draws beams/torpedoes/explosions for shots involving the command ship. */
-export const playEffects = (events, map, playerId) => {
+export const playEffects = (events, map, playerId, grid = GRID_SIZE) => {
   if (!map || !events?.length) return;
   const relevant = events.filter((e) => isTerminalEvent(e) || e.fromId === playerId || e.toId === playerId);
   if (!relevant.length) return;
-  const svg = layer(map);
+  const svg = layer(map, grid);
   relevant.forEach((e, i) => {
     if (isTerminalEvent(e)) draw(svg, e);
     else setTimeout(() => draw(svg, e), i * 160);
@@ -125,9 +128,9 @@ export const playEffects = (events, map, playerId) => {
  * A fading dashed line from where a hull was to where it is now, so a repositioning
  * stays legible after the ship has finished gliding.
  */
-export const drawMove = (map, from, to) => {
+export const drawMove = (map, from, to, grid = GRID_SIZE) => {
   if (!map) return;
-  const svg = layer(map);
+  const svg = layer(map, grid);
   const line = document.createElementNS(SVG_NS, 'line');
   line.setAttribute('x1', from.x);
   line.setAttribute('y1', from.y);
@@ -143,9 +146,9 @@ export const drawMove = (map, from, to) => {
  * Replays a whole round: every ship's volleys, not only the ones that touched you,
  * paced slowly enough to follow. Returns how long the replay runs, in milliseconds.
  */
-export const replayEffects = (events, map, stepMs = 420) => {
+export const replayEffects = (events, map, stepMs = 420, grid = GRID_SIZE) => {
   if (!map || !events?.length) return 0;
-  const svg = layer(map);
+  const svg = layer(map, grid);
   svg.innerHTML = '';
   events.forEach((e, i) => setTimeout(() => draw(svg, e), i * stepMs));
   return events.length * stepMs;

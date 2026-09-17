@@ -9,6 +9,7 @@ import {
   GRID_SIZE,
   LOG_LIMIT,
   RANGES,
+  REIMAGINED_GRID_SIZE,
   SCENARIO_IDS,
   SHIP_NAMES,
   SHIP_TEMPLATES,
@@ -50,10 +51,17 @@ const createShip = ({ id, name, faction, kind, x, y }) => {
   };
 };
 
-const randomPosition = (rng, faction, regional, occupied) => {
+const randomPosition = (rng, faction, regional, occupied, gridSize) => {
+  // Regional formations are pinned in 100-unit space; scale them onto the actual
+  // field so a Reimagined war spreads them across the wider map. At gridSize 100
+  // the scale is 1, so a classic or extended war places every hull exactly as before.
+  const scale = gridSize / GRID_SIZE;
   const bounds = regional
-    ? STARTING_FORMATIONS[faction]
-    : { x: [1, GRID_SIZE - 1], y: [1, GRID_SIZE - 1] };
+    ? {
+      x: STARTING_FORMATIONS[faction].x.map((value) => Math.round(value * scale)),
+      y: STARTING_FORMATIONS[faction].y.map((value) => Math.round(value * scale)),
+    }
+    : { x: [1, gridSize - 1], y: [1, gridSize - 1] };
 
   let position;
   do {
@@ -67,8 +75,8 @@ const randomPosition = (rng, faction, regional, occupied) => {
   return position;
 };
 
-const createFleet = (faction, rng, regional, occupied) => SHIP_ROSTER.map(([suffix, kind], index) => {
-  const position = randomPosition(rng, faction, regional, occupied);
+const createFleet = (faction, rng, regional, occupied, gridSize) => SHIP_ROSTER.map(([suffix, kind], index) => {
+  const position = randomPosition(rng, faction, regional, occupied, gridSize);
   const factionId = FACTION_IDS[faction];
   return createShip({
     id: `${factionId}-${suffix}`,
@@ -94,30 +102,47 @@ const assignCaptains = (seed, count) => {
   return Array.from({ length: count }, (_, index) => deck[index % deck.length]);
 };
 
-export const createGame = ({ seed = 'xanadu', regional = false, sound = false, extended = false, scenario = 'annihilation', precision = false } = {}) => {
+export const createGame = ({ seed = 'xanadu', regional = false, sound = false, extended = false, scenario = 'annihilation', precision = false, reimagined = false } = {}) => {
   const normalizedSeed = String(seed);
+  // Argonaut Reimagined builds on the extended layer — orders, doctrine, the
+  // dockyard, and the scenarios are the substrate the Reimagined systems need — so
+  // the flag implies it, and opens the war on a wider tactical field.
+  const isReimagined = Boolean(reimagined);
+  const isExtended = Boolean(extended) || isReimagined;
+  const gridSize = isReimagined ? REIMAGINED_GRID_SIZE : GRID_SIZE;
   const rng = createRng(normalizedSeed);
-  const occupied = new Set([`${XANADU_POSITION.x},${XANADU_POSITION.y}`]);
-  const fleets = Object.values(FACTIONS).flatMap((faction) => createFleet(faction, rng, regional, occupied));
+  const xanaduPosition = {
+    x: Math.round(XANADU_POSITION.x * (gridSize / GRID_SIZE)),
+    y: Math.round(XANADU_POSITION.y * (gridSize / GRID_SIZE)),
+  };
+  const occupied = new Set([`${xanaduPosition.x},${xanaduPosition.y}`]);
+  const fleets = Object.values(FACTIONS).flatMap((faction) => createFleet(faction, rng, regional, occupied, gridSize));
   const xanadu = createShip({
     id: 'xanadu',
     name: 'Xanadu',
     faction: FACTIONS.FEDERATION,
     kind: 'starbase',
-    ...XANADU_POSITION,
+    ...xanaduPosition,
   });
   const enemyFlagships = fleets.filter((ship) => ship.id.endsWith('-flagship') && ship.faction !== FACTIONS.FEDERATION);
   const roster = [...fleets, xanadu];
   const captains = assignCaptains(normalizedSeed, roster.length);
   const vendettaShipId = rng.pick(enemyFlagships).id;
   // A scenario is an extended-war option; a classic war always fights to annihilation.
-  const scenarioId = extended && SCENARIO_IDS.includes(scenario) ? scenario : 'annihilation';
+  const scenarioId = isExtended && SCENARIO_IDS.includes(scenario) ? scenario : 'annihilation';
 
   return {
     seed: normalizedSeed,
     regional: Boolean(regional),
     sound: Boolean(sound),
-    extended: Boolean(extended),
+    extended: isExtended,
+    // Argonaut Reimagined: the opt-in expansion mode. Implies `extended`, widens the
+    // battlefield to `gridSize`, and gates every Reimagined system. Off by default,
+    // so a classic or extended war reads none of it and plays exactly as calibrated.
+    reimagined: isReimagined,
+    // The tactical field, in map units. 100 for a classic or extended war; wider for
+    // a Reimagined one. Absent in old saves, so every reader defaults to GRID_SIZE.
+    gridSize,
     // Precision fire: called phaser shots and the power dial, for the player's
     // volleys only. Off by default, so a classic war plays exactly as calibrated.
     precision: Boolean(precision),

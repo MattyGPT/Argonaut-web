@@ -1,5 +1,5 @@
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets } from './game/actions.js';
-import { SPECTATOR_TICK_MS, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
+import { SPECTATOR_TICK_MS, GRID_SIZE, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
 import { alertLevel, appendLog, createGame, getShip, systemUnits } from './game/state.js';
 import { scenarioFor } from './game/scenarios.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './game/turns.js';
@@ -90,7 +90,7 @@ const shake = () => {
 const showEvents = (events) => {
   const ordinary = ordinaryBattleEvents(events);
   if (!ordinary.length) return;
-  playEffects(ordinary, document.querySelector('#map'), game.playerShipId);
+  playEffects(ordinary, document.querySelector('#map'), game.playerShipId, game.gridSize ?? GRID_SIZE);
   if (ordinary.some((e) => e.toId === game.playerShipId && e.hit)) shake();
   if (game.sound) {
     ordinary
@@ -111,7 +111,7 @@ const clearTerminalPresentation = () => {
 const presentTerminalEvents = (events) => withPlaybackLock(
   (locked) => { presentingTerminalEvents = locked; },
   () => playTerminalEvents(events, (terminalEvent) => {
-    if (terminalEvent) playEffects([terminalEvent], document.querySelector('#map'), game.playerShipId);
+    if (terminalEvent) playEffects([terminalEvent], document.querySelector('#map'), game.playerShipId, game.gridSize ?? GRID_SIZE);
     view = { ...view, terminalEvent, battlePaused: Boolean(terminalEvent) || replayingRound };
     refresh();
   }, () => wait(TERMINAL_EVENT_MS)),
@@ -207,7 +207,7 @@ const dispatch = async (action) => {
       refresh();
       await playReplayEvents(
         round.events,
-        (event) => replayEffects([event], document.querySelector('#map')),
+        (event) => replayEffects([event], document.querySelector('#map'), undefined, game.gridSize ?? GRID_SIZE),
         (event) => presentTerminalEvents([event]),
         wait,
       );
@@ -316,12 +316,13 @@ const dispatch = async (action) => {
 
 document.title = 'Argonaut Web';
 document.querySelector('#app-title').textContent = 'Argonaut Web';
-bindInput(document.querySelector('#game-root'), dispatch);
+bindInput(document.querySelector('#game-root'), dispatch, () => game.gridSize ?? GRID_SIZE);
 
 /** Scenarios are an extended-war option, so the picker is only live in that mode. */
 const syncScenarioAvailability = () => {
   const scenario = document.querySelector('#scenario');
-  const extended = document.querySelector('#extended').checked;
+  // Reimagined builds on the extended layer, so it enables scenarios too.
+  const extended = document.querySelector('#extended').checked || document.querySelector('#reimagined').checked;
   scenario.disabled = !extended;
   if (!extended) scenario.value = 'annihilation';
 };
@@ -336,12 +337,20 @@ document.querySelector('#new-game').addEventListener('click', whenPlaybackUnlock
   document.querySelector('#sound').checked = game.sound;
   document.querySelector('#precision').checked = game.precision;
   document.querySelector('#extended').checked = game.extended;
+  document.querySelector('#reimagined').checked = game.reimagined ?? false;
   document.querySelector('#scenario').value = game.scenario ?? 'annihilation';
   syncScenarioAvailability();
   document.querySelector('#new-game-dialog').showModal();
 }));
 
 document.querySelector('#extended').addEventListener('change', syncScenarioAvailability);
+
+// Argonaut Reimagined carries the extended layer with it, so ticking it ticks
+// extended too and live-enables the scenario picker.
+document.querySelector('#reimagined').addEventListener('change', (event) => {
+  if (event.target.checked) document.querySelector('#extended').checked = true;
+  syncScenarioAvailability();
+});
 
 /**
  * The opening narrative. An extended war names the captain who has sworn to hunt
@@ -368,6 +377,7 @@ document.querySelector('#new-game-form').addEventListener('submit', whenPlayback
       sound: document.querySelector('#sound').checked,
       precision: document.querySelector('#precision').checked,
       extended: document.querySelector('#extended').checked,
+      reimagined: document.querySelector('#reimagined').checked,
       scenario: document.querySelector('#scenario').value,
     });
     precisionSettings = { power: 100, focus: null };

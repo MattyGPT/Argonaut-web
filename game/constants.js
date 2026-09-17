@@ -1,5 +1,15 @@
 export const GRID_SIZE = 100;
 
+/**
+ * The tactical field a Reimagined war opens on, in the same map units as
+ * `GRID_SIZE`. Classic and extended wars stay at `GRID_SIZE`, so the calibrated
+ * opening disposition and every absolute range figure are unchanged; only a
+ * Reimagined war widens the battlefield. Weapon and sensor ranges deliberately do
+ * *not* scale with it (Phase 0 range policy), so the bigger field changes tactics
+ * rather than zooming them. A balance dial for the Argonaut Reimagined roadmap.
+ */
+export const REIMAGINED_GRID_SIZE = 160;
+
 export const FACTIONS = Object.freeze({
   FEDERATION: 'Federation',
   AXIS: 'Axis',

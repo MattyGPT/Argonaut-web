@@ -558,23 +558,24 @@ const moveAction = (game, action, actor) => {
   const displacement = Math.hypot(dx, dy);
   const capacity = engineCapacity(actor);
   if (displacement > capacity) return invalid(game, `Movement exceeds engine capacity of ${capacity}.`);
+  const grid = game.gridSize ?? GRID_SIZE;
   const x = actor.x + dx;
   const y = actor.y + dy;
-  if (x < 0 || x > GRID_SIZE || y < 0 || y > GRID_SIZE) return invalid(game, 'Movement would leave the tactical map.');
+  if (x < 0 || x > grid || y < 0 || y > grid) return invalid(game, 'Movement would leave the tactical map.');
   const movedActor = { ...actor, x, y };
   const collision = resolveCollision(replaceShip(game, movedActor), movedActor);
   return result(completeTurn(collision.game), [`${actor.name} moves to ${x},${y}.`, ...collision.messages], { events: collision.events });
 };
 
-const pullToward = (actor, target, pull) => {
+const pullToward = (actor, target, pull, gridSize) => {
   const dx = actor.x - target.x;
   const dy = actor.y - target.y;
   const dist = Math.hypot(dx, dy);
   if (dist <= 0) return { x: target.x, y: target.y };
   const step = Math.min(pull, dist);
   return {
-    x: Math.max(0, Math.min(GRID_SIZE, Math.round(target.x + (dx / dist) * step))),
-    y: Math.max(0, Math.min(GRID_SIZE, Math.round(target.y + (dy / dist) * step))),
+    x: Math.max(0, Math.min(gridSize, Math.round(target.x + (dx / dist) * step))),
+    y: Math.max(0, Math.min(gridSize, Math.round(target.y + (dy / dist) * step))),
   };
 };
 
@@ -582,9 +583,9 @@ const pullToward = (actor, target, pull) => {
  * One tractor lock: how hard the beam pulls and where it lands the target.
  * Shared by the player's command and the autopilots' so both beams behave alike.
  */
-export const tractorLock = (actor, target) => {
+export const tractorLock = (actor, target, gridSize = GRID_SIZE) => {
   const pull = systemUnits(actor, 'tractor') * TRACTOR_PULL_PER_UNIT;
-  return { pull, position: pullToward(actor, target, pull) };
+  return { pull, position: pullToward(actor, target, pull, gridSize) };
 };
 
 const tractorAction = (game, action, actor) => {
@@ -598,7 +599,7 @@ const tractorAction = (game, action, actor) => {
   if (found.error) return invalid(game, found.error, found.requiresTarget);
   if (distance(actor, found.target) > RANGES.tractor) return invalid(game, `${found.target.name} is out of tractor range.`);
   if (isImmovable(found.target)) return invalid(game, `${found.target.name} is far too massive for the tractor beam to move.`);
-  const { pull, position } = tractorLock(actor, found.target);
+  const { pull, position } = tractorLock(actor, found.target, game.gridSize ?? GRID_SIZE);
   const pulled = { ...found.target, tractorBy: actor.id, x: position.x, y: position.y };
   // A beam can drag a hull straight into another one, and that is a collision like
   // any other — which makes towing an enemy into a friend a real tactic.
@@ -708,9 +709,10 @@ const hyperspaceAction = (game, action, actor) => {
       { events: [terminalEvent('destruction', 'hyperspace', actor)] },
     );
   }
-  const x = action.x === undefined ? rng.integer(1, GRID_SIZE - 1) : Number(action.x);
-  const y = action.y === undefined ? rng.integer(1, GRID_SIZE - 1) : Number(action.y);
-  if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x > GRID_SIZE || y < 0 || y > GRID_SIZE) {
+  const grid = game.gridSize ?? GRID_SIZE;
+  const x = action.x === undefined ? rng.integer(1, grid - 1) : Number(action.x);
+  const y = action.y === undefined ? rng.integer(1, grid - 1) : Number(action.y);
+  if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x > grid || y < 0 || y > grid) {
     return invalid(game, 'Hyperspace destination must be valid map coordinates.');
   }
   const shieldDamage = Math.max(HYPERSPACE_MIN_SHIELD_LOSS, Math.ceil(shieldCapacity(actor) * HYPERSPACE_SHIELD_LOSS));
