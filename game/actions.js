@@ -42,9 +42,10 @@ import {
   isImmovable,
   isSpectator,
   isTractorHeld,
+  powerEffect,
+  sensorRange,
   shieldCapacity,
   strongestFederation,
-  systemRange,
   systemUnits,
   templateSystems,
   vendettaGrudge,
@@ -56,10 +57,12 @@ const unitName = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
  * Rolls one volley's damage. Shared by the player's shots and the autopilots'.
  * `grudge` is the vendetta captain's escalation against your command ship; at zero
  * the roll is exactly what it has always been, so a classic war is untouched.
+ * `powerEff` is the weapons-sink multiplier (1 outside a Reimagined war, so parity
+ * holds): routing reactor power into the guns scales the whole band up or down.
  */
-export const weaponDamage = (type, shooter, rng, grudge = 0) => {
+export const weaponDamage = (type, shooter, rng, grudge = 0, powerEff = 1) => {
   const { base, perUnit, spread } = WEAPONS[type];
-  const nominal = (base + systemUnits(shooter, type) * perUnit) * (1 + grudge * VENDETTA.damagePerStep);
+  const nominal = (base + systemUnits(shooter, type) * perUnit) * (1 + grudge * VENDETTA.damagePerStep) * powerEff;
   const low = nominal * (1 - spread);
   return Math.max(1, Math.round(low + rng.next() * nominal * 2 * spread));
 };
@@ -266,7 +269,7 @@ export const maneuverTo = (game, x, y) => {
   const dy = y - actor.y;
   const span = Math.hypot(dx, dy);
   if (span < 0.5) return null; // a click on your own hull is not an order
-  const capacity = engineCapacity(actor, game.gridSize ?? GRID_SIZE);
+  const capacity = engineCapacity(actor, game.gridSize ?? GRID_SIZE, powerEffect(game, actor, 'engines'));
   const reach = Math.min(capacity, span);
   let moveX = Math.round((dx / span) * reach);
   let moveY = Math.round((dy / span) * reach);
@@ -342,12 +345,12 @@ export const shipCommands = (game, targetId) => {
       offer('tractor-direct', 'Direct tow…', systemUnits(actor, 'tractor') > 0 && !isImmovable(target), RANGES.tractor);
     }
   }
-  offer('scan', 'Scan', systemUnits(actor, 'scanner') > 0, systemRange(actor, 'scanner'));
+  offer('scan', 'Scan', systemUnits(actor, 'scanner') > 0, sensorRange(game, actor, 'scanner'));
   if (!hostile && isActive(target)) {
-    offer('transport', 'Transport crew', systemUnits(actor, 'transporter') > 0, systemRange(actor, 'transporter'));
+    offer('transport', 'Transport crew', systemUnits(actor, 'transporter') > 0, sensorRange(game, actor, 'transporter'));
   }
   if (target.status === 'vacant') {
-    offer('transport', 'Board ship', systemUnits(actor, 'transporter') > 0, systemRange(actor, 'transporter'));
+    offer('transport', 'Board ship', systemUnits(actor, 'transporter') > 0, sensorRange(game, actor, 'transporter'));
   }
   return commands;
 };
@@ -355,7 +358,7 @@ export const shipCommands = (game, targetId) => {
 const computerReport = (game, actor) => {
   // A standard command must not out-see the mapper. The hidden reports are the ones
   // the manual says give information your enemies do not have; this one is not.
-  const mapperRange = systemRange(actor, 'mapper');
+  const mapperRange = sensorRange(game, actor, 'mapper');
   const mapped = game.ships.filter((ship) => isActive(ship)
     && (ship.id === actor.id || distance(actor, ship) <= mapperRange));
   const allies = mapped.filter((ship) => ship.id !== actor.id && ship.faction === actor.faction);
@@ -401,7 +404,7 @@ const scanReport = (game, target) => ({
 });
 
 const mapReport = (game, actor) => {
-  const range = systemRange(actor, 'mapper');
+  const range = sensorRange(game, actor, 'mapper');
   const visible = getLivingShips(game)
     .filter((ship) => distance(actor, ship) <= range)
     .sort((left, right) => distance(actor, left) - distance(actor, right));
@@ -416,7 +419,7 @@ const mapReport = (game, actor) => {
  * so each contact answers with its alert level as well as its range.
  */
 const radioReport = (game, actor) => {
-  const range = systemRange(actor, 'radio');
+  const range = sensorRange(game, actor, 'radio');
   const contacts = getLivingShips(game)
     .filter((ship) => ship.id !== actor.id && ship.faction === actor.faction && distance(actor, ship) <= range);
   return {
@@ -461,7 +464,7 @@ const weaponAction = (game, action, actor, type) => {
     return result(updated, `${actor.name} fires ${type} at ${found.target.name}. Missed!`, { events: [fireEvent(type, actor, found.target, false, details)] });
   }
   const grudge = vendettaGrudge(game, actor, found.target);
-  const roll = weaponDamage(type, actor, rng, grudge);
+  const roll = weaponDamage(type, actor, rng, grudge, powerEffect(game, actor, 'weapons'));
   const damage = focus
     ? Math.round(roll * (power / 100) * SURGICAL_DAMAGE_FACTOR)
     : Math.round(roll * (power / 100));
@@ -564,7 +567,7 @@ const moveAction = (game, action, actor) => {
   const dy = Number(action.dy);
   if (!Number.isFinite(dx) || !Number.isFinite(dy)) return invalid(game, 'Movement requires numeric displacement coordinates.');
   const displacement = Math.hypot(dx, dy);
-  const capacity = engineCapacity(actor, game.gridSize ?? GRID_SIZE);
+  const capacity = engineCapacity(actor, game.gridSize ?? GRID_SIZE, powerEffect(game, actor, 'engines'));
   if (displacement > capacity) return invalid(game, `Movement exceeds engine capacity of ${capacity}.`);
   const grid = game.gridSize ?? GRID_SIZE;
   const x = actor.x + dx;
@@ -591,8 +594,8 @@ const pullToward = (actor, target, pull, gridSize) => {
  * One tractor lock: how hard the beam pulls and where it lands the target.
  * Shared by the player's command and the autopilots' so both beams behave alike.
  */
-export const tractorLock = (actor, target, gridSize = GRID_SIZE, destination = null) => {
-  const pull = systemUnits(actor, 'tractor') * TRACTOR_PULL_PER_UNIT;
+export const tractorLock = (actor, target, gridSize = GRID_SIZE, destination = null, tractorEff = 1) => {
+  const pull = systemUnits(actor, 'tractor') * TRACTOR_PULL_PER_UNIT * tractorEff;
   // A directed tow aims the pull at `destination`; otherwise the target is reeled
   // straight toward the caster. The pull budget is the same either way.
   return { pull, position: pullToward(destination ?? actor, target, pull, gridSize) };
@@ -633,7 +636,7 @@ const tractorAction = (game, action, actor) => {
   // A directed tow is Reimagined-only; a classic or extended war ignores the fields
   // and pulls toward the caster exactly as calibrated.
   const destination = game.reimagined ? towDestination(game, action, grid) : null;
-  const { pull, position } = tractorLock(actor, found.target, grid, destination);
+  const { pull, position } = tractorLock(actor, found.target, grid, destination, powerEffect(game, actor, 'tractor'));
   const pulled = { ...found.target, tractorBy: actor.id, x: position.x, y: position.y };
   // A beam can drag a hull straight into another one, and that is a collision like
   // any other — which makes towing an enemy into a friend a real tactic.
@@ -652,7 +655,7 @@ const transportAction = (game, action, actor) => {
   if (disabled) return disabled;
   const found = targetFor(game, action, actor);
   if (found.error) return invalid(game, found.error, found.requiresTarget);
-  if (distance(actor, found.target) > systemRange(actor, 'transporter')) return invalid(game, `${found.target.name} is out of transporter range.`);
+  if (distance(actor, found.target) > sensorRange(game, actor, 'transporter')) return invalid(game, `${found.target.name} is out of transporter range.`);
   if (isActive(found.target) && found.target.faction !== actor.faction) return invalid(game, 'Cannot transport onto a live enemy ship.');
   const amount = Number(action.amount ?? DEFAULT_CREW_TRANSFER);
   if (!Number.isInteger(amount) || amount < 1) return invalid(game, 'Transport crew amount must be a positive whole number.');
@@ -891,7 +894,7 @@ export const applyPlayerAction = (game, action = {}) => {
       if (disabled) return disabled;
       const found = targetFor(game, action, actor);
       if (found.error) return invalid(game, found.error, found.requiresTarget);
-      if (distance(actor, found.target) > systemRange(actor, 'scanner')) return invalid(game, `${found.target.name} is out of scanner range.`);
+      if (distance(actor, found.target) > sensorRange(game, actor, 'scanner')) return invalid(game, `${found.target.name} is out of scanner range.`);
       return result(
         { ...game, scanned: { ...(game.scanned ?? {}), [found.target.id]: true } },
         `Scan of ${found.target.name} complete.`,

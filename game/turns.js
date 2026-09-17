@@ -56,7 +56,7 @@ const resolveAiAction = (game, shipId) => {
       };
     }
     const grudge = vendettaGrudge(game, actor, target);
-    const amount = weaponDamage(action.type, actor, rng, grudge);
+    const amount = weaponDamage(action.type, actor, rng, grudge, powerEffect(game, actor, 'weapons'));
     const before = target.status;
     const hit = damageShip(target, amount, rng);
     const kill = before === 'active' && hit.status !== 'active' ? 1 : 0;
@@ -92,7 +92,7 @@ const resolveAiAction = (game, shipId) => {
     if (!isActive(target) || isImmovable(target) || distance(actor, target) > RANGES.tractor) {
       return { game, messages: [`${actor.name} holds position.`], type: 'pass' };
     }
-    const { pull, position } = tractorLock(actor, target, game.gridSize ?? GRID_SIZE);
+    const { pull, position } = tractorLock(actor, target, game.gridSize ?? GRID_SIZE, null, powerEffect(game, actor, 'tractor'));
     const pulled = { ...target, tractorBy: actor.id, x: position.x, y: position.y };
     const collision = resolveCollision(replaceShip(game, pulled), pulled);
     return {
