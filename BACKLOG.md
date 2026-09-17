@@ -65,7 +65,15 @@ consequences were recorded in `CALIBRATION.md` rather than fixed:
 
 ## Ideas
 
-_None recorded yet._
+- **Argonaut Reimagined** — a third war mode (alongside classic and extended)
+  gating an ambitious, original expansion: power management, a larger battlefield,
+  environmental hazards, prize fleets, new hulls and weapons, narrative encounters,
+  a sector campaign, and seed challenges. Laid out as ~30 dependency-ordered,
+  independently shippable chunks in
+  `docs/superpowers/specs/2026-09-17-argonaut-reimagined-roadmap.md`. Round 1 is
+  power management; Phase 0 (the `reimagined` flag + per-war `gridSize` + camera)
+  is the prerequisite foundation. Every chunk is guarded by a parity test so a
+  classic or extended war never regresses.
 
 ## Bugs
 
