@@ -17,6 +17,7 @@
       <div class="top-actions">
         <span id="mode-readout" class="mode-badge"></span>
         <span id="seed-readout">SEED —</span>
+        <button id="user-guide" class="secondary">User guide</button>
         <button id="theme-toggle" class="secondary">Classic view</button>
         <button id="new-game" class="secondary">New game</button>
       </div>
@@ -155,6 +156,181 @@
           <button value="confirm">Begin</button>
         </div>
       </form>
+    </dialog>
+    <dialog id="guide-dialog" class="guide" aria-label="User guide">
+      <div class="guide-shell">
+        <header class="guide-head">
+          <div>
+            <p class="eyebrow">FEDERATION TACTICAL COMMAND</p>
+            <h2>Argonaut Web — user guide</h2>
+          </div>
+          <form method="dialog" class="guide-close">
+            <button value="close" class="secondary">Close</button>
+          </form>
+        </header>
+        <nav class="guide-nav" aria-label="Guide sections">
+          <a href="#guide-war">The war</a>
+          <a href="#guide-start">Starting up</a>
+          <a href="#guide-map">Tactical map</a>
+          <a href="#guide-commands">Commands</a>
+          <a href="#guide-combat">Combat</a>
+          <a href="#guide-extended">Extended war</a>
+          <a href="#guide-precision">Precision fire</a>
+          <a href="#guide-comfort">Comforts</a>
+          <a href="#guide-about">Provenance</a>
+        </nav>
+        <div class="guide-body">
+          <section id="guide-war">
+            <h3>The war at a glance</h3>
+            <p>Argonaut Web is a turn-based fleet battle in deep space. You command the Federation flagship <b>Argo</b> — and through it the whole Federation — against three enemy alliances. Every stardate you issue one command; then every other captain in the war zone acts at once. The war ends when one side is annihilated, when every survivor is stranded beyond reach of anything, or when you resign and let the autopilots finish what you started.</p>
+            <ul>
+              <li>Four alliances field five hulls each — a battle cruiser, three cruisers, and a scout — plus the Federation starbase <b>Xanadu</b>, which fights at your side.</li>
+              <li>One command spends one stardate. Information commands, fleet orders, and refits are free.</li>
+              <li>The war autosaves after every action; reload the page and resume where you left off.</li>
+              <li>The seed shown in the top bar fixes the opening disposition. Same seed, same war.</li>
+            </ul>
+            <figure class="guide-figure">
+              <img src="assets/guide/overview.png" alt="The full Argonaut Web interface: battle narrative on the left, tactical map in the centre, command console on the right, and a roll call report below." loading="lazy">
+              <figcaption>Federation tactical command: the battle narrative (left) logs every action newest-first, the tactical map (centre) is where the war is fought, and the command console (right) carries your ship's condition and every command.</figcaption>
+            </figure>
+          </section>
+          <section id="guide-start">
+            <h3>Starting a war</h3>
+            <p><b>New game</b> in the top bar opens the war panel. Name a seed or take the one offered; tick the options you want. A classic war with every box unticked plays exactly by the original 1992 rules — the flags only add.</p>
+            <ul>
+              <li><b>Regional enemy formations</b> starts the enemy fleets clustered by alliance instead of scattered.</li>
+              <li><b>Tactical sound</b> adds phaser, photon, explosion, and miss effects, plus a klaxon on the way into RED alert.</li>
+              <li><b>Precision fire</b> gives your phaser volleys a power dial and called subsystem shots.</li>
+              <li><b>Extended war</b> adds standing orders for your fleet, alliance doctrines, the Xanadu dockyard, and three scenarios.</li>
+            </ul>
+            <figure class="guide-figure">
+              <img src="assets/guide/new-game.png" alt="The New game dialog with fields for seed, regional formations, tactical sound, precision fire, extended war, and scenario." loading="lazy">
+              <figcaption>The war panel. The scenario picker only comes alive in an extended war.</figcaption>
+            </figure>
+          </section>
+          <section id="guide-map">
+            <h3>Reading the tactical map</h3>
+            <ul>
+              <li>Every hull is a circle bearing its initial, coloured by alliance; a wreck is a <b>+</b>. A dashed border means vacant or surrendered.</li>
+              <li>Dashed rings around your ship mark phaser (red), photon (yellow), and engine (cyan) reach. In an extended war the green ring around Xanadu is the dockyard.</li>
+              <li>A red outline marks an enemy that can reach <i>you</i> this stardate.</li>
+              <li>The map is limited by your mapper — fog of war. <kbd>Backspace</kbd> shows the whole war zone; <kbd>7</kbd> lists exact local positions.</li>
+              <li><b>Click empty space</b> to steer your ship toward that point, clamped to your engine ring. <b>Click a hull</b> for its context menu: every command your ship can actually perform on it, and nothing else. <kbd>Escape</kbd> puts the menu away.</li>
+            </ul>
+            <div class="guide-cols">
+              <figure class="guide-figure">
+                <img src="assets/guide/map.png" alt="The tactical map with ships of four alliances, range rings around the player ship, and red outlines on enemies in phaser reach." loading="lazy">
+                <figcaption>A skirmish taking shape: enemies outlined in red can reach you; your own rings show what you can reach.</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/ship-menu.png" alt="A ship context menu grown out of an enemy hull, offering Fire phasers, Tractor beam, and Scan." loading="lazy">
+                <figcaption>The context menu grows out of the hull you clicked and only offers commands whose hardware works and whose range reaches.</figcaption>
+              </figure>
+            </div>
+          </section>
+          <section id="guide-commands">
+            <h3>Commands and keys</h3>
+            <p>Every command has a console button and a key. The numbered commands spend your stardate; the information commands at the bottom are free and print into the mission panel.</p>
+            <table class="guide-keys">
+              <tbody>
+                <tr><td><kbd>1</kbd> Shields</td><td>Flush engine power into shields. Needs working engines.</td></tr>
+                <tr><td><kbd>2</kbd> Engines</td><td>Maneuver by exact ΔX / ΔY, or click the map instead.</td></tr>
+                <tr><td><kbd>3</kbd> Phasers</td><td>Energy volley at a hull in range; scales with live phaser units.</td></tr>
+                <tr><td><kbd>4</kbd> Photons</td><td>Torpedo at close range; heavier damage, smaller reach.</td></tr>
+                <tr><td><kbd>5</kbd> Tractor</td><td>Lock a beam and drag the target toward you.</td></tr>
+                <tr><td><kbd>6</kbd> Scanner</td><td>Scan a hull. In an extended war, reveals who captains it.</td></tr>
+                <tr><td><kbd>8</kbd> Transport</td><td>Beam crew to a friendly hull — or board a vacant one.</td></tr>
+                <tr><td><kbd>-</kbd> Hyperspace</td><td>Blind jump to a random point, shields weakened on arrival. Shakes off a tractor lock; can burn the ship up.</td></tr>
+                <tr><td><kbd>=</kbd> Self-destruct</td><td>Destroys everything in blast radius, shrapnel beyond. Xanadu's blast is especially large.</td></tr>
+                <tr><td><kbd>P</kbd> / <kbd>Tab</kbd> Pass</td><td>Hold position and end the stardate.</td></tr>
+                <tr><td><kbd>`</kbd> Autopilot</td><td>Your ship fights one turn like an enemy captain — ruthless, but clumsy.</td></tr>
+                <tr><td><kbd>Esc</kbd> Resign</td><td>Hand the whole Federation to the autopilot and watch the war play out. Final.</td></tr>
+                <tr><td><kbd>0</kbd> Computer</td><td>Free: the computer's read on the war.</td></tr>
+                <tr><td><kbd>7</kbd> Mapper · <kbd>9</kbd> Radio</td><td>Free: exact local positions; radio traffic report.</td></tr>
+                <tr><td><kbd>R</kbd> · <kbd>S</kbd> · <kbd>L</kbd> · <kbd>Bksp</kbd></td><td>Free: roll call, shot distribution, alliance statistics, full war-zone map.</td></tr>
+                <tr><td><kbd>F</kbd> Fleet</td><td>Extended war only: your fleet and its standing orders.</td></tr>
+              </tbody>
+            </table>
+            <p class="dialog-note">Hyperspace, self-destruct, and resign ask for confirmation first — none of them can be undone. While any dialog is open it owns the keyboard, so game keys never fire behind a prompt.</p>
+            <div class="guide-cols">
+              <figure class="guide-figure">
+                <img src="assets/guide/console.png" alt="The command console: condition, location, shields, crew, status, the eight subsystem unit counts, and the grid of command buttons with their keys." loading="lazy">
+                <figcaption>The command console: your hull's condition and subsystem units above, every command and its key below.</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/report.png" alt="The mission panel showing a roll call of every hull in the war with position, status, shields, and crew." loading="lazy">
+                <figcaption>The mission panel carries the free information reports — here the roll call of every hull in the war.</figcaption>
+              </figure>
+            </div>
+          </section>
+          <section id="guide-combat">
+            <h3>Combat and survival</h3>
+            <ul>
+              <li><b>Battles are attritional.</b> Hulls carry double the shields and crew the gunnery table was tuned against: a kill takes some fourteen volleys, a war about twenty-five stardates. The guns themselves are unchanged from the original.</li>
+              <li>Shots miss — yours and the enemy's alike — and every volley rolls its own damage band.</li>
+              <li>Damage past your shields knocks out subsystems, shortening scanner, mapper, transporter, and radio reach. Lose all crew and the hull sits vacant, boardable by your transporter — command included.</li>
+              <li>Tractor locks pull both ways and end only when the holding ship dies; hyperspace also shakes one off.</li>
+              <li>Two hulls on the same point collide: one is destroyed, the other crippled. This applies to your moves, the autopilots', tractor tows, and hyperspace arrivals.</li>
+              <li>Lose your command ship or resign and command shifts to another Federation hull; the war goes on without you.</li>
+              <li>Enemy fleets concentrate fire on a shared target in a classic war; the vendetta ship breaks formation to hunt you personally.</li>
+            </ul>
+          </section>
+          <section id="guide-extended">
+            <h3>The extended war</h3>
+            <p>An extended war keeps every original rule and adds an admiral's layer: standing orders for your fleet, a dockyard at Xanadu, alliance doctrines, named captains, and three scenarios. Orders are free and persist until changed; they travel by radio, so a hull out of contact acknowledges one stardate late.</p>
+            <ul>
+              <li><b>Focus with fleet</b> (original behavior), <b>Hold</b>, <b>Withdraw</b> toward Xanadu, <b>Escort</b> a friendly hull, <b>Screen</b> a ward against the nearest threat, <b>Intercept</b> one named enemy.</li>
+              <li><b>Xanadu is a dockyard.</b> A hull ending the stardate inside the green ring recovers shields, crew, and one unit of its worst-damaged subsystem — and may take one refit per war: an extra photon bay, overcharged phasers, a tuned drive, or deeper sensors.</li>
+              <li><b>Each alliance fights its own way</b> — Axis swarms and detonates rather than die, Bloc works the phaser edge and executes the weakest hull it can hit, Cabal tractors you into collisions, Federation concentrates fire with damage discipline.</li>
+              <li><b>Earn the captains' names.</b> A named captain has sworn to hunt you; scanning hulls reveals who commands what. Two kills make a captain an ace (★ on the map), and every third kill your hunter scores makes its volleys against you bite harder.</li>
+              <li><b>Replay the round</b> from the battle narrative header to watch the whole computer phase play back on the map.</li>
+              <li><b>Three scenarios:</b> cease hostilities (the original), hold Xanadu to stardate 30, or hunt the hunter — identify your vendetta captain by scanning before the war kills them first.</li>
+            </ul>
+            <figure class="guide-figure">
+              <img src="assets/guide/fleet-orders.png" alt="A Federation hull's context menu in an extended war, showing Scan and Transport crew plus the six standing orders." loading="lazy">
+              <figcaption>A friendly hull's menu in an extended war: standing orders are free, persist until changed, and outrank the captain's own instincts.</figcaption>
+            </figure>
+          </section>
+          <section id="guide-precision">
+            <h3>Precision fire</h3>
+            <p>With the flag on, every phaser prompt carries two dials. A <b>called system</b> spends 40% of the rolled volley on one subsystem with no crew casualties — strip shields with standard fire first, then burn out engines or guns and leave the hull intact. The <b>power dial</b> throttles the volley: a measured finish never carries the overkill that shatters a hull, so it leaves a boardable prize instead of wreckage.</p>
+            <p>A hull with crew left but no engines, phasers, or photons strikes its colors at stardate end — crew away in escape pods, hull adrift for your transporter. The enemy still fires standard volleys either way.</p>
+            <div class="guide-cols">
+              <figure class="guide-figure">
+                <img src="assets/guide/precision.png" alt="The phaser target dialog with a called-system select and a phaser power slider set to full." loading="lazy">
+                <figcaption>The precision phaser prompt: called system, power dial, and the damage band you are about to roll.</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/combat.png" alt="The tactical map mid-volley with a phaser beam drawn from the player ship to an enemy hull." loading="lazy">
+                <figcaption>A volley in flight. Called shots draw as a thinner, coherent beam — here and in the round replay.</figcaption>
+              </figure>
+            </div>
+          </section>
+          <section id="guide-comfort">
+            <h3>Comforts and access</h3>
+            <ul>
+              <li><b>Classic view</b> in the top bar switches to the black phosphor CRT theme with scanlines; your choice persists between visits.</li>
+              <li><b>Save / resume</b> — the war lives in your browser's local storage and resumes on reload. <b>New game</b> starts fresh.</li>
+              <li>Motion and impact effects honor <b>prefers-reduced-motion</b>; ships glide between stardates and leave fading trails otherwise.</li>
+              <li>A single concise status line serves screen readers instead of announcing the whole board on every keystroke.</li>
+            </ul>
+            <figure class="guide-figure">
+              <img src="assets/guide/classic.png" alt="The same battle rendered in the classic green phosphor CRT theme with scanlines." loading="lazy">
+              <figcaption>The classic CRT view — the same war in 1992 phosphor.</figcaption>
+            </figure>
+          </section>
+          <section id="guide-about">
+            <h3>Provenance, maintenance, and contact</h3>
+            <p>The original <b>Argonaut</b> is a tactical space-war game for DOS, released in 1992 and originally (c) 1988, 1992 by <b>Jim Chen</b>. This web remake is newly written HTML, CSS, and JavaScript; the supplied DOS manual was used only as a behavioral reference, and the program includes no original <code>.COM</code>, screenshots, or other original assets. Captain names, fleet orders, alliance doctrines, the Xanadu dockyard, the scenarios, and the extended-war narrative are original to this remake.</p>
+            <p>The remake is maintained today by <b>MattyGPT</b> as an open-source project. The full source, issue tracker, and release history live in the public repository, and the game you are playing is deployed straight from it:</p>
+            <ul class="guide-links">
+              <li><a href="https://github.com/MattyGPT/Argonaut-web" target="_blank" rel="noopener">github.com/MattyGPT/Argonaut-web</a> — source, history, and deployment.</li>
+              <li><a href="https://github.com/MattyGPT/Argonaut-web/issues" target="_blank" rel="noopener">Open an issue</a> — bug reports, questions, calibration notes against the original, and ideas are all welcome there.</li>
+            </ul>
+            <p class="dialog-note">Rights note: the original manual declares copyright and shareware terms. This is a private restoration exercise unless the original rights holder grants permission for a public release using the Argonaut title, story, names, and other game expression.</p>
+          </section>
+        </div>
+      </div>
     </dialog>
     <script type="module" src="app.js"></script>
   </body>
