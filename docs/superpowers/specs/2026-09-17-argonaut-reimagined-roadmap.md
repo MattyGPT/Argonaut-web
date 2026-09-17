@@ -111,7 +111,7 @@ combat mechanics — a clean checkpoint. **Next: Phase 1, power management (14a)
 | Round | Chunk | Builds | Tested by | Status |
 | --- | --- | --- | --- | --- |
 | 14a | Reactor + power state + shield regen | Damageable `reactor` subsystem (Reimagined only), `game.power` allocation, `reactorOutput`/`powerEffect` helpers, free `setPower` action, and the **shield-regen** sink | Reactor present only in Reimagined; budget shrinks with damage; default = 1.0x; classic parity; regen scales with the shield sink | ✅ PR #26 |
-| 14b | Allocation effects (other sinks) | Weapons/engines/sensors/tractor multipliers wired through `weaponDamage`, `engineCapacity`, `systemRange`, tractor pull | Each sink changes output; overcharge saturates; starving a sink degrades it | — |
+| 14b | Allocation effects (other sinks) | Weapons/engines/sensors/tractor multipliers wired through `weaponDamage`, `engineCapacity`, a new `sensorRange` helper, and tractor pull | Each sink changes output; overcharge saturates; starving a sink degrades it; classic parity | ✅ PR #28 |
 | 14c | Power-bar UI | Console pips to drag the allocation, click/keyboard, a11y | Free (no stardate spent); persists across save; reachable by keyboard | — |
 | 14d | AI profiles + reactor refit/repair | `powerProfile` per doctrine, reactor refit, dockyard restores reactor | Doctrines allocate; refit cap; vendetta ignores self-preservation | — |
 

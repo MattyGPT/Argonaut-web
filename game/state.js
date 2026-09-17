@@ -228,9 +228,10 @@ export const systemRange = (ship, system) => systemUnits(ship, system) * (SYSTEM
  * How far a hull may move per stardate. Scales with the size of the field so a
  * Reimagined war crosses its wider map in about the same number of turns as a
  * classic war crosses the 100-unit one; at the default `GRID_SIZE` the factor is 1
- * and the figure is exactly the calibrated one.
+ * and the figure is exactly the calibrated one. `enginesEff` is the power-management
+ * multiplier for the engines sink (1 outside a Reimagined war, so parity holds).
  */
-export const engineCapacity = (ship, gridSize = GRID_SIZE) => systemUnits(ship, 'engines') * ENGINE_MOVE_PER_UNIT * (gridSize / GRID_SIZE);
+export const engineCapacity = (ship, gridSize = GRID_SIZE, enginesEff = 1) => systemUnits(ship, 'engines') * ENGINE_MOVE_PER_UNIT * (gridSize / GRID_SIZE) * enginesEff;
 
 /** Self-destruct blast radius; the Xanadu starbase's is doubled. */
 export const blastRadius = (ship) => ship?.className === 'Starbase' ? STARBASE_BLAST_RADIUS : RANGES.selfDestruct;
@@ -256,7 +257,7 @@ const canStillAct = (game, ship) => {
     .some((other) => other.status === 'active' && other.faction !== ship.faction && distance(ship, other) <= reach);
   if (hostileInRange) return true;
   return systemUnits(ship, 'transporter') > 0
-    && game.ships.some((other) => other.status === 'vacant' && distance(ship, other) <= systemRange(ship, 'transporter'));
+    && game.ships.some((other) => other.status === 'vacant' && distance(ship, other) <= sensorRange(game, ship, 'transporter'));
 };
 
 /**
@@ -309,7 +310,7 @@ export const radioIntegrity = (ship) => {
 export const inRadioContact = (game, from, to) => {
   if (!from || !to) return false;
   if (from.id === to.id) return true;
-  const hears = (relay, ship) => systemRange(relay, 'radio') > 0 && distance(relay, ship) <= systemRange(relay, 'radio');
+  const hears = (relay, ship) => sensorRange(game, relay, 'radio') > 0 && distance(relay, ship) <= sensorRange(game, relay, 'radio');
   if (hears(from, to)) return true;
   const xanadu = getShip(game, 'xanadu');
   return Boolean(xanadu) && xanadu.status === 'active' && hears(xanadu, from) && hears(xanadu, to);
@@ -384,6 +385,15 @@ export const powerEffect = (game, ship, sink) => {
   if (need <= 0) return 1;
   return Math.min(POWER.overcharge, (powerAllocation(game, ship)[sink] ?? 0) / need);
 };
+
+/**
+ * Sensor reach under power management: the hardware range scaled by the sensors sink.
+ * Identical to `systemRange` outside a Reimagined war (where `powerEffect` is 1), so
+ * fog of war, scans, radio, and transporter reach are unchanged for a classic or
+ * extended war. Every sensor consumer reads this rather than `systemRange` so the
+ * mapper fog and the `7`/`9`/scan reports never disagree.
+ */
+export const sensorRange = (game, ship, system) => systemRange(ship, system) * powerEffect(game, ship, 'sensors');
 
 /** Reads an allocation as the console would: "shields 4, weapons 6, engines 4, ...". */
 export const describePower = (allocation) => POWER_SINKS.map((sink) => `${sink} ${allocation?.[sink] ?? 0}`).join(', ');

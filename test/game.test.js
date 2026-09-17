@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, POWER, POWER_SINKS, RANGES, REIMAGINED_GRID_SIZE, SCENARIOS, STALEMATE_ROUNDS, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioProgress } from '../game/scenarios.js';
-import { abbreviateNarrative, alertLevel, appendLog, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, isAce, powerAllocation, powerEffect, radioIntegrity, reactorOutput, shieldCapacity, strongestFederation, templateSystems, vendettaGrudge } from '../game/state.js';
-import { applyPlayerAction, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveCollision, shipCommands, weaponDamage } from '../game/actions.js';
+import { abbreviateNarrative, alertLevel, appendLog, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, isAce, powerAllocation, powerEffect, radioIntegrity, reactorOutput, sensorRange, shieldCapacity, strongestFederation, templateSystems, vendettaGrudge } from '../game/state.js';
+import { applyPlayerAction, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveCollision, shipCommands, tractorLock, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
@@ -2163,4 +2163,71 @@ test('a starved shield sink or a dead reactor regenerates nothing', () => {
 test('power regeneration is inert in a classic war', () => {
   const game = withShips(createGame({ seed: 'regen-classic' }), (ship) => (ship.id === 'fed-flagship' ? { ...ship, shields: 50 } : ship));
   assert.deepEqual(resolvePowerRegen(game).game, game);
+});
+
+// --- Round 14b: the weapons / engines / sensors / tractor sinks (Reimagined) ---
+
+/** A Reimagined game with the flagship's power set to a given allocation. */
+const powered = (seed, allocation) => {
+  const game = createGame({ seed, reimagined: true });
+  return { ...game, power: { ...game.power, 'fed-flagship': allocation } };
+};
+
+test('routing power into the guns hardens a volley', () => {
+  const ship = getShip(createGame({ seed: 'sink-weapons', reimagined: true }), 'fed-flagship');
+  const plain = createGame({ seed: 'sink-weapons', reimagined: true });
+  const baseline = weaponDamage('phasers', ship, createRng('w'), 0, powerEffect(plain, ship, 'weapons'));
+  const armed = powered('sink-weapons', { shields: 0, weapons: 9, engines: 0, sensors: 0, tractor: 0 });
+  const boosted = weaponDamage('phasers', ship, createRng('w'), 0, powerEffect(armed, ship, 'weapons'));
+  assert.ok(boosted > baseline, `overcharged guns roll more (${boosted} > ${baseline})`);
+  assert.ok(powerEffect(armed, ship, 'weapons') <= POWER.overcharge, 'and saturate at the overcharge cap');
+});
+
+test('starving the guns softens a volley', () => {
+  const ship = getShip(createGame({ seed: 'sink-weapons-low', reimagined: true }), 'fed-flagship');
+  const plain = createGame({ seed: 'sink-weapons-low', reimagined: true });
+  const baseline = weaponDamage('phasers', ship, createRng('w'), 0, powerEffect(plain, ship, 'weapons'));
+  const starved = powered('sink-weapons-low', { shields: 6, weapons: 2, engines: 4, sensors: 4, tractor: 2 });
+  const weakened = weaponDamage('phasers', ship, createRng('w'), 0, powerEffect(starved, ship, 'weapons'));
+  assert.ok(weakened < baseline, `a starved gun rolls less (${weakened} < ${baseline})`);
+});
+
+test('routing power into engines extends reach; starving it shrinks reach', () => {
+  const game = createGame({ seed: 'sink-engines', reimagined: true });
+  const ship = getShip(game, 'fed-flagship');
+  const baseline = engineCapacity(ship, game.gridSize, powerEffect(game, ship, 'engines'));
+  const armed = powered('sink-engines', { shields: 0, weapons: 0, engines: 12, sensors: 0, tractor: 0 });
+  const boosted = engineCapacity(ship, armed.gridSize, powerEffect(armed, ship, 'engines'));
+  const starved = powered('sink-engines', { shields: 6, weapons: 6, engines: 1, sensors: 4, tractor: 2 });
+  const weakened = engineCapacity(ship, starved.gridSize, powerEffect(starved, ship, 'engines'));
+  assert.ok(boosted > baseline, 'overcharged engines reach farther');
+  assert.ok(weakened < baseline, 'starved engines reach less');
+});
+
+test('routing power into sensors extends scanner reach', () => {
+  const game = createGame({ seed: 'sink-sensors', reimagined: true });
+  const ship = getShip(game, 'fed-flagship');
+  const baseline = sensorRange(game, ship, 'scanner');
+  const armed = powered('sink-sensors', { shields: 0, weapons: 0, engines: 0, sensors: 6, tractor: 0 });
+  assert.ok(sensorRange(armed, ship, 'scanner') > baseline, 'more sensor power sees farther');
+  assert.equal(baseline, 40, 'a battle cruiser scanner (4 units x 10) at the default 1.0x');
+});
+
+test('routing power into the tractor beam pulls harder', () => {
+  const game = createGame({ seed: 'sink-tractor', reimagined: true });
+  const ship = getShip(game, 'fed-flagship');
+  const target = { ...getShip(game, 'axis-flagship'), x: ship.x + 20, y: ship.y };
+  const baseline = tractorLock(ship, target, game.gridSize).pull;
+  const armed = powered('sink-tractor', { shields: 0, weapons: 0, engines: 0, sensors: 0, tractor: 3 });
+  const boosted = tractorLock(ship, target, armed.gridSize, null, powerEffect(armed, ship, 'tractor')).pull;
+  assert.ok(boosted > baseline, `overcharged beam pulls harder (${boosted} > ${baseline})`);
+});
+
+test('the power sinks never change a classic war', () => {
+  const game = createGame({ seed: 'sink-classic' });
+  const ship = getShip(game, 'fed-flagship');
+  assert.equal(sensorRange(game, ship, 'scanner'), 40, 'scanner reach is the calibrated 4 x 10');
+  assert.equal(engineCapacity(ship, game.gridSize, powerEffect(game, ship, 'engines')), 50, 'engine reach is the calibrated 5 x 10');
+  assert.equal(weaponDamage('phasers', ship, createRng('w'), 0, powerEffect(game, ship, 'weapons')),
+    weaponDamage('phasers', ship, createRng('w')), 'a classic volley is untouched by the weapons sink');
 });

@@ -9,6 +9,7 @@ import {
   isImmovable,
   isTractorHeld,
   orderFor,
+  powerEffect,
   shieldCapacity,
   systemUnits,
 } from './state.js';
@@ -43,11 +44,12 @@ const canNavigate = (game, actor) => systemUnits(actor, 'engines') > 0 && !isTra
  * precisely; the clumsy seeded drift is left to unordered fleet behavior, so
  * issuing orders is worth something.
  */
-const stepToward = (actor, point, stopAt, gridSize = GRID_SIZE) => {
+const stepToward = (actor, point, stopAt, game) => {
   const dx = point.x - actor.x;
   const dy = point.y - actor.y;
   const span = Math.hypot(dx, dy);
-  const magnitude = Math.min(engineCapacity(actor, gridSize), Math.max(0, span - stopAt));
+  const capacity = engineCapacity(actor, game?.gridSize ?? GRID_SIZE, powerEffect(game, actor, 'engines'));
+  const magnitude = Math.min(capacity, Math.max(0, span - stopAt));
   if (span <= 0 || magnitude < 1) return { type: 'move', dx: 0, dy: 0 };
   return { type: 'move', dx: Math.round((dx / span) * magnitude), dy: Math.round((dy / span) * magnitude) };
 };
@@ -100,7 +102,7 @@ const shootOrChase = (game, actor, target, stopAt) => {
   const shot = engage(actor, target, distance(actor, target));
   if (shot) return shot;
   if (!canNavigate(game, actor)) return { type: 'pass' };
-  return stepToward(actor, target, stopAt, game.gridSize ?? GRID_SIZE);
+  return stepToward(actor, target, stopAt, game);
 };
 
 /**
@@ -128,7 +130,7 @@ const orderedAction = (game, actor, order) => {
     if (parting) return parting;
     const home = withdrawTo(game, actor);
     if (!home || !canNavigate(game, actor)) return { type: 'pass' };
-    return stepToward(actor, home, 0, game.gridSize ?? GRID_SIZE);
+    return stepToward(actor, home, 0, game);
   }
 
   const ward = getShip(game, order.targetId);
@@ -141,7 +143,7 @@ const orderedAction = (game, actor, order) => {
     if (shot) return shot;
     const post = screenPost(ward, threat.ship);
     if (!canNavigate(game, actor) || distance(actor, post) <= FLEET_ORDER_TUNING.screenTolerance) return { type: 'pass' };
-    return stepToward(actor, post, 0, game.gridSize ?? GRID_SIZE);
+    return stepToward(actor, post, 0, game);
   }
 
   // Escort: fight whatever is menacing the ward, otherwise ride along beside it.
@@ -152,12 +154,12 @@ const orderedAction = (game, actor, order) => {
   const firing = nearby ? engage(actor, nearby.ship, nearby.range) : null;
   if (firing) return firing;
   if (distance(actor, ward) <= FLEET_ORDER_TUNING.escortDistance || !canNavigate(game, actor)) return { type: 'pass' };
-  return stepToward(actor, ward, FLEET_ORDER_TUNING.escortDistance, game.gridSize ?? GRID_SIZE);
+  return stepToward(actor, ward, FLEET_ORDER_TUNING.escortDistance, game);
 };
 
 /** Backs away from a threat on a full engine burn; the caller clamps to the map. */
-const stepAway = (actor, threat, gridSize = GRID_SIZE) => {
-  const capacity = engineCapacity(actor, gridSize);
+const stepAway = (actor, threat, game) => {
+  const capacity = engineCapacity(actor, game?.gridSize ?? GRID_SIZE, powerEffect(game, actor, 'engines'));
   const span = distance(actor, threat) || 1;
   return {
     type: 'move',
@@ -170,11 +172,10 @@ const stepAway = (actor, threat, gridSize = GRID_SIZE) => {
 const fallBack = (game, actor, threat) => {
   if (!canNavigate(game, actor)) return { type: 'pass' };
   const home = withdrawTo(game, actor);
-  const grid = game.gridSize ?? GRID_SIZE;
   if (home && distance(actor, home) > 4 && distance(home, threat) > distance(actor, threat)) {
-    return stepToward(actor, home, 0, grid);
+    return stepToward(actor, home, 0, game);
   }
-  return stepAway(actor, threat, grid);
+  return stepAway(actor, threat, game);
 };
 
 /**
@@ -237,13 +238,13 @@ const doctrineAction = (game, actor) => {
   const range = distance(actor, target);
 
   if (!hunting && doctrine.retreatBelow > 0 && ratio <= doctrine.retreatBelow) return fallBack(game, actor, target);
-  if (doctrine.minRange > 0 && range < doctrine.minRange && canNavigate(game, actor)) return stepAway(actor, target, game.gridSize ?? GRID_SIZE);
+  if (doctrine.minRange > 0 && range < doctrine.minRange && canNavigate(game, actor)) return stepAway(actor, target, game);
   // Cabal would rather wreck your hull on somebody else's than shoot it — but only
   // when the tow lands you on another enemy, so both hulls in that collision belong
   // to someone else. Towing you onto a Cabal ship is a coin flip it will not take.
   if (doctrine.tractorFirst && systemUnits(actor, 'tractor') > 0 && range <= RANGES.tractor
     && !isTractorHeld(game, target) && !isImmovable(target)) {
-    const { position } = tractorLock(actor, target, game.gridSize ?? GRID_SIZE);
+    const { position } = tractorLock(actor, target, game.gridSize ?? GRID_SIZE, null, powerEffect(game, actor, 'tractor'));
     const wreck = game.ships.some((ship) => ship.id !== target.id && isActive(ship)
       && ship.faction !== actor.faction && distance(position, ship) < 1);
     if (wreck) return { type: 'tractor', targetId: target.id };
@@ -252,7 +253,7 @@ const doctrineAction = (game, actor) => {
   const shot = engage(actor, target, range, doctrine.noTractor);
   if (shot) return shot;
   if (!canNavigate(game, actor)) return { type: 'pass' };
-  if (range > doctrine.standoff) return stepToward(actor, target, doctrine.standoff, game.gridSize ?? GRID_SIZE);
+  if (range > doctrine.standoff) return stepToward(actor, target, doctrine.standoff, game);
   return { type: 'pass' };
 };
 
@@ -285,7 +286,7 @@ export const chooseAiAction = (game, shipId) => {
     const rng = createRng(`${game.seed}:${shipId}:${game.randomStep ?? 0}`);
     const deltaX = target.ship.x - actor.x;
     const deltaY = target.ship.y - actor.y;
-    const capacity = engineCapacity(actor, game.gridSize ?? GRID_SIZE);
+    const capacity = engineCapacity(actor, game.gridSize ?? GRID_SIZE, powerEffect(game, actor, 'engines'));
     const magnitude = Math.min(capacity, Math.max(1, target.range - AI_PURSUIT.standoff) * (AI_PURSUIT.speedBase + rng.next() * AI_PURSUIT.speedJitter));
     const angle = Math.atan2(deltaY, deltaX) + (rng.next() - 0.5) * AI_PURSUIT.headingDrift;
     return {

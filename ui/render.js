@@ -17,8 +17,9 @@ import {
   isSpectator,
   orderFor,
   pendingOrderFor,
+  powerEffect,
   radioIntegrity,
-  systemRange,
+  sensorRange,
 } from '../game/state.js';
 
 const commands = [
@@ -230,7 +231,7 @@ export const renderGame = (game, view = {}) => {
     : 'click a ship for its commands · click empty space to maneuver · dashed rings = your phaser / photon / engine range · red outline = enemy that can reach you';
 
   const actorActive = Boolean(actor) && actor.status === 'active';
-  const mapperRange = actorActive ? systemRange(actor, 'mapper') : Infinity;
+  const mapperRange = actorActive ? sensorRange(game, actor, 'mapper') : Infinity;
   const isVisible = (ship) => !actorActive || ship.id === actor.id || distance(ship, actor) <= mapperRange;
   document.querySelector('#mapper-readout').textContent = actorActive
     ? (Number.isFinite(mapperRange) && mapperRange > 0 ? `Mapper ${mapperRange}` : 'Mapper blacked out')
@@ -249,7 +250,7 @@ export const renderGame = (game, view = {}) => {
   if (actorActive) {
     if (actor.systems.phasers > 0) rings.push({ r: RANGES.phasers, kind: 'phasers', x: actor.x, y: actor.y });
     if (actor.systems.photons > 0) rings.push({ r: RANGES.photons, kind: 'photons', x: actor.x, y: actor.y });
-    const engineReach = engineCapacity(actor, grid);
+    const engineReach = engineCapacity(actor, grid, powerEffect(game, actor, 'engines'));
     if (engineReach > 0) rings.push({ r: engineReach, kind: 'engines', x: actor.x, y: actor.y });
   }
   // In an extended war the dockyard at Xanadu repairs anything inside its ring.
