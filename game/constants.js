@@ -281,7 +281,7 @@ export const SURRENDER = Object.freeze({ maxShips: 2, strengthRatio: 0.15 });
  */
 export const AI_PURSUIT = Object.freeze({ standoff: 8, speedBase: 0.8, speedJitter: 0.5, headingDrift: 0.3 });
 
-/** Pacing of the spectator loop that plays out a resigned war. */
+/** Pacing of the spectator loop that plays out a war the player only watches. */
 export const SPECTATOR_TICK_MS = 400;
 
 /**

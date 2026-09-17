@@ -351,17 +351,37 @@ test('a ship in photon range fires instead of moving, so static fire never colli
   assert.equal(chooseAiAction(game, 'axis-flagship').type, 'photons');
 });
 
-test('losing the flagship shifts command and the war continues; losing every Federation ship ends it', () => {
+test('losing the flagship shifts command; losing every Federation ship leaves the war to the alliances still afloat', () => {
   const game = createGame({ seed: 'loss' });
   const flagshipDown = withShips(game, (ship) => ship.id === 'fed-flagship' ? { ...ship, status: 'destroyed' } : ship);
   assert.equal(evaluateOutcome(flagshipDown).kind, 'active');
   const transfer = transferCommandIfNeeded(flagshipDown);
   assert.notEqual(transfer.game.playerShipId, 'fed-flagship');
   assert.match(transfer.message, /continue without you/i);
+  // Three alliances are still fighting, so nobody has won yet: the war plays on.
   const fedGone = withShips(game, (ship) => ship.faction === 'Federation' ? { ...ship, status: 'destroyed' } : ship);
-  assert.equal(evaluateOutcome(fedGone).kind, 'alliance-win');
+  assert.equal(evaluateOutcome(fedGone).kind, 'active');
+  const lost = transferCommandIfNeeded(fedGone);
+  assert.equal(lost.game.commandLost, true);
+  assert.match(lost.message, /no hull left/i);
+  assert.equal(transferCommandIfNeeded(lost.game).message, null, 'the loss is announced once');
+  // Down to one alliance, that alliance has won.
+  const blocOnly = withShips(game, (ship) => ship.faction === 'Bloc' ? ship : { ...ship, status: 'destroyed' });
+  assert.equal(evaluateOutcome(blocOnly).kind, 'alliance-win');
+  assert.match(evaluateOutcome(blocOnly).message, /Bloc forces have won/);
   const draw = withShips(game, (ship) => ({ ...ship, status: 'destroyed' }));
   assert.equal(evaluateOutcome(draw).kind, 'draw');
+});
+
+test('a war the Federation has lost plays itself out instead of ending early', () => {
+  const game = withShips(createGame({ seed: 'spectate' }), (ship) => ship.faction === 'Federation'
+    ? { ...ship, status: 'destroyed' }
+    : ship);
+  const round = resolveComputerTurns({ ...game, phase: 'computer' });
+  assert.equal(round.outcome, null);
+  assert.equal(round.phase, 'player');
+  assert.equal(round.commandLost, true);
+  assert.ok(round.log.some((line) => /no hull left/.test(line)));
 });
 
 test('resigning continues the war by shifting command to another Federation ship', () => {

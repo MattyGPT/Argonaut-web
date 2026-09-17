@@ -40,6 +40,7 @@ import {
   isAce,
   isActive,
   isImmovable,
+  isSpectator,
   isTractorHeld,
   shieldCapacity,
   strongestFederation,
@@ -257,7 +258,7 @@ export const orderTargets = (game, shipId, orderType) => {
  * Null when the ship cannot maneuver at all.
  */
 export const maneuverTo = (game, x, y) => {
-  if (game.phase !== 'player' || game.outcome || game.resigned) return null;
+  if (game.phase !== 'player' || game.outcome || isSpectator(game)) return null;
   const actor = getShip(game, game.playerShipId);
   if (!isActive(actor) || systemUnits(actor, 'engines') <= 0 || isTractorHeld(game, actor)) return null;
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;

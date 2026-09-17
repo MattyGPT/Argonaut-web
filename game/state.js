@@ -186,6 +186,13 @@ export const getShip = (game, id) => game.ships.find((ship) => ship.id === id);
 export const isActive = (ship) => ship?.status === 'active';
 
 /**
+ * Whether the player no longer has the conn: resigned to the autopilot, or the
+ * Federation is out of a war the remaining alliances are still fighting. Either
+ * way the rounds play themselves out and the player watches.
+ */
+export const isSpectator = (game) => Boolean(game.resigned || game.commandLost);
+
+/**
  * Whether a hull is far too massive for a tractor beam to budge. A starbase is
  * anchored and out-masses anything afloat, so no beam — friendly or enemy — can
  * tow it, and it never ends up held by a tractor lock.
