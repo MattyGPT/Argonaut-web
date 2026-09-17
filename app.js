@@ -1,6 +1,6 @@
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets } from './game/actions.js';
 import { SPECTATOR_TICK_MS, GRID_SIZE, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
-import { alertLevel, appendLog, createGame, getShip, systemUnits } from './game/state.js';
+import { alertLevel, appendLog, createGame, getShip, isSpectator, systemUnits } from './game/state.js';
 import { scenarioFor } from './game/scenarios.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './game/turns.js';
 import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget, promptForTowDestination } from './ui/input.js';
@@ -158,7 +158,7 @@ const spectate = () => {
   if (spectating) return;
   spectating = true;
   const step = async () => {
-    if (!game.resigned || game.outcome || game.phase !== 'player') {
+    if (!isSpectator(game) || game.outcome || game.phase !== 'player') {
       spectating = false;
       return;
     }
@@ -168,7 +168,7 @@ const spectate = () => {
     await presentTerminalEvents(auto.events);
     await runComputer();
     refresh();
-    if (game.resigned && !game.outcome && game.phase === 'player') setTimeout(step, SPECTATOR_TICK_MS);
+    if (isSpectator(game) && !game.outcome && game.phase === 'player') setTimeout(step, SPECTATOR_TICK_MS);
     else spectating = false;
   };
   step();
@@ -196,7 +196,7 @@ const dispatch = async (action) => {
 
   // Clicking empty space on the map is a maneuver order for the command ship.
   if (action.type === 'map-click') {
-    if (game.phase !== 'player' || game.outcome || game.resigned) return;
+    if (game.phase !== 'player' || game.outcome || isSpectator(game)) return;
     const move = maneuverTo(game, action.x, action.y);
     if (!move) {
       const actor = getShip(game, game.playerShipId);
@@ -249,7 +249,7 @@ const dispatch = async (action) => {
   // where to haul it — a hull to slam into, or a coordinate — then fires the ordinary
   // tractor action with that destination so the rules stay in one place.
   if (action.type === 'tractor-direct') {
-    if (!game.reimagined || game.phase !== 'player' || game.outcome || game.resigned) return;
+    if (!game.reimagined || game.phase !== 'player' || game.outcome || isSpectator(game)) return;
     const victim = getShip(game, action.targetId);
     if (!victim || victim.status === 'destroyed') return;
     const candidates = game.ships.filter((ship) => ship.status !== 'destroyed' && ship.id !== victim.id);
@@ -316,7 +316,7 @@ const dispatch = async (action) => {
   }
 
   if (CONFIRMATIONS.has(action.type) && !action.confirmed) {
-    if (game.phase !== 'player' || game.outcome || game.resigned) return;
+    if (game.phase !== 'player' || game.outcome || isSpectator(game)) return;
     const [title, message] = CONFIRMATIONS.get(action.type)(getShip(game, game.playerShipId));
     if (await promptForConfirmation(title, message)) dispatch({ ...action, confirmed: true });
     return;
@@ -351,7 +351,7 @@ const dispatch = async (action) => {
   await presentTerminalEvents(outcome.events);
   await runComputer();
   refresh();
-  if (game.resigned) spectate();
+  if (isSpectator(game)) spectate();
 };
 
 document.title = 'Argonaut Web';
@@ -501,4 +501,4 @@ applyTheme(theme);
 
 refresh();
 if (game.phase === 'computer') { runComputer(); refresh(); }
-if (game.resigned && !game.outcome && game.phase === 'player') spectate();
+if (isSpectator(game) && !game.outcome && game.phase === 'player') spectate();

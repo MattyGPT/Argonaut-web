@@ -14,6 +14,7 @@ import {
   inRadioContact,
   isAce,
   isActive,
+  isSpectator,
   orderFor,
   pendingOrderFor,
   radioIntegrity,
@@ -282,7 +283,7 @@ export const renderGame = (game, view = {}) => {
   // gone whenever that hull is gone, hidden by fog, or the war is not taking orders.
   const contextShip = view.contextShipId ? getShip(game, view.contextShipId) : null;
   const menuShip = contextShip && contextShip.status !== 'destroyed' && isVisible(contextShip)
-    && !game.outcome && !game.resigned && !view.battlePaused
+    && !game.outcome && !isSpectator(game) && !view.battlePaused
     ? contextShip
     : null;
   const menu = document.querySelector('#ship-menu');
@@ -309,7 +310,10 @@ export const renderGame = (game, view = {}) => {
       <div class="status-row"><span>Status</span><b>${actor.status}</b></div>
     </div>
     <div class="system-grid">${Object.entries(actor.systems).map(([name, amount]) => `<span>${cap(name)} <b>${amount}</b></span>`).join('')}</div>
-    <div class="command-grid">${commandList(game).map(([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || game.resigned || view.battlePaused ? 'disabled' : ''}>${label}<kbd>${key}</kbd></button>`).join('')}</div>
+    <div class="command-grid">${commandList(game).map(([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || isSpectator(game) || view.battlePaused ? 'disabled' : ''}>${label}<kbd>${key}</kbd></button>`).join('')}</div>
+    ${game.commandLost
+      ? '<p class="console-note">Federation command is lost. The remaining alliances fight on, and you watch the war from here.</p>'
+      : ''}
     ${view.precision && (view.precision.power !== 100 || view.precision.focus)
       ? `<p class="console-note">Phasers set to ${view.precision.power}% power${view.precision.focus ? `, called to ${view.precision.focus}` : ''}.</p>`
       : ''}`;
