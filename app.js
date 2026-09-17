@@ -326,6 +326,10 @@ const syncScenarioAvailability = () => {
   if (!extended) scenario.value = 'annihilation';
 };
 
+document.querySelector('#user-guide').addEventListener('click', whenPlaybackUnlocked(playbackLocked, () => {
+  document.querySelector('#guide-dialog').showModal();
+}));
+
 document.querySelector('#new-game').addEventListener('click', whenPlaybackUnlocked(playbackLocked, () => {
   document.querySelector('#new-seed').value = randomSeed();
   document.querySelector('#regional').checked = game.regional;

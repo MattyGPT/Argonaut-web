@@ -1003,3 +1003,161 @@ body.classic .ship.has-order::before {
     animation-duration: .01s;
   }
 }
+
+/* User guide — a wide reading dialog over the war, with its own scroll. */
+dialog.guide {
+  max-width: min(96vw, 980px);
+  width: min(96vw, 980px);
+  max-height: min(92vh, 860px);
+  padding: 0;
+}
+
+.guide-shell {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  max-height: inherit;
+}
+
+.guide-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.2rem .8rem;
+  border-bottom: 1px solid var(--line);
+}
+
+/* The shared dialog form rule sizes prompt forms; the close form is just a button. */
+.guide-close {
+  min-width: 0;
+}
+
+.guide-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem 1rem;
+  padding: .6rem 1.2rem;
+  border-bottom: 1px solid var(--line);
+  font-size: .74rem;
+}
+
+.guide-nav a {
+  color: var(--cyan);
+  text-decoration: none;
+}
+
+.guide-nav a:hover, .guide-nav a:focus-visible {
+  text-decoration: underline;
+}
+
+.guide-body {
+  overflow-y: auto;
+  padding: 1.2rem;
+  display: grid;
+  gap: 1.7rem;
+  scroll-behavior: smooth;
+}
+
+.guide-body section {
+  display: grid;
+  gap: .7rem;
+  scroll-margin-top: .5rem;
+}
+
+.guide-body h3 {
+  margin: 0;
+  color: var(--cyan);
+  font-size: .95rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.guide-body p, .guide-body li {
+  margin: 0;
+  color: #bcd6e6;
+  font-size: .79rem;
+  line-height: 1.65;
+}
+
+.guide-body b {
+  color: #e6f7ff;
+}
+
+.guide-body ul {
+  display: grid;
+  gap: .35rem;
+  padding-left: 1.2rem;
+}
+
+.guide-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.guide-figure {
+  margin: 0;
+  display: grid;
+  gap: .45rem;
+}
+
+.guide-figure img {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #06101e;
+}
+
+.guide-figure figcaption {
+  color: #7f9fb3;
+  font-size: .7rem;
+  line-height: 1.5;
+}
+
+.guide-keys {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .75rem;
+}
+
+.guide-keys td {
+  padding: .38rem .5rem;
+  border-bottom: 1px solid #162d42;
+  color: #bcd6e6;
+  vertical-align: top;
+  line-height: 1.5;
+}
+
+.guide-keys td:first-child {
+  white-space: nowrap;
+  width: 1%;
+}
+
+.guide-keys kbd, .guide-body kbd {
+  color: var(--cyan);
+}
+
+.guide-links a {
+  color: var(--cyan);
+}
+
+body.classic dialog.guide {
+  background: #000;
+  border-color: #145014;
+  border-radius: 0;
+}
+
+body.classic .guide-figure img {
+  border-color: #145014;
+  border-radius: 0;
+}
+
+body.classic .guide-body p, body.classic .guide-body li,
+body.classic .guide-keys td, body.classic .guide-figure figcaption {
+  color: #9fdf9f;
+}
+
+body.classic .guide-body b {
+  color: #baffba;
+}

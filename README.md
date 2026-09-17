@@ -264,6 +264,12 @@ the round replay.
 
 ## Quality of life
 
+- **User guide** — the top-bar button opens an illustrated in-game guide: how the
+  war works, the tactical map, every command and key, combat mechanics, the
+  extended war and precision fire, the comforts, and the game's provenance,
+  maintainer, and where to reach out. Its screenshots are regenerated with
+  `npm install --no-save puppeteer-core` followed by
+  `node scripts/capture-guide-shots.mjs` against a running `npm start`.
 - **Save/resume** — the war autosaves to your browser (localStorage) after every
   action and resumes where you left off when you reload. `New game` starts fresh.
 - **Classic view** — the top-bar toggle switches to a black phosphor CRT theme
