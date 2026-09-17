@@ -75,9 +75,13 @@ carries the extended war and opens the fight on a much wider 240-unit battlefiel
 the map becomes a pannable, zoomable viewport into (wheel or `+`/`-` to zoom, arrow
 keys or the minimap to pan, `⌖` to re-center on your flagship). Weapon ranges stay
 at their classic units while engine reach scales with the field, so there is real
-room to screen, flank, and disengage. It never changes how a classic or extended
-war plays — those keep the calibrated 100-unit field. New Reimagined systems land
-over time; see `docs/superpowers/specs/2026-09-17-argonaut-reimagined-roadmap.md`.
+room to screen, flank, and disengage. It also adds the **directed tractor beam**:
+open an enemy's menu in range and choose **Direct tow…** to haul it toward a
+coordinate or straight into another hull — a deliberate tractor-ram, for the same
+pull budget as a standard tow (you choose the direction, not the distance). It
+never changes how a classic or extended war plays — those keep the calibrated
+100-unit field and the pull-toward-you beam. New Reimagined systems land over time;
+see `docs/superpowers/specs/2026-09-17-argonaut-reimagined-roadmap.md`.
 
 ## Mechanics notes
 

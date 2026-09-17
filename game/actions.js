@@ -333,6 +333,11 @@ export const shipCommands = (game, targetId) => {
     offer('phasers', 'Fire phasers', systemUnits(actor, 'phasers') > 0, RANGES.phasers);
     offer('photons', 'Fire photons', systemUnits(actor, 'photons') > 0, RANGES.photons);
     offer('tractor', 'Tractor beam', systemUnits(actor, 'tractor') > 0 && !isImmovable(target), RANGES.tractor);
+    // A directed tow is a Reimagined option: aim the pull at a point or a hull to
+    // slam the target into, rather than reeling it straight toward you.
+    if (game.reimagined) {
+      offer('tractor-direct', 'Direct tow…', systemUnits(actor, 'tractor') > 0 && !isImmovable(target), RANGES.tractor);
+    }
   }
   offer('scan', 'Scan', systemUnits(actor, 'scanner') > 0, systemRange(actor, 'scanner'));
   if (!hostile && isActive(target)) {
@@ -583,9 +588,31 @@ const pullToward = (actor, target, pull, gridSize) => {
  * One tractor lock: how hard the beam pulls and where it lands the target.
  * Shared by the player's command and the autopilots' so both beams behave alike.
  */
-export const tractorLock = (actor, target, gridSize = GRID_SIZE) => {
+export const tractorLock = (actor, target, gridSize = GRID_SIZE, destination = null) => {
   const pull = systemUnits(actor, 'tractor') * TRACTOR_PULL_PER_UNIT;
-  return { pull, position: pullToward(actor, target, pull, gridSize) };
+  // A directed tow aims the pull at `destination`; otherwise the target is reeled
+  // straight toward the caster. The pull budget is the same either way.
+  return { pull, position: pullToward(destination ?? actor, target, pull, gridSize) };
+};
+
+/**
+ * Where a directed tractor tow is aimed: a hull to slam into (`towardId`), or a
+ * coordinate (`towardX`/`towardY`), clamped to the field. Null when the action names
+ * neither, so the beam falls back to the classic pull toward the caster.
+ */
+const towDestination = (game, action, grid) => {
+  if (action.towardId) {
+    const hull = getShip(game, action.towardId);
+    if (hull && hull.status !== 'destroyed') return { x: hull.x, y: hull.y };
+  }
+  if (action.towardX !== undefined && action.towardY !== undefined) {
+    const x = Number(action.towardX);
+    const y = Number(action.towardY);
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      return { x: Math.max(0, Math.min(grid, Math.round(x))), y: Math.max(0, Math.min(grid, Math.round(y))) };
+    }
+  }
+  return null;
 };
 
 const tractorAction = (game, action, actor) => {
@@ -599,14 +626,20 @@ const tractorAction = (game, action, actor) => {
   if (found.error) return invalid(game, found.error, found.requiresTarget);
   if (distance(actor, found.target) > RANGES.tractor) return invalid(game, `${found.target.name} is out of tractor range.`);
   if (isImmovable(found.target)) return invalid(game, `${found.target.name} is far too massive for the tractor beam to move.`);
-  const { pull, position } = tractorLock(actor, found.target, game.gridSize ?? GRID_SIZE);
+  const grid = game.gridSize ?? GRID_SIZE;
+  // A directed tow is Reimagined-only; a classic or extended war ignores the fields
+  // and pulls toward the caster exactly as calibrated.
+  const destination = game.reimagined ? towDestination(game, action, grid) : null;
+  const { pull, position } = tractorLock(actor, found.target, grid, destination);
   const pulled = { ...found.target, tractorBy: actor.id, x: position.x, y: position.y };
   // A beam can drag a hull straight into another one, and that is a collision like
   // any other — which makes towing an enemy into a friend a real tactic.
   const collision = resolveCollision(completeTurn(replaceShip(game, pulled)), pulled);
   return result(collision.game, [
     `${actor.name} locks a tractor beam on ${found.target.name}.`,
-    `Tractor beam good for ${pull} units pull. ${actor.name} has beamed ${found.target.name} to ${position.x}, ${position.y}.`,
+    destination
+      ? `Tractor beam good for ${pull} units pull. ${actor.name} hauls ${found.target.name} toward ${destination.x}, ${destination.y} — now at ${position.x}, ${position.y}.`
+      : `Tractor beam good for ${pull} units pull. ${actor.name} has beamed ${found.target.name} to ${position.x}, ${position.y}.`,
     ...collision.messages,
   ], { events: collision.events });
 };
