@@ -108,12 +108,12 @@ combat mechanics — a clean checkpoint. **Next: Phase 1, power management (14a)
 
 ### Phase 1 — Power management *(headline; detailed below)*
 
-| Round | Chunk | Builds | Tested by |
-| --- | --- | --- | --- |
-| 14a | Reactor subsystem + power state | `reactor` in templates, `power` map, default profiles — data only | State shape; save round-trip; parity |
-| 14b | Allocation effects | Five sinks scale weapons/engines/sensors/tractor + shield regen | Each sink changes output; budget cap clamps over-allocation |
-| 14c | `setPower` + power-bar UI | Free action, console pips, click/keyboard | Free (no stardate spent); persists across save; a11y |
-| 14d | AI profiles + reactor refit/repair | `powerProfile` per doctrine, reactor refit, dockyard restores reactor | Doctrines allocate; refit cap; vendetta ignores self-preservation |
+| Round | Chunk | Builds | Tested by | Status |
+| --- | --- | --- | --- | --- |
+| 14a | Reactor + power state + shield regen | Damageable `reactor` subsystem (Reimagined only), `game.power` allocation, `reactorOutput`/`powerEffect` helpers, free `setPower` action, and the **shield-regen** sink | Reactor present only in Reimagined; budget shrinks with damage; default = 1.0x; classic parity; regen scales with the shield sink | ✅ PR #26 |
+| 14b | Allocation effects (other sinks) | Weapons/engines/sensors/tractor multipliers wired through `weaponDamage`, `engineCapacity`, `systemRange`, tractor pull | Each sink changes output; overcharge saturates; starving a sink degrades it | — |
+| 14c | Power-bar UI | Console pips to drag the allocation, click/keyboard, a11y | Free (no stardate spent); persists across save; reachable by keyboard | — |
+| 14d | AI profiles + reactor refit/repair | `powerProfile` per doctrine, reactor refit, dockyard restores reactor | Doctrines allocate; refit cap; vendetta ignores self-preservation | — |
 
 ### Phase 2 — The living battlefield *(idea #5, #6)*
 
@@ -308,18 +308,31 @@ vendetta ship ignores self-preservation as it already does.
   self-preservation.
 - Full Node suite green.
 
-### Open questions for Round 1
+### Round 1 decisions (settled with Matt, 2026-09-17)
 
-1. **Shields: regenerate vs. ceiling.** Should surplus shield power trickle
-   shields back each stardate, raise a temporary over-capacity, or both? (Affects
-   how turtling feels and how it interacts with the dockyard.)
-2. **Fate of the flush command** under Reimagined — retire it, or re-cast as an
-   emergency surge that borrows from the next turn?
-3. **Allocation granularity** — integer pips (readable, chunky) vs. a 0–100
-   slider per sink (finer, more micromanagement).
-4. **Reactor as damageable subsystem vs. fixed per-class output** — damageable is
-   more interesting and ties into precision fire, but adds a system to every
-   template and to the damage lottery.
+1. **Reactor model — damageable subsystem.** The reactor is a real subsystem on
+   Reimagined hulls only (injected in `createShip`, absent from `SHIP_TEMPLATES.systems`
+   so a classic or extended damage lottery is byte-identical). `reactorOutput =
+   POWER.perUnit × live reactor units`, so knocking it out with a precision called
+   shot shrinks the budget and every sink with it. `templateSystems` reports the
+   reactor only for a hull that has one, so the dockyard repairs it and a classic
+   complement is unchanged. *(Shipped 14a.)*
+2. **Shields — regenerate.** Surplus shield power trickles shields back each
+   stardate (`resolvePowerRegen`, scaled by the shield sink), a continuous cousin of
+   the engine flush. Chosen over a temporary over-capacity buffer as more intuitive.
+   *(Shipped 14a; the other four sinks are 14b.)*
+3. **Flush command — kept.** `1` still flushes engines for a one-shot shield burst;
+   passive regen is additional, not a replacement. May revisit once 14b lands.
+4. **Allocation granularity — integer pips.** Readable, chunky, FTL-like; the power
+   bar (14c) spends whole points, no sliders.
+5. **Allocation is free & persistent,** like a fleet order — a bridge decision, not
+   a maneuver. `setPower` costs no stardate. *(Action shipped 14a; UI in 14c.)*
+
+The model: each sink has a `need` (points for 1.0× calibrated performance); a sink's
+effectiveness is `allocated / need` clamped to `[0, POWER.overcharge]`. The default
+profile spends exactly the needs, so an untouched hull performs exactly as before
+power existed and overcharging one sink requires starving another. Every figure lives
+in `POWER` (`constants.js`) as a balance dial for the Reimagined simulation harness.
 
 ---
 

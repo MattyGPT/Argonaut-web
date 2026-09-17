@@ -1,4 +1,4 @@
-import { DOCKING, FACTIONS, GRID_SIZE, MISS_CHANCE, RANGES, STALEMATE_ROUNDS, SURRENDER } from './constants.js';
+import { DOCKING, FACTIONS, GRID_SIZE, MISS_CHANCE, POWER, RANGES, STALEMATE_ROUNDS, SURRENDER } from './constants.js';
 import { damageShip, detonate, fireEvent, flushShields, killLines, resolveCollision, terminalEvent, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
@@ -13,6 +13,7 @@ import {
   isActive,
   isImmovable,
   isStranded,
+  powerEffect,
   shieldCapacity,
   strongestFederation,
   templateSystems,
@@ -114,14 +115,6 @@ const resolveAiAction = (game, shipId) => {
   return { game, messages: [], type: action.type };
 };
 
-const dominantEnemy = (activeEnemies) => {
-  const counts = activeEnemies.reduce((totals, ship) => {
-    totals[ship.faction] = (totals[ship.faction] ?? 0) + 1;
-    return totals;
-  }, {});
-  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'Enemy';
-};
-
 const victoryMessage = (kind, faction) => {
   if (kind === 'hopeless-draw') return 'The war has ended in a hopeless draw.  All survivors are stranded.';
   if (kind === 'draw') return 'The war has destroyed all four alliances.  No one wins.';
@@ -138,11 +131,20 @@ const victoryMessage = (kind, faction) => {
 export const transferCommandIfNeeded = (game) => {
   const current = getShip(game, game.playerShipId);
   if (isActive(current)) return { game, message: null };
-  const next = strongestFederation(game, null);
-  if (!next) return { game, message: null };
   const preface = current?.status === 'destroyed'
     ? "You're dead.  The war will continue without you.  "
     : '';
+  const next = strongestFederation(game, null);
+  if (!next) {
+    // The Federation is out of the war but the war is not over: the alliances
+    // still afloat keep fighting it out, and the player watches from here on.
+    // Only said once, and not at all on the stardate the war itself ends.
+    if (game.commandLost || evaluateOutcome(game).kind !== 'active') return { game, message: null };
+    return {
+      game: { ...game, commandLost: true },
+      message: `${preface}Federation command has no hull left.  You watch the rest of the war from here.`,
+    };
+  }
   return {
     game: { ...game, playerShipId: next.id, vendettaShipId: null },
     message: `${preface}Federation command shifted to ${next.name}.  Welcome aboard your new ship, Captain.`,
@@ -150,16 +152,18 @@ export const transferCommandIfNeeded = (game) => {
 };
 
 export const evaluateOutcome = (game) => {
-  const activeFederation = game.ships.filter((ship) => isActive(ship) && ship.faction === FACTIONS.FEDERATION);
-  const activeEnemies = game.ships.filter((ship) => isActive(ship) && ship.faction !== FACTIONS.FEDERATION);
-  if (activeFederation.length === 0 && activeEnemies.length === 0) {
+  // Every alliance afloat is at war with every other, so the war ends only when
+  // the field is down to one — or none. Losing the Federation does not hand the
+  // victory to whoever happens to be strongest at that instant: the surviving
+  // alliances keep fighting until one of them is left standing.
+  const activeFactions = [...new Set(game.ships.filter((ship) => isActive(ship)).map((ship) => ship.faction))];
+  if (activeFactions.length === 0) {
     return { kind: 'draw', message: victoryMessage('draw') };
   }
-  if (activeEnemies.length === 0) {
-    return { kind: 'federation-win', message: victoryMessage('federation-win') };
-  }
-  if (activeFederation.length === 0) {
-    return { kind: 'alliance-win', message: victoryMessage('alliance-win', dominantEnemy(activeEnemies)) };
+  if (activeFactions.length === 1) {
+    const [last] = activeFactions;
+    if (last === FACTIONS.FEDERATION) return { kind: 'federation-win', message: victoryMessage('federation-win') };
+    return { kind: 'alliance-win', message: victoryMessage('alliance-win', last) };
   }
   // A scenario objective can end the war in either direction. It is checked after
   // the annihilation outcomes, so wiping out an alliance still wins outright even
@@ -313,6 +317,27 @@ export const resolveDocking = (game) => {
 };
 
 /**
+ * Power management (Reimagined): surplus routed to the shield sink regenerates a
+ * little shield power every stardate, scaled by how hard the reactor drives it. A
+ * hull whose reactor is knocked out regenerates nothing. Resolves in the computer
+ * phase, like the dockyard. Inert in a classic or extended war.
+ */
+export const resolvePowerRegen = (game) => {
+  if (!game.reimagined) return { game, messages: [] };
+  const messages = [];
+  const ships = game.ships.map((ship) => {
+    if (!isActive(ship)) return ship;
+    const capacity = shieldCapacity(ship);
+    if (ship.shields >= capacity) return ship;
+    const gained = Math.min(capacity - ship.shields, Math.floor(capacity * POWER.shieldRegenRate * powerEffect(game, ship, 'shields')));
+    if (gained <= 0) return ship;
+    messages.push(`${ship.name}'s reactor restores ${gained} shield power.`);
+    return { ...ship, shields: ship.shields + gained };
+  });
+  return { game: { ...game, ships }, messages };
+};
+
+/**
  * A fingerprint of everything that could make the war progress: where every hull
  * sits, what it can still do, and who owns it. Two consecutive rounds with the
  * same fingerprint mean nothing happened anywhere in the war zone.
@@ -368,6 +393,9 @@ export const resolveComputerTurns = (initialGame) => {
   const docked = resolveDocking(game);
   game = docked.game;
   log.push(...docked.messages);
+  const regen = resolvePowerRegen(game);
+  game = regen.game;
+  log.push(...regen.messages);
   // After the dockyard, so a disabled hull that limped home keeps fighting;
   // before the fleet capitulation check, so a hull that struck its colors no
   // longer counts toward its alliance's strength.

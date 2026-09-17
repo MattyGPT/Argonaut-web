@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, RANGES, REIMAGINED_GRID_SIZE, SCENARIOS, STALEMATE_ROUNDS, VENDETTA } from '../game/constants.js';
+import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, POWER, POWER_SINKS, RANGES, REIMAGINED_GRID_SIZE, SCENARIOS, STALEMATE_ROUNDS, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioProgress } from '../game/scenarios.js';
-import { abbreviateNarrative, alertLevel, appendLog, createGame, crewCapacity, distance, engineCapacity, getShip, isAce, radioIntegrity, shieldCapacity, strongestFederation, vendettaGrudge } from '../game/state.js';
+import { abbreviateNarrative, alertLevel, appendLog, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, isAce, powerAllocation, powerEffect, radioIntegrity, reactorOutput, shieldCapacity, strongestFederation, templateSystems, vendettaGrudge } from '../game/state.js';
 import { applyPlayerAction, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveCollision, shipCommands, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
-import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, transferCommandIfNeeded } from '../game/turns.js';
+import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
 
 const withShips = (game, update) => ({ ...game, ships: game.ships.map(update) });
@@ -2054,4 +2054,93 @@ test('the ship menu offers a directed tow only in a Reimagined war', () => {
   const classic = shipCommands(setup({}), 'axis-flagship');
   assert.ok(!classic.some((command) => command.type === 'tractor-direct'), 'a classic war does not');
   assert.ok(classic.some((command) => command.type === 'tractor'), 'the standard tractor beam is still offered');
+});
+
+// --- Round 14a: the reactor subsystem and power allocation (Reimagined) ---
+
+test('a Reimagined hull carries a reactor; a classic or extended one does not', () => {
+  const reim = getShip(createGame({ seed: 'reactor', reimagined: true }), 'fed-flagship');
+  assert.equal(reim.systems.reactor, POWER.reactor['Battle cruiser']);
+  assert.equal('reactor' in getShip(createGame({ seed: 'reactor' }), 'fed-flagship').systems, false,
+    'a classic hull has no reactor, so its damage lottery is unchanged');
+  assert.equal('reactor' in getShip(createGame({ seed: 'reactor', extended: true }), 'fed-flagship').systems, false);
+});
+
+test('the dockyard complement includes the reactor only for a Reimagined hull', () => {
+  assert.equal(templateSystems(getShip(createGame({ seed: 'tmpl', reimagined: true }), 'fed-flagship')).reactor,
+    POWER.reactor['Battle cruiser']);
+  assert.equal('reactor' in templateSystems(getShip(createGame({ seed: 'tmpl' }), 'fed-flagship')), false);
+});
+
+test('reactor output shrinks as the reactor takes damage', () => {
+  const ship = getShip(createGame({ seed: 'reactor-out', reimagined: true }), 'fed-flagship');
+  assert.equal(reactorOutput(ship), ship.systems.reactor * POWER.perUnit);
+  assert.equal(reactorOutput({ ...ship, systems: { ...ship.systems, reactor: 1 } }), POWER.perUnit);
+  assert.equal(reactorOutput({ ...ship, systems: { ...ship.systems, reactor: 0 } }), 0);
+});
+
+test('the default allocation runs every sink at calibrated 1.0x', () => {
+  const game = createGame({ seed: 'power-default', reimagined: true });
+  const ship = getShip(game, 'fed-flagship');
+  for (const sink of POWER_SINKS) {
+    assert.equal(powerEffect(game, ship, sink), 1, `${sink} runs at 1.0x by default`);
+  }
+});
+
+test('power effect is always 1 outside a Reimagined war', () => {
+  const game = createGame({ seed: 'power-classic' });
+  const ship = getShip(game, 'fed-flagship');
+  assert.equal(powerEffect(game, ship, 'weapons'), 1);
+  assert.equal(powerEffect(game, ship, 'shields'), 1);
+});
+
+test('overcharging one sink starves another', () => {
+  const game = createGame({ seed: 'power-trade', reimagined: true });
+  const ship = getShip(game, 'fed-flagship');
+  const alloc = clampPowerAllocation({ weapons: 99 }, ship);
+  const armed = { ...game, power: { ...game.power, [ship.id]: alloc } };
+  assert.ok(powerEffect(armed, ship, 'weapons') > 1, 'weapons overcharge past 1.0x');
+  assert.ok(powerEffect(armed, ship, 'weapons') <= POWER.overcharge, 'but saturate at the overcharge cap');
+  assert.equal(powerEffect(armed, ship, 'engines'), 0, 'engines are starved to nothing');
+});
+
+test('clampPowerAllocation never exceeds the reactor budget', () => {
+  const ship = getShip(createGame({ seed: 'power-clamp', reimagined: true }), 'fed-flagship');
+  const alloc = clampPowerAllocation({ shields: 50, weapons: 50, engines: 50, sensors: 50, tractor: 50 }, ship);
+  const total = POWER_SINKS.reduce((sum, sink) => sum + alloc[sink], 0);
+  assert.equal(total, reactorOutput(ship));
+});
+
+test('setting power is free, persists, and is Reimagined-only', () => {
+  const game = createGame({ seed: 'set-power', reimagined: true });
+  const out = applyPlayerAction(game, { type: 'power', allocation: { shields: 2, weapons: 9, engines: 4, sensors: 4, tractor: 2 } });
+  assert.equal(out.game.turn, game.turn, 'setting power costs no stardate');
+  assert.equal(out.game.phase, 'player', 'and does not end the turn');
+  assert.equal(powerAllocation(out.game, getShip(out.game, 'fed-flagship')).weapons, 9);
+  assert.match(out.messages.join(' '), /sets power/);
+
+  const classic = applyPlayerAction(createGame({ seed: 'set-power-classic' }), { type: 'power', allocation: { weapons: 9 } });
+  assert.match(classic.messages.join(' '), /Reimagined/i);
+  assert.deepEqual(classic.game, createGame({ seed: 'set-power-classic' }), 'a classic war ignores it');
+});
+
+test('the reactor regenerates shields each stardate, scaled by the shield sink', () => {
+  const game = withShips(createGame({ seed: 'regen', reimagined: true }), (ship) => (ship.id === 'fed-flagship' ? { ...ship, shields: 100 } : ship));
+  const out = resolvePowerRegen(game);
+  // Capacity 200, rate 0.02, default shields effectiveness 1.0 -> floor(200 * 0.02) = 4.
+  assert.equal(getShip(out.game, 'fed-flagship').shields, 104);
+  assert.match(out.messages.join(' '), /restores 4 shield power/);
+});
+
+test('a starved shield sink or a dead reactor regenerates nothing', () => {
+  const base = withShips(createGame({ seed: 'regen-off', reimagined: true }), (ship) => (ship.id === 'fed-flagship' ? { ...ship, shields: 100 } : ship));
+  const starved = { ...base, power: { ...base.power, 'fed-flagship': { shields: 0, weapons: 6, engines: 4, sensors: 4, tractor: 2 } } };
+  assert.equal(getShip(resolvePowerRegen(starved).game, 'fed-flagship').shields, 100);
+  const dead = withShips(base, (ship) => (ship.id === 'fed-flagship' ? { ...ship, systems: { ...ship.systems, reactor: 0 } } : ship));
+  assert.equal(getShip(resolvePowerRegen(dead).game, 'fed-flagship').shields, 100);
+});
+
+test('power regeneration is inert in a classic war', () => {
+  const game = withShips(createGame({ seed: 'regen-classic' }), (ship) => (ship.id === 'fed-flagship' ? { ...ship, shields: 50 } : ship));
+  assert.deepEqual(resolvePowerRegen(game).game, game);
 });

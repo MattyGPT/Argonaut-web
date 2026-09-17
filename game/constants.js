@@ -144,6 +144,41 @@ export const ENGINE_MOVE_PER_UNIT = 10;
 /** Shield power gained per engine unit flushed. */
 export const SHIELD_PER_ENGINE = 5;
 
+/**
+ * Power management (Argonaut Reimagined, Phase 1). Every Reimagined hull runs a
+ * reactor — a damageable subsystem, present only on Reimagined ships so a classic or
+ * extended war's damage lottery is untouched — whose live units set the power budget
+ * the hull distributes across five sinks. Knocking the reactor out with a called shot
+ * shrinks the budget and every system that draws on it.
+ *
+ * The budget is `perUnit x live reactor units`. Each sink has a `need` — the points
+ * that buy 1.0x (calibrated) performance — and a sink's effectiveness is
+ * `allocated / need`, clamped to `[0, overcharge]`. The per-class default profile
+ * spends exactly the needs, so an untouched hull performs exactly as it did before
+ * power existed and the only way to overcharge one sink is to starve another: a real
+ * trade, not a free boost. Bigger reactors leave surplus points to overcharge with.
+ *
+ * Only the shield sink is wired in 14a (it regenerates a little shield power each
+ * stardate, scaled by effectiveness); the weapons/engines/sensors/tractor sinks are
+ * computed by the same helper and switched on in 14b. Every figure is a balance dial
+ * for the Reimagined simulation harness, not a calibrated value.
+ */
+export const POWER = Object.freeze({
+  /** Power budget per live reactor unit. */
+  perUnit: 5,
+  /** A sink may be driven this far past its need (1.5 = +50%) before it saturates. */
+  overcharge: 1.5,
+  /** Reactor units per hull class, keyed by className. */
+  reactor: Object.freeze({ 'Battle cruiser': 5, Cruiser: 4, Scout: 4, Starbase: 8 }),
+  /** Points each sink needs for 1.0x; the default profile spends exactly these. */
+  need: Object.freeze({ shields: 4, weapons: 6, engines: 4, sensors: 4, tractor: 2 }),
+  /** Shield power restored per stardate, as a fraction of capacity at 1.0x shields power. */
+  shieldRegenRate: 0.02,
+});
+
+/** The five systems a reactor budget is distributed across. */
+export const POWER_SINKS = Object.freeze(['shields', 'weapons', 'engines', 'sensors', 'tractor']);
+
 /** Shots can miss. The same roll governs the player's volleys and the autopilots'. */
 export const MISS_CHANCE = 0.12;
 

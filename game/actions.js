@@ -27,8 +27,10 @@ import {
   alertLevel,
   blastRadius,
   captainOf,
+  clampPowerAllocation,
   crewCapacity,
   describeOrder,
+  describePower,
   distance,
   dockedAt,
   engineCapacity,
@@ -839,6 +841,24 @@ const setRefit = (game, action, actor) => {
   return result(updated, `${ship.name} is refitted at ${base.name}: ${detail}.`);
 };
 
+/**
+ * Sets a hull's reactor power allocation. Like a fleet order it costs no turn — it is
+ * a bridge decision, not a maneuver — and it persists until changed. Reimagined only;
+ * the allocation is clamped to the hull's live reactor budget, so a damaged reactor
+ * cannot be over-allocated.
+ */
+const setPower = (game, action, actor) => {
+  if (!game.reimagined) return invalid(game, 'Power management is only available in a Reimagined war.');
+  const ship = getShip(game, action.shipId ?? game.playerShipId);
+  if (!ship || !isActive(ship)) return invalid(game, 'No such hull to set power for.');
+  if (ship.faction !== actor.faction) return invalid(game, 'Only Federation hulls take your power settings.');
+  const allocation = clampPowerAllocation(action.allocation ?? {}, ship);
+  return result(
+    { ...game, power: { ...(game.power ?? {}), [ship.id]: allocation } },
+    `${ship.name} sets power: ${describePower(allocation)}.`,
+  );
+};
+
 export const applyPlayerAction = (game, action = {}) => {
   if (!game || !action.type) return invalid(game, 'Choose a command.');
   if (game.outcome || game.phase === 'ended') return invalid(game, 'The war has already ended.');
@@ -890,6 +910,7 @@ export const applyPlayerAction = (game, action = {}) => {
     case 'transport': return transportAction(game, action, actor);
     case 'orders': return setOrder(game, action, actor);
     case 'refit': return setRefit(game, action, actor);
+    case 'power': return setPower(game, action, actor);
     case 'autopilot': return result(completeTurn(game), `${actor.name} autopilot holds course.`);
     case 'resign': {
       if (game.resigned) return invalid(game, 'You have already resigned command; the autopilot has the conn.');

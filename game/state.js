@@ -8,6 +8,8 @@ import {
   FACTION_IDS,
   GRID_SIZE,
   LOG_LIMIT,
+  POWER,
+  POWER_SINKS,
   RANGES,
   REIMAGINED_GRID_SIZE,
   SCENARIO_IDS,
@@ -29,8 +31,13 @@ const SHIP_ROSTER = Object.freeze([
   ['scout', 'scout'],
 ]);
 
-const createShip = ({ id, name, faction, kind, x, y }) => {
+const createShip = ({ id, name, faction, kind, x, y, reimagined }) => {
   const template = SHIP_TEMPLATES[kind];
+  // A Reimagined hull carries a reactor subsystem; a classic or extended one does
+  // not, so their damage lottery — and every calibrated figure — is untouched.
+  const systems = reimagined
+    ? { ...template.systems, reactor: POWER.reactor[template.className] ?? 0 }
+    : { ...template.systems };
 
   return {
     id,
@@ -42,7 +49,7 @@ const createShip = ({ id, name, faction, kind, x, y }) => {
     status: 'active',
     shields: template.shields,
     crew: template.crew,
-    systems: { ...template.systems },
+    systems,
     tractorBy: null,
     kills: 0,
     shotsFired: 0,
@@ -75,7 +82,7 @@ const randomPosition = (rng, faction, regional, occupied, gridSize) => {
   return position;
 };
 
-const createFleet = (faction, rng, regional, occupied, gridSize) => SHIP_ROSTER.map(([suffix, kind], index) => {
+const createFleet = (faction, rng, regional, occupied, gridSize, reimagined) => SHIP_ROSTER.map(([suffix, kind], index) => {
   const position = randomPosition(rng, faction, regional, occupied, gridSize);
   const factionId = FACTION_IDS[faction];
   return createShip({
@@ -83,6 +90,7 @@ const createFleet = (faction, rng, regional, occupied, gridSize) => SHIP_ROSTER.
     name: SHIP_NAMES[faction][index],
     faction,
     kind,
+    reimagined,
     ...position,
   });
 });
@@ -116,12 +124,13 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     y: Math.round(XANADU_POSITION.y * (gridSize / GRID_SIZE)),
   };
   const occupied = new Set([`${xanaduPosition.x},${xanaduPosition.y}`]);
-  const fleets = Object.values(FACTIONS).flatMap((faction) => createFleet(faction, rng, regional, occupied, gridSize));
+  const fleets = Object.values(FACTIONS).flatMap((faction) => createFleet(faction, rng, regional, occupied, gridSize, isReimagined));
   const xanadu = createShip({
     id: 'xanadu',
     name: 'Xanadu',
     faction: FACTIONS.FEDERATION,
     kind: 'starbase',
+    reimagined: isReimagined,
     ...xanaduPosition,
   });
   const enemyFlagships = fleets.filter((ship) => ship.id.endsWith('-flagship') && ship.faction !== FACTIONS.FEDERATION);
@@ -164,6 +173,9 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     scanned: {},
     // The one-time dockyard refit each hull has taken, if any.
     refits: {},
+    // Per-hull reactor power allocation (shipId -> sink -> points), Reimagined only.
+    // Empty by default; a hull with no stored allocation runs its class default.
+    power: {},
     outcome: null,
   };
 };
@@ -316,7 +328,58 @@ export const vendettaGrudge = (game, shooter, target) => {
 };
 
 /** The template's system complement, for measuring what a hull has lost. */
-export const templateSystems = (ship) => ({ ...(templateFor(ship)?.systems ?? {}) });
+export const templateSystems = (ship) => {
+  const base = { ...(templateFor(ship)?.systems ?? {}) };
+  // A Reimagined hull's reactor is part of its complement, so the dockyard repairs it
+  // and a refit cap would see it; a classic or extended hull has none, so its
+  // complement is exactly the template's and its calibration is untouched.
+  if (ship?.systems && 'reactor' in ship.systems) base.reactor = POWER.reactor[ship.className] ?? 0;
+  return base;
+};
+
+/**
+ * The power budget a hull can allocate: `POWER.perUnit` per live reactor unit. A
+ * reactor knocked out by damage shrinks the budget and every sink that draws on it.
+ */
+export const reactorOutput = (ship) => systemUnits(ship, 'reactor') * POWER.perUnit;
+
+/** Normalize an allocation to non-negative integers summing to at most the budget. */
+const clampAllocation = (allocation, budget) => {
+  const out = {};
+  let spent = 0;
+  for (const sink of POWER_SINKS) {
+    const want = Math.max(0, Math.floor(Number(allocation?.[sink]) || 0));
+    const value = Math.min(want, Math.max(0, budget - spent));
+    out[sink] = value;
+    spent += value;
+  }
+  return out;
+};
+
+/** Clamp a requested allocation to a hull's reactor budget. */
+export const clampPowerAllocation = (allocation, ship) => clampAllocation(allocation, reactorOutput(ship));
+
+/**
+ * The allocation a hull is running: its stored one, or the per-class default (each
+ * sink at its need, capped to the budget). The default spends exactly the needs, so
+ * an untouched hull runs every sink at 1.0x.
+ */
+export const powerAllocation = (game, ship) => clampAllocation(game?.power?.[ship?.id] ?? POWER.need, reactorOutput(ship));
+
+/**
+ * A sink's effectiveness multiplier: `allocated / need`, clamped to `[0, overcharge]`.
+ * Always 1 outside a Reimagined war, so a classic or extended hull performs exactly as
+ * calibrated; at the default allocation a Reimagined hull is also 1.0x.
+ */
+export const powerEffect = (game, ship, sink) => {
+  if (!game?.reimagined) return 1;
+  const need = POWER.need[sink] ?? 0;
+  if (need <= 0) return 1;
+  return Math.min(POWER.overcharge, (powerAllocation(game, ship)[sink] ?? 0) / need);
+};
+
+/** Reads an allocation as the console would: "shields 4, weapons 6, engines 4, ...". */
+export const describePower = (allocation) => POWER_SINKS.map((sink) => `${sink} ${allocation?.[sink] ?? 0}`).join(', ');
 
 /**
  * The friendly starbase this hull is docked at, if any — close enough, and healthy
