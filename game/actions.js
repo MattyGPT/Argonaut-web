@@ -263,7 +263,7 @@ export const maneuverTo = (game, x, y) => {
   const dy = y - actor.y;
   const span = Math.hypot(dx, dy);
   if (span < 0.5) return null; // a click on your own hull is not an order
-  const capacity = engineCapacity(actor);
+  const capacity = engineCapacity(actor, game.gridSize ?? GRID_SIZE);
   const reach = Math.min(capacity, span);
   let moveX = Math.round((dx / span) * reach);
   let moveY = Math.round((dy / span) * reach);
@@ -556,7 +556,7 @@ const moveAction = (game, action, actor) => {
   const dy = Number(action.dy);
   if (!Number.isFinite(dx) || !Number.isFinite(dy)) return invalid(game, 'Movement requires numeric displacement coordinates.');
   const displacement = Math.hypot(dx, dy);
-  const capacity = engineCapacity(actor);
+  const capacity = engineCapacity(actor, game.gridSize ?? GRID_SIZE);
   if (displacement > capacity) return invalid(game, `Movement exceeds engine capacity of ${capacity}.`);
   const grid = game.gridSize ?? GRID_SIZE;
   const x = actor.x + dx;

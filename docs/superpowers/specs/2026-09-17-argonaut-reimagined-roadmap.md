@@ -45,30 +45,38 @@ The war zone is `GRID_SIZE = 100`, a single module constant read in eight places
 formation in `state.js`, and the tests). The small grid crowds 21 hulls and leaves
 little room to maneuver, screen, or hide.
 
-**Phase 0** makes the grid a *property of the war* rather than a global constant:
+**Phase 0** makes the grid a *property of the war* rather than a global constant.
+**Shipped** (13a–13b in PR #23, 13c–13d in PR #24):
 
 - `game.gridSize`, defaulting to 100. Classic and extended wars keep 100, so
   calibration and the seeded opening disposition are untouched. Reimagined opens
-  on a larger field (target ~160–200; the exact size is a Phase 0 balance dial).
-- Replace the eight `GRID_SIZE` reads with `game.gridSize`. The render layer
-  already maps hull coordinates to the field as a fraction, so it scales for free
-  once positions and the click map divide by `gridSize` instead of the constant.
-- **Range policy.** `RANGES` (phasers 30, photons 10, tractor 35) are absolute
-  map units. On a 200-unit field they cover a quarter the fraction they do today,
-  so combat thins out. Two options, to settle in Phase 0:
-  1. Scale weapon/sensor ranges with `gridSize` (keeps the *feel* of reach), or
-  2. Keep ranges fixed and let the bigger field reward speed, screening, and
-     terrain (makes engines and the scout matter more).
-  Recommendation: **(2)** for Reimagined — the larger field should change tactics,
-  not just zoom them — but revisit once hazards (Phase 2) and the sector campaign
-  (Phase 6) are in.
-- **Camera.** A field too big to read at once needs pan/zoom (or a viewport that
-  follows the command ship with a strategic minimap). This is the one genuinely
-  new UI affordance Phase 0 introduces; everything else is a constant swap.
+  on a **240-unit** field (`REIMAGINED_GRID_SIZE`).
+- The eight `GRID_SIZE` reads became `game.gridSize` (click→coordinate mapping,
+  move clamping, the hyperspace landing roll, the starting formation, the tractor
+  pull bound, and the render/FX projection). The render layer maps hull coordinates
+  to the field as a fraction, so it scaled cleanly.
+- **Range policy — settled: option (2), ranges fixed, movement scaled.** `RANGES`
+  (phasers 30, photons 10, tractor 35) stay at their absolute map units and do
+  *not* scale, so on the 240 field a gun covers a smaller fraction of the war and
+  there is real room to screen, flank, and disengage. To keep the war from dragging,
+  `engineCapacity` *does* scale with the field (`× gridSize / GRID_SIZE`), so a hull
+  crosses 240 units in about the same number of stardates it crosses 100 today. At
+  `GRID_SIZE` the factor is 1 and the figure is exactly the calibrated one, so a
+  classic or extended war is unchanged. Revisit the balance once hazards (Phase 2)
+  and the sector campaign (Phase 6) are in.
+- **Camera — shipped.** The map is now a viewport into the field: `ui/camera.js`
+  is a pure projection (window, world↔viewport, the `#map-field` transform,
+  cursor-anchored zoom, pan, follow). The world layer is slid and scaled to frame
+  the camera window; the FX `viewBox` tracks the same window so beams land on their
+  hulls; click-to-maneuver inverts the projection. The camera follows the command
+  ship until you pan or zoom, the wheel zooms toward the cursor, arrow keys pan,
+  and a **minimap** shows the whole war zone with the viewport rectangle and
+  re-centers on drag. All of it is inert in a classic or extended war, where the
+  whole field already fits and the projection is identity.
 
-Phase 0 is deliberately small and infrastructure-only: it ships the seam, proves
-the parity test still holds at 100, and lets Reimagined open on a wider field
-before any new mechanic depends on it.
+Phase 0 is infrastructure-only: it ships the seam, proves the parity test still
+holds at 100, and lets Reimagined open on a wide, navigable field before any new
+mechanic depends on it.
 
 ## The roadmap — buildable, testable chunks
 
@@ -86,17 +94,17 @@ destroying needs room; cheap levers (stances) before the largest single damage-m
 touch (directional shields); the sector campaign as the capstone the expanded grid
 feeds into.
 
-### Phase 0 — Foundation *(prerequisite for everything positional)*
+### Phase 0 — Foundation *(prerequisite for everything positional)* — ✅ shipped
 
-| Round | Chunk | Builds | Tested by |
-| --- | --- | --- | --- |
-| 13a | `reimagined` flag | New-game checkbox, `createGame` param, save field — no mechanics yet | Parity holds; flag-on war still identical |
-| 13b | `game.gridSize` per war | Replace the eight `GRID_SIZE` reads; default 100 | At 100 → identical; Reimagined opens wider, ships placed/landed in-bounds |
-| 13c | Camera: pan/zoom + minimap | Read a field too big for one screen | Click→coord maps under pan/zoom; reduced-motion; minimap correct |
-| 13d | Range/scale policy | Settle scaled-vs-fixed ranges on the big field | Combat resolves at the new size; balance recorded |
+| Round | Chunk | Builds | Tested by | Status |
+| --- | --- | --- | --- | --- |
+| 13a | `reimagined` flag | New-game checkbox, `createGame` param, save field — no mechanics yet | Parity holds; flag-on war still identical | ✅ PR #23 |
+| 13b | `game.gridSize` per war | Replace the eight `GRID_SIZE` reads; default 100 | At 100 → identical; Reimagined opens wider, ships placed/landed in-bounds | ✅ PR #23 |
+| 13c | Camera: pan/zoom + minimap | Read a field too big for one screen | `ui/camera.js` projection round-trips; click→coord maps under pan/zoom; minimap renders | ✅ PR #24 |
+| 13d | Range/scale policy | Ranges fixed, movement scaled with the field | `engineCapacity` scales; wide-field maneuver; classic/extended parity | ✅ PR #24 |
 
-13a–13b may ship as one PR, 13c–13d as a second. After Phase 0, Reimagined is
-playable on a wide field with zero new mechanics — a clean checkpoint.
+After Phase 0, Reimagined is playable and navigable on a wide field with zero new
+combat mechanics — a clean checkpoint. **Next: Phase 1, power management (14a).**
 
 ### Phase 1 — Power management *(headline; detailed below)*
 

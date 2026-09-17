@@ -205,7 +205,13 @@ export const shieldCapacity = (ship) => templateFor(ship)?.shields ?? ship?.shie
 export const crewCapacity = (ship) => templateFor(ship)?.crew ?? ship?.crew ?? 0;
 export const systemUnits = (ship, system) => Math.max(0, ship?.systems?.[system] ?? 0);
 export const systemRange = (ship, system) => systemUnits(ship, system) * (SYSTEM_RANGE_PER_UNIT[system] ?? 0);
-export const engineCapacity = (ship) => systemUnits(ship, 'engines') * ENGINE_MOVE_PER_UNIT;
+/**
+ * How far a hull may move per stardate. Scales with the size of the field so a
+ * Reimagined war crosses its wider map in about the same number of turns as a
+ * classic war crosses the 100-unit one; at the default `GRID_SIZE` the factor is 1
+ * and the figure is exactly the calibrated one.
+ */
+export const engineCapacity = (ship, gridSize = GRID_SIZE) => systemUnits(ship, 'engines') * ENGINE_MOVE_PER_UNIT * (gridSize / GRID_SIZE);
 
 /** Self-destruct blast radius; the Xanadu starbase's is doubled. */
 export const blastRadius = (ship) => ship?.className === 'Starbase' ? STARBASE_BLAST_RADIUS : RANGES.selfDestruct;

@@ -226,12 +226,20 @@ test('the top bar and legend mark an extended war', () => {
 
 test('a Reimagined war is badged and draws hulls as a fraction of the wider field', () => {
   elements.clear();
-  const game = withFlagship(createGame({ seed: 'render-reimagined', reimagined: true }), { x: 120, y: 80 });
+  const game = withFlagship(createGame({ seed: 'render-reimagined', reimagined: true }), { x: 60, y: 120 });
   renderGame(game);
   assert.equal(read('#mode-readout').textContent, 'REIMAGINED WAR');
-  // 120 of 160 units is 75% across the field, and 80 of 160 is 50% down; a classic
-  // 100-unit field would have no room for a hull at 120 at all.
-  assert.match(read('#map-field').innerHTML, /--x:75;--y:50/);
+  // 60 of 240 units is 25% across the field, and 120 of 240 is 50% down; a classic
+  // 100-unit field would have no room for a hull at those coordinates at all.
+  assert.match(read('#map-field').innerHTML, /--x:25;--y:50/);
+  // The minimap and camera chrome only exist for a war wider than the screen.
+  assert.match(read('#minimap').innerHTML, /mini-view/);
+});
+
+test('a classic war draws no minimap, where the whole field already fits', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'render-classic-nocam' }));
+  assert.equal(read('#minimap').innerHTML, '');
 });
 
 test('a ship under orders wears a pip on the map', () => {

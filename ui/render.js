@@ -1,6 +1,7 @@
 import { DOCKING, FACTIONS, GRID_SIZE, RANGES, REFITS } from '../game/constants.js';
 import { shipCommands } from '../game/actions.js';
 import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
+import { cameraWindow, fieldTransform, viewportFromWorld } from './camera.js';
 import { drawMove } from './fx.js';
 import {
   abbreviateNarrative,
@@ -126,11 +127,12 @@ const shipMenu = (game, actor, ship) => {
  * map edge and clamping so it never leaves the map or covers its own ship. The
  * tail keeps pointing at the hull's row once the box has been clamped.
  */
-const placeShipMenu = (menu, map, ship, grid) => {
+const placeShipMenu = (menu, map, ship, win) => {
   const rect = map?.getBoundingClientRect?.();
   if (!rect?.width || !rect?.height) return;
-  const px = (ship.x / grid) * rect.width;
-  const py = (ship.y / grid) * rect.height;
+  const at = viewportFromWorld(ship.x, ship.y, win);
+  const px = at.vx * rect.width;
+  const py = at.vy * rect.height;
   const gap = 16;
   let side = 'right';
   let left = px + gap;
@@ -154,9 +156,9 @@ const placeShipMenu = (menu, map, ship, grid) => {
  */
 let moveMemory = { seed: null, positions: new Map() };
 
-const animateMoves = (map, game) => {
+const animateMoves = (map, game, win) => {
   if (!map?.querySelectorAll) return;
-  const grid = game.gridSize ?? GRID_SIZE;
+  const grid = win?.gridSize ?? game.gridSize ?? GRID_SIZE;
   if (moveMemory.seed !== game.seed) moveMemory = { seed: game.seed, positions: new Map() };
   map.querySelectorAll('.ship[data-ship-id]').forEach((button) => {
     const ship = getShip(game, button.dataset.shipId);
@@ -164,7 +166,7 @@ const animateMoves = (map, game) => {
     const previous = moveMemory.positions.get(ship.id);
     moveMemory.positions.set(ship.id, { x: ship.x, y: ship.y });
     if (!previous || (previous.x === ship.x && previous.y === ship.y)) return;
-    drawMove(map, previous, ship, grid);
+    drawMove(map, previous, ship, win);
     button.style.left = `${(previous.x / grid) * 100}%`;
     button.style.top = `${(previous.y / grid) * 100}%`;
     // Two frames: the old position has to be committed before the transition target.
@@ -173,6 +175,31 @@ const animateMoves = (map, game) => {
       button.style.top = `${(ship.y / grid) * 100}%`;
     }));
   });
+};
+
+/**
+ * The minimap: the whole war zone in miniature, with the hulls the mapper can see and
+ * a rectangle for the camera's current window. Dragging it (wired in app.js) re-centers
+ * the view; once the field is wider than the screen it is the only whole-war picture,
+ * so it stands in for the Backspace report's sense of the battlefield. Hidden in a
+ * classic or extended war, where the whole field already fits on screen.
+ */
+const renderMinimap = (game, win, isVisible) => {
+  const minimap = document.querySelector('#minimap');
+  const controls = document.querySelector('#camera-controls');
+  const show = Boolean(game.reimagined);
+  if (controls) controls.hidden = !show;
+  if (!minimap) return;
+  minimap.hidden = !show;
+  if (!show) { minimap.innerHTML = ''; return; }
+  const grid = win.gridSize;
+  const frac = (value) => (value / grid) * 100;
+  const dots = game.ships
+    .filter((ship) => ship.status !== 'destroyed' && isVisible(ship))
+    .map((ship) => `<span class="mini-dot ${ship.faction}${ship.id === game.playerShipId ? ' you' : ''}" style="--mx:${frac(ship.x)};--my:${frac(ship.y)}"></span>`)
+    .join('');
+  const viewport = `<span class="mini-view" style="--vx:${frac(win.minX)};--vy:${frac(win.minY)};--vw:${frac(win.size)}"></span>`;
+  minimap.innerHTML = dots + viewport;
 };
 
 export const renderGame = (game, view = {}) => {
@@ -188,6 +215,10 @@ export const renderGame = (game, view = {}) => {
   // percentage of `game.gridSize`, which is wider in a Reimagined war.
   const grid = game.gridSize ?? GRID_SIZE;
   const pct = (value) => (value / grid) * 100;
+  // A Reimagined field is wider than the screen, so the map is a camera window into
+  // it. A classic war's window is the whole field at zoom 1, which projects exactly
+  // as it did before the camera existed.
+  const win = cameraWindow(grid, view.camera);
   document.querySelector('#mode-readout').textContent = game.reimagined
     ? (scenarioFor(game).id === 'annihilation' ? 'REIMAGINED WAR' : `REIMAGINED · ${scenarioFor(game).title.toUpperCase()}`)
     : game.extended
@@ -217,7 +248,7 @@ export const renderGame = (game, view = {}) => {
   if (actorActive) {
     if (actor.systems.phasers > 0) rings.push({ r: RANGES.phasers, kind: 'phasers', x: actor.x, y: actor.y });
     if (actor.systems.photons > 0) rings.push({ r: RANGES.photons, kind: 'photons', x: actor.x, y: actor.y });
-    const engineReach = engineCapacity(actor);
+    const engineReach = engineCapacity(actor, grid);
     if (engineReach > 0) rings.push({ r: engineReach, kind: 'engines', x: actor.x, y: actor.y });
   }
   // In an extended war the dockyard at Xanadu repairs anything inside its ring.
@@ -241,7 +272,11 @@ export const renderGame = (game, view = {}) => {
     return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}"${view.battlePaused ? ' disabled' : ''}><span class="glyph">${ship.name[0]}</span></button>`;
   }).join('');
   map.innerHTML = ringHtml + shipHtml;
-  animateMoves(map, game);
+  // Slide and scale the world layer so the camera window fills the viewport. The
+  // test stub has no `style`, so guard it; the projection is identity at zoom 1.
+  if (map.style) map.style.transform = fieldTransform(win);
+  animateMoves(map, game, win);
+  renderMinimap(game, win, isVisible);
 
   // The context menu lives over the map field, beside the hull it grew from. It is
   // gone whenever that hull is gone, hidden by fog, or the war is not taking orders.
@@ -256,7 +291,7 @@ export const renderGame = (game, view = {}) => {
     menu.innerHTML = menuShip ? shipMenu(game, actor, menuShip) : '';
     if (menuShip) {
       menu.setAttribute?.('open', '');
-      placeShipMenu(menu, document.querySelector('#map'), menuShip, grid);
+      placeShipMenu(menu, document.querySelector('#map'), menuShip, win);
       if (!wasOpen) menu.querySelector?.('button')?.focus?.();
     } else {
       menu.removeAttribute?.('open');

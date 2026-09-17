@@ -140,6 +140,9 @@ h1 {
   aspect-ratio: 1.35;
   min-height: 320px;
   cursor: crosshair;
+  /* A Reimagined field is wider than the screen, so the map is a viewport that the
+     world layer (#map-field) is slid and scaled inside; the overflow must clip. */
+  overflow: hidden;
   background-image: linear-gradient(#1a365311 1px, transparent 1px), linear-gradient(90deg, #1a365311 1px, transparent 1px), radial-gradient(circle at 20% 30%, #d8eeff 0 1px, transparent 2px), radial-gradient(circle at 80% 20%, #d8eeff 0 1px, transparent 2px), radial-gradient(circle at 43% 72%, #d8eeff 0 1px, transparent 2px);
   background-size: 10% 10%, 10% 10%, 100% 100%, 100% 100%, 100% 100%;
 }
@@ -148,6 +151,8 @@ h1 {
   position: absolute;
   inset: 0;
   z-index: 1;
+  /* render.js slides and scales this layer to frame the camera window. */
+  transform-origin: 0 0;
 }
 
 .ship {
@@ -268,6 +273,72 @@ h1 {
   color: #43525f;
   font-size: .85rem;
   line-height: 1;
+  pointer-events: none;
+}
+
+/* Camera chrome for a Reimagined war, whose field is wider than the screen. Both
+   are overlays on the viewport, hidden in a classic or extended war, and clicking
+   them is never a maneuver (input.js skips them). */
+.camera-controls {
+  position: absolute;
+  top: .5rem;
+  right: .5rem;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+}
+
+.camera-controls button {
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.minimap {
+  position: absolute;
+  right: .5rem;
+  bottom: .5rem;
+  z-index: 4;
+  width: 26%;
+  max-width: 9.5rem;
+  aspect-ratio: 1;
+  background: rgba(5, 12, 22, .78);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  cursor: crosshair;
+  touch-action: none;
+  overflow: hidden;
+}
+
+.mini-dot {
+  position: absolute;
+  left: calc(var(--mx) * 1%);
+  top: calc(var(--my) * 1%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+}
+
+.mini-dot.you {
+  width: 8px;
+  height: 8px;
+  box-shadow: 0 0 0 1px #fff;
+}
+
+.mini-view {
+  position: absolute;
+  left: calc(var(--vx) * 1%);
+  top: calc(var(--vy) * 1%);
+  width: calc(var(--vw) * 1%);
+  height: calc(var(--vw) * 1%);
+  border: 1px solid #cfe8ff;
+  background: #cfe8ff14;
+  transform: translate(0, 0);
   pointer-events: none;
 }
 

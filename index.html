@@ -34,6 +34,12 @@
         <div id="map" role="group" aria-label="Space map">
           <div id="map-field"></div>
           <div id="ship-menu" aria-label="Ship commands"></div>
+          <div id="camera-controls" class="camera-controls" hidden>
+            <button id="zoom-in" class="secondary tiny" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+            <button id="zoom-out" class="secondary tiny" type="button" title="Zoom out" aria-label="Zoom out">&minus;</button>
+            <button id="camera-center" class="secondary tiny" type="button" title="Center on command ship" aria-label="Center on command ship">&#8982;</button>
+          </div>
+          <div id="minimap" class="minimap" role="img" aria-label="War zone minimap" hidden></div>
         </div>
         <div class="map-legend">
           <span class="Federation">■ Federation</span>
@@ -206,6 +212,7 @@
               <li><b>Tactical sound</b> adds phaser, photon, explosion, and miss effects, plus a klaxon on the way into RED alert.</li>
               <li><b>Precision fire</b> gives your phaser volleys a power dial and called subsystem shots.</li>
               <li><b>Extended war</b> adds standing orders for your fleet, alliance doctrines, the Xanadu dockyard, and three scenarios.</li>
+              <li><b>Argonaut Reimagined</b> is an expansion mode under active development. It carries the extended war and opens on a much wider 240-unit battlefield that the map becomes a pannable, zoomable viewport into — wheel or <kbd>+</kbd>/<kbd>-</kbd> to zoom, arrow keys or the minimap to pan, <kbd>⌖</kbd> to re-center on your flagship. Engine reach scales with the field while weapon ranges stay at their classic units, leaving room to screen, flank, and disengage. A classic or extended war is untouched.</li>
             </ul>
             <figure class="guide-figure">
               <img src="assets/guide/new-game.png" alt="The New game dialog with fields for seed, regional formations, tactical sound, precision fire, extended war, and scenario." loading="lazy">
