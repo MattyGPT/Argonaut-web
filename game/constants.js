@@ -4,11 +4,17 @@ export const GRID_SIZE = 100;
  * The tactical field a Reimagined war opens on, in the same map units as
  * `GRID_SIZE`. Classic and extended wars stay at `GRID_SIZE`, so the calibrated
  * opening disposition and every absolute range figure are unchanged; only a
- * Reimagined war widens the battlefield. Weapon and sensor ranges deliberately do
- * *not* scale with it (Phase 0 range policy), so the bigger field changes tactics
- * rather than zooming them. A balance dial for the Argonaut Reimagined roadmap.
+ * Reimagined war widens the battlefield.
+ *
+ * Phase 0 range/scale policy (13d): weapon and sensor ranges stay at their fixed
+ * map units and do *not* scale, but engine movement does (`engineCapacity` scales
+ * with the field), so a hull crosses the wider field in about the same number of
+ * stardates while its guns cover a smaller fraction of it. The result is room to
+ * screen, flank, and disengage rather than a zoomed-out copy of the classic fight.
+ * The field is large enough that it no longer fits on one screen, which is what the
+ * pan/zoom camera and minimap (13c) are for. A balance dial for the roadmap.
  */
-export const REIMAGINED_GRID_SIZE = 160;
+export const REIMAGINED_GRID_SIZE = 240;
 
 export const FACTIONS = Object.freeze({
   FEDERATION: 'Federation',

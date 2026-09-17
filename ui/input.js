@@ -32,7 +32,7 @@ const keys = Object.freeze({
 /** Whether focus currently sits on something Tab is supposed to reach. */
 const isFocusable = (element) => Boolean(element?.matches?.('button, input, select, textarea, a[href], [tabindex]'));
 
-export const bindInput = (root, dispatch, getGridSize = () => GRID_SIZE) => {
+export const bindInput = (root, dispatch, getCamera = () => ({ minX: 0, minY: 0, size: GRID_SIZE })) => {
   root.addEventListener('click', (event) => {
     // Refit choices live beside the order picker and carry the hull they are for.
     const refitButton = event.target.closest('[data-refit]');
@@ -55,6 +55,8 @@ export const bindInput = (root, dispatch, getGridSize = () => GRID_SIZE) => {
     }
     // The menu body is not empty space: clicking it may never become a maneuver.
     if (event.target.closest('#ship-menu')) return;
+    // Neither is the camera chrome (minimap, zoom buttons) that overlays the map.
+    if (event.target.closest('#minimap') || event.target.closest('#camera-controls')) return;
     const command = event.target.closest('[data-command]')?.dataset.command;
     if (command) dispatch({ type: command });
     const ship = event.target.closest('[data-ship-id]')?.dataset.shipId;
@@ -73,11 +75,11 @@ export const bindInput = (root, dispatch, getGridSize = () => GRID_SIZE) => {
     }
     const rect = map.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
-    const grid = getGridSize();
+    const win = getCamera();
     dispatch({
       type: 'map-click',
-      x: ((event.clientX - rect.left) / rect.width) * grid,
-      y: ((event.clientY - rect.top) / rect.height) * grid,
+      x: win.minX + ((event.clientX - rect.left) / rect.width) * win.size,
+      y: win.minY + ((event.clientY - rect.top) / rect.height) * win.size,
     });
   });
 

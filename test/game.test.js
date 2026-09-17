@@ -1968,13 +1968,19 @@ test('the Reimagined scaffold leaves a classic or extended war untouched', () =>
 });
 
 test('a Reimagined war maneuvers past the classic 100-unit edge, but not off the field', () => {
-  const game = withShips(createGame({ seed: 'reimagined-move', reimagined: true }), (ship) => {
-    if (ship.id === 'fed-flagship') return { ...ship, x: 120, y: 80 };
+  const setup = (x) => withShips(createGame({ seed: 'reimagined-move', reimagined: true }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x, y: 120 };
     if (ship.id === 'xanadu') return ship;
     return { ...ship, x: 5, y: 5 };
   });
-  const inside = applyPlayerAction(game, { type: 'move', dx: 30, dy: 0 });
-  assert.equal(getShip(inside.game, 'fed-flagship').x, 150, 'a coordinate a classic war would refuse lands on the wider field');
-  const offEdge = applyPlayerAction(game, { type: 'move', dx: 50, dy: 0 });
+  const past = applyPlayerAction(setup(100), { type: 'move', dx: 30, dy: 0 });
+  assert.equal(getShip(past.game, 'fed-flagship').x, 130, 'a coordinate a classic war would refuse lands on the wider field');
+  const offEdge = applyPlayerAction(setup(200), { type: 'move', dx: 50, dy: 0 });
   assert.match(offEdge.messages.join(' '), /leave the tactical map/i, 'movement still stops at the field edge');
+});
+
+test('engine reach scales with the field, so a wide war closes at the same pace', () => {
+  const flagship = getShip(createGame({ seed: 'scale-move' }), 'fed-flagship');
+  assert.equal(engineCapacity(flagship), 50, 'the calibrated reach on the classic 100-unit field');
+  assert.equal(engineCapacity(flagship, REIMAGINED_GRID_SIZE), 120, 'the same hull crosses the 240-unit field in the same number of turns');
 });

@@ -4,7 +4,10 @@ import { isTerminalEvent } from './battle-events.js';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const TERMINAL_EFFECT_MS = 2500;
 
-const layer = (map, grid = GRID_SIZE) => {
+/** The whole field, as a camera window — what a classic war always draws into. */
+const FULL_FIELD = { minX: 0, minY: 0, size: GRID_SIZE };
+
+const layer = (map, win = FULL_FIELD) => {
   let el = map.querySelector('svg.fx-layer');
   if (!el) {
     el = document.createElementNS(SVG_NS, 'svg');
@@ -12,9 +15,10 @@ const layer = (map, grid = GRID_SIZE) => {
     el.setAttribute('preserveAspectRatio', 'none');
     map.appendChild(el);
   }
-  // The FX layer is drawn in map units, so its viewBox tracks the war's field —
-  // wider in a Reimagined war — and beams, trails, and bursts land on their hulls.
-  el.setAttribute('viewBox', `0 0 ${grid} ${grid}`);
+  // FX are drawn in world units, so the layer's viewBox is the camera window: beams,
+  // trails, and bursts land on their hulls whether the view shows the whole field or
+  // is zoomed into one corner of a wide Reimagined war.
+  el.setAttribute('viewBox', `${win.minX} ${win.minY} ${win.size} ${win.size}`);
   return el;
 };
 
@@ -113,11 +117,11 @@ const draw = (svg, e) => {
 };
 
 /** Draws beams/torpedoes/explosions for shots involving the command ship. */
-export const playEffects = (events, map, playerId, grid = GRID_SIZE) => {
+export const playEffects = (events, map, playerId, win = FULL_FIELD) => {
   if (!map || !events?.length) return;
   const relevant = events.filter((e) => isTerminalEvent(e) || e.fromId === playerId || e.toId === playerId);
   if (!relevant.length) return;
-  const svg = layer(map, grid);
+  const svg = layer(map, win);
   relevant.forEach((e, i) => {
     if (isTerminalEvent(e)) draw(svg, e);
     else setTimeout(() => draw(svg, e), i * 160);
@@ -128,9 +132,9 @@ export const playEffects = (events, map, playerId, grid = GRID_SIZE) => {
  * A fading dashed line from where a hull was to where it is now, so a repositioning
  * stays legible after the ship has finished gliding.
  */
-export const drawMove = (map, from, to, grid = GRID_SIZE) => {
+export const drawMove = (map, from, to, win = FULL_FIELD) => {
   if (!map) return;
-  const svg = layer(map, grid);
+  const svg = layer(map, win);
   const line = document.createElementNS(SVG_NS, 'line');
   line.setAttribute('x1', from.x);
   line.setAttribute('y1', from.y);
@@ -146,9 +150,9 @@ export const drawMove = (map, from, to, grid = GRID_SIZE) => {
  * Replays a whole round: every ship's volleys, not only the ones that touched you,
  * paced slowly enough to follow. Returns how long the replay runs, in milliseconds.
  */
-export const replayEffects = (events, map, stepMs = 420, grid = GRID_SIZE) => {
+export const replayEffects = (events, map, stepMs = 420, win = FULL_FIELD) => {
   if (!map || !events?.length) return 0;
-  const svg = layer(map, grid);
+  const svg = layer(map, win);
   svg.innerHTML = '';
   events.forEach((e, i) => setTimeout(() => draw(svg, e), i * stepMs));
   return events.length * stepMs;

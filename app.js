@@ -4,6 +4,7 @@ import { alertLevel, appendLog, createGame, getShip, systemUnits } from './game/
 import { scenarioFor } from './game/scenarios.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './game/turns.js';
 import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget } from './ui/input.js';
+import { cameraWindow, centerOn, clampCamera, makeCamera, panBy, zoomAt } from './ui/camera.js';
 import {
   ordinaryBattleEvents,
   playReplayEvents,
@@ -41,7 +42,29 @@ const save = () => {
 const randomSeed = () => `war-${Math.random().toString(36).slice(2, 8)}`;
 
 let game = loadSave() ?? createGame({ seed: randomSeed() });
-let view = { entries: ['Tactical systems online. Choose a command.'] };
+let view = { entries: ['Tactical systems online. Choose a command.'], camera: null };
+
+/** The war's field, defaulting safely for an old save that predates `gridSize`. */
+const field = () => game.gridSize ?? GRID_SIZE;
+
+/**
+ * Keep the camera alive and, while it is following, framed on the command ship. The
+ * camera is ephemeral view state — never saved — so a fresh or resumed war frames
+ * the flagship and a manual pan/zoom takes over until you re-center.
+ */
+const syncCamera = () => {
+  const ship = getShip(game, game.playerShipId);
+  if (!view.camera) {
+    view = { ...view, camera: makeCamera(field(), ship) };
+    return;
+  }
+  if (view.camera.follow && ship) {
+    view = { ...view, camera: clampCamera({ ...view.camera, cx: ship.x, cy: ship.y }, field()) };
+  }
+};
+
+/** The camera's visible window, for the FX layer and the click-to-maneuver map. */
+const currentWindow = () => cameraWindow(field(), view.camera);
 
 /**
  * The precision-fire dials as last set in this war's phaser prompts, so a player
@@ -62,8 +85,11 @@ const CONFIRMATIONS = new Map([
   ['hyperspace', (actor) => ['Hyperspace?', `${actor?.name ?? 'Your ship'} will emerge at a random point in the war zone with its shields weakened by the jump — and the jump itself can burn the ship up.`]],
 ]);
 
+const redraw = () => renderGame(game, { ...view, precision: game.precision ? precisionSettings : null });
+
 const refresh = () => {
-  renderGame(game, { ...view, precision: game.precision ? precisionSettings : null });
+  syncCamera();
+  redraw();
   warnOnRedAlert();
   save();
 };
@@ -90,7 +116,7 @@ const shake = () => {
 const showEvents = (events) => {
   const ordinary = ordinaryBattleEvents(events);
   if (!ordinary.length) return;
-  playEffects(ordinary, document.querySelector('#map'), game.playerShipId, game.gridSize ?? GRID_SIZE);
+  playEffects(ordinary, document.querySelector('#map'), game.playerShipId, currentWindow());
   if (ordinary.some((e) => e.toId === game.playerShipId && e.hit)) shake();
   if (game.sound) {
     ordinary
@@ -111,7 +137,7 @@ const clearTerminalPresentation = () => {
 const presentTerminalEvents = (events) => withPlaybackLock(
   (locked) => { presentingTerminalEvents = locked; },
   () => playTerminalEvents(events, (terminalEvent) => {
-    if (terminalEvent) playEffects([terminalEvent], document.querySelector('#map'), game.playerShipId, game.gridSize ?? GRID_SIZE);
+    if (terminalEvent) playEffects([terminalEvent], document.querySelector('#map'), game.playerShipId, currentWindow());
     view = { ...view, terminalEvent, battlePaused: Boolean(terminalEvent) || replayingRound };
     refresh();
   }, () => wait(TERMINAL_EVENT_MS)),
@@ -207,7 +233,7 @@ const dispatch = async (action) => {
       refresh();
       await playReplayEvents(
         round.events,
-        (event) => replayEffects([event], document.querySelector('#map'), undefined, game.gridSize ?? GRID_SIZE),
+        (event) => replayEffects([event], document.querySelector('#map'), undefined, currentWindow()),
         (event) => presentTerminalEvents([event]),
         wait,
       );
@@ -316,7 +342,66 @@ const dispatch = async (action) => {
 
 document.title = 'Argonaut Web';
 document.querySelector('#app-title').textContent = 'Argonaut Web';
-bindInput(document.querySelector('#game-root'), dispatch, () => game.gridSize ?? GRID_SIZE);
+bindInput(document.querySelector('#game-root'), dispatch, currentWindow);
+
+/**
+ * Camera controls for a Reimagined war, whose field is wider than the screen. The
+ * wheel zooms toward the cursor, the arrow keys pan, dragging the minimap re-centers,
+ * and the buttons zoom or snap back onto the command ship. None of these are game
+ * commands, so they live here rather than in the command input layer; each is inert
+ * unless the war is Reimagined, and clicking the chrome never becomes a maneuver.
+ */
+const setCamera = (camera) => { view = { ...view, camera }; redraw(); };
+const zoomBy = (factor) => { if (game.reimagined) setCamera(zoomAt(view.camera, field(), 0.5, 0.5, factor)); };
+const recenter = () => { if (game.reimagined) setCamera(centerOn(view.camera, field(), getShip(game, game.playerShipId))); };
+
+const mapEl = document.querySelector('#map');
+mapEl.addEventListener('wheel', (event) => {
+  if (!game.reimagined) return;
+  event.preventDefault();
+  const rect = mapEl.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const vx = (event.clientX - rect.left) / rect.width;
+  const vy = (event.clientY - rect.top) / rect.height;
+  setCamera(zoomAt(view.camera, field(), vx, vy, event.deltaY < 0 ? 1.2 : 1 / 1.2));
+}, { passive: false });
+
+document.addEventListener('keydown', (event) => {
+  if (!game.reimagined || document.querySelector('dialog[open]')) return;
+  if (event.target.matches?.('input,select,textarea')) return;
+  const steps = { ArrowLeft: [-0.25, 0], ArrowRight: [0.25, 0], ArrowUp: [0, -0.25], ArrowDown: [0, 0.25] };
+  const step = steps[event.key];
+  if (!step) return;
+  event.preventDefault();
+  setCamera(panBy(view.camera, field(), step[0], step[1]));
+});
+
+const minimap = document.querySelector('#minimap');
+let minimapDragging = false;
+const minimapCenter = (event) => {
+  const rect = minimap.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const grid = field();
+  setCamera(clampCamera({
+    ...view.camera,
+    cx: ((event.clientX - rect.left) / rect.width) * grid,
+    cy: ((event.clientY - rect.top) / rect.height) * grid,
+    follow: false,
+  }, grid));
+};
+minimap.addEventListener('pointerdown', (event) => {
+  if (!game.reimagined) return;
+  minimapDragging = true;
+  minimap.setPointerCapture?.(event.pointerId);
+  minimapCenter(event);
+});
+minimap.addEventListener('pointermove', (event) => { if (minimapDragging) minimapCenter(event); });
+minimap.addEventListener('pointerup', () => { minimapDragging = false; });
+minimap.addEventListener('pointercancel', () => { minimapDragging = false; });
+
+document.querySelector('#zoom-in').addEventListener('click', () => zoomBy(1.25));
+document.querySelector('#zoom-out').addEventListener('click', () => zoomBy(1 / 1.25));
+document.querySelector('#camera-center').addEventListener('click', () => recenter());
 
 /** Scenarios are an extended-war option, so the picker is only live in that mode. */
 const syncScenarioAvailability = () => {
@@ -381,7 +466,7 @@ document.querySelector('#new-game-form').addEventListener('submit', whenPlayback
       scenario: document.querySelector('#scenario').value,
     });
     precisionSettings = { power: 100, focus: null };
-    view = { entries: openingLines(game) };
+    view = { entries: openingLines(game), camera: null };
     refresh();
   }
 }));

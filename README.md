@@ -66,9 +66,18 @@ original ship names:
 - **Cabal** — Pequod, Queen Mab, Ragnarok, Saboteur, Terrorist
 
 The **New game** panel exposes the replay seed, the regional fleet setup, the
-optional tactical sound, the precision fire mode, the extended war mode, and —
-in an extended war — the scenario. Use the same seed to reproduce the opening
-state.
+optional tactical sound, the precision fire mode, the extended war mode, the
+**Argonaut Reimagined** mode, and — in an extended war — the scenario. Use the
+same seed to reproduce the opening state.
+
+**Argonaut Reimagined** is an opt-in expansion mode, under active development, that
+carries the extended war and opens the fight on a much wider 240-unit battlefield
+the map becomes a pannable, zoomable viewport into (wheel or `+`/`-` to zoom, arrow
+keys or the minimap to pan, `⌖` to re-center on your flagship). Weapon ranges stay
+at their classic units while engine reach scales with the field, so there is real
+room to screen, flank, and disengage. It never changes how a classic or extended
+war plays — those keep the calibrated 100-unit field. New Reimagined systems land
+over time; see `docs/superpowers/specs/2026-09-17-argonaut-reimagined-roadmap.md`.
 
 ## Mechanics notes
 
