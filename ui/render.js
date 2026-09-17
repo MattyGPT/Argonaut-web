@@ -1,4 +1,4 @@
-import { DOCKING, FACTIONS, RANGES, REFITS } from '../game/constants.js';
+import { DOCKING, FACTIONS, GRID_SIZE, RANGES, REFITS } from '../game/constants.js';
 import { shipCommands } from '../game/actions.js';
 import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
 import { drawMove } from './fx.js';
@@ -126,11 +126,11 @@ const shipMenu = (game, actor, ship) => {
  * map edge and clamping so it never leaves the map or covers its own ship. The
  * tail keeps pointing at the hull's row once the box has been clamped.
  */
-const placeShipMenu = (menu, map, ship) => {
+const placeShipMenu = (menu, map, ship, grid) => {
   const rect = map?.getBoundingClientRect?.();
   if (!rect?.width || !rect?.height) return;
-  const px = (ship.x / 100) * rect.width;
-  const py = (ship.y / 100) * rect.height;
+  const px = (ship.x / grid) * rect.width;
+  const py = (ship.y / grid) * rect.height;
   const gap = 16;
   let side = 'right';
   let left = px + gap;
@@ -156,6 +156,7 @@ let moveMemory = { seed: null, positions: new Map() };
 
 const animateMoves = (map, game) => {
   if (!map?.querySelectorAll) return;
+  const grid = game.gridSize ?? GRID_SIZE;
   if (moveMemory.seed !== game.seed) moveMemory = { seed: game.seed, positions: new Map() };
   map.querySelectorAll('.ship[data-ship-id]').forEach((button) => {
     const ship = getShip(game, button.dataset.shipId);
@@ -163,13 +164,13 @@ const animateMoves = (map, game) => {
     const previous = moveMemory.positions.get(ship.id);
     moveMemory.positions.set(ship.id, { x: ship.x, y: ship.y });
     if (!previous || (previous.x === ship.x && previous.y === ship.y)) return;
-    drawMove(map, previous, ship);
-    button.style.left = `${previous.x}%`;
-    button.style.top = `${previous.y}%`;
+    drawMove(map, previous, ship, grid);
+    button.style.left = `${(previous.x / grid) * 100}%`;
+    button.style.top = `${(previous.y / grid) * 100}%`;
     // Two frames: the old position has to be committed before the transition target.
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      button.style.left = `${ship.x}%`;
-      button.style.top = `${ship.y}%`;
+      button.style.left = `${(ship.x / grid) * 100}%`;
+      button.style.top = `${(ship.y / grid) * 100}%`;
     }));
   });
 };
@@ -183,9 +184,15 @@ export const renderGame = (game, view = {}) => {
 
   document.querySelector('#seed-readout').textContent = `SEED ${game.seed}`;
   document.querySelector('#turn-readout').textContent = `Stardate ${game.turn}`;
-  document.querySelector('#mode-readout').textContent = game.extended
-    ? (scenarioFor(game).id === 'annihilation' ? 'EXTENDED WAR' : `EXTENDED · ${scenarioFor(game).title.toUpperCase()}`)
-    : '';
+  // Hull coordinates and ranges are absolute map units; the field is drawn as a
+  // percentage of `game.gridSize`, which is wider in a Reimagined war.
+  const grid = game.gridSize ?? GRID_SIZE;
+  const pct = (value) => (value / grid) * 100;
+  document.querySelector('#mode-readout').textContent = game.reimagined
+    ? (scenarioFor(game).id === 'annihilation' ? 'REIMAGINED WAR' : `REIMAGINED · ${scenarioFor(game).title.toUpperCase()}`)
+    : game.extended
+      ? (scenarioFor(game).id === 'annihilation' ? 'EXTENDED WAR' : `EXTENDED · ${scenarioFor(game).title.toUpperCase()}`)
+      : '';
   document.querySelector('#legend-note').textContent = game.extended
     ? 'click a ship for its commands · click empty space to maneuver · dashed rings = your phaser / photon / engine range · green ring = Xanadu dockyard range · red outline = enemy that can reach you · white pip = ship under orders'
     : 'click a ship for its commands · click empty space to maneuver · dashed rings = your phaser / photon / engine range · red outline = enemy that can reach you';
@@ -218,11 +225,11 @@ export const renderGame = (game, view = {}) => {
   if (game.extended && xanadu?.status === 'active' && xanadu.faction === actor?.faction) {
     rings.push({ r: DOCKING.range, kind: 'dock', x: xanadu.x, y: xanadu.y });
   }
-  const ringHtml = rings.map(({ r, kind, x, y }) => `<div class="range-ring ${kind}" style="--x:${x};--y:${y};--d:${2 * r}%" aria-hidden="true"></div>`).join('');
+  const ringHtml = rings.map(({ r, kind, x, y }) => `<div class="range-ring ${kind}" style="--x:${pct(x)};--y:${pct(y)};--d:${pct(2 * r)}%" aria-hidden="true"></div>`).join('');
 
   const shipHtml = game.ships.filter(isVisible).map((ship) => {
     if (ship.status === 'destroyed') {
-      return `<span class="wreck" style="--x:${ship.x};--y:${ship.y}" title="${ship.name}: destroyed" aria-hidden="true">+</span>`;
+      return `<span class="wreck" style="--x:${pct(ship.x)};--y:${pct(ship.y)}" title="${ship.name}: destroyed" aria-hidden="true">+</span>`;
     }
     const threat = threats.has(ship.id) ? ' threat' : '';
     const standing = orderFor(game, ship.id) ?? pendingOrderFor(game, ship.id);
@@ -231,7 +238,7 @@ export const renderGame = (game, view = {}) => {
     // out which hull has sworn to hunt you.
     const captain = game.extended && game.scanned?.[ship.id] ? ship.captain : null;
     const ace = captain && isAce(ship) ? ' ace' : '';
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}" style="--x:${ship.x};--y:${ship.y}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}"${view.battlePaused ? ' disabled' : ''}><span class="glyph">${ship.name[0]}</span></button>`;
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}"${view.battlePaused ? ' disabled' : ''}><span class="glyph">${ship.name[0]}</span></button>`;
   }).join('');
   map.innerHTML = ringHtml + shipHtml;
   animateMoves(map, game);
@@ -249,7 +256,7 @@ export const renderGame = (game, view = {}) => {
     menu.innerHTML = menuShip ? shipMenu(game, actor, menuShip) : '';
     if (menuShip) {
       menu.setAttribute?.('open', '');
-      placeShipMenu(menu, document.querySelector('#map'), menuShip);
+      placeShipMenu(menu, document.querySelector('#map'), menuShip, grid);
       if (!wasOpen) menu.querySelector?.('button')?.focus?.();
     } else {
       menu.removeAttribute?.('open');

@@ -91,7 +91,7 @@ const resolveAiAction = (game, shipId) => {
     if (!isActive(target) || isImmovable(target) || distance(actor, target) > RANGES.tractor) {
       return { game, messages: [`${actor.name} holds position.`], type: 'pass' };
     }
-    const { pull, position } = tractorLock(actor, target);
+    const { pull, position } = tractorLock(actor, target, game.gridSize ?? GRID_SIZE);
     const pulled = { ...target, tractorBy: actor.id, x: position.x, y: position.y };
     const collision = resolveCollision(replaceShip(game, pulled), pulled);
     return {
@@ -106,8 +106,9 @@ const resolveAiAction = (game, shipId) => {
     };
   }
   if (action.type === 'move') {
-    const x = Math.max(0, Math.min(GRID_SIZE, actor.x + action.dx));
-    const y = Math.max(0, Math.min(GRID_SIZE, actor.y + action.dy));
+    const grid = game.gridSize ?? GRID_SIZE;
+    const x = Math.max(0, Math.min(grid, actor.x + action.dx));
+    const y = Math.max(0, Math.min(grid, actor.y + action.dy));
     return { game: replaceShip(game, { ...actor, x, y }), messages: [`${actor.name} moves to ${x},${y}.`], type: action.type };
   }
   return { game, messages: [], type: action.type };

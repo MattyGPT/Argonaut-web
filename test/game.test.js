@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, RANGES, SCENARIOS, STALEMATE_ROUNDS, VENDETTA } from '../game/constants.js';
+import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, RANGES, REIMAGINED_GRID_SIZE, SCENARIOS, STALEMATE_ROUNDS, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioProgress } from '../game/scenarios.js';
 import { abbreviateNarrative, alertLevel, appendLog, createGame, crewCapacity, distance, engineCapacity, getShip, isAce, radioIntegrity, shieldCapacity, strongestFederation, vendettaGrudge } from '../game/state.js';
@@ -1931,4 +1931,50 @@ test('a hull that struck its colors is a prize your transporter can board', () =
   const out = resolveDisabledSurrender(withShips(precisionGame('prize'), gutted));
   const commands = shipCommands(out.game, 'axis-flagship');
   assert.ok(commands.some((command) => command.type === 'transport' && /Board/.test(command.label)));
+});
+
+// --- Argonaut Reimagined, Phase 0: the mode flag and the wider battlefield ---
+
+test('Reimagined is a war option that carries the extended layer, off by default', () => {
+  const classic = createGame({ seed: 'reimagined-flag' });
+  assert.equal(classic.reimagined, false);
+  assert.equal(classic.gridSize, GRID_SIZE, 'a classic war keeps the calibrated 100-unit field');
+  const reimagined = createGame({ seed: 'reimagined-flag', reimagined: true });
+  assert.equal(reimagined.reimagined, true);
+  assert.equal(reimagined.extended, true, 'Reimagined builds on the extended war');
+  assert.equal(reimagined.gridSize, REIMAGINED_GRID_SIZE);
+});
+
+test('a Reimagined war opens wider, every hull in bounds, Xanadu at the center', () => {
+  const game = createGame({ seed: 'reimagined-field', reimagined: true });
+  const grid = game.gridSize;
+  assert.ok(grid > GRID_SIZE, 'the Reimagined field is wider than the classic one');
+  for (const ship of game.ships) {
+    assert.ok(ship.x >= 0 && ship.x <= grid && ship.y >= 0 && ship.y <= grid,
+      `${ship.name} at ${ship.x},${ship.y} sits outside the ${grid}-unit field`);
+  }
+  const center = Math.round((grid / GRID_SIZE) * 50);
+  const xanadu = getShip(game, 'xanadu');
+  assert.deepEqual({ x: xanadu.x, y: xanadu.y }, { x: center, y: center },
+    'Xanadu anchors the center of the wider field');
+});
+
+test('the Reimagined scaffold leaves a classic or extended war untouched', () => {
+  // The flag defaults off and the field stays 100 units, so the opening disposition
+  // is byte-identical to a war created without the option at all.
+  assert.deepEqual(createGame({ seed: 'parity' }), createGame({ seed: 'parity', reimagined: false }));
+  assert.equal(createGame({ seed: 'parity', extended: true }).gridSize, GRID_SIZE);
+  assert.equal(createGame({ seed: 'parity', extended: true }).reimagined, false);
+});
+
+test('a Reimagined war maneuvers past the classic 100-unit edge, but not off the field', () => {
+  const game = withShips(createGame({ seed: 'reimagined-move', reimagined: true }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 120, y: 80 };
+    if (ship.id === 'xanadu') return ship;
+    return { ...ship, x: 5, y: 5 };
+  });
+  const inside = applyPlayerAction(game, { type: 'move', dx: 30, dy: 0 });
+  assert.equal(getShip(inside.game, 'fed-flagship').x, 150, 'a coordinate a classic war would refuse lands on the wider field');
+  const offEdge = applyPlayerAction(game, { type: 'move', dx: 50, dy: 0 });
+  assert.match(offEdge.messages.join(' '), /leave the tactical map/i, 'movement still stops at the field edge');
 });

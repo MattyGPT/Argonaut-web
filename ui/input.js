@@ -32,7 +32,7 @@ const keys = Object.freeze({
 /** Whether focus currently sits on something Tab is supposed to reach. */
 const isFocusable = (element) => Boolean(element?.matches?.('button, input, select, textarea, a[href], [tabindex]'));
 
-export const bindInput = (root, dispatch) => {
+export const bindInput = (root, dispatch, getGridSize = () => GRID_SIZE) => {
   root.addEventListener('click', (event) => {
     // Refit choices live beside the order picker and carry the hull they are for.
     const refitButton = event.target.closest('[data-refit]');
@@ -73,10 +73,11 @@ export const bindInput = (root, dispatch) => {
     }
     const rect = map.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
+    const grid = getGridSize();
     dispatch({
       type: 'map-click',
-      x: ((event.clientX - rect.left) / rect.width) * GRID_SIZE,
-      y: ((event.clientY - rect.top) / rect.height) * GRID_SIZE,
+      x: ((event.clientX - rect.left) / rect.width) * grid,
+      y: ((event.clientY - rect.top) / rect.height) * grid,
     });
   });
 

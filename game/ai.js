@@ -1,4 +1,4 @@
-import { AI_PURSUIT, FLEET_ORDER_TUNING, PERSONALITIES, RANGES } from './constants.js';
+import { AI_PURSUIT, FLEET_ORDER_TUNING, GRID_SIZE, PERSONALITIES, RANGES } from './constants.js';
 import { flushShields, tractorLock } from './actions.js';
 import { createRng } from './rng.js';
 import {
@@ -242,7 +242,7 @@ const doctrineAction = (game, actor) => {
   // to someone else. Towing you onto a Cabal ship is a coin flip it will not take.
   if (doctrine.tractorFirst && systemUnits(actor, 'tractor') > 0 && range <= RANGES.tractor
     && !isTractorHeld(game, target) && !isImmovable(target)) {
-    const { position } = tractorLock(actor, target);
+    const { position } = tractorLock(actor, target, game.gridSize ?? GRID_SIZE);
     const wreck = game.ships.some((ship) => ship.id !== target.id && isActive(ship)
       && ship.faction !== actor.faction && distance(position, ship) < 1);
     if (wreck) return { type: 'tractor', targetId: target.id };

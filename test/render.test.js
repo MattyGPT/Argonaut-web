@@ -224,6 +224,16 @@ test('the top bar and legend mark an extended war', () => {
   assert.equal(read('#mode-readout').textContent, '');
 });
 
+test('a Reimagined war is badged and draws hulls as a fraction of the wider field', () => {
+  elements.clear();
+  const game = withFlagship(createGame({ seed: 'render-reimagined', reimagined: true }), { x: 120, y: 80 });
+  renderGame(game);
+  assert.equal(read('#mode-readout').textContent, 'REIMAGINED WAR');
+  // 120 of 160 units is 75% across the field, and 80 of 160 is 50% down; a classic
+  // 100-unit field would have no room for a hull at 120 at all.
+  assert.match(read('#map-field').innerHTML, /--x:75;--y:50/);
+});
+
 test('a ship under orders wears a pip on the map', () => {
   elements.clear();
   const game = {
