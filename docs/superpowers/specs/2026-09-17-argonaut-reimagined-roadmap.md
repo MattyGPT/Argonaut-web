@@ -134,13 +134,36 @@ combat mechanics — a clean checkpoint. **Next: Phase 1, power management (14a)
 | 19 | Fleet loadout / points budget | Choose composition at war start | Budget enforcement; seeded generation |
 | 20 | Drones / fighters | Launchable subsystem, semi-independent units | Launch + AI action branch |
 
-### Phase 4 — Combat depth *(#3, #4, #1)*
+### Phase 4 — Combat depth *(#3, #4, #1, + directed tractor)*
 
 | Round | Chunk | Builds | Tested by |
 | --- | --- | --- | --- |
 | 21 | Evasive/firing stances | Per-turn accuracy-vs-evasion trade | Modifier applies; disengage tool works |
 | 22 | Weapon variety | Ion/EMP (disable, no crew), spread torpedoes, mines | Each damage model distinct |
+| 22b | **Directed tractor beam** | Aim the tow at a coordinate or a hull to slam into | Tow vector follows the named point; collision resolves; pull budget unchanged |
 | 23 | Directional shields | Fore/aft/port/starboard arcs + facing | Arc damage; AI faces threat; largest single chunk |
+
+**22b — Directed tractor beam** (Matt's addition). Today `5` locks a target and
+reels it straight toward the caster by the full `TRACTOR_PULL_PER_UNIT × units`
+budget. The directed beam keeps that budget but lets the player choose the
+*direction*: after locking, name a destination — an `(x, y)` coordinate, or a hull
+to slam into — and the victim is towed along that vector instead of toward you.
+This makes tractor-ramming a deliberate player tactic (tow an enemy into another
+enemy, into Xanadu, or — once Phase 2 lands — into an asteroid field or ion storm),
+generalizing what the Cabal's `tractorFirst` doctrine already does for the AI.
+
+- Reimagined-only; a classic or extended war keeps the pull-toward-caster behavior.
+- Reuses `tractorLock`/`pullToward` (point the vector at the chosen destination
+  rather than the actor) and the existing `resolveCollision` path that tractor tows
+  already trigger. The lock still requires the target inside `RANGES.tractor`, and
+  the tow can never exceed the pull budget — you choose where, not how far.
+- Seams: a directed branch in `tractorAction` (`game/actions.js`); a "Direct tow…"
+  option in the tractor prompt / ship context menu (`ui/input.js`, `app.js`,
+  `ui/render.js`), reusing the coordinate prompt for the `(x, y)` case and the
+  target picker for the "ram that hull" case; an event so the FX/replay layer draws
+  the tow. Optional AI hook: let a doctrine aim a tow at a hazard once terrain exists.
+- Self-contained — it can be pulled forward ahead of stances or weapon variety if
+  Matt wants it sooner.
 
 ### Phase 5 — Narrative & variety *(#11, #13)*
 
