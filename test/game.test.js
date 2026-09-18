@@ -1438,6 +1438,39 @@ test('an Axis captain with nothing in range closes to contact', () => {
   assert.equal(action.dy, 0);
 });
 
+test('an Axis captain no longer detonates at 8% — it waits until nearly destroyed', () => {
+  // ~6% shields (9 of 140) sat inside the old 8% trigger; at the 4% bar the captain
+  // keeps fighting instead of ending the exchange — and often the war — on a blast.
+  const game = extended('axis-no-early-blast', (ship) => {
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 9 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 55, y: 50 };
+    if (ship.id === 'fed-cruiser-2') return { ...ship, x: 50, y: 55 };
+    if (ship.id === 'fed-cruiser-3') return { ...ship, x: 45, y: 50 };
+    if (ship.id === 'fed-scout') return { ...ship, x: 50, y: 45 };
+    if (ship.faction === 'Axis') return { ...ship, x: 5, y: 5 };
+    return { ...ship, x: 95, y: 95 };
+  });
+  assert.notEqual(chooseAiAction(game, 'axis-cruiser-1').type, 'self-destruct',
+    'four enemies point-blank is no longer enough at 6% shields');
+});
+
+test("the vendetta captain never detonates, even cornered at death's door", () => {
+  const game = {
+    ...extended('vendetta-no-suicide', (ship) => {
+      if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 3 };
+      if (ship.id === 'fed-cruiser-1') return { ...ship, x: 55, y: 50 };
+      if (ship.id === 'fed-cruiser-2') return { ...ship, x: 50, y: 55 };
+      if (ship.id === 'fed-cruiser-3') return { ...ship, x: 45, y: 50 };
+      if (ship.id === 'fed-scout') return { ...ship, x: 50, y: 45 };
+      if (ship.faction === 'Axis') return { ...ship, x: 5, y: 5 };
+      return { ...ship, x: 95, y: 95 };
+    }),
+    vendettaShipId: 'axis-cruiser-1',
+  };
+  assert.notEqual(chooseAiAction(game, 'axis-cruiser-1').type, 'self-destruct',
+    'the hunter keeps hunting rather than trading itself away');
+});
+
 test('a Bloc gunner backs off anything inside its minimum range', () => {
   const game = extended('bloc-kite', (ship) => {
     if (ship.id === 'bloc-cruiser-1') return { ...ship, x: 50, y: 50 };

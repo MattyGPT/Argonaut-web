@@ -179,8 +179,10 @@ you issue an order.
   clumsiest captain by collisions, and your own record as Captain Jason.
 - **Each alliance fights its own way.** In the original every autopilot ran the
   same doctrine. In an extended war: **Axis** swarms the nearest hull and refuses
-  to give ground, refits late, and detonates rather than be destroyed once at
-  least four enemy ships — more enemies than friends — sit inside its blast;
+  to give ground, refits late, and — only as a last stand when all but destroyed
+  (4% shields) with at least four enemy ships, more enemies than friends, stacked
+  inside its blast — detonates rather than be destroyed (the vendetta captain never
+  does, and keeps hunting);
   **Bloc** works the phaser edge, backs off anything that closes to point-blank,
   never tractors, and executes the weakest hull it can actually hit; **Cabal**
   fights with its fleet but spends a tractor beam whenever it can smash you into
