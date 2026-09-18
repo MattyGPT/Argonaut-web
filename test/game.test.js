@@ -2265,3 +2265,52 @@ test('an unknown sink is refused', () => {
   assert.match(out.messages.join(' '), /specify a power allocation/i);
   assert.deepEqual(out.game, game);
 });
+
+// --- Round 14d: AI doctrine power profiles, reactor refit, dockyard reactor repair ---
+
+test('an AI hull runs its alliance doctrine power profile (Reimagined)', () => {
+  const game = createGame({ seed: 'ai-power', reimagined: true });
+  const axis = getShip(game, 'axis-flagship');
+  assert.ok(powerEffect(game, axis, 'weapons') > 1, 'Axis overcharges its guns');
+  assert.ok(powerEffect(game, axis, 'shields') < 1, 'and starves its shields to do it');
+  assert.ok(powerEffect(game, getShip(game, 'cabal-flagship'), 'tractor') > 1, 'Cabal overcharges the tractor beam');
+  assert.equal(powerEffect(game, getShip(game, 'bloc-flagship'), 'tractor'), 0, 'Bloc never tractors');
+});
+
+test("the player's command ship runs the flat default, not a doctrine profile", () => {
+  const game = createGame({ seed: 'cmd-power', reimagined: true });
+  for (const sink of POWER_SINKS) assert.equal(powerEffect(game, getShip(game, game.playerShipId), sink), 1);
+  // A Federation hull the player does not command runs the Federation profile, which leans on shields.
+  assert.ok(powerEffect(game, getShip(game, 'fed-cruiser-1'), 'shields') > 1);
+});
+
+test('doctrine power profiles never touch a classic or extended war', () => {
+  for (const opts of [{}, { extended: true }]) {
+    const game = createGame({ seed: 'profile-parity', ...opts });
+    assert.equal(powerEffect(game, getShip(game, 'axis-flagship'), 'weapons'), 1,
+      'a non-Reimagined enemy runs at calibrated 1.0x');
+  }
+});
+
+test('a docked hull may take a reactor upgrade in a Reimagined war', () => {
+  const game = withShips(createGame({ seed: 'reactor-refit', reimagined: true }), (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 124, y: 120 } : ship));
+  const before = getShip(game, 'fed-cruiser-1').systems.reactor;
+  const out = applyPlayerAction(game, { type: 'refit', shipId: 'fed-cruiser-1', kind: 'reactor' });
+  assert.equal(getShip(out.game, 'fed-cruiser-1').systems.reactor, before + 1, 'the upgrade adds a reactor unit');
+  assert.match(out.messages.join(' '), /refitted/);
+});
+
+test('a reactor upgrade is refused outside a Reimagined war', () => {
+  const game = withShips(createGame({ seed: 'reactor-refit-ext', extended: true }), (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 54, y: 50 } : ship));
+  const out = applyPlayerAction(game, { type: 'refit', shipId: 'fed-cruiser-1', kind: 'reactor' });
+  assert.match(out.messages.join(' '), /Reimagined/i);
+  assert.deepEqual(out.game, game);
+});
+
+test('the dockyard repairs a damaged reactor (Reimagined)', () => {
+  const game = withShips(createGame({ seed: 'reactor-repair', reimagined: true }), (ship) => (ship.id === 'fed-cruiser-1'
+    ? { ...ship, x: 124, y: 120, systems: { ...ship.systems, reactor: 1 } }
+    : ship));
+  const repaired = getShip(resolveDocking(game).game, 'fed-cruiser-1');
+  assert.equal(repaired.systems.reactor, 2, 'the most-damaged subsystem — the reactor — gains a unit');
+});

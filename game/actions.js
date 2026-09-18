@@ -829,6 +829,8 @@ const setRefit = (game, action, actor) => {
   if (game.refits?.[ship.id]) return invalid(game, `${ship.name} has already taken its refit this war.`);
   const refit = REFITS[action.kind];
   if (!refit) return invalid(game, `Unknown refit: ${action.kind}.`);
+  // A reactor upgrade needs a reactor to upgrade, which only Reimagined hulls carry.
+  if ('reactor' in refit.systems && !game.reimagined) return invalid(game, 'A reactor upgrade is only available in a Reimagined war.');
   const base = dockedAt(game, ship);
   if (!base) return invalid(game, `${ship.name} must be inside the dockyard ring to be refitted.`);
   const template = templateSystems(ship);

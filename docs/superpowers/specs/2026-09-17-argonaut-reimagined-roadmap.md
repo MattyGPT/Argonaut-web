@@ -106,14 +106,14 @@ feeds into.
 After Phase 0, Reimagined is playable and navigable on a wide field with zero new
 combat mechanics — a clean checkpoint. **Next: Phase 1, power management (14a).**
 
-### Phase 1 — Power management *(headline; detailed below)*
+### Phase 1 — Power management *(headline; detailed below)* — ✅ complete
 
 | Round | Chunk | Builds | Tested by | Status |
 | --- | --- | --- | --- | --- |
 | 14a | Reactor + power state + shield regen | Damageable `reactor` subsystem (Reimagined only), `game.power` allocation, `reactorOutput`/`powerEffect` helpers, free `setPower` action, and the **shield-regen** sink | Reactor present only in Reimagined; budget shrinks with damage; default = 1.0x; classic parity; regen scales with the shield sink | ✅ PR #26 |
 | 14b | Allocation effects (other sinks) | Weapons/engines/sensors/tractor multipliers wired through `weaponDamage`, `engineCapacity`, a new `sensorRange` helper, and tractor pull | Each sink changes output; overcharge saturates; starving a sink degrades it; classic parity | ✅ PR #28 |
 | 14c | Power-bar UI | Console pips to drag the allocation, click/keyboard, a11y | Free (no stardate spent); persists across save; reachable by keyboard | ✅ PR #29 |
-| 14d | AI profiles + reactor refit/repair | `powerProfile` per doctrine, reactor refit, dockyard restores reactor | Doctrines allocate; refit cap; vendetta ignores self-preservation | — |
+| 14d | AI profiles + reactor refit/repair | `POWER.profiles` per alliance (AI hulls run their doctrine bias; the command ship runs the flat default), a `reactor` refit (Reimagined-gated), and dockyard reactor repair (free via 14a's reactor-aware `templateSystems`) | Doctrines allocate; command ship stays 1.0x; refit adds a unit and is refused outside Reimagined; dockyard repairs a damaged reactor; classic/extended parity | ✅ PR #30 |
 
 ### Phase 2 — The living battlefield *(idea #5, #6)*
 

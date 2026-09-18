@@ -174,6 +174,20 @@ export const POWER = Object.freeze({
   need: Object.freeze({ shields: 4, weapons: 6, engines: 4, sensors: 4, tractor: 2 }),
   /** Shield power restored per stardate, as a fraction of capacity at 1.0x shields power. */
   shieldRegenRate: 0.02,
+  /**
+   * How each alliance's captains bias their reactor, in the same units as `need`. An
+   * AI hull in a Reimagined war runs its alliance profile (clamped to its live reactor
+   * budget); the player's command ship runs the flat default until they set the bar.
+   * These mirror the doctrine personalities: Axis swarms hot on guns and speed, Bloc
+   * works the artillery edge on guns and sensors and never tractors, Cabal stays mobile
+   * for the tractor-ram, and the Federation fights by the book with a shields lean.
+   */
+  profiles: Object.freeze({
+    Axis: Object.freeze({ shields: 2, weapons: 9, engines: 6, sensors: 3, tractor: 2 }),
+    Bloc: Object.freeze({ shields: 3, weapons: 9, engines: 3, sensors: 5, tractor: 0 }),
+    Cabal: Object.freeze({ shields: 3, weapons: 3, engines: 6, sensors: 3, tractor: 6 }),
+    Federation: Object.freeze({ shields: 6, weapons: 6, engines: 4, sensors: 4, tractor: 2 }),
+  }),
 });
 
 /** The five systems a reactor budget is distributed across. */
@@ -448,6 +462,10 @@ export const REFITS = Object.freeze({
   phasers: Object.freeze({ label: 'Overcharge', systems: Object.freeze({ phasers: 1 }) }),
   engines: Object.freeze({ label: 'Tune drive', systems: Object.freeze({ engines: 1 }) }),
   sensors: Object.freeze({ label: 'Deep sensors', systems: Object.freeze({ scanner: 1, mapper: 1 }) }),
+  // Reimagined only: a bigger reactor raises the power budget. Gated out of the
+  // dockyard menu and refused by setRefit in a classic or extended war, where hulls
+  // carry no reactor subsystem.
+  reactor: Object.freeze({ label: 'Reactor upgrade', systems: Object.freeze({ reactor: 1 }) }),
 });
 
 export const REFIT_IDS = Object.freeze(Object.keys(REFITS));
