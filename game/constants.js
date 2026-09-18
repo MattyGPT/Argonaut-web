@@ -351,13 +351,18 @@ export const STALEMATE_ROUNDS = 12;
 export const PERSONALITIES = Object.freeze({
   Axis: Object.freeze({
     // Swarm: goes for the nearest hull and stays inside photon range, which is where
-    // the heavy damage is. Gives ground only when practically dead, and then goes out
-    // among the enemy rather than run.
+    // the heavy damage is. Gives ground only when practically dead. Detonating is a
+    // rare last stand, not a routine exchange-ender: the hull must be all but
+    // destroyed (4% shields, down from 8%) with four enemies — and more enemies than
+    // friends — stacked inside its blast. At 8% a focused brawl ended too often on one
+    // detonation wiping the player's cluster, which played smart but felt awful and
+    // closed out wars early. The vendetta captain is exempt (see suicideRun): it keeps
+    // hunting rather than trading itself away.
     standoff: 6,
     minRange: 0,
     flushBelow: 0.2,
     retreatBelow: 0.08,
-    suicideBelow: 0.08,
+    suicideBelow: 0.04,
     suicideMinEnemies: 4,
   }),
   Bloc: Object.freeze({

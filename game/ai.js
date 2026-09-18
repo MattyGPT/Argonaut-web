@@ -184,6 +184,10 @@ const fallBack = (game, actor, threat) => {
  */
 const suicideRun = (game, actor, doctrine, enemies) => {
   if (!(doctrine.suicideBelow > 0)) return null;
+  // The vendetta captain is single-minded: it neither refits, runs, nor gives up the
+  // hunt to detonate. It "numbly navigates through devastating enemy fire" until it
+  // is destroyed or its target is, so it never trades itself for the fleet.
+  if (isVendetta(game, actor)) return null;
   if (actor.shields > shieldCapacity(actor) * doctrine.suicideBelow) return null;
   const blast = blastRadius(actor);
   const inside = (list) => list.filter((ship) => distance(actor, ship) <= blast).length;
