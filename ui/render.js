@@ -116,7 +116,7 @@ const shipMenu = (game, actor, ship) => {
     const docked = dockedAt(game, ship);
     const refitTaken = game.refits?.[ship.id];
     const refitGrid = docked && !refitTaken
-      ? `<p class="menu-sub">One refit at ${docked.name}, once per war:</p><div class="order-grid">${Object.entries(REFITS).map(([id, refit]) => `<button data-refit="${id}" data-refit-ship="${ship.id}"${disabled}>${refit.label}</button>`).join('')}</div>`
+      ? `<p class="menu-sub">One refit at ${docked.name}, once per war:</p><div class="order-grid">${Object.entries(REFITS).filter(([id]) => id !== 'reactor' || game.reimagined).map(([id, refit]) => `<button data-refit="${id}" data-refit-ship="${ship.id}"${disabled}>${refit.label}</button>`).join('')}</div>`
       : '';
     orders = `<p class="menu-sub">${orderLines.join(' ')}</p><div class="order-grid">${buttons}</div>${refitGrid}`;
   }

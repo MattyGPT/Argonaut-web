@@ -368,11 +368,22 @@ const clampAllocation = (allocation, budget) => {
 export const clampPowerAllocation = (allocation, ship) => clampAllocation(allocation, reactorOutput(ship));
 
 /**
- * The allocation a hull is running: its stored one, or the per-class default (each
- * sink at its need, capped to the budget). The default spends exactly the needs, so
- * an untouched hull runs every sink at 1.0x.
+ * The allocation a hull is running: its stored one if the player set it, otherwise an
+ * AI hull in a Reimagined war runs its alliance's doctrine profile, and anything else
+ * (the player's command ship, or a classic/extended war) runs the flat per-class
+ * default — each sink at its need, so an untouched hull runs every sink at 1.0x. The
+ * result is always clamped to the hull's live reactor budget, so damage shrinks it.
  */
-export const powerAllocation = (game, ship) => clampAllocation(game?.power?.[ship?.id] ?? POWER.need, reactorOutput(ship));
+export const powerAllocation = (game, ship) => {
+  const budget = reactorOutput(ship);
+  const stored = game?.power?.[ship?.id];
+  if (stored) return clampAllocation(stored, budget);
+  if (game?.reimagined && ship && ship.id !== game.playerShipId) {
+    const profile = POWER.profiles?.[ship.faction];
+    if (profile) return clampAllocation(profile, budget);
+  }
+  return clampAllocation(POWER.need, budget);
+};
 
 /**
  * A sink's effectiveness multiplier: `allocated / need`, clamped to `[0, overcharge]`.
