@@ -54,17 +54,35 @@ feature." A cell grid would add granularity we do not need yet. (Recorded decisi
 
 ```js
 export const TERRAIN = Object.freeze({
-  counts: { nebula: 3, asteroids: 4, 'ion-storm': 2 },
-  radius: { nebula: [24, 40], asteroids: [14, 24], 'ion-storm': [18, 30] },
+  // Settled sparser (Q2): 6 features on the 240 field, radii a touch larger so each
+  // sparse feature is a meaningful landmark.
+  counts: { nebula: 2, asteroids: 2, 'ion-storm': 2 },
+  radius: { nebula: [28, 44], asteroids: [16, 26], 'ion-storm': [20, 32] },
   edgeMargin: 12,          // keep centers this far inside the field edge
   xanaduClearance: 30,     // no feature center this close to the starbase
-  minSeparation: 18,       // between feature centers
-  nebulaRevealRange: 8,    // how close an outside sensor can see into a nebula
-  asteroidStrike: { chance: 0.35, min: 10, max: 40 },  // rock strike on ending a move inside
+  minSeparation: 20,       // between feature centers
+  // Q1 middle option: a feature is drawn faint beyond mapper range and crisp within.
+  faintOpacity: 0.45,      // opacity multiplier for terrain beyond the mapper
+  // Q6: nebula reveal range scales with the observer's sensors effectiveness.
+  nebulaRevealRange: 8,    // base units an outside sensor sees into a nebula at 1.0x
+  // Q4: rock strike only on ending a move/tow inside the field.
+  asteroidStrike: { chance: 0.35, min: 10, max: 40 },
   asteroidCoverMiss: 0.25, // extra miss chance on a shot whose line crosses asteroids
-  ionStormJam: true,       // weapons + radio offline inside (see 15d)
+  // Q3: ion storm has a full-jam core and a degraded outer ring.
+  ionStormCore: 0.6,       // fraction of the radius that is the full-jam core
+  ionStormRingMiss: 0.15,  // added miss chance in the outer ring
+  ionStormRingRadio: 0.5,  // radio reach multiplier in the outer ring
+  // Q5: two relay nodes; holding one grants its alliance a power-budget bump.
+  relayCount: 2,
+  relayRadius: 10,
+  relayPowerBonus: 5,      // +reactor budget to every hull of the holding alliance
+  // Q7: storms are fixed in Phase 2, but features carry an optional velocity hook.
 });
 ```
+
+Each generated feature is `{ id, type, x, y, radius, v? }` — `v` (a drift velocity)
+is reserved and unused in Phase 2 (Q7: fixed now, drifting switchable on later
+without reworking the model).
 
 ## Rendering (15a)
 
@@ -74,10 +92,11 @@ export const TERRAIN = Object.freeze({
   naturally at the viewport because `#map` is `overflow: hidden`.
 - The **minimap** draws the same features (scaled), so a wide field is navigable by
   terrain at a glance.
-- **Terrain is known geography** — it renders regardless of the mapper fog of war
-  (you have star charts), while *ships* inside it stay subject to the sensor rules
-  below. This keeps the big field readable without giving away hull positions.
-  *(Open question — see below.)*
+- **Terrain is known geography, drawn at two opacities (Q1 middle option):** a
+  feature within the command ship's mapper range renders crisp; beyond it, faint
+  (`faintOpacity`). You can always route by the field's shape, but the mapper and
+  the sensors sink sharpen the picture. *Ships* inside terrain stay subject to the
+  sensor rules below.
 - The FX `viewBox` and beam/torpedo drawing are unchanged; terrain is decoration
   plus a query layer, not part of the effects pipeline.
 
@@ -113,29 +132,34 @@ Seams: the weapon miss roll (`game/actions.js`), the move/tractor collision
 resolution (`resolveCollision` already runs after moves and tows — add a
 terrain-strike step), a `segmentCrossesFeature(game, a, b, 'asteroids')` helper.
 
-### 15d — Ion storm: jam
-A hull **inside** an ion storm has its **weapons and radio offline** for that
-stardate: it cannot fire (a phaser/photon command and the autopilot's engage both
-refuse with "weapons offline in the ion storm"), and its radio neither sends nor
-relays. Engines, sensors, and tractor still work, so a caught hull can flee or be
-towed out. Whether the jam is constant or intermittent (a seeded per-stardate
-flicker for drama) is an open question.
+### 15d — Ion storm: jam (core + degraded ring — Q3)
+An ion storm has two zones. In the **core** (inside `ionStormCore` × radius) a hull's
+**weapons and radio are fully offline** for that stardate: it cannot fire (a
+phaser/photon command and the autopilot's engage both refuse with "weapons offline
+in the ion storm"), and its radio neither sends nor relays. In the **outer ring**
+(from the core edge to the full radius) the jam is only partial: shots gain
+`ionStormRingMiss` to their miss chance and radio reach is multiplied by
+`ionStormRingRadio`. Engines, sensors, and tractor work throughout, so a caught hull
+can flee or be towed out. The jam is constant (not a flicker) — predictable to plan
+around, with the ring letting you fight at a penalty or skim a message through.
 
-Seams: `requiresSystem`/weapon validation (`game/actions.js`), `engage` and the
-autopilot fire path (`game/ai.js`, `game/turns.js`), `inRadioContact`
-(`game/state.js`).
+Seams: `requiresSystem`/weapon validation and the miss roll (`game/actions.js`),
+`engage` and the autopilot fire path (`game/ai.js`, `game/turns.js`),
+`inRadioContact` (`game/state.js`).
 
-### 16 — Capturable objectives (relay nodes)
-A `relay` feature is a fixed node (one or two per war). A hull that **ends a
-stardate** inside it and is not tractor-held **holds** it for its alliance,
-recorded on `game.held` (`{ relayId: faction }`). Holding grants a small
-alliance-wide bonus while held — candidates: +1 sensor effectiveness, a trickle of
-shield regen, or +1 to the power budget of every hull of that alliance. Contesting
-flips it; the holder being driven off frees it. Resolves in the computer phase like
-the dockyard, is narrated, and is drawn with a faction-colored ring.
+### 16 — Capturable objectives (relay nodes — Q5)
+Two `relay` nodes are placed symmetrically off-center (so they do not stack on
+Xanadu). A hull that **ends a stardate** inside a node and is not tractor-held
+**holds** it for its alliance, recorded on `game.held` (`{ relayId: faction }`).
+Holding grants **+`relayPowerBonus` reactor budget to every hull of that alliance**
+while held — so the whole fleet can overcharge a sink without starving another,
+tying the objective straight into Phase 1's power system. Contesting flips it; the
+holder being driven off frees it. Resolves in the computer phase like the dockyard,
+is narrated, and is drawn with a faction-colored ring + a minimap marker.
 
-Seams: a `resolveObjectives(game)` step in `resolveComputerTurns`, a bonus hook in
-`powerEffect`/`sensorRange`/`resolvePowerRegen`, render ring + minimap marker.
+Seams: a `resolveObjectives(game)` step in `resolveComputerTurns`, a budget hook in
+`reactorOutput`/`powerAllocation` (the bonus raises the holding alliance's budget),
+render ring + minimap marker.
 
 ## AI interaction
 
@@ -166,21 +190,24 @@ could later be extended to aim tows into asteroid fields.
 - Effects resolve in the computer phase where applicable, narrated and replayable
   through the existing event/FX pipeline.
 
-## Open questions for Matt
+## Decisions (settled with Matt, 2026-09-18)
 
-1. **Terrain visibility** — known geography regardless of mapper (proposed), or
-   fog-limited like ships? Known geography keeps the wide field navigable; fog-limited
-   makes the mapper/sensors sink matter even more.
-2. **Feature density** — the proposed counts (3 nebulae / 4 asteroid fields / 2
-   storms on a 240 field) are a first guess. Sparser = more open maneuver; denser =
-   a cluttered, positional fight. Preference?
-3. **Ion storm jam** — constant while inside, or an intermittent seeded flicker
-   (more dramatic, less predictable)?
-4. **Asteroid collision** — rock strike on *ending* a move inside (proposed), or also
-   a movement cost / blocking, or a strike on *passing through*?
-5. **Relay bonus** — which of the candidate bonuses (sensor effectiveness, shield
-   regen, power budget) feels right, and one node or two?
-6. **Nebula penetration** — should overcharged sensors pierce a nebula (proposed, and
-   a nice payoff for the sensors sink), or is a nebula an absolute blind spot?
-7. **Drifting storms** — should ion storms move over the war (a late-phase option),
-   or stay fixed for the whole battle?
+1. **Terrain visibility — middle option.** Terrain is known geography, always drawn,
+   but **faint beyond mapper range and crisp within it** (`faintOpacity`), so the wide
+   field stays navigable while the mapper and the sensors sink still sharpen it.
+2. **Density — sparser: 6 features** (2 nebulae / 2 asteroid fields / 2 ion storms),
+   radii a touch larger so each is a meaningful landmark. All `TERRAIN` dials.
+3. **Ion storm — constant jam, core + degraded ring.** Full weapons/radio offline in
+   the core (`ionStormCore` × radius); added miss chance and halved radio in the outer
+   ring. Predictable to plan around, with a fight-at-a-penalty edge.
+4. **Asteroid collision — rock strike on ending a move/tow inside.** Passing through at
+   speed is safe; parking or being tractor-dumped inside rolls a seeded strike. Pairs
+   with the directed tractor beam.
+5. **Relay — power-budget bump, two nodes.** Holding a node grants every hull of that
+   alliance +`relayPowerBonus` reactor budget (overcharge without starving), tying the
+   objective into Phase 1. Two symmetric off-center nodes; holding both is an achievement.
+6. **Nebula penetration — sensors pierce, scalable.** The reveal range into a nebula
+   scales with the observer's sensors effectiveness (no hard cap), making the sensors
+   sink a real counter to nebula camping. Keep the base reveal modest vs. nebula radii.
+7. **Storms — fixed now, velocity hook for later.** Features carry an optional `v`
+   field, unused in Phase 2, so drifting can be switched on without reworking terrain.
