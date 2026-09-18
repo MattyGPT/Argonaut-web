@@ -171,6 +171,13 @@ test('a ship-menu command carries the hull it was opened for', () => {
   assert.deepEqual(dispatched, [{ type: 'phasers', targetId: 'axis-flagship' }]);
 });
 
+test('a reactor power pip nudges one sink by its delta', () => {
+  openDialog = null;
+  const dispatched = bind();
+  click('[data-power-sink]', { powerSink: 'weapons', powerDelta: '1' });
+  assert.deepEqual(dispatched, [{ type: 'power', sink: 'weapons', delta: 1 }]);
+});
+
 test('clicking the menu body is not a maneuver', () => {
   openDialog = null;
   const dispatched = bind();

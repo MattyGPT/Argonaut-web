@@ -10,6 +10,7 @@ import {
   MISS_CHANCE,
   ORDER_TYPES,
   OVERKILL_DESTROY_MARGIN,
+  POWER_SINKS,
   RANGES,
   REFITS,
   REFIT_OVER_TEMPLATE,
@@ -42,7 +43,9 @@ import {
   isImmovable,
   isSpectator,
   isTractorHeld,
+  powerAllocation,
   powerEffect,
+  reactorOutput,
   sensorRange,
   shieldCapacity,
   strongestFederation,
@@ -847,16 +850,30 @@ const setRefit = (game, action, actor) => {
 
 /**
  * Sets a hull's reactor power allocation. Like a fleet order it costs no turn — it is
- * a bridge decision, not a maneuver — and it persists until changed. Reimagined only;
- * the allocation is clamped to the hull's live reactor budget, so a damaged reactor
- * cannot be over-allocated.
+ * a bridge decision, not a maneuver — and it persists until changed. Reimagined only.
+ *
+ * Takes either a whole `allocation`, or a `sink` + `delta` nudge from the console pips.
+ * A nudge never redistributes the other sinks: increasing past the live reactor budget
+ * is refused outright rather than silently stealing from another system, and a sink
+ * never drops below zero.
  */
 const setPower = (game, action, actor) => {
   if (!game.reimagined) return invalid(game, 'Power management is only available in a Reimagined war.');
   const ship = getShip(game, action.shipId ?? game.playerShipId);
   if (!ship || !isActive(ship)) return invalid(game, 'No such hull to set power for.');
   if (ship.faction !== actor.faction) return invalid(game, 'Only Federation hulls take your power settings.');
-  const allocation = clampPowerAllocation(action.allocation ?? {}, ship);
+
+  let requested = action.allocation;
+  if (!requested && POWER_SINKS.includes(action.sink) && Number.isFinite(Number(action.delta))) {
+    const current = powerAllocation(game, ship);
+    const proposed = { ...current, [action.sink]: Math.max(0, (current[action.sink] ?? 0) + Math.trunc(Number(action.delta))) };
+    const total = POWER_SINKS.reduce((sum, sink) => sum + proposed[sink], 0);
+    if (total > reactorOutput(ship)) return invalid(game, `${ship.name}'s reactor cannot spare the power.`);
+    requested = proposed;
+  }
+  if (!requested) return invalid(game, 'Specify a power allocation or a sink to adjust.');
+
+  const allocation = clampPowerAllocation(requested, ship);
   return result(
     { ...game, power: { ...(game.power ?? {}), [ship.id]: allocation } },
     `${ship.name} sets power: ${describePower(allocation)}.`,

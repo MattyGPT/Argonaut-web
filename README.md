@@ -78,7 +78,14 @@ at their classic units while engine reach scales with the field, so there is rea
 room to screen, flank, and disengage. It also adds the **directed tractor beam**:
 open an enemy's menu in range and choose **Direct tow…** to haul it toward a
 coordinate or straight into another hull — a deliberate tractor-ram, for the same
-pull budget as a standard tow (you choose the direction, not the distance). It
+pull budget as a standard tow (you choose the direction, not the distance). It also
+adds **reactor power management**: every hull runs a damageable reactor whose output
+is a budget you distribute across five sinks — shields, weapons, engines, sensors,
+tractor — from the console power bar (free, and it persists). Each sink performs at
+its calibrated level by default; overcharge one and you must starve another, so a
+mauled reactor leaves you with hard choices. Surplus shield power regenerates shields
+each stardate, and knocking out an enemy's reactor with a called shot shrinks
+everything it can do. It
 never changes how a classic or extended war plays — those keep the calibrated
 100-unit field and the pull-toward-you beam. New Reimagined systems land over time;
 see `docs/superpowers/specs/2026-09-17-argonaut-reimagined-roadmap.md`.

@@ -1,4 +1,4 @@
-import { DOCKING, FACTIONS, GRID_SIZE, RANGES, REFITS } from '../game/constants.js';
+import { DOCKING, FACTIONS, GRID_SIZE, POWER_SINKS, RANGES, REFITS } from '../game/constants.js';
 import { shipCommands } from '../game/actions.js';
 import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
 import { cameraWindow, fieldTransform, viewportFromWorld } from './camera.js';
@@ -17,8 +17,10 @@ import {
   isSpectator,
   orderFor,
   pendingOrderFor,
+  powerAllocation,
   powerEffect,
   radioIntegrity,
+  reactorOutput,
   sensorRange,
 } from '../game/state.js';
 
@@ -204,6 +206,37 @@ const renderMinimap = (game, win, isVisible) => {
   minimap.innerHTML = dots + viewport;
 };
 
+/**
+ * The reactor power bar, Reimagined only: one row per sink showing its allocation, a
+ * live effectiveness multiplier, and −/+ pips that nudge it. Setting power is a free
+ * action, so the bar stays interactive during the player's turn and greys out while
+ * a round resolves or the war is spectated. The + pip disables once the reactor budget
+ * is fully spent; a nudge past it is refused by the rules rather than stealing from
+ * another sink.
+ */
+const powerBar = (game, actor, view) => {
+  if (!game.reimagined || !actor || game.outcome || isSpectator(game)) return '';
+  const budget = reactorOutput(actor);
+  const allocation = powerAllocation(game, actor);
+  const spent = POWER_SINKS.reduce((sum, sink) => sum + (allocation[sink] ?? 0), 0);
+  const locked = game.phase !== 'player' || view.battlePaused ? ' disabled' : '';
+  const rows = POWER_SINKS.map((sink) => {
+    const value = allocation[sink] ?? 0;
+    const eff = powerEffect(game, actor, sink);
+    return `<div class="power-row">`
+      + `<span class="power-label">${cap(sink)}</span>`
+      + `<button class="power-step" data-power-sink="${sink}" data-power-delta="-1"${value <= 0 || locked ? ' disabled' : ''} aria-label="Less ${sink} power">&minus;</button>`
+      + `<span class="power-value">${value}</span>`
+      + `<button class="power-step" data-power-sink="${sink}" data-power-delta="1"${spent >= budget || locked ? ' disabled' : ''} aria-label="More ${sink} power">+</button>`
+      + `<span class="power-eff">${eff.toFixed(2)}&times;</span>`
+      + `</div>`;
+  }).join('');
+  return `<div class="power-bar">`
+    + `<div class="power-head"><span>Reactor power</span><span>${spent} / ${budget}</span></div>`
+    + rows
+    + `</div>`;
+};
+
 export const renderGame = (game, view = {}) => {
   const actor = getShip(game, game.playerShipId);
   const map = document.querySelector('#map-field');
@@ -311,6 +344,7 @@ export const renderGame = (game, view = {}) => {
       <div class="status-row"><span>Status</span><b>${actor.status}</b></div>
     </div>
     <div class="system-grid">${Object.entries(actor.systems).map(([name, amount]) => `<span>${cap(name)} <b>${amount}</b></span>`).join('')}</div>
+    ${powerBar(game, actor, view)}
     <div class="command-grid">${commandList(game).map(([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || isSpectator(game) || view.battlePaused ? 'disabled' : ''}>${label}<kbd>${key}</kbd></button>`).join('')}</div>
     ${game.commandLost
       ? '<p class="console-note">Federation command is lost. The remaining alliances fight on, and you watch the war from here.</p>'
