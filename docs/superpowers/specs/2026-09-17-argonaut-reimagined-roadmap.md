@@ -117,6 +117,9 @@ combat mechanics — a clean checkpoint. **Next: Phase 1, power management (14a)
 
 ### Phase 2 — The living battlefield *(idea #5, #6)*
 
+Detailed design (terrain model, hazard rules, AI interaction, open questions):
+`docs/superpowers/specs/2026-09-18-phase-2-living-battlefield.md`.
+
 | Round | Chunk | Builds | Tested by |
 | --- | --- | --- | --- |
 | 15a | Terrain data layer + render | Seeded nebula/asteroid/ion placement — no combat effect yet | Deterministic placement; renders; parity |
