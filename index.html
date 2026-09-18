@@ -212,6 +212,7 @@
           <a href="#guide-combat">Combat</a>
           <a href="#guide-extended">Extended war</a>
           <a href="#guide-precision">Precision fire</a>
+          <a href="#guide-reimagined">Reimagined</a>
           <a href="#guide-comfort">Comforts</a>
           <a href="#guide-about">Provenance</a>
         </nav>
@@ -238,7 +239,7 @@
               <li><b>Tactical sound</b> adds phaser, photon, explosion, and miss effects, plus a klaxon on the way into RED alert.</li>
               <li><b>Precision fire</b> gives your phaser volleys a power dial and called subsystem shots.</li>
               <li><b>Extended war</b> adds standing orders for your fleet, alliance doctrines, the Xanadu dockyard, and three scenarios.</li>
-              <li><b>Argonaut Reimagined</b> is an expansion mode under active development. It carries the extended war and opens on a much wider 240-unit battlefield that the map becomes a pannable, zoomable viewport into — wheel or <kbd>+</kbd>/<kbd>-</kbd> to zoom, arrow keys or the minimap to pan, <kbd>⌖</kbd> to re-center on your flagship. Engine reach scales with the field while weapon ranges stay at their classic units, leaving room to screen, flank, and disengage. It also adds the <b>directed tractor beam</b>: open an enemy in range and pick <b>Direct tow…</b> to haul it toward a coordinate or slam it into another hull — a deliberate tractor-ram for the same pull budget (you choose the direction, not the distance). And it adds <b>reactor power management</b>: the console power bar spends your reactor budget across shields, weapons, engines, sensors, and tractor (free, and it sticks). Every sink runs at its calibrated level by default — overcharge one and you must starve another — surplus shield power regenerates shields each stardate, and a knocked-out reactor shrinks everything a hull can do. A classic or extended war is untouched.</li>
+              <li><b>Argonaut Reimagined</b> is an expansion mode under active development — it carries the extended war and adds a wider 240-unit battlefield with a pan/zoom camera, reactor power management, and the directed tractor beam. See <a href="#guide-reimagined">Argonaut Reimagined</a> below. A classic or extended war is untouched.</li>
             </ul>
             <figure class="guide-figure">
               <img src="assets/guide/new-game.png" alt="The New game dialog with fields for seed, regional formations, tactical sound, precision fire, extended war, and scenario." loading="lazy">
@@ -342,6 +343,24 @@
                 <figcaption>A volley in flight. Called shots draw as a thinner, coherent beam — here and in the round replay.</figcaption>
               </figure>
             </div>
+          </section>
+          <section id="guide-reimagined">
+            <h3>Argonaut Reimagined</h3>
+            <p><b>Argonaut Reimagined</b> is an opt-in expansion mode, chosen in the <b>New game</b> panel and still under active development. It carries the whole extended war — fleet orders, alliance doctrines, the Xanadu dockyard, named captains, and the scenarios — and layers original systems on top. A classic or extended war is untouched: every Reimagined addition is read only when the flag is on, so the calibrated 1992 game is preserved exactly. More systems land over time.</p>
+            <p><b>A wider battlefield.</b> A Reimagined war opens on a 240-unit field instead of 100, so there is room to screen, flank, and disengage. Weapon ranges stay at their classic units while engine reach scales with the field, so a hull crosses the wider map in about the same number of stardates but its guns cover a smaller fraction of it.</p>
+            <ul>
+              <li>The map is a <b>viewport</b> into that field: <b>wheel</b> zooms toward the cursor, <b>arrow keys</b> pan, and the <b>minimap</b> (bottom-right) shows the whole war zone with your viewport rectangle — drag it to re-center.</li>
+              <li>The camera <b>follows your flagship</b> until you pan or zoom; the <b>⌖</b> button snaps back onto it, and <b>+</b> / <b>−</b> zoom in and out.</li>
+            </ul>
+            <p><b>Reactor power.</b> Every Reimagined hull runs a damageable <b>reactor</b> whose live units set a power budget you distribute across five sinks — <b>shields, weapons, engines, sensors,</b> and <b>tractor</b> — from the <b>power bar</b> in the command console. Each row shows its allocation, a live effectiveness multiplier, and <b>−/+</b> pips; the header reads <i>spent / budget</i>.</p>
+            <ul>
+              <li>Setting power is <b>free</b> (it costs no stardate) and <b>persists</b> across the autosave. Each sink runs at its calibrated level (<b>1.00×</b>) by default.</li>
+              <li><b>Overcharge one sink and you must starve another</b> — the budget is fixed and a sink saturates at 1.5×, so it is a real trade, not a free boost. Weapons scale volley damage, engines scale movement reach, sensors scale scanner/mapper/radio/transporter range, tractor scales beam pull, and surplus shield power <b>regenerates shields</b> each stardate.</li>
+              <li>The reactor is damageable: a precision <b>called shot</b> can knock it out, shrinking that hull's budget and everything it powers. The <b>dockyard</b> repairs reactor damage, and a one-time <b>Reactor upgrade</b> refit adds a unit, raising the budget.</li>
+              <li>Enemy captains run <b>doctrine power profiles</b> — Axis biases guns and speed, Bloc guns and sensors (and never tractors), Cabal speed and tractor, Federation a balanced shields lean. Your own command ship stays neutral until you move the bar.</li>
+            </ul>
+            <p><b>Directed tractor beam.</b> Open an enemy inside tractor range and choose <b>Direct tow…</b> to aim the beam at a coordinate or another hull instead of reeling the target straight toward you. The victim is hauled along that vector for the same pull budget — <i>you choose the direction, not the distance</i> — so towing an enemy into another hull is a deliberate tractor-ram.</p>
+            <p class="dialog-note">Reimagined is balanced by whole-war simulation as it matures, not calibrated against the 1992 original, so enemy strength and war length can differ from a classic war. The build roadmap lives in the repository under <code>docs/superpowers/specs</code>.</p>
           </section>
           <section id="guide-comfort">
             <h3>Comforts and access</h3>
