@@ -2231,3 +2231,37 @@ test('the power sinks never change a classic war', () => {
   assert.equal(weaponDamage('phasers', ship, createRng('w'), 0, powerEffect(game, ship, 'weapons')),
     weaponDamage('phasers', ship, createRng('w')), 'a classic volley is untouched by the weapons sink');
 });
+
+// --- Round 14c: the console power bar's sink nudges ---
+
+test('a power nudge adjusts one sink without touching the others, for free', () => {
+  const game = createGame({ seed: 'nudge', reimagined: true });
+  const out = applyPlayerAction(game, { type: 'power', sink: 'weapons', delta: 1 });
+  const alloc = powerAllocation(out.game, getShip(out.game, 'fed-flagship'));
+  assert.equal(alloc.weapons, POWER.need.weapons + 1, 'weapons goes up by one');
+  assert.equal(alloc.shields, POWER.need.shields, 'the other sinks are untouched');
+  assert.equal(out.game.turn, game.turn, 'a nudge costs no stardate');
+  assert.equal(out.game.phase, 'player');
+});
+
+test('a power nudge down never goes below zero', () => {
+  const game = createGame({ seed: 'nudge-down', reimagined: true });
+  const drained = applyPlayerAction(game, { type: 'power', allocation: { shields: 4, weapons: 6, engines: 4, sensors: 4, tractor: 0 } });
+  const out = applyPlayerAction(drained.game, { type: 'power', sink: 'tractor', delta: -1 });
+  assert.equal(powerAllocation(out.game, getShip(out.game, 'fed-flagship')).tractor, 0);
+});
+
+test('a nudge past the reactor budget is refused, not stolen from another sink', () => {
+  // A scout's reactor is 4 units x 5 = 20 budget; the default profile spends exactly 20.
+  const game = { ...createGame({ seed: 'nudge-cap', reimagined: true }), playerShipId: 'fed-scout' };
+  const out = applyPlayerAction(game, { type: 'power', sink: 'weapons', delta: 1 });
+  assert.match(out.messages.join(' '), /cannot spare the power/i);
+  assert.deepEqual(out.game, game, 'a refused nudge changes nothing');
+});
+
+test('an unknown sink is refused', () => {
+  const game = createGame({ seed: 'nudge-bad', reimagined: true });
+  const out = applyPlayerAction(game, { type: 'power', sink: 'warp', delta: 1 });
+  assert.match(out.messages.join(' '), /specify a power allocation/i);
+  assert.deepEqual(out.game, game);
+});

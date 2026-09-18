@@ -242,6 +242,19 @@ test('a classic war draws no minimap, where the whole field already fits', () =>
   assert.equal(read('#minimap').innerHTML, '');
 });
 
+test('the console carries a reactor power bar in a Reimagined war, and none in a classic one', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'power-bar', reimagined: true }));
+  const html = read('#console').innerHTML;
+  assert.match(html, /Reactor power/);
+  assert.match(html, /data-power-sink="weapons"/);
+  assert.match(html, /data-power-delta="1"/);
+  assert.match(html, /data-power-delta="-1"/);
+  elements.clear();
+  renderGame(createGame({ seed: 'power-bar-classic' }));
+  assert.ok(!read('#console').innerHTML.includes('data-power-sink'), 'a classic war shows no power bar');
+});
+
 test('a ship under orders wears a pip on the map', () => {
   elements.clear();
   const game = {

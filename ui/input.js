@@ -53,6 +53,13 @@ export const bindInput = (root, dispatch, getCamera = () => ({ minX: 0, minY: 0,
       dispatch({ type: menuCommand.dataset.shipCommand, targetId: menuCommand.dataset.shipTarget });
       return;
     }
+    // Reactor power pips live in the console and nudge one sink by a delta. Setting
+    // power is a free action, so this never spends the stardate.
+    const powerButton = event.target.closest('[data-power-sink]');
+    if (powerButton) {
+      dispatch({ type: 'power', sink: powerButton.dataset.powerSink, delta: Number(powerButton.dataset.powerDelta) });
+      return;
+    }
     // The menu body is not empty space: clicking it may never become a maneuver.
     if (event.target.closest('#ship-menu')) return;
     // Neither is the camera chrome (minimap, zoom buttons) that overlays the map.
