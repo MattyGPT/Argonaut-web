@@ -1,4 +1,4 @@
-import { DOCKING, FACTIONS, GRID_SIZE, POWER_SINKS, RANGES, REFITS } from '../game/constants.js';
+import { DOCKING, FACTIONS, GRID_SIZE, POWER_SINKS, RANGES, REFITS, TERRAIN } from '../game/constants.js';
 import { shipCommands } from '../game/actions.js';
 import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
 import { cameraWindow, fieldTransform, viewportFromWorld } from './camera.js';
@@ -198,12 +198,18 @@ const renderMinimap = (game, win, isVisible) => {
   if (!show) { minimap.innerHTML = ''; return; }
   const grid = win.gridSize;
   const frac = (value) => (value / grid) * 100;
+  // Terrain is known geography, so the minimap draws every feature regardless of
+  // mapper reach — the wide field stays navigable by terrain at a glance. The
+  // faint-beyond/crisp-within mapper fade applies to the tactical map only.
+  const terrain = (game.terrain ?? [])
+    .map((feature) => `<span class="mini-terrain ${feature.type}" style="--mx:${frac(feature.x)};--my:${frac(feature.y)};--mr:${frac(feature.radius)}" aria-hidden="true"></span>`)
+    .join('');
   const dots = game.ships
     .filter((ship) => ship.status !== 'destroyed' && isVisible(ship))
     .map((ship) => `<span class="mini-dot ${ship.faction}${ship.id === game.playerShipId ? ' you' : ''}" style="--mx:${frac(ship.x)};--my:${frac(ship.y)}"></span>`)
     .join('');
   const viewport = `<span class="mini-view" style="--vx:${frac(win.minX)};--vy:${frac(win.minY)};--vw:${frac(win.size)}"></span>`;
-  minimap.innerHTML = dots + viewport;
+  minimap.innerHTML = terrain + dots + viewport;
 };
 
 /**
@@ -293,6 +299,17 @@ export const renderGame = (game, view = {}) => {
   }
   const ringHtml = rings.map(({ r, kind, x, y }) => `<div class="range-ring ${kind}" style="--x:${pct(x)};--y:${pct(y)};--d:${pct(2 * r)}%" aria-hidden="true"></div>`).join('');
 
+  // Terrain (Reimagined only) draws on the world layer beneath ships and range
+  // rings, as translucent faction-neutral blobs that pan and zoom with the camera.
+  // It is known geography: a feature the mapper can reach at all renders crisp;
+  // beyond mapper range it fades to TERRAIN.faintOpacity — you can always route by
+  // the field's shape, but the mapper and the sensors sink sharpen the picture.
+  const terrainHtml = (game.terrain ?? []).map((feature) => {
+    const crisp = !actorActive || distance(actor, feature) <= mapperRange + feature.radius;
+    const label = feature.type.replace('-', ' ');
+    return `<div class="terrain ${feature.type}" style="--x:${pct(feature.x)};--y:${pct(feature.y)};--d:${pct(2 * feature.radius)}%;--o:${crisp ? 1 : TERRAIN.faintOpacity}" title="${label}" aria-hidden="true"></div>`;
+  }).join('');
+
   const shipHtml = game.ships.filter(isVisible).map((ship) => {
     if (ship.status === 'destroyed') {
       return `<span class="wreck" style="--x:${pct(ship.x)};--y:${pct(ship.y)}" title="${ship.name}: destroyed" aria-hidden="true">+</span>`;
@@ -306,7 +323,7 @@ export const renderGame = (game, view = {}) => {
     const ace = captain && isAce(ship) ? ' ace' : '';
     return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}"${view.battlePaused ? ' disabled' : ''}><span class="glyph">${ship.name[0]}</span></button>`;
   }).join('');
-  map.innerHTML = ringHtml + shipHtml;
+  map.innerHTML = terrainHtml + ringHtml + shipHtml;
   // Slide and scale the world layer so the camera window fills the viewport. The
   // test stub has no `style`, so guard it; the projection is identity at zoom 1.
   if (map.style) map.style.transform = fieldTransform(win);

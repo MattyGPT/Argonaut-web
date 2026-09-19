@@ -389,3 +389,54 @@ test('the top bar names the scenario being fought', () => {
   renderGame(createGame({ seed: 'scenario-badge-plain', extended: true }));
   assert.equal(read('#mode-readout').textContent, 'EXTENDED WAR');
 });
+
+// --- Round 15a: terrain overlays on the map and the minimap (Reimagined) ---
+
+test('a Reimagined war charts every terrain feature on the map and the minimap', () => {
+  elements.clear();
+  const game = createGame({ seed: 'render-terrain', reimagined: true });
+  renderGame(game);
+  const field = read('#map-field').innerHTML;
+  assert.equal((field.match(/class="terrain /g) ?? []).length, game.terrain.length,
+    'every feature draws on the world layer');
+  for (const feature of game.terrain) {
+    assert.match(field, new RegExp(`class="terrain ${feature.type}"`), `${feature.id} draws as its type`);
+    const grid = game.gridSize;
+    assert.match(field, new RegExp(`--x:${(feature.x / grid) * 100};--y:${(feature.y / grid) * 100};--d:${(2 * feature.radius / grid) * 100}%`),
+      `${feature.id} is positioned in field fractions, diameter and all`);
+  }
+  // Terrain sits beneath the hulls: the first blob precedes the first ship in the markup.
+  assert.ok(field.indexOf('class="terrain') < field.indexOf('class="ship'),
+    'terrain draws under the ships');
+  const minimap = read('#minimap').innerHTML;
+  assert.equal((minimap.match(/mini-terrain/g) ?? []).length, game.terrain.length,
+    'the minimap draws the same features');
+  assert.ok(minimap.indexOf('mini-terrain') < minimap.indexOf('mini-dot'),
+    'and draws them under the hull dots');
+});
+
+test('terrain is crisp within mapper reach and faint beyond it', () => {
+  elements.clear();
+  const base = createGame({ seed: 'render-terrain-fade', reimagined: true });
+  const game = withFlagship({
+    ...base,
+    terrain: [
+      { id: 'nebula-1', type: 'nebula', x: 40, y: 40, radius: 30 },
+      { id: 'ion-storm-1', type: 'ion-storm', x: 200, y: 200, radius: 24 },
+    ],
+  }, { x: 20, y: 20 });
+  renderGame(game);
+  const field = read('#map-field').innerHTML;
+  // A battle cruiser's mapper reaches 60; the near nebula is inside it, the far storm is not.
+  assert.match(field, /class="terrain nebula" style="[^"]*--o:1"/, 'a mapped feature renders crisp');
+  assert.match(field, /class="terrain ion-storm" style="[^"]*--o:0\.45"/, 'an unmapped one fades to faintOpacity');
+});
+
+test('a classic or extended war draws no terrain anywhere', () => {
+  for (const opts of [{}, { extended: true }]) {
+    elements.clear();
+    renderGame(createGame({ seed: 'render-terrain-off', ...opts }));
+    assert.ok(!/class="terrain/.test(read('#map-field').innerHTML), 'the world layer carries no blobs');
+    assert.equal(read('#minimap').innerHTML, '', 'and the minimap stays dark');
+  }
+});

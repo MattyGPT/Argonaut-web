@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, POWER, POWER_SINKS, RANGES, REIMAGINED_GRID_SIZE, SCENARIOS, STALEMATE_ROUNDS, VENDETTA } from '../game/constants.js';
+import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, POWER, POWER_SINKS, RANGES, REIMAGINED_GRID_SIZE, SCENARIOS, STALEMATE_ROUNDS, TERRAIN, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioProgress } from '../game/scenarios.js';
-import { abbreviateNarrative, alertLevel, appendLog, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, isAce, powerAllocation, powerEffect, radioIntegrity, reactorOutput, sensorRange, shieldCapacity, strongestFederation, templateSystems, vendettaGrudge } from '../game/state.js';
+import { abbreviateNarrative, alertLevel, appendLog, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, insideFeature, isAce, powerAllocation, powerEffect, radioIntegrity, reactorOutput, sensorRange, shieldCapacity, strongestFederation, templateSystems, terrainAt, vendettaGrudge } from '../game/state.js';
 import { applyPlayerAction, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveCollision, shipCommands, tractorLock, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
@@ -2346,4 +2346,96 @@ test('the dockyard repairs a damaged reactor (Reimagined)', () => {
     : ship));
   const repaired = getShip(resolveDocking(game).game, 'fed-cruiser-1');
   assert.equal(repaired.systems.reactor, 2, 'the most-damaged subsystem — the reactor — gains a unit');
+});
+
+// --- Round 15a: the terrain data layer (Reimagined) ---
+
+const TERRAIN_SEEDS = ['terrain-a', 'terrain-b', 'xanadu', 'reimagined-field'];
+
+test('a Reimagined war seeds six terrain features, two of each hazard type', () => {
+  for (const seed of TERRAIN_SEEDS) {
+    const terrain = createGame({ seed, reimagined: true }).terrain;
+    assert.equal(terrain.length, 6, `seed ${seed} places every feature`);
+    for (const [type, count] of Object.entries(TERRAIN.counts)) {
+      assert.equal(terrain.filter((feature) => feature.type === type).length, count, `seed ${seed} places ${count} ${type}`);
+    }
+    const ids = new Set(terrain.map((feature) => feature.id));
+    assert.equal(ids.size, terrain.length, 'every feature has a unique id');
+  }
+});
+
+test('terrain placement is deterministic on its own seeded stream', () => {
+  for (const seed of TERRAIN_SEEDS) {
+    const first = createGame({ seed, reimagined: true });
+    const second = createGame({ seed, reimagined: true });
+    assert.deepEqual(first.terrain, second.terrain, 'the same seed charts the same battlefield');
+    assert.notDeepEqual(first.terrain, createGame({ seed: `${seed}-other`, reimagined: true }).terrain,
+      'a different seed charts a different one');
+  }
+  // The terrain stream is separate from the war's RNG: an option that changes how
+  // many draws the fleets consume leaves the charted battlefield untouched.
+  const plain = createGame({ seed: 'terrain-stream', reimagined: true });
+  const regional = createGame({ seed: 'terrain-stream', reimagined: true, regional: true });
+  assert.deepEqual(plain.terrain, regional.terrain, 'terrain never reads the war stream');
+  assert.notDeepEqual(plain.ships, regional.ships, 'while fleet placement does');
+});
+
+test('every feature is in bounds, sized in its range, and clear of Xanadu', () => {
+  for (const seed of TERRAIN_SEEDS) {
+    const game = createGame({ seed, reimagined: true });
+    const grid = game.gridSize;
+    const xanadu = getShip(game, 'xanadu');
+    for (const feature of game.terrain) {
+      const [minRadius, maxRadius] = TERRAIN.radius[feature.type];
+      assert.ok(feature.radius >= minRadius && feature.radius <= maxRadius,
+        `${feature.id} radius ${feature.radius} sits in [${minRadius}, ${maxRadius}]`);
+      assert.ok(feature.x >= TERRAIN.edgeMargin && feature.x <= grid - TERRAIN.edgeMargin,
+        `${feature.id} center x is inside the edge margin`);
+      assert.ok(feature.y >= TERRAIN.edgeMargin && feature.y <= grid - TERRAIN.edgeMargin,
+        `${feature.id} center y is inside the edge margin`);
+      assert.ok(distance(feature, xanadu) >= feature.radius + TERRAIN.xanaduClearance,
+        `${feature.id} keeps its edge clear of the dockyard`);
+      assert.ok(!insideFeature(game, xanadu), 'Xanadu is never buried in a hazard');
+    }
+    for (const [i, a] of game.terrain.entries()) {
+      for (const b of game.terrain.slice(i + 1)) {
+        assert.ok(distance(a, b) >= TERRAIN.minSeparation,
+          `${a.id} and ${b.id} keep the minimum center separation`);
+      }
+    }
+  }
+});
+
+test('a classic or extended war carries no terrain, and the parity scaffold holds', () => {
+  assert.deepEqual(createGame({ seed: 'terrain-classic' }).terrain, []);
+  assert.deepEqual(createGame({ seed: 'terrain-extended', extended: true }).terrain, []);
+  // The standing parity guard: the terrain layer changes nothing a classic war reads.
+  assert.deepEqual(createGame({ seed: 'terrain-parity' }), createGame({ seed: 'terrain-parity', reimagined: false }));
+});
+
+test('insideFeature and terrainAt answer the point-in-feature test', () => {
+  const game = {
+    ...createGame({ seed: 'terrain-helpers', reimagined: true }),
+    terrain: [
+      { id: 'nebula-1', type: 'nebula', x: 80, y: 80, radius: 30 },
+      { id: 'ion-storm-1', type: 'ion-storm', x: 160, y: 160, radius: 20 },
+    ],
+  };
+  assert.equal(insideFeature(game, { x: 80, y: 80 }), true, 'the center is inside');
+  assert.equal(insideFeature(game, { x: 100, y: 80 }), true, 'so is a point within the radius');
+  assert.equal(insideFeature(game, { x: 111, y: 80 }), false, 'and a point beyond it is outside');
+  assert.equal(insideFeature(game, { x: 100, y: 80 }, 'nebula'), true, 'the type filter matches');
+  assert.equal(insideFeature(game, { x: 100, y: 80 }, 'ion-storm'), false, 'and rejects the wrong type');
+  assert.equal(terrainAt(game, { x: 160, y: 175 })?.id, 'ion-storm-1');
+  assert.equal(terrainAt(game, { x: 10, y: 10 }), null, 'open space belongs to no feature');
+});
+
+test('terrain helpers tolerate a classic war and an old save with no terrain field', () => {
+  const classic = createGame({ seed: 'terrain-helpers-classic' });
+  assert.equal(insideFeature(classic, { x: 50, y: 50 }), false);
+  assert.equal(terrainAt(classic, { x: 50, y: 50 }), null);
+  const oldSave = { ...createGame({ seed: 'terrain-old-save', reimagined: true }) };
+  delete oldSave.terrain;
+  assert.equal(insideFeature(oldSave, { x: 50, y: 50 }), false, 'a save predating terrain reads as empty');
+  assert.equal(terrainAt(oldSave, { x: 50, y: 50 }), null);
 });

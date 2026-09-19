@@ -18,6 +18,7 @@ import {
   STARBASE_BLAST_RADIUS,
   STARTING_FORMATIONS,
   SYSTEM_RANGE_PER_UNIT,
+  TERRAIN,
   VENDETTA,
   XANADU_POSITION,
 } from './constants.js';
@@ -110,6 +111,45 @@ const assignCaptains = (seed, count) => {
   return Array.from({ length: count }, (_, index) => deck[index % deck.length]);
 };
 
+/**
+ * Terrain placement (Argonaut Reimagined, Phase 2). Features are drawn on their own
+ * seeded stream — `${seed}:terrain`, the same pattern as captains — so ship positions
+ * and the vendetta pick stay byte-identical. Centers sit inside `edgeMargin` of the
+ * field edge, keep `xanaduClearance` between the feature's *edge* and the starbase
+ * (so the dockyard is never buried in a hazard), and stay `minSeparation` apart from
+ * every other center so features never concentrically stack. Mild edge overlap is
+ * allowed and interesting. Rejection sampling is bounded so a pathological seed skips
+ * a feature rather than hanging; on the 240-unit field placement always succeeds.
+ * Each feature may carry a drift velocity `v` — reserved and unused in Phase 2 (Q7:
+ * storms are fixed for now, drifting switchable on later without reworking the model).
+ */
+const TERRAIN_MAX_ATTEMPTS = 400;
+
+const generateTerrain = (seed, gridSize, xanadu) => {
+  const rng = createRng(`${seed}:terrain`);
+  const features = [];
+  const edge = TERRAIN.edgeMargin;
+  for (const [type, count] of Object.entries(TERRAIN.counts)) {
+    const [minRadius, maxRadius] = TERRAIN.radius[type];
+    for (let index = 1; index <= count; index += 1) {
+      for (let attempt = 0; attempt < TERRAIN_MAX_ATTEMPTS; attempt += 1) {
+        const candidate = {
+          id: `${type}-${index}`,
+          type,
+          x: rng.integer(edge, gridSize - edge),
+          y: rng.integer(edge, gridSize - edge),
+          radius: rng.integer(minRadius, maxRadius),
+        };
+        if (distance(candidate, xanadu) < candidate.radius + TERRAIN.xanaduClearance) continue;
+        if (features.some((other) => distance(candidate, other) < TERRAIN.minSeparation)) continue;
+        features.push(candidate);
+        break;
+      }
+    }
+  }
+  return features;
+};
+
 export const createGame = ({ seed = 'xanadu', regional = false, sound = false, extended = false, scenario = 'annihilation', precision = false, reimagined = false } = {}) => {
   const normalizedSeed = String(seed);
   // Argonaut Reimagined builds on the extended layer — orders, doctrine, the
@@ -176,6 +216,10 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     // Per-hull reactor power allocation (shipId -> sink -> points), Reimagined only.
     // Empty by default; a hull with no stored allocation runs its class default.
     power: {},
+    // The living battlefield: seeded terrain features ({ id, type, x, y, radius, v? }),
+    // Reimagined only. A classic or extended war carries an empty list, and old saves
+    // may lack the field entirely, so every reader defaults to [].
+    terrain: isReimagined ? generateTerrain(normalizedSeed, gridSize, xanaduPosition) : [],
     outcome: null,
   };
 };
@@ -202,6 +246,18 @@ export const isImmovable = (ship) => ship?.className === 'Starbase';
 export const getLivingShips = (game) => game.ships.filter((ship) => ship.status !== 'destroyed');
 
 export const distance = (first, second) => Math.hypot(first.x - second.x, first.y - second.y);
+
+/**
+ * The terrain feature containing a point, or null. Terrain helpers are pure data
+ * reads: a classic or extended war carries `terrain: []` (and an old save may lack
+ * the field), so they answer null/false there without ever checking the mode flag.
+ * Overlapping features resolve to the first match in generation order.
+ */
+export const terrainAt = (game, point) => (game?.terrain ?? []).find((feature) => distance(point, feature) <= feature.radius) ?? null;
+
+/** Whether a point sits inside a terrain feature, optionally of a given type. */
+export const insideFeature = (game, point, type) => (game?.terrain ?? [])
+  .some((feature) => (type ? feature.type === type : true) && distance(point, feature) <= feature.radius);
 
 /**
  * The Federation hull command should shift to. Xanadu out-masses every ship afloat,
