@@ -29,7 +29,12 @@ export const scenarioOutcome = (game) => {
     // Boarding the hull counts as ending the vendetta, exactly as it ends the hunt
     // for Captain Jason in the original.
     const boarded = hunter.faction === FACTIONS.FEDERATION;
-    const ended = boarded || hunter.status !== 'active';
+    // A third alliance can take the hunter too (round 17's AI boarding): any flip
+    // of its allegiance ends the hunt exactly like a colors-strike — the vendetta
+    // is over either way. The prize record keeps the name of the captain who
+    // hunted you, so the resolution can still say who it was.
+    const turned = !boarded && Boolean(hunter.prize);
+    const ended = boarded || turned || hunter.status !== 'active';
     if (!ended) return null;
     // The point of the scenario is knowing who was coming for you. A hunter that
     // dies in the general melee before you have scanned it is a lost opportunity,
@@ -44,7 +49,10 @@ export const scenarioOutcome = (game) => {
       };
     }
     if (boarded) {
-      return { kind: 'scenario-win', message: `${hunter.name} flies Federation colours.  Captain ${hunter.captain}, who hunted you, is yours.` };
+      return { kind: 'scenario-win', message: `${hunter.name} flies Federation colours.  Captain ${hunter.prize?.captain ?? hunter.captain}, who hunted you, is yours.` };
+    }
+    if (turned) {
+      return { kind: 'scenario-win', message: `${hunter.name} flies ${hunter.faction} colours — Captain ${hunter.prize.captain ?? hunter.captain}, who hunted you, is gone.  The vendetta ends here.` };
     }
     if (hunter.status === 'destroyed') {
       return { kind: 'scenario-win', message: `${hunter.name} is destroyed, with Captain ${hunter.captain} aboard.  The vendetta ends here.` };

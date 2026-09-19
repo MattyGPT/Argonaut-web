@@ -11,6 +11,7 @@ import {
   isTractorHeld,
   orderFor,
   powerEffect,
+  sensorRange,
   shieldCapacity,
   systemUnits,
 } from './state.js';
@@ -86,7 +87,11 @@ const pickTarget = (game, actor) => {
 /** Where a withdrawing ship runs to: Xanadu if it still stands, else the fleet. */
 const withdrawTo = (game, actor) => {
   const xanadu = getShip(game, 'xanadu');
-  if (xanadu && isActive(xanadu)) return xanadu;
+  // Reimagined-only generalization (round 17): a prize withdraws toward a base its
+  // OWN alliance holds — only the Federation ever has one — else toward its fleet,
+  // so an Axis prize no longer limps at the enemy starbase. A classic or extended
+  // war keeps the original resolution byte-identical.
+  if (xanadu && isActive(xanadu) && (!game.reimagined || xanadu.faction === actor.faction)) return xanadu;
   const friends = game.ships.filter((ship) => isActive(ship) && ship.faction === actor.faction && ship.id !== actor.id);
   if (friends.length === 0) return null;
   return {
@@ -137,6 +142,18 @@ const orderedAction = (game, actor, order) => {
     const home = withdrawTo(game, actor);
     if (!home || !canNavigate(game, actor)) return { type: 'pass' };
     return stepToward(actor, home, 0, game);
+  }
+
+  if (order.type === 'board') {
+    // The one targeted order whose subject is a derelict: stale the moment the hull
+    // is destroyed or taken by anyone else, and the ship falls back to fleet
+    // behavior rather than idling over an empty berth (round 17).
+    const target = getShip(game, order.targetId);
+    if (!target || target.status !== 'vacant') return null;
+    if (systemUnits(actor, 'transporter') <= 0 || actor.crew <= 1) return null;
+    if (distance(actor, target) <= sensorRange(game, actor, 'transporter')) return { type: 'board', targetId: target.id };
+    if (!canNavigate(game, actor)) return null;
+    return stepToward(actor, target, 0, game);
   }
 
   const ward = getShip(game, order.targetId);
@@ -267,6 +284,30 @@ const doctrineAction = (game, actor) => {
   return { type: 'pass' };
 };
 
+/**
+ * Opportunistic prize-taking (round 17, Reimagined): with no shot available this
+ * stardate — no enemy inside gun reach, or the guns jammed in an ion storm — a
+ * captain with working transporters and crew to spare boards the nearest vacant
+ * hull inside transporter reach, enemy wreck or struck-colors friendly alike.
+ * Deterministic (nearest, ties by id) and it consumes no RNG, so no seeded stream
+ * shifts. The vendetta captain is single-minded and never boards, and the
+ * starbase is exempt — garrisoned and immense, only the player's own transporter
+ * re-mans it.
+ */
+const prizeOpportunity = (game, actor) => {
+  if (!game.reimagined || isVendetta(game, actor)) return null;
+  if (systemUnits(actor, 'transporter') <= 0 || actor.crew <= 1) return null;
+  const jammed = ionStormZone(game, actor) === 'core';
+  const shotAvailable = !jammed && enemiesOf(game, actor).some((enemy) => (systemUnits(actor, 'phasers') > 0 && distance(actor, enemy) <= RANGES.phasers)
+    || (systemUnits(actor, 'photons') > 0 && distance(actor, enemy) <= RANGES.photons));
+  if (shotAvailable) return null;
+  const reach = sensorRange(game, actor, 'transporter');
+  const hull = game.ships
+    .filter((ship) => ship.status === 'vacant' && ship.className !== 'Starbase' && distance(actor, ship) <= reach)
+    .sort((a, b) => distance(actor, a) - distance(actor, b) || a.id.localeCompare(b.id))[0];
+  return hull ? { type: 'board', targetId: hull.id } : null;
+};
+
 export const chooseAiAction = (game, shipId) => {
   const actor = getShip(game, shipId);
   if (!isActive(actor)) return { type: 'pass' };
@@ -278,6 +319,11 @@ export const chooseAiAction = (game, shipId) => {
     const ordered = orderedAction(game, actor, order);
     if (ordered) return ordered;
   }
+
+  // Prize-taking outranks doctrine but not orders: a captain with nothing to
+  // shoot at grabs a derelict in reach (round 17, Reimagined only).
+  const board = prizeOpportunity(game, actor);
+  if (board) return board;
 
   if (game.extended) {
     const doctrine = doctrineAction(game, actor);

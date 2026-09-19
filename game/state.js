@@ -11,6 +11,7 @@ import {
   MISS_CHANCE,
   POWER,
   POWER_SINKS,
+  PRIZE,
   RANGES,
   REIMAGINED_GRID_SIZE,
   SCENARIO_IDS,
@@ -257,6 +258,15 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     // Resolved in the computer phase like the dockyard; empty until someone ends a
     // stardate on a node, and absent in old saves, so every reader defaults to {}.
     held: {},
+    // How many prize captains have been dealt (round 17), advancing the
+    // `${seed}:prizes` sub-stream. Never incremented outside a Reimagined war, and
+    // absent in old saves, so every reader defaults to 0.
+    prizeDraws: 0,
+    // Cumulative captures per alliance (round 17), for the battle report's
+    // "prizes taken" line — the per-ship record only remembers the LAST capture,
+    // so a recapture would otherwise erase the history. Reimagined only; absent in
+    // old saves, so every reader defaults to {}.
+    prizesTaken: {},
     outcome: null,
   };
 };
@@ -537,7 +547,25 @@ export const powerEffect = (game, ship, sink) => {
   if (!game?.reimagined) return 1;
   const need = POWER.need[sink] ?? 0;
   if (need <= 0) return 1;
-  return Math.min(POWER.overcharge, (powerAllocation(game, ship)[sink] ?? 0) / need);
+  return Math.min(POWER.overcharge, (powerAllocation(game, ship)[sink] ?? 0) / need) * manningEffect(game, ship, sink);
+};
+
+/**
+ * The manning multiplier (round 17): a prize whose crew is below `PRIZE.manningFloor`
+ * of its complement is skeleton-crewed and runs its engines and weapons at
+ * `PRIZE.manningPenalty` until transporter transfers or the dockyard bring it up —
+ * a captured hull cannot be thrown straight into the line at full strength. Sensors,
+ * shields, and tractor are unaffected: a prize crew can still see, hold, and tow.
+ * Folded in through `powerEffect`, the single choke point every engine and weapon
+ * consumer already reads, so it is exactly 1 for anything that is not an
+ * under-manned prize in a Reimagined war.
+ */
+export const manningEffect = (game, ship, sink) => {
+  if (!game?.reimagined || !ship?.prize) return 1;
+  if (sink !== 'engines' && sink !== 'weapons') return 1;
+  const complement = crewCapacity(ship);
+  if (complement <= 0 || (ship.crew ?? 0) >= complement * PRIZE.manningFloor) return 1;
+  return PRIZE.manningPenalty;
 };
 
 /**
@@ -639,6 +667,7 @@ export const describeOrder = (game, order) => {
     case 'escort': return `escort ${name}`;
     case 'intercept': return `intercept ${name}`;
     case 'screen': return `screen ${name}`;
+    case 'board': return `board ${name}`;
     default: return 'concentrate with the fleet';
   }
 };

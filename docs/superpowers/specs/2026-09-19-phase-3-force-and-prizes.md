@@ -213,8 +213,11 @@ The prize record is a field on the ship, so it rides the existing `ships` array
 through the autosave with **no migration**: an old save's hulls simply have no
 `prize`, and every reader treats absent as "never taken" (`ship.prize ?? null`).
 The `board` order persists through `game.orders` like every other order; the
-`prizeDraws` counter defaults to 0; manning is derived state (crew ÷
-complement), never stored. Nothing new in `loadSave`.
+`prizeDraws` counter defaults to 0; and the cumulative `game.prizesTaken`
+ledger — captures per alliance, which the battle report's "taken" line reads,
+since the per-ship record is last-write-wins across recaptures — defaults to
+`{}`. Manning is derived state (crew ÷ complement), never stored. Nothing new
+in `loadSave`.
 
 ## The rest of Phase 3 — seams, not designs
 

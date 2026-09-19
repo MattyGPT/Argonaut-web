@@ -243,6 +243,26 @@ export const TERRAIN = Object.freeze({
   /** Q7: storms are fixed in Phase 2, but features carry an optional velocity hook `v`. */
 });
 
+/**
+ * The prize fleet (Argonaut Reimagined, Phase 3 round 17). Capture itself is
+ * original behavior — a hull whose crew dies stays a `vacant` prize and a
+ * transporter can take it over in any war — so Reimagined adds the layer on top:
+ * every allegiance flip is recorded on the hull (`ship.prize`), the prize is dealt
+ * a new captain and auto-issued `withdraw` so it limps rearward, and a skeleton
+ * crew performs degraded until transporter runs or the dockyard bring it up.
+ * Settled with Matt, 2026-09-19 — see
+ * `docs/superpowers/specs/2026-09-19-phase-3-force-and-prizes.md`. Every number is
+ * a balance dial for the Reimagined simulation harness, not a calibrated value.
+ */
+export const PRIZE = Object.freeze({
+  /** Below this fraction of its crew complement a prize runs under-manned. */
+  manningFloor: 0.25,
+  /** Engines + weapons multiplier while a prize is under-manned. */
+  manningPenalty: 0.5,
+  /** Crew an AI captain or a `board` standing order beams over. */
+  aiParty: 10,
+});
+
 /** Shots can miss. The same roll governs the player's volleys and the autopilots'. */
 export const MISS_CHANCE = 0.12;
 
@@ -353,8 +373,13 @@ export const SPECTATOR_TICK_MS = 400;
  * behavior — concentrate with the fleet — so it is also the default. The targeted
  * orders need a second ship named alongside them.
  */
-export const ORDER_TYPES = Object.freeze(['focus', 'hold', 'withdraw', 'escort', 'intercept', 'screen']);
-export const TARGETED_ORDERS = Object.freeze(['escort', 'intercept', 'screen']);
+export const ORDER_TYPES = Object.freeze(['focus', 'hold', 'withdraw', 'escort', 'intercept', 'screen', 'board']);
+/**
+ * The targeted orders. `board` (round 17) is the odd one out: it names a
+ * *vacant* hull rather than an active ship, and it is Reimagined-only — `setOrder`
+ * refuses it elsewhere, so a classic or extended war never sees a boarding party.
+ */
+export const TARGETED_ORDERS = Object.freeze(['escort', 'intercept', 'screen', 'board']);
 
 /** How close an ordered ship stations itself, in map units. */
 export const FLEET_ORDER_TUNING = Object.freeze({

@@ -1,4 +1,4 @@
-import { DOCKING, FACTIONS, GRID_SIZE, POWER_SINKS, RANGES, REFITS, TERRAIN } from '../game/constants.js';
+import { DOCKING, FACTIONS, GRID_SIZE, POWER_SINKS, PRIZE, RANGES, REFITS, TERRAIN } from '../game/constants.js';
 import { shipCommands } from '../game/actions.js';
 import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
 import { cameraWindow, fieldTransform, viewportFromWorld } from './camera.js';
@@ -6,6 +6,7 @@ import { drawMove } from './fx.js';
 import {
   abbreviateNarrative,
   alertLevel,
+  crewCapacity,
   describeOrder,
   distance,
   dockedAt,
@@ -78,7 +79,20 @@ const ORDER_BUTTONS = Object.freeze([
   ['escort', 'Escort…'],
   ['screen', 'Screen…'],
   ['intercept', 'Intercept…'],
+  // Round 17: mustering a boarding party is a Reimagined-war order, so the button
+  // only appears there (setOrder refuses it elsewhere regardless).
+  ['board', 'Board…'],
 ]);
+
+/** The order buttons a war mode offers: `board` is Reimagined-only. */
+const orderButtonsFor = (game) => (game.reimagined ? ORDER_BUTTONS : ORDER_BUTTONS.filter(([type]) => type !== 'board'));
+
+/** How the fleet report and the ship menu read a prize of war (round 17). */
+const prizeNote = (ship) => {
+  if (!ship?.prize) return '';
+  const manning = ship.crew < crewCapacity(ship) * PRIZE.manningFloor ? ', under-manned' : '';
+  return ` — prize of war from the ${ship.prize.from}, stardate ${ship.prize.turn}, prize crew ${ship.crew}/${crewCapacity(ship)}${manning}`;
+};
 
 /**
  * The context menu that grows out of a clicked hull: what your command ship can
@@ -94,6 +108,11 @@ const shipMenu = (game, actor, ship) => {
     `${ship.faction} ${ship.className.toLowerCase()} · ${ship.status}`,
     `${own ? 'your command ship' : `${distance(actor, ship).toFixed(1)} away`} · shields ${ship.shields} · crew ${ship.crew}`,
     ...(captain ? [`Captain ${captain}${isAce(ship) ? ` · an ace, ${ship.kills} kills` : ''}`] : []),
+    // A prize of your alliance tells its story in the menu (round 17); the record
+    // only exists in a Reimagined war, so no mode check is needed here.
+    ...(ship.prize && ship.faction === actor?.faction
+      ? [`Prize of war — taken from the ${ship.prize.from} at stardate ${ship.prize.turn}; prize crew ${ship.crew}/${crewCapacity(ship)}${ship.crew < crewCapacity(ship) * PRIZE.manningFloor ? ' — under-manned, engines and guns degraded' : ''}`]
+      : []),
   ];
   const commands = shipCommands(game, ship.id)
     .map(({ type, label }) => `<button data-ship-command="${type}" data-ship-target="${ship.id}"${disabled}>${label}</button>`)
@@ -111,7 +130,7 @@ const shipMenu = (game, actor, ship) => {
         : (contact ? null : 'Out of radio contact — orders arrive one stardate late.'),
       ...(own ? ['Your own hull obeys these orders whenever the autopilot has the conn.'] : []),
     ].filter(Boolean);
-    const buttons = ORDER_BUTTONS
+    const buttons = orderButtonsFor(game)
       .map(([type, label]) => `<button data-order="${type}" data-order-ship="${ship.id}"${standing?.type === type ? ' class="current"' : ''}${disabled}>${label}</button>`)
       .join('');
     const docked = dockedAt(game, ship);
@@ -334,7 +353,10 @@ export const renderGame = (game, view = {}) => {
     // out which hull has sworn to hunt you.
     const captain = game.extended && game.scanned?.[ship.id] ? ship.captain : null;
     const ace = captain && isAce(ship) ? ' ace' : '';
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}"${view.battlePaused ? ' disabled' : ''}><span class="glyph">${ship.name[0]}</span></button>`;
+    // A hull taken as a prize wears a gold pip (round 17), opposite the white
+    // under-orders pip; the capture was narrated, so this is public knowledge.
+    const prize = ship.prize ? ' prize' : '';
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}"${view.battlePaused ? ' disabled' : ''}><span class="glyph">${ship.name[0]}</span>${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}</button>`;
   }).join('');
   map.innerHTML = terrainHtml + ringHtml + shipHtml;
   // Slide and scale the world layer so the camera window fills the viewport. The
@@ -502,7 +524,7 @@ export const reportFor = (game, type) => {
         const standing = travelling ?? orderFor(game, ship.id);
         const reached = ship.id === command?.id || inRadioContact(game, command, ship);
         const mark = travelling ? ' (order in transit)' : reached ? '' : ' (out of contact)';
-        return `${ship.name} — ${describeOrder(game, standing)}${mark}; condition ${alertLevel(ship)} at ${ship.x},${ship.y}.`;
+        return `${ship.name}${prizeNote(ship)} — ${describeOrder(game, standing)}${mark}; condition ${alertLevel(ship)} at ${ship.x},${ship.y}.`;
       });
     return {
       title: `Fleet orders, Stardate ${game.turn}`,
@@ -521,11 +543,20 @@ export const reportFor = (game, type) => {
     const gunner = topGun?.kills
       ? `Top gun: ${game.extended ? `Captain ${topGun.captain} of the ${topGun.name}` : `${topGun.name} of the ${topGun.faction}`}, ${topGun.kills} credited kills.`
       : 'No ship scored a kill.';
+    // Prizes (round 17): taken counts every capture your side ever made (the
+    // cumulative ledger — the per-ship record only remembers the last one), and
+    // lost counts those hulls no longer flying your colors: retaken or destroyed.
+    // A dark prize still in your allegiance is not lost — it can be re-manned.
+    // Absent without the ledger, so a classic or extended report is unchanged.
+    const prizesTaken = game.prizesTaken?.[FACTIONS.FEDERATION] ?? 0;
+    const prizesHeld = game.ships.filter((ship) => ship.prize?.byFaction === FACTIONS.FEDERATION
+      && ship.faction === FACTIONS.FEDERATION && ship.status !== 'destroyed').length;
     return {
       title: 'Battle report',
       lines: [
         `Stardates elapsed: ${game.turn}.`,
         `Federation losses: ${losses} of ${federation.length} hulls.`,
+        prizesTaken ? `Prizes: ${prizesTaken} taken, ${prizesTaken - prizesHeld} lost.` : null,
         gunner,
         punished?.shotsTaken ? `Heaviest punishment taken: ${punished.name} absorbed ${punished.shotsTaken} volleys.` : null,
         clumsy?.collisions ? `Most collisions: ${clumsy.name} with ${clumsy.collisions}.` : null,

@@ -1,5 +1,5 @@
-import { DOCKING, FACTIONS, GRID_SIZE, POWER, RANGES, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
-import { damageShip, detonate, fireEvent, flushShields, killLines, resolveAsteroidStrike, resolveCollision, terminalEvent, tractorLock, weaponDamage } from './actions.js';
+import { DOCKING, FACTIONS, GRID_SIZE, POWER, PRIZE, RANGES, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
+import { captureHull, damageShip, detonate, fireEvent, flushShields, killLines, resolveAsteroidStrike, resolveCollision, terminalEvent, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
 import { scenarioOutcome } from './scenarios.js';
@@ -16,8 +16,10 @@ import {
   isTractorHeld,
   powerEffect,
   segmentCrossesFeature,
+  sensorRange,
   shieldCapacity,
   strongestFederation,
+  systemUnits,
   templateSystems,
   vendettaGrudge,
   volleyMissChance,
@@ -113,6 +115,23 @@ const resolveAiAction = (game, shipId) => {
         ...strike.messages,
       ],
       events: [...collision.events, ...strike.events],
+      type: action.type,
+    };
+  }
+  if (action.type === 'board') {
+    // Prize-taking (round 17, Reimagined): revalidated here because the derelict
+    // may have been taken or destroyed since the action was chosen earlier in the
+    // same computer phase. The capture helper stamps the record, deals the prize
+    // captain, and auto-issues the withdraw; no RNG is consumed.
+    const target = getShip(game, action.targetId);
+    if (!target || target.status !== 'vacant' || systemUnits(actor, 'transporter') <= 0 || actor.crew <= 1
+      || distance(actor, target) > sensorRange(game, actor, 'transporter')) {
+      return { game, messages: [`${actor.name} holds position.`], type: 'pass' };
+    }
+    const capture = captureHull(game, actor, target, PRIZE.aiParty);
+    return {
+      game: capture.game,
+      messages: [`${actor.name} beams a prize crew across to ${target.name}.`, ...capture.messages],
       type: action.type,
     };
   }
