@@ -259,6 +259,25 @@ export const terrainAt = (game, point) => (game?.terrain ?? []).find((feature) =
 export const insideFeature = (game, point, type) => (game?.terrain ?? [])
   .some((feature) => (type ? feature.type === type : true) && distance(point, feature) <= feature.radius);
 
+/** Shortest distance from a point to the segment a→b. */
+const pointSegmentDistance = (point, a, b) => {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const span = dx * dx + dy * dy;
+  const t = span === 0 ? 0 : Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / span));
+  return Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy));
+};
+
+/**
+ * Whether the straight shot line a→b crosses a terrain feature, optionally of a
+ * given type — the cover test (15c) a volley through an asteroid field fails.
+ * An endpoint inside the feature counts as crossing it. Like the other terrain
+ * helpers this is a pure data read, so it is always false outside a Reimagined
+ * war and the calibrated miss rate is untouched.
+ */
+export const segmentCrossesFeature = (game, a, b, type) => (game?.terrain ?? [])
+  .some((feature) => (type ? feature.type === type : true) && pointSegmentDistance(feature, a, b) <= feature.radius);
+
 /**
  * The Federation hull command should shift to. Xanadu out-masses every ship afloat,
  * so ranking on raw strength alone handed command to an immobile starbase — no move,

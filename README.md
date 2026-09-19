@@ -90,8 +90,11 @@ nebulae, asteroid fields, and ion storms across the wide field, drawn as
 translucent overlays on the tactical map and the minimap — faint beyond your
 mapper's reach, crisp within it. A hull lurking **inside a nebula** is hidden
 from an outside mapper, scanner, and radio beyond a short reveal range that
-overcharged sensors pierce further; the asteroid and ion-storm hazards switch on
-over the coming rounds. It
+overcharged sensors pierce further. **Asteroid fields** give cover — a volley
+whose shot line crosses one can splash on a rock — and a hull that *ends* a move
+or a tractor tow inside one takes a seeded rock strike across its shields, which
+makes towing an enemy into the rocks a deliberate weapon; passing straight
+through at speed is safe. The ion-storm jam switches on in a coming round. It
 never changes how a classic or extended war plays — those keep the calibrated
 100-unit field and the pull-toward-you beam. New Reimagined systems land over time;
 see `docs/superpowers/specs/2026-09-17-argonaut-reimagined-roadmap.md`.
