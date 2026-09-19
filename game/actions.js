@@ -1,5 +1,6 @@
 import {
   ACE_KILLS,
+  CAPTAIN_NAMES,
   CREW_DAMAGE_WEIGHT,
   CRIPPLE,
   DEFAULT_CREW_TRANSFER,
@@ -10,6 +11,7 @@ import {
   ORDER_TYPES,
   OVERKILL_DESTROY_MARGIN,
   POWER_SINKS,
+  PRIZE,
   RANGES,
   REFITS,
   REFIT_OVER_TEMPLATE,
@@ -256,7 +258,11 @@ export const damageShip = (ship, amount, rng = createRng('damage'), options = {}
 export const orderTargets = (game, shipId, orderType) => {
   const actor = getShip(game, shipId);
   if (!actor || !isActive(actor)) return [];
-  const candidates = getLivingShips(game).filter((ship) => isActive(ship) && ship.id !== actor.id);
+  const living = getLivingShips(game).filter((ship) => ship.id !== actor.id);
+  // A board order names a derelict — any alliance's, including a struck-colors
+  // friendly — which is the one targeted order that does not name an active ship.
+  if (orderType === 'board') return living.filter((ship) => ship.status === 'vacant');
+  const candidates = living.filter((ship) => isActive(ship));
   return orderType === 'intercept'
     ? candidates.filter((ship) => ship.faction !== actor.faction)
     : candidates.filter((ship) => ship.faction === actor.faction);
@@ -712,6 +718,73 @@ const tractorAction = (game, action, actor) => {
   ], { events: [...collision.events, ...strike.events] });
 };
 
+/**
+ * One capture, whichever path produced it (round 17): the boarding party beams
+ * over and the hull comes alive under the boarder's colors. Shared by the
+ * player's transporter, a `board` standing order, and an AI captain's
+ * opportunistic boarding, so every prize is identical and the vendetta ends on
+ * any allegiance flip, exactly as player boarding has always done.
+ *
+ * In a Reimagined war a flip also stamps the **prize record** — origin, boarder,
+ * stardate, and the captain the hull serves no more (kept so the hunt scenario
+ * can still name who hunted you) — deals it a new prize captain off the
+ * `${seed}:prizes` sub-stream advanced by `game.prizeDraws` (deterministic, and
+ * no existing stream shifts), and auto-issues `withdraw` straight onto its
+ * orders, so the prize limps rearward until ordered up. Re-manning a friendly
+ * derelict (no flip) restores it to service but is not a capture and stamps
+ * nothing. Consumes no RNG draws.
+ */
+export const captureHull = (game, boarder, target, party) => {
+  const placed = Math.min(party, boarder.crew - 1, crewCapacity(target));
+  const flip = target.faction !== boarder.faction;
+  let captured = { ...target, faction: boarder.faction, status: 'active', crew: placed, tractorBy: null };
+  let next = {
+    ...game,
+    // Boarding the vendetta ship ends the vendetta; otherwise that hull would
+    // keep hunting Captain Jason in its new colors' hands.
+    vendettaShipId: flip && game.vendettaShipId === captured.id ? null : game.vendettaShipId,
+  };
+  const messages = [];
+  if (game.reimagined && flip) {
+    const draw = game.prizeDraws ?? 0;
+    const captain = createRng(`${game.seed}:prizes:${draw}`).pick(CAPTAIN_NAMES);
+    const times = (target.prize?.times ?? 0) + 1;
+    captured = {
+      ...captured,
+      captain,
+      prize: { from: target.faction, by: boarder.id, byFaction: boarder.faction, turn: game.turn, captain: target.captain, times },
+    };
+    next = {
+      ...next,
+      prizeDraws: draw + 1,
+      // The cumulative ledger the battle report reads: the per-ship record only
+      // remembers the last capture, so "taken, ever" lives here.
+      prizesTaken: { ...(next.prizesTaken ?? {}), [boarder.faction]: (next.prizesTaken?.[boarder.faction] ?? 0) + 1 },
+      // Direct onto `orders`, not pending: the capturing hull is standing next to
+      // its prize, so radio contact is a given.
+      orders: { ...(next.orders ?? {}), [captured.id]: { type: 'withdraw', targetId: null } },
+    };
+    const base = getShip(game, 'xanadu');
+    const dest = base && isActive(base) && base.faction === boarder.faction ? `toward ${base.name}` : 'toward the fleet';
+    messages.push(
+      `${captured.name} is taken as a prize of the ${boarder.faction} — Captain ${captain} commands her now, and she withdraws ${dest}.`,
+      ...(times > 1 ? [`${captured.name} has changed hands ${times} times.`] : []),
+    );
+  } else if (game.reimagined) {
+    messages.push(`A party from ${boarder.name} brings ${captured.name} back into the fight.`);
+  }
+  const source = { ...boarder, crew: boarder.crew - placed };
+  next = {
+    ...next,
+    ships: next.ships.map((ship) => {
+      if (ship.id === captured.id) return captured;
+      if (ship.id === source.id) return source;
+      return ship;
+    }),
+  };
+  return { game: next, captured, source, placed, messages };
+};
+
 const transportAction = (game, action, actor) => {
   const disabled = requiresSystem(game, actor, 'transporter');
   if (disabled) return disabled;
@@ -731,18 +804,15 @@ const transportAction = (game, action, actor) => {
     return result(updated, `${added} crew beam from ${actor.name} to ${target.name}.`);
   }
   if (found.target.status !== 'vacant') return invalid(game, 'Only a vacant ship can be occupied.');
-  const placed = Math.min(amount, actor.crew - 1, crewCapacity(found.target));
-  const source = { ...actor, crew: actor.crew - placed };
-  const captured = { ...found.target, faction: actor.faction, status: 'active', crew: placed, tractorBy: null };
+  const capture = captureHull(game, actor, found.target, amount);
   const base = {
-    ...game,
-    playerShipId: action.transferCommand ? captured.id : game.playerShipId,
-    // Boarding the vendetta ship ends the vendetta; otherwise that hull would
-    // keep hunting Captain Jason after it joined the Federation.
-    vendettaShipId: game.vendettaShipId === captured.id ? null : game.vendettaShipId,
-    ships: game.ships.map((ship) => ship.id === source.id ? source : ship.id === captured.id ? captured : ship),
+    ...capture.game,
+    playerShipId: action.transferCommand ? capture.captured.id : game.playerShipId,
   };
-  return result(completeTurn(base), `${captured.name} is occupied by ${placed} crew${action.transferCommand ? '; command transferred.' : '.'}`);
+  return result(completeTurn(base), [
+    `${capture.captured.name} is occupied by ${capture.placed} crew${action.transferCommand ? '; command transferred.' : '.'}`,
+    ...capture.messages,
+  ]);
 };
 
 const destroyedShip = (ship) => ({ ...ship, status: 'destroyed', crew: 0, shields: 0, tractorBy: null });
@@ -855,7 +925,15 @@ const setOrder = (game, action, actor) => {
   if (!ORDER_TYPES.includes(type)) return invalid(game, `Unknown order: ${type}.`);
 
   const order = { type, targetId: null };
-  if (TARGETED_ORDERS.includes(type)) {
+  if (type === 'board') {
+    // The one targeted order whose subject is a derelict rather than an active
+    // ship — and a Reimagined-war order only, so a classic or extended war never
+    // musters a boarding party (round 17).
+    if (!game.reimagined) return invalid(game, 'Boarding parties are only mustered in a Reimagined war.');
+    const target = getShip(game, action.targetId);
+    if (!target || target.status !== 'vacant') return invalid(game, 'A board order names a derelict hull.', true);
+    order.targetId = target.id;
+  } else if (TARGETED_ORDERS.includes(type)) {
     const target = getShip(game, action.targetId);
     if (!target || !isActive(target)) return invalid(game, 'That order needs an active ship to name.', true);
     if (target.id === ship.id) return invalid(game, `${ship.name} cannot be ordered against itself.`);

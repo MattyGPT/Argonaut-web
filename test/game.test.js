@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, RANGES, REIMAGINED_GRID_SIZE, SCENARIOS, STALEMATE_ROUNDS, TERRAIN, VENDETTA } from '../game/constants.js';
+import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, SCENARIOS, STALEMATE_ROUNDS, TERRAIN, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
-import { scenarioProgress } from '../game/scenarios.js';
+import { scenarioOutcome, scenarioProgress } from '../game/scenarios.js';
 import { abbreviateNarrative, alertLevel, appendLog, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, inRadioContact, insideFeature, ionStormZone, isAce, nebulaHides, nebulaRevealRange, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, strongestFederation, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
-import { applyPlayerAction, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, tractorLock, weaponDamage } from '../game/actions.js';
+import { applyPlayerAction, captureHull, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, tractorLock, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolveObjectives, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
@@ -3005,4 +3005,246 @@ test('relay objectives never touch a classic or extended war, and tolerate old s
   delete oldSave.held;
   const out = resolveObjectives(oldSave);
   assert.equal(out.game.held['relay-1'], 'Federation', 'the objective still resolves and records the hold');
+});
+
+// --- Argonaut Reimagined, Phase 3 round 17: the prize fleet ---
+
+/**
+ * A Reimagined war staged for capture tests: the command ship and a Federation
+ * cruiser mid-field beside Grendel, an Axis cruiser left vacant, everyone else at
+ * their seeded corners. Xanadu sits at (120, 120), inside whose 40-unit
+ * transporter reach the derelict also lies — but the ship order puts
+ * fed-cruiser-1 (second to act) long ahead of the starbase (last).
+ */
+const prizeWar = (seed) => withShips(createGame({ seed, reimagined: true }), (ship) => {
+  if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
+  if (ship.id === 'fed-cruiser-1') return { ...ship, x: 95, y: 100 };
+  if (ship.id === 'axis-cruiser-1') return { ...ship, status: 'vacant', crew: 0, x: 104, y: 100 };
+  return ship;
+});
+
+/**
+ * A Reimagined war for AI prize-taking: an Axis cruiser alone mid-field beside a
+ * vacant Federation scout, and every other hull parked by hand in a far corner
+ * (spread out, since ships seed randomly across the field and doctrine movement
+ * toward a shared target could otherwise stack them into collisions). No enemy
+ * sits inside any gun's reach of the pair, whatever the seed.
+ */
+const AI_PRIZE_PARKING = {
+  'fed-flagship': [10, 230], 'fed-cruiser-1': [14, 234], 'fed-cruiser-2': [18, 226], 'fed-cruiser-3': [12, 222],
+  'axis-flagship': [10, 10], 'axis-cruiser-2': [14, 14], 'axis-cruiser-3': [16, 8], 'axis-scout': [20, 12],
+  'bloc-flagship': [230, 10], 'bloc-cruiser-1': [226, 14], 'bloc-cruiser-2': [222, 8], 'bloc-cruiser-3': [228, 16], 'bloc-scout': [224, 20],
+  'cabal-flagship': [225, 225], 'cabal-cruiser-1': [230, 230], 'cabal-cruiser-2': [220, 232], 'cabal-cruiser-3': [228, 222], 'cabal-scout': [232, 226],
+};
+
+const aiPrizeWar = (seed) => withShips(createGame({ seed, reimagined: true }), (ship) => {
+  if (ship.id === 'axis-cruiser-1') return { ...ship, x: 220, y: 120 };
+  if (ship.id === 'fed-scout') return { ...ship, status: 'vacant', crew: 0, x: 226, y: 120 };
+  return AI_PRIZE_PARKING[ship.id] ? { ...ship, x: AI_PRIZE_PARKING[ship.id][0], y: AI_PRIZE_PARKING[ship.id][1] } : ship;
+});
+
+test('boarding a derelict in a Reimagined war stamps the prize record', () => {
+  const game = prizeWar('prize-capture');
+  const out = applyPlayerAction(game, { type: 'transport', targetId: 'axis-cruiser-1', amount: 10 });
+  const prize = getShip(out.game, 'axis-cruiser-1');
+  assert.equal(prize.faction, 'Federation');
+  assert.equal(prize.status, 'active');
+  assert.equal(prize.crew, 10);
+  assert.deepEqual(
+    { ...prize.prize, captain: prize.prize.captain },
+    { from: 'Axis', by: 'fed-flagship', byFaction: 'Federation', turn: 1, captain: getShip(game, 'axis-cruiser-1').captain, times: 1 },
+    'the record names the origin, the boarder, the stardate, and the captain it serves no more',
+  );
+  assert.ok(CAPTAIN_NAMES.includes(prize.captain), 'the prize is dealt a new captain');
+  assert.equal(out.game.prizeDraws, 1, 'the prize sub-stream advanced');
+  assert.deepEqual(out.game.orders['axis-cruiser-1'], { type: 'withdraw', targetId: null }, 'a fresh prize withdraws rearward');
+  assert.deepEqual(out.messages[0], 'Grendel is occupied by 10 crew.');
+  assert.match(out.messages.join(' '), /taken as a prize of the Federation — Captain \w+ commands her now, and she withdraws toward Xanadu\./);
+  // Deterministic: the same state and the same action draw the same prize captain.
+  const again = applyPlayerAction(game, { type: 'transport', targetId: 'axis-cruiser-1', amount: 10 });
+  assert.deepEqual(again.game, out.game);
+});
+
+test('a prize takes standing orders and reads as a prize in the reports', () => {
+  const captured = applyPlayerAction(prizeWar('prize-orders'), { type: 'transport', targetId: 'axis-cruiser-1', amount: 10 });
+  const held = applyPlayerAction({ ...captured.game, phase: 'player' }, { type: 'orders', shipId: 'axis-cruiser-1', order: { type: 'hold' } });
+  assert.match(held.messages.join(' '), /acknowledges: hold position/, 'the prize is orderable like any Federation hull');
+  assert.equal(held.game.phase, 'player', 'orders stay free');
+  const line = reportFor(held.game, 'fleet').lines.find((entry) => entry.startsWith('Grendel'));
+  assert.match(line, /Grendel — prize of war from the Axis, stardate 1, prize crew 10\/140, under-manned — hold position/);
+  assert.ok(reportFor(held.game, 'battle-report').lines.includes('Prizes: 1 taken, 0 lost.'));
+});
+
+test('an under-manned prize runs its engines and guns at half until crewed up', () => {
+  const out = applyPlayerAction(prizeWar('prize-manning'), { type: 'transport', targetId: 'axis-cruiser-1', amount: 10 });
+  const prize = getShip(out.game, 'axis-cruiser-1');
+  assert.ok(prize.crew < crewCapacity(prize) * PRIZE.manningFloor, '10 hands is a skeleton crew for a cruiser');
+  assert.equal(powerEffect(out.game, prize, 'engines'), PRIZE.manningPenalty);
+  assert.equal(powerEffect(out.game, prize, 'weapons'), PRIZE.manningPenalty);
+  assert.equal(powerEffect(out.game, prize, 'sensors'), 1, 'a prize crew can still see');
+  assert.equal(engineCapacity(prize, out.game.gridSize, powerEffect(out.game, prize, 'engines')), 48, 'half the calibrated reach');
+  const crewed = withShips(out.game, (ship) => (ship.id === 'axis-cruiser-1'
+    ? { ...ship, crew: Math.ceil(crewCapacity(ship) * PRIZE.manningFloor) }
+    : ship));
+  assert.equal(powerEffect(crewed, getShip(crewed, 'axis-cruiser-1'), 'engines'), 1, 'transporter runs bring it back to full');
+});
+
+test('a board order sends a Federation hull to take the derelict', () => {
+  const game = prizeWar('prize-board-order');
+  const ordered = applyPlayerAction(game, { type: 'orders', shipId: 'fed-cruiser-1', order: { type: 'board' }, targetId: 'axis-cruiser-1' });
+  assert.equal(ordered.game.phase, 'player', 'issuing the order is free');
+  assert.deepEqual(ordered.game.orders['fed-cruiser-1'], { type: 'board', targetId: 'axis-cruiser-1' });
+  assert.match(ordered.messages.join(' '), /acknowledges: board Grendel/);
+  const out = resolveComputerTurns({ ...ordered.game, phase: 'computer' });
+  const prize = getShip(out, 'axis-cruiser-1');
+  assert.equal(prize.faction, 'Federation', 'the ordered hull beams a prize crew over on its own');
+  assert.equal(prize.status, 'active');
+  assert.equal(prize.prize?.by, 'fed-cruiser-1');
+  assert.equal(getShip(out, 'fed-cruiser-1').crew, 130, 'ten hands went across');
+  assert.deepEqual(out.orders['axis-cruiser-1'], { type: 'withdraw', targetId: null }, 'the capture replaces the board order with the withdraw');
+  assert.ok(out.log.some((line) => /Bonhomme beams a prize crew across to Grendel/.test(line)));
+});
+
+test('a board order sails toward a derelict out of reach, and goes stale once it is taken', () => {
+  const game = prizeWar('prize-board-stale');
+  const ordered = { ...game, orders: { 'fed-cruiser-1': { type: 'board', targetId: 'axis-cruiser-1' } } };
+  assert.deepEqual(chooseAiAction(ordered, 'fed-cruiser-1'), { type: 'board', targetId: 'axis-cruiser-1' }, 'in reach, it boards at once');
+  const far = withShips(ordered, (ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, x: 160, y: 100 } : ship));
+  const sailing = chooseAiAction(far, 'fed-cruiser-1');
+  assert.equal(sailing.type, 'move', 'out of reach, it closes the distance');
+  assert.ok(sailing.dx > 0);
+  const taken = withShips(ordered, (ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, status: 'active', crew: 10 } : ship));
+  assert.notEqual(chooseAiAction(taken, 'fed-cruiser-1').type, 'board', 'someone else got there first: the order is stale');
+});
+
+test('a captain with no shot to take boards the nearest derelict, and spends no roll', () => {
+  const game = aiPrizeWar('ai-prize');
+  assert.deepEqual(chooseAiAction(game, 'axis-cruiser-1'), { type: 'board', targetId: 'fed-scout' });
+  const out = captureHull(game, getShip(game, 'axis-cruiser-1'), getShip(game, 'fed-scout'), PRIZE.aiParty);
+  assert.equal(out.game.randomStep, game.randomStep, 'boarding consumes no RNG');
+  const prize = getShip(out.game, 'fed-scout');
+  assert.equal(prize.faction, 'Axis', 'prizes are symmetric');
+  assert.equal(prize.crew, PRIZE.aiParty);
+  assert.equal(getShip(out.game, 'axis-cruiser-1').crew, 130);
+  assert.equal(out.game.orders['fed-scout'].type, 'withdraw');
+  assert.ok(out.messages.some((line) => /prize of the Axis/.test(line)));
+});
+
+test('an AI captain boards through the computer phase', () => {
+  const out = resolveComputerTurns({ ...aiPrizeWar('ai-prize-round'), phase: 'computer' });
+  assert.equal(getShip(out, 'fed-scout').faction, 'Axis');
+  assert.ok(out.log.some((line) => /beams a prize crew across to Empyreal/.test(line)));
+});
+
+test('a live fight outranks a prize, and the vendetta captain never boards', () => {
+  const base = aiPrizeWar('prize-priorities');
+  const gunsBear = withShips(base, (ship) => (ship.id === 'fed-cruiser-2' ? { ...ship, x: 200, y: 120 } : ship));
+  assert.notEqual(chooseAiAction(gunsBear, 'axis-cruiser-1').type, 'board', 'a captain with a shot takes the shot');
+  const hunting = { ...base, vendettaShipId: 'axis-cruiser-1' };
+  assert.equal(chooseAiAction(hunting, 'axis-cruiser-1').type, 'move', 'the vendetta captain keeps hunting');
+});
+
+test('AI captains never board the starbase', () => {
+  const game = withShips(createGame({ seed: 'prize-xanadu', reimagined: true }), (ship) => {
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 118, y: 120 };
+    if (ship.id === 'xanadu') return { ...ship, status: 'vacant', crew: 0 };
+    if (ship.faction === 'Federation') return { ...ship, x: 20, y: 20 };
+    return ship;
+  });
+  assert.notEqual(chooseAiAction(game, 'axis-cruiser-1').type, 'board', 'Xanadu is garrisoned and immense');
+});
+
+test('a recaptured prize overwrites its record and counts as lost', () => {
+  const first = applyPlayerAction(prizeWar('prize-retaken'), { type: 'transport', targetId: 'axis-cruiser-1', amount: 10 });
+  const dark = withShips(first.game, (ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, status: 'vacant', crew: 0 } : ship));
+  const out = captureHull(dark, getShip(dark, 'axis-cruiser-2'), getShip(dark, 'axis-cruiser-1'), PRIZE.aiParty);
+  const prize = getShip(out.game, 'axis-cruiser-1');
+  assert.equal(prize.faction, 'Axis', 'its original alliance can take it back');
+  assert.equal(prize.prize.from, 'Federation');
+  assert.equal(prize.prize.byFaction, 'Axis');
+  assert.equal(prize.prize.times, 2);
+  assert.ok(out.messages.some((line) => /changed hands 2 times/.test(line)));
+  assert.ok(reportFor(out.game, 'battle-report').lines.includes('Prizes: 1 taken, 1 lost.'));
+});
+
+test('any allegiance flip ends the vendetta, and re-manning a friendly wreck is no capture', () => {
+  const base = { ...prizeWar('prize-vendetta-flip'), vendettaShipId: 'axis-cruiser-1' };
+  const taken = applyPlayerAction(base, { type: 'transport', targetId: 'axis-cruiser-1', amount: 10 });
+  assert.equal(taken.game.vendettaShipId, null, 'the player boarding ends it, as always');
+  const dark = withShips(base, (ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, status: 'vacant', crew: 0 } : ship));
+  const turned = captureHull(dark, getShip(dark, 'bloc-cruiser-1'), getShip(dark, 'axis-cruiser-1'), PRIZE.aiParty);
+  assert.equal(turned.game.vendettaShipId, null, 'a third alliance taking the hull ends it too');
+  const remanned = captureHull(dark, getShip(dark, 'axis-cruiser-2'), getShip(dark, 'axis-cruiser-1'), PRIZE.aiParty);
+  assert.equal(remanned.game.vendettaShipId, 'axis-cruiser-1', 'no flip, no end');
+  assert.equal(getShip(remanned.game, 'axis-cruiser-1').prize, undefined, 're-manning a friendly derelict stamps no record');
+  assert.deepEqual(remanned.messages, ['A party from Hellhound brings Grendel back into the fight.']);
+});
+
+test('a hunter taken by a third alliance ends the hunt', () => {
+  const base = createGame({ seed: 'hunt-turned', reimagined: true, scenario: 'hunt-the-vendetta' });
+  const hunterId = base.objectiveShipId;
+  const hunter = getShip(base, hunterId);
+  const third = ['Axis', 'Bloc', 'Cabal'].find((faction) => faction !== hunter.faction);
+  const dark = withShips(base, (ship) => (ship.id === hunterId ? { ...ship, status: 'vacant', crew: 0 } : ship));
+  const out = captureHull(dark, getShip(dark, `${third.toLowerCase()}-cruiser-1`), getShip(dark, hunterId), PRIZE.aiParty);
+  assert.equal(scenarioOutcome(out.game).kind, 'scenario-loss', 'taken before you ever scanned it — you never learned who was coming');
+  const win = scenarioOutcome({ ...out.game, scanned: { [hunterId]: true } });
+  assert.equal(win.kind, 'scenario-win');
+  assert.ok(win.message.includes(hunter.captain), 'the resolution still names the captain who hunted you');
+  assert.match(win.message, new RegExp(`flies ${third} colours`));
+});
+
+test('the prize layer never touches a classic or extended war', () => {
+  for (const opts of [{}, { extended: true }]) {
+    const game = withShips(createGame({ seed: 'prize-parity', ...opts }), (ship) => {
+      if (ship.id === 'fed-flagship') return { ...ship, x: 10, y: 10 };
+      if (ship.id === 'axis-cruiser-1') return { ...ship, status: 'vacant', crew: 0, x: 12, y: 10 };
+      if (ship.id === 'axis-cruiser-2') return { ...ship, x: 14, y: 10 };
+      return ship;
+    });
+    // AI captains never board: the derelict stays a derelict.
+    assert.notEqual(chooseAiAction(game, 'axis-cruiser-2').type, 'board');
+    // A board order is refused — fleet orders themselves are refused in a classic war.
+    const refused = applyPlayerAction(game, { type: 'orders', shipId: 'fed-cruiser-1', order: { type: 'board' }, targetId: 'axis-cruiser-1' });
+    assert.match(refused.messages.join(' '), opts.extended ? /Reimagined/ : /extended war/);
+    // Player capture stays the calibrated occupation, message for message.
+    const captured = applyPlayerAction(game, { type: 'transport', targetId: 'axis-cruiser-1', amount: 10 });
+    const hull = getShip(captured.game, 'axis-cruiser-1');
+    assert.equal(hull.faction, 'Federation');
+    assert.equal(hull.prize, undefined);
+    assert.equal(hull.captain, getShip(game, 'axis-cruiser-1').captain, 'the hull keeps the captain it launched with');
+    assert.equal(captured.game.orders?.['axis-cruiser-1'], undefined, 'no order is auto-issued');
+    assert.equal(captured.game.prizeDraws, 0);
+    assert.deepEqual(captured.game.prizesTaken, {}, 'no ledger entry outside a Reimagined war');
+    assert.deepEqual(captured.messages, ['Grendel is occupied by 10 crew.']);
+  }
+});
+
+test('an extended war with a derelict adrift plays out without a single prize', () => {
+  let war = withShips(createGame({ seed: 'prize-parity-war', extended: true }), (ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, status: 'vacant', crew: 0 } : ship));
+  for (let round = 0; round < 30 && !war.outcome; round += 1) {
+    war = resolveComputerTurns({ ...war, phase: 'computer' });
+  }
+  assert.ok(war.ships.every((ship) => ship.prize === undefined));
+  assert.ok(!(war.log ?? []).some((line) => /prize/i.test(line)));
+});
+
+test('old saves tolerate the absent prize fields', () => {
+  const captured = applyPlayerAction(prizeWar('prize-old-save'), { type: 'transport', targetId: 'axis-cruiser-1', amount: 10 });
+  // A Reimagined save from before round 17: no prizeDraws or prizesTaken on the
+  // game, no record on hulls.
+  const old = withShips({ ...captured.game, prizeDraws: undefined, prizesTaken: undefined }, (ship) => {
+    if (ship.id !== 'axis-cruiser-1') return ship;
+    const { prize, ...rest } = ship;
+    return rest;
+  });
+  const hull = getShip(old, 'axis-cruiser-1');
+  assert.equal(powerEffect(old, hull, 'engines'), 1, 'no record, no manning penalty');
+  assert.ok(reportFor(old, 'fleet').lines.every((line) => !/prize of war/.test(line)));
+  assert.ok(!reportFor(old, 'battle-report').lines.some((line) => /Prizes:/.test(line)), 'no ledger, no prizes line');
+  const dark = withShips(old, (ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, status: 'vacant', crew: 0 } : ship));
+  const retaken = captureHull(dark, getShip(dark, 'bloc-cruiser-1'), getShip(dark, 'axis-cruiser-1'), PRIZE.aiParty);
+  assert.equal(retaken.game.prizeDraws, 1, 'a fresh capture starts the count');
+  assert.deepEqual(retaken.game.prizesTaken, { Bloc: 1 }, 'and the ledger');
+  assert.equal(getShip(retaken.game, 'axis-cruiser-1').prize.times, 1);
 });

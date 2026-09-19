@@ -103,7 +103,17 @@ mirrored off Xanadu as capturable objectives: end a stardate inside one — not
 tractor-held — and your alliance holds it, every hull gaining +5 reactor budget
 while it is held, enough to overcharge a sink without starving another.
 Contesting darkens the node and driving the holder off frees it, and a held node
-wears its alliance's ring on the map and minimap. It
+wears its alliance's ring on the map and minimap. It also fields a **prize
+fleet**: every hull boarded in a Reimagined war is recorded as a prize — its
+origin, the stardate taken, and its prize crew read in the fleet report, the
+ship's menu, and a gold pip on the map. Any Federation hull can be ordered to
+**Board…** a derelict and will sail over and beam a prize crew across on its own,
+and enemy captains do the same when they have no shot to fire — a knocked-out
+hull is a resource every alliance races for. A fresh prize is under-manned (its
+engines and guns run at half effectiveness below a quarter of its complement)
+and withdraws toward Xanadu until you dock it, crew it up, and order it into the
+line; a prize whose crew dies can be retaken by anyone, including its original
+alliance. It
 never changes how a classic or extended war plays — those keep the calibrated
 100-unit field and the pull-toward-you beam. New Reimagined systems land over time;
 see `docs/superpowers/specs/2026-09-17-argonaut-reimagined-roadmap.md`.

@@ -491,3 +491,40 @@ test('a relay node draws neutral while free, and wears its holder\'s colors on m
   assert.match(read('#minimap').innerHTML, /class="mini-terrain relay Federation"/,
     'and its colors on the minimap');
 });
+
+// --- Round 17: the prize pip, the menu's prize line, and the Board… order ---
+
+/** A Reimagined war with Bonhomme staged as a freshly taken, under-manned prize. */
+const prizeRenderGame = (seed) => withPair(createGame({ seed, reimagined: true }),
+  'fed-flagship', { x: 100, y: 100 },
+  'fed-cruiser-1', {
+    x: 104,
+    y: 100,
+    crew: 10,
+    prize: { from: 'Axis', by: 'fed-flagship', byFaction: 'Federation', turn: 3, captain: 'Vess', times: 1 },
+  });
+
+test('a prize of war wears a pip on the map and tells its story in the menu', () => {
+  elements.clear();
+  renderGame(prizeRenderGame('render-prize'), { contextShipId: 'fed-cruiser-1' });
+  const field = read('#map-field').innerHTML;
+  assert.match(field, /class="ship Federation active prize"/, 'the hull is marked as a prize');
+  assert.match(field, /prize-pip/, 'and wears its pip');
+  assert.match(field, /title="Bonhomme: active — prize of war"/);
+  const menu = read('#ship-menu').innerHTML;
+  assert.match(menu, /Prize of war — taken from the Axis at stardate 3; prize crew 10\/140 — under-manned, engines and guns degraded/);
+});
+
+test('the Reimagined order picker offers Board…; an extended war does not', () => {
+  elements.clear();
+  renderGame(withPair(createGame({ seed: 'order-board', reimagined: true }),
+    'fed-flagship', { x: 10, y: 10 }, 'fed-cruiser-1', { x: 14, y: 10 }), { contextShipId: 'fed-cruiser-1' });
+  assert.match(read('#ship-menu').innerHTML, /data-order="board"/);
+
+  elements.clear();
+  renderGame(withPair(createGame({ seed: 'order-board-off', extended: true }),
+    'fed-flagship', { x: 10, y: 10 }, 'fed-cruiser-1', { x: 14, y: 10 }), { contextShipId: 'fed-cruiser-1' });
+  const menu = read('#ship-menu').innerHTML;
+  assert.match(menu, /data-order="hold"/, 'the extended order picker is unchanged');
+  assert.ok(!/data-order="board"/.test(menu), 'boarding parties are Reimagined-only');
+});

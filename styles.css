@@ -1185,6 +1185,25 @@ body.classic .ship.has-order::before {
   text-shadow: 0 0 5px currentColor;
 }
 
+/* Reimagined prize fleet: a hull taken as a prize wears a gold pip, opposite the
+   white under-orders pip. A real element because both pseudo-elements are taken
+   (orders pip, ace star). Flagged for the manual play-test pass. */
+.ship .prize-pip {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffd76a;
+  box-shadow: 0 0 6px #ffd76a;
+}
+
+body.classic .ship .prize-pip {
+  background: #38ff38;
+  box-shadow: none;
+}
+
 .fx-impact {
   fill: none;
   stroke: #fff;
