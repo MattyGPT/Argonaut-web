@@ -115,7 +115,7 @@ combat mechanics — a clean checkpoint. **Next: Phase 1, power management (14a)
 | 14c | Power-bar UI | Console pips to drag the allocation, click/keyboard, a11y | Free (no stardate spent); persists across save; reachable by keyboard | ✅ PR #29 |
 | 14d | AI profiles + reactor refit/repair | `POWER.profiles` per alliance (AI hulls run their doctrine bias; the command ship runs the flat default), a `reactor` refit (Reimagined-gated), and dockyard reactor repair (free via 14a's reactor-aware `templateSystems`) | Doctrines allocate; command ship stays 1.0x; refit adds a unit and is refused outside Reimagined; dockyard repairs a damaged reactor; classic/extended parity | ✅ PR #30 |
 
-### Phase 2 — The living battlefield *(idea #5, #6)*
+### Phase 2 — The living battlefield *(idea #5, #6)* — ✅ complete
 
 Detailed design (terrain model, hazard rules, AI interaction, open questions):
 `docs/superpowers/specs/2026-09-18-phase-2-living-battlefield.md`.
@@ -126,7 +126,7 @@ Detailed design (terrain model, hazard rules, AI interaction, open questions):
 | 15b | Nebula = sensor denial | Blocks mapper/scanner inside | Visibility/fog through nebula | ✅ PR #36 |
 | 15c | Asteroids = cover + collision | Blocks/degrades shots; collision on entry | Shot interception; collision path reused | ✅ PR #38 |
 | 15d | Ion storm = jam | Disables weapons/radio per stardate | Effect window applies/clears | ✅ PR #39 |
-| 16 | Capturable objectives | Relay/cache nodes grant a bonus while held | Hold/contest flips bonus | |
+| 16 | Capturable objectives | Relay/cache nodes grant a bonus while held | Hold/contest flips bonus | ✅ PR #40 |
 
 ### Phase 3 — Force & prizes *(#7, #9, #8, #10)*
 
