@@ -85,7 +85,12 @@ tractor — from the console power bar (free, and it persists). Each sink perfor
 its calibrated level by default; overcharge one and you must starve another, so a
 mauled reactor leaves you with hard choices. Surplus shield power regenerates shields
 each stardate, and knocking out an enemy's reactor with a called shot shrinks
-everything it can do. It
+everything it can do. It also charts a **living battlefield**: each war seeds
+nebulae, asteroid fields, and ion storms across the wide field, drawn as
+translucent overlays on the tactical map and the minimap — faint beyond your
+mapper's reach, crisp within it. In this first cut they are known geography to
+route by; their hazards (sensor denial, rock strikes, jamming) switch on over
+the coming rounds. It
 never changes how a classic or extended war plays — those keep the calibrated
 100-unit field and the pull-toward-you beam. New Reimagined systems land over time;
 see `docs/superpowers/specs/2026-09-17-argonaut-reimagined-roadmap.md`.

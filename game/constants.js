@@ -193,6 +193,56 @@ export const POWER = Object.freeze({
 /** The five systems a reactor budget is distributed across. */
 export const POWER_SINKS = Object.freeze(['shields', 'weapons', 'engines', 'sensors', 'tractor']);
 
+/**
+ * The living battlefield (Argonaut Reimagined, Phase 2). A Reimagined war seeds
+ * `game.terrain`: a list of typed circular features — nebulae to hide in, asteroid
+ * fields to wreck a hull on, ion storms that jam a fleet — placed on their own
+ * seeded stream so ship placement is untouched. A classic or extended war carries
+ * an empty list and reads none of this, so calibration is untouched.
+ *
+ * Only the placement and rendering dials are live in 15a (counts, radii, margins,
+ * `faintOpacity`); the effect magnitudes below are read by the hazard rounds that
+ * follow (15b nebula sensor denial, 15c asteroid cover/collision, 15d ion-storm
+ * jam, 16 relay objectives). Every number is a balance dial for the Reimagined
+ * simulation harness, not a calibrated value.
+ *
+ * Settled with Matt, 2026-09-18 — see
+ * `docs/superpowers/specs/2026-09-18-phase-2-living-battlefield.md`.
+ */
+export const TERRAIN = Object.freeze({
+  /** Sparser on purpose (Q2): 6 features on the 240 field, each a meaningful landmark. */
+  counts: Object.freeze({ nebula: 2, asteroids: 2, 'ion-storm': 2 }),
+  /** Per-type radius range, in map units. */
+  radius: Object.freeze({
+    nebula: Object.freeze([28, 44]),
+    asteroids: Object.freeze([16, 26]),
+    'ion-storm': Object.freeze([20, 32]),
+  }),
+  /** Feature centers stay this far inside the field edge. */
+  edgeMargin: 12,
+  /** No feature edge comes this close to the starbase, so the dockyard is never buried. */
+  xanaduClearance: 30,
+  /** Minimum distance between feature centers, so they never concentrically stack. */
+  minSeparation: 20,
+  /** Q1 middle option: terrain is known geography, drawn faint beyond mapper range. */
+  faintOpacity: 0.45,
+  /** Q6: base units an outside sensor sees into a nebula at 1.0x; scales with the sensors sink. */
+  nebulaRevealRange: 8,
+  /** Q4: rock strike only on ending a move/tow inside the field. */
+  asteroidStrike: Object.freeze({ chance: 0.35, min: 10, max: 40 }),
+  /** Extra miss chance on a shot whose line crosses asteroids. */
+  asteroidCoverMiss: 0.25,
+  /** Q3: ion storm — full-jam core, degraded outer ring. */
+  ionStormCore: 0.6,
+  ionStormRingMiss: 0.15,
+  ionStormRingRadio: 0.5,
+  /** Q5: two relay nodes (round 16); holding one grants its alliance a power-budget bump. */
+  relayCount: 2,
+  relayRadius: 10,
+  relayPowerBonus: 5,
+  /** Q7: storms are fixed in Phase 2, but features carry an optional velocity hook `v`. */
+});
+
 /** Shots can miss. The same roll governs the player's volleys and the autopilots'. */
 export const MISS_CHANCE = 0.12;
 

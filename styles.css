@@ -265,6 +265,39 @@ h1 {
   opacity: .7;
 }
 
+/* Terrain features (Argonaut Reimagined): translucent faction-neutral blobs on the
+   world layer, beneath the ships and range rings, so they pan and zoom with the
+   camera. `--o` carries the mapper fade from render.js — crisp within mapper reach,
+   faint (TERRAIN.faintOpacity) beyond. Nebula violet, asteroids slate, ion storm
+   amber. Decoration plus a query layer: nothing in the rules reads the markup. */
+.terrain {
+  position: absolute;
+  left: calc(var(--x) * 1%);
+  top: calc(var(--y) * 1%);
+  width: var(--d);
+  height: var(--d);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1px solid;
+  pointer-events: none;
+  opacity: var(--o, 1);
+}
+
+.terrain.nebula {
+  border-color: #b48cff59;
+  background: radial-gradient(circle at 42% 38%, #9a63ff40, #6a3fd021 70%, transparent);
+}
+
+.terrain.asteroids {
+  border-color: #9fb2bf4d;
+  background: radial-gradient(circle at 55% 45%, #7d8f9c38, #5c6b761f 70%, transparent);
+}
+
+.terrain.ion-storm {
+  border-color: #ffc36b59;
+  background: radial-gradient(circle at 48% 52%, #ffb04d3d, #ff8c1a1c 70%, transparent);
+}
+
 .wreck {
   position: absolute;
   left: calc(var(--x) * 1%);
@@ -340,6 +373,32 @@ h1 {
   background: #cfe8ff14;
   transform: translate(0, 0);
   pointer-events: none;
+}
+
+/* Terrain on the minimap: the same features, scaled, under the hull dots and the
+   viewport rectangle, so a wide field is navigable by terrain at a glance. */
+.mini-terrain {
+  position: absolute;
+  left: calc(var(--mx) * 1%);
+  top: calc(var(--my) * 1%);
+  width: calc(var(--mr) * 2%);
+  height: calc(var(--mr) * 2%);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: .45;
+}
+
+.mini-terrain.nebula {
+  background: #9a63ff;
+}
+
+.mini-terrain.asteroids {
+  background: #8fa3ad;
+}
+
+.mini-terrain.ion-storm {
+  background: #ffb04d;
 }
 
 /* The context menu that grows out of a clicked hull. It is placed in pixels by
