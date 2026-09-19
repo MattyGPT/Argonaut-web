@@ -6,7 +6,7 @@ import { scenarioProgress } from '../game/scenarios.js';
 import { abbreviateNarrative, alertLevel, appendLog, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, inRadioContact, insideFeature, ionStormZone, isAce, nebulaHides, nebulaRevealRange, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, strongestFederation, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
 import { applyPlayerAction, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, tractorLock, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
-import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
+import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolveObjectives, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
 
 const withShips = (game, update) => ({ ...game, ships: game.ships.map(update) });
@@ -2352,13 +2352,15 @@ test('the dockyard repairs a damaged reactor (Reimagined)', () => {
 
 const TERRAIN_SEEDS = ['terrain-a', 'terrain-b', 'xanadu', 'reimagined-field'];
 
-test('a Reimagined war seeds six terrain features, two of each hazard type', () => {
+test('a Reimagined war seeds six hazards and two relay nodes', () => {
   for (const seed of TERRAIN_SEEDS) {
     const terrain = createGame({ seed, reimagined: true }).terrain;
-    assert.equal(terrain.length, 6, `seed ${seed} places every feature`);
+    assert.equal(terrain.length, 6 + TERRAIN.relayCount, `seed ${seed} places every feature`);
     for (const [type, count] of Object.entries(TERRAIN.counts)) {
       assert.equal(terrain.filter((feature) => feature.type === type).length, count, `seed ${seed} places ${count} ${type}`);
     }
+    assert.equal(terrain.filter((feature) => feature.type === 'relay').length, TERRAIN.relayCount,
+      `seed ${seed} places the ${TERRAIN.relayCount} capturable relay nodes`);
     const ids = new Set(terrain.map((feature) => feature.id));
     assert.equal(ids.size, terrain.length, 'every feature has a unique id');
   }
@@ -2386,9 +2388,13 @@ test('every feature is in bounds, sized in its range, and clear of Xanadu', () =
     const grid = game.gridSize;
     const xanadu = getShip(game, 'xanadu');
     for (const feature of game.terrain) {
-      const [minRadius, maxRadius] = TERRAIN.radius[feature.type];
-      assert.ok(feature.radius >= minRadius && feature.radius <= maxRadius,
-        `${feature.id} radius ${feature.radius} sits in [${minRadius}, ${maxRadius}]`);
+      if (feature.type === 'relay') {
+        assert.equal(feature.radius, TERRAIN.relayRadius, `${feature.id} is a fixed-size node`);
+      } else {
+        const [minRadius, maxRadius] = TERRAIN.radius[feature.type];
+        assert.ok(feature.radius >= minRadius && feature.radius <= maxRadius,
+          `${feature.id} radius ${feature.radius} sits in [${minRadius}, ${maxRadius}]`);
+      }
       assert.ok(feature.x >= TERRAIN.edgeMargin && feature.x <= grid - TERRAIN.edgeMargin,
         `${feature.id} center x is inside the edge margin`);
       assert.ok(feature.y >= TERRAIN.edgeMargin && feature.y <= grid - TERRAIN.edgeMargin,
@@ -2863,4 +2869,140 @@ test('the ion storm never touches a classic or extended war', () => {
     assert.equal(radioStormFactor(game, actor), 1);
     assert.equal(volleyMissChance(game, actor, target), MISS_CHANCE, 'the calibrated miss rate stands');
   }
+});
+
+// --- Round 16: capturable relay objectives (Reimagined) ---
+
+test('the two relay nodes are mirrored symmetrically off Xanadu', () => {
+  for (const seed of TERRAIN_SEEDS) {
+    const game = createGame({ seed, reimagined: true });
+    const relays = game.terrain.filter((feature) => feature.type === 'relay');
+    assert.equal(relays.length, 2);
+    const xanadu = getShip(game, 'xanadu');
+    assert.equal(relays[0].x + relays[1].x, 2 * xanadu.x, 'the pair mirrors through the starbase');
+    assert.equal(relays[0].y + relays[1].y, 2 * xanadu.y);
+    assert.equal(distance(relays[0], xanadu).toFixed(6), distance(relays[1], xanadu).toFixed(6),
+      'so both sit equidistant from it — and from every alliance\'s corner');
+    assert.ok(distance(relays[0], xanadu) > 0, 'and neither stacks on the dockyard');
+  }
+});
+
+/**
+ * A Reimagined war with one hand-placed relay node at (160,160). Bonhomme sits on
+ * it; everyone else — Xanadu included, so no dockyard or relay interferes — is
+ * parked far away.
+ */
+const relayGame = (seed = 'relay') => {
+  const base = createGame({ seed, reimagined: true });
+  return {
+    ...base,
+    terrain: [{ id: 'relay-1', type: 'relay', x: 160, y: 160, radius: TERRAIN.relayRadius }],
+    ships: base.ships.map((ship) => {
+      if (ship.id === 'fed-cruiser-1') return { ...ship, x: 160, y: 160 };
+      return { ...ship, x: 230, y: 20 };
+    }),
+  };
+};
+
+test('ending a stardate on a node holds it for the alliance, and only changes narrate', () => {
+  const game = relayGame('relay-hold');
+  assert.deepEqual(game.held, {}, 'a fresh war holds nothing');
+  const out = resolveObjectives(game);
+  assert.equal(out.game.held['relay-1'], 'Federation');
+  assert.match(out.messages.join(' '), /The Federation holds the relay node/);
+  const again = resolveObjectives(out.game);
+  assert.equal(again.game.held['relay-1'], 'Federation');
+  assert.deepEqual(again.messages, [], 'an unchanged hold is not re-narrated every stardate');
+});
+
+test('contesting darkens the node and driving the holder off frees it', () => {
+  const fedHeld = resolveObjectives(relayGame('relay-contest')).game;
+  // An Axis hull arrives while Bonhomme still sits there: contested, nobody holds.
+  const contested = {
+    ...fedHeld,
+    ships: fedHeld.ships.map((ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, x: 162, y: 160 } : ship)),
+  };
+  const dark = resolveObjectives(contested);
+  assert.equal(dark.game.held['relay-1'], undefined, 'a contested node goes dark');
+  assert.match(dark.messages.join(' '), /contested — the Federation has lost it/);
+  // The Federation hull leaves and the Axis one stays: the node flips.
+  const flipped = resolveObjectives({
+    ...dark.game,
+    ships: dark.game.ships.map((ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 40, y: 200 } : ship)),
+  });
+  assert.equal(flipped.game.held['relay-1'], 'Axis');
+  assert.match(flipped.messages.join(' '), /The Axis has wrested the relay node .* from the Federation|The Axis holds the relay node/);
+  // And driving the holder off frees it again.
+  const freed = resolveObjectives({
+    ...flipped.game,
+    ships: flipped.game.ships.map((ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, x: 40, y: 200 } : ship)),
+  });
+  assert.equal(freed.game.held['relay-1'], undefined);
+  assert.match(freed.messages.join(' '), /The Axis has lost the relay node/);
+});
+
+test('a tractor-held hull holds no node, and a wreck holds none', () => {
+  const base = relayGame('relay-towed');
+  const towed = resolveObjectives({
+    ...base,
+    ships: base.ships.map((ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, tractorBy: 'fed-flagship' } : ship)),
+  });
+  assert.equal(towed.game.held['relay-1'], undefined, 'a hull dragged onto the node holds nothing');
+  assert.deepEqual(towed.messages, []);
+  const wrecked = resolveObjectives({
+    ...base,
+    ships: base.ships.map((ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, status: 'destroyed' } : ship)),
+  });
+  assert.equal(wrecked.game.held['relay-1'], undefined, 'a wreck on the node holds nothing');
+});
+
+test('holding a node raises the whole alliance reactor budget, and only its own', () => {
+  const held = resolveObjectives(relayGame('relay-power')).game;
+  const cruiser = getShip(held, 'fed-cruiser-1');
+  assert.equal(reactorOutput(cruiser), 20, 'a cruiser runs a 20-point reactor');
+  assert.equal(reactorOutput(cruiser, held), 20 + TERRAIN.relayPowerBonus, 'the held node raises every Federation hull');
+  assert.equal(reactorOutput(getShip(held, 'fed-flagship'), held), 25 + TERRAIN.relayPowerBonus, 'flagship included');
+  const axis = getShip(held, 'axis-flagship');
+  assert.equal(reactorOutput(axis, held), reactorOutput(axis), 'the enemy gains nothing');
+  // The raised budget lets an allocation through that the bare reactor refuses:
+  // the first four sinks spend 18, so a 20-point reactor leaves the tractor 2.
+  const over = { shields: 4, weapons: 6, engines: 4, sensors: 4, tractor: 6 };
+  assert.equal(clampPowerAllocation(over, cruiser).tractor, 2, 'clamped to the bare 20-point budget');
+  assert.equal(clampPowerAllocation(over, cruiser, held).tractor, 6, 'the bonus budget buys the overcharge');
+});
+
+test('the console pips spend the relay bonus', () => {
+  const game = { ...relayGame('relay-pips'), playerShipId: 'fed-cruiser-1' };
+  // Bonhomme's default profile spends exactly its 20-point budget, so without the
+  // node a nudge up is refused...
+  const refused = applyPlayerAction(game, { type: 'power', sink: 'tractor', delta: 1 });
+  assert.match(refused.messages.join(' '), /cannot spare the power/i);
+  // ...and with the node held, the same nudge lands.
+  const held = resolveObjectives(game).game;
+  const allowed = applyPlayerAction(held, { type: 'power', sink: 'tractor', delta: 1 });
+  assert.equal(powerAllocation(allowed.game, getShip(allowed.game, 'fed-cruiser-1')).tractor, POWER.need.tractor + 1);
+});
+
+test('the relay resolves in the computer phase, like the dockyard', () => {
+  const base = relayGame('relay-round');
+  // Hold position so the computer phase does not sail Bonhomme off its node.
+  const game = { ...base, orders: { 'fed-cruiser-1': { type: 'hold', targetId: null } } };
+  const out = resolveComputerTurns({ ...game, phase: 'computer' });
+  assert.equal(out.held['relay-1'], 'Federation', 'the node is captured by stardate end');
+  assert.ok(out.log.some((entry) => /holds the relay node/.test(entry)), 'and the narrative says so');
+});
+
+test('relay objectives never touch a classic or extended war, and tolerate old saves', () => {
+  for (const opts of [{}, { extended: true }]) {
+    const game = createGame({ seed: 'relay-parity', ...opts });
+    assert.deepEqual(game.held, {}, 'the field exists and is empty, like orders and power');
+    const out = resolveObjectives(game);
+    assert.equal(out.game, game, 'no nodes, no state change');
+    assert.deepEqual(out.messages, []);
+  }
+  // A Reimagined save from before round 16 has terrain but no `held` field.
+  const oldSave = relayGame('relay-old-save');
+  delete oldSave.held;
+  const out = resolveObjectives(oldSave);
+  assert.equal(out.game.held['relay-1'], 'Federation', 'the objective still resolves and records the hold');
 });

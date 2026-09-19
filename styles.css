@@ -298,6 +298,34 @@ h1 {
   background: radial-gradient(circle at 48% 52%, #ffb04d3d, #ff8c1a1c 70%, transparent);
 }
 
+/* The capturable relay node (round 16): a small hard-ringed marker, neutral ice-blue
+   while free, glowing in the holding alliance's colors while held. Ownership is
+   public knowledge — every side can see who holds the objectives. */
+.terrain.relay {
+  border: 2px solid #cfe8ff;
+  background: radial-gradient(circle at 50% 50%, #cfe8ff38, #cfe8ff14 65%, transparent);
+}
+
+.terrain.relay.Federation {
+  border-color: var(--fed);
+  box-shadow: 0 0 14px var(--fed);
+}
+
+.terrain.relay.Axis {
+  border-color: var(--axis);
+  box-shadow: 0 0 14px var(--axis);
+}
+
+.terrain.relay.Bloc {
+  border-color: var(--bloc);
+  box-shadow: 0 0 14px var(--bloc);
+}
+
+.terrain.relay.Cabal {
+  border-color: var(--cabal);
+  box-shadow: 0 0 14px var(--cabal);
+}
+
 .wreck {
   position: absolute;
   left: calc(var(--x) * 1%);
@@ -399,6 +427,29 @@ h1 {
 
 .mini-terrain.ion-storm {
   background: #ffb04d;
+}
+
+/* The relay node reads as a bright marker on the minimap, in its holder's colors
+   while held (round 16) — the objectives should be navigable at a glance. */
+.mini-terrain.relay {
+  background: #cfe8ff;
+  opacity: .9;
+}
+
+.mini-terrain.relay.Federation {
+  background: var(--fed);
+}
+
+.mini-terrain.relay.Axis {
+  background: var(--axis);
+}
+
+.mini-terrain.relay.Bloc {
+  background: var(--bloc);
+}
+
+.mini-terrain.relay.Cabal {
+  background: var(--cabal);
 }
 
 /* The context menu that grows out of a clicked hull. It is placed in pixels by

@@ -1,4 +1,4 @@
-import { DOCKING, FACTIONS, GRID_SIZE, POWER, RANGES, STALEMATE_ROUNDS, SURRENDER } from './constants.js';
+import { DOCKING, FACTIONS, GRID_SIZE, POWER, RANGES, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
 import { damageShip, detonate, fireEvent, flushShields, killLines, resolveAsteroidStrike, resolveCollision, terminalEvent, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
@@ -13,6 +13,7 @@ import {
   isActive,
   isImmovable,
   isStranded,
+  isTractorHeld,
   powerEffect,
   segmentCrossesFeature,
   shieldCapacity,
@@ -347,6 +348,43 @@ export const resolvePowerRegen = (game) => {
 };
 
 /**
+ * Capturable relay objectives (round 16, Reimagined). A hull that ends the stardate
+ * inside a relay node and is not tractor-held holds it for its alliance, recorded on
+ * `game.held`; while held, every hull of that alliance gains `relayPowerBonus`
+ * reactor budget per node (`reactorOutput` reads it), so the whole fleet can
+ * overcharge a sink without starving another. Contested — hulls of two or more
+ * alliances inside when the stardate ends — or driven off, the node goes dark and
+ * free. Resolves in the computer phase like the dockyard and is narrated on every
+ * change. Without relay terrain this is inert, so a classic or extended war never
+ * sees it, and old saves default `held` safely.
+ */
+export const resolveObjectives = (game) => {
+  const relays = (game.terrain ?? []).filter((feature) => feature.type === 'relay');
+  if (relays.length === 0) return { game, messages: [] };
+  const held = { ...(game.held ?? {}) };
+  const messages = [];
+  for (const relay of relays) {
+    const inside = game.ships.filter((ship) => isActive(ship) && !isTractorHeld(game, ship)
+      && distance(ship, relay) <= relay.radius);
+    const factions = [...new Set(inside.map((ship) => ship.faction))];
+    const before = held[relay.id] ?? null;
+    const after = factions.length === 1 ? factions[0] : null;
+    if (after) held[relay.id] = after;
+    else delete held[relay.id];
+    if (after && after !== before) {
+      messages.push(before
+        ? `The ${after} has wrested the relay node at ${relay.x}, ${relay.y} from the ${before}.`
+        : `The ${after} holds the relay node at ${relay.x}, ${relay.y} — its reactors gain ${TERRAIN.relayPowerBonus} power budget.`);
+    } else if (!after && before) {
+      messages.push(factions.length > 1
+        ? `The relay node at ${relay.x}, ${relay.y} is contested — the ${before} has lost it.`
+        : `The ${before} has lost the relay node at ${relay.x}, ${relay.y}.`);
+    }
+  }
+  return { game: { ...game, held }, messages };
+};
+
+/**
  * A fingerprint of everything that could make the war progress: where every hull
  * sits, what it can still do, and who owns it. Two consecutive rounds with the
  * same fingerprint mean nothing happened anywhere in the war zone.
@@ -413,6 +451,12 @@ export const resolveComputerTurns = (initialGame) => {
   const docked = resolveDocking(game);
   game = docked.game;
   log.push(...docked.messages);
+  // The relay objectives resolve like the dockyard (round 16), and before the
+  // shield regen, so an alliance that just took a node already runs its reactors
+  // on the raised budget this stardate.
+  const objectives = resolveObjectives(game);
+  game = objectives.game;
+  log.push(...objectives.messages);
   const regen = resolvePowerRegen(game);
   game = regen.game;
   log.push(...regen.messages);

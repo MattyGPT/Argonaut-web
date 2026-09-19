@@ -467,3 +467,27 @@ test('a hull lurking in a nebula vanishes from map and minimap, and reappears fr
   assert.match(read('#map-field').innerHTML, /data-ship-id="axis-flagship"/, 'from inside the same nebula, it is plain to see');
   assert.match(read('#minimap').innerHTML, /mini-dot Axis/);
 });
+
+// --- Round 16: the relay node ring ---
+
+test('a relay node draws neutral while free, and wears its holder\'s colors on map and minimap', () => {
+  const base = createGame({ seed: 'render-relay', reimagined: true });
+  const setup = {
+    ...base,
+    terrain: [{ id: 'relay-1', type: 'relay', x: 160, y: 160, radius: 10 }],
+    held: {},
+  };
+  elements.clear();
+  renderGame(setup);
+  assert.match(read('#map-field').innerHTML, /class="terrain relay" [^>]*title="relay"/,
+    'a free node is faction-neutral');
+  assert.match(read('#minimap').innerHTML, /class="mini-terrain relay"/);
+
+  elements.clear();
+  renderGame({ ...setup, held: { 'relay-1': 'Federation' } });
+  assert.match(read('#map-field').innerHTML, /class="terrain relay Federation"/,
+    'a held node wears its holder\'s ring');
+  assert.match(read('#map-field').innerHTML, /title="relay — held by the Federation"/);
+  assert.match(read('#minimap').innerHTML, /class="mini-terrain relay Federation"/,
+    'and its colors on the minimap');
+});

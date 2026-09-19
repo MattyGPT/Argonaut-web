@@ -929,12 +929,13 @@ const setPower = (game, action, actor) => {
     const current = powerAllocation(game, ship);
     const proposed = { ...current, [action.sink]: Math.max(0, (current[action.sink] ?? 0) + Math.trunc(Number(action.delta))) };
     const total = POWER_SINKS.reduce((sum, sink) => sum + proposed[sink], 0);
-    if (total > reactorOutput(ship)) return invalid(game, `${ship.name}'s reactor cannot spare the power.`);
+    // The budget includes any relay-node bonus the alliance holds (round 16).
+    if (total > reactorOutput(ship, game)) return invalid(game, `${ship.name}'s reactor cannot spare the power.`);
     requested = proposed;
   }
   if (!requested) return invalid(game, 'Specify a power allocation or a sink to adjust.');
 
-  const allocation = clampPowerAllocation(requested, ship);
+  const allocation = clampPowerAllocation(requested, ship, game);
   return result(
     { ...game, power: { ...(game.power ?? {}), [ship.id]: allocation } },
     `${ship.name} sets power: ${describePower(allocation)}.`,
