@@ -98,7 +98,12 @@ through at speed is safe. **Ion storms** jam constantly: inside the core a hull'
 weapons and radio are offline for the stardate — it cannot fire or be reached,
 though engines, sensors, and tractor still work, so it can flee or be towed out
 — and in the storm's outer ring volleys miss more and radio reach halves, which
-lets you fight at a penalty or skim a message through. It
+lets you fight at a penalty or skim a message through. Two **relay nodes** sit
+mirrored off Xanadu as capturable objectives: end a stardate inside one — not
+tractor-held — and your alliance holds it, every hull gaining +5 reactor budget
+while it is held, enough to overcharge a sink without starving another.
+Contesting darkens the node and driving the holder off frees it, and a held node
+wears its alliance's ring on the map and minimap. It
 never changes how a classic or extended war plays — those keep the calibrated
 100-unit field and the pull-toward-you beam. New Reimagined systems land over time;
 see `docs/superpowers/specs/2026-09-17-argonaut-reimagined-roadmap.md`.

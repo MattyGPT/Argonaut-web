@@ -203,7 +203,11 @@ const renderMinimap = (game, win, isVisible) => {
   // mapper reach — the wide field stays navigable by terrain at a glance. The
   // faint-beyond/crisp-within mapper fade applies to the tactical map only.
   const terrain = (game.terrain ?? [])
-    .map((feature) => `<span class="mini-terrain ${feature.type}" style="--mx:${frac(feature.x)};--my:${frac(feature.y)};--mr:${frac(feature.radius)}" aria-hidden="true"></span>`)
+    .map((feature) => {
+      // A held relay wears its holder's faction colors on the minimap too (round 16).
+      const holder = feature.type === 'relay' ? game.held?.[feature.id] ?? null : null;
+      return `<span class="mini-terrain ${feature.type}${holder ? ` ${holder}` : ''}" style="--mx:${frac(feature.x)};--my:${frac(feature.y)};--mr:${frac(feature.radius)}" aria-hidden="true"></span>`;
+    })
     .join('');
   const dots = game.ships
     .filter((ship) => ship.status !== 'destroyed' && isVisible(ship))
@@ -223,7 +227,8 @@ const renderMinimap = (game, win, isVisible) => {
  */
 const powerBar = (game, actor, view) => {
   if (!game.reimagined || !actor || game.outcome || isSpectator(game)) return '';
-  const budget = reactorOutput(actor);
+  // The budget shown includes any relay-node bonus the Federation holds (round 16).
+  const budget = reactorOutput(actor, game);
   const allocation = powerAllocation(game, actor);
   const spent = POWER_SINKS.reduce((sum, sink) => sum + (allocation[sink] ?? 0), 0);
   const locked = game.phase !== 'player' || view.battlePaused ? ' disabled' : '';
@@ -311,7 +316,11 @@ export const renderGame = (game, view = {}) => {
   const terrainHtml = (game.terrain ?? []).map((feature) => {
     const crisp = !actorActive || distance(actor, feature) <= mapperRange + feature.radius;
     const label = feature.type.replace('-', ' ');
-    return `<div class="terrain ${feature.type}" style="--x:${pct(feature.x)};--y:${pct(feature.y)};--d:${pct(2 * feature.radius)}%;--o:${crisp ? 1 : TERRAIN.faintOpacity}" title="${label}" aria-hidden="true"></div>`;
+    // A held relay node wears its holder's colors as a ring (round 16); ownership
+    // is public knowledge — every alliance can see who holds the objectives.
+    const holder = feature.type === 'relay' ? game.held?.[feature.id] ?? null : null;
+    const title = holder ? `${label} — held by the ${holder}` : label;
+    return `<div class="terrain ${feature.type}${holder ? ` ${holder}` : ''}" style="--x:${pct(feature.x)};--y:${pct(feature.y)};--d:${pct(2 * feature.radius)}%;--o:${crisp ? 1 : TERRAIN.faintOpacity}" title="${title}" aria-hidden="true"></div>`;
   }).join('');
 
   const shipHtml = game.ships.filter(isVisible).map((ship) => {

@@ -126,6 +126,36 @@ const assignCaptains = (seed, count) => {
  */
 const TERRAIN_MAX_ATTEMPTS = 400;
 
+/**
+ * The capturable relay nodes (round 16): `relayCount` mirrored pairs — one point
+ * drawn off-center, its mirror through the starbase is the partner — so the two
+ * nodes are always equidistant from Xanadu and from each alliance's corner of the
+ * field, and never stack on the dockyard. Same constraints as the hazards (in
+ * bounds, edge clear of Xanadu, minimum center separation); the pair is re-drawn
+ * until both endpoints satisfy them.
+ */
+const placeRelays = (rng, gridSize, xanadu, features) => {
+  const edge = TERRAIN.edgeMargin;
+  const radius = TERRAIN.relayRadius;
+  const clear = (point) => point.x >= edge && point.x <= gridSize - edge
+    && point.y >= edge && point.y <= gridSize - edge
+    && distance(point, xanadu) >= radius + TERRAIN.xanaduClearance
+    && features.every((other) => distance(point, other) >= TERRAIN.minSeparation);
+  for (let attempt = 0; attempt < TERRAIN_MAX_ATTEMPTS; attempt += 1) {
+    const first = { x: rng.integer(edge, gridSize - edge), y: rng.integer(edge, gridSize - edge) };
+    const second = { x: 2 * xanadu.x - first.x, y: 2 * xanadu.y - first.y };
+    if (!clear(first) || !clear(second)) continue;
+    return [first, second].map((point, index) => ({
+      id: `relay-${index + 1}`,
+      type: 'relay',
+      x: point.x,
+      y: point.y,
+      radius,
+    }));
+  }
+  return [];
+};
+
 const generateTerrain = (seed, gridSize, xanadu) => {
   const rng = createRng(`${seed}:terrain`);
   const features = [];
@@ -148,7 +178,9 @@ const generateTerrain = (seed, gridSize, xanadu) => {
       }
     }
   }
-  return features;
+  // The relays draw AFTER the hazards, on the same stream, so a seed charts the
+  // same hazard geography it did before the objectives existed.
+  return [...features, ...placeRelays(rng, gridSize, xanadu, features)];
 };
 
 export const createGame = ({ seed = 'xanadu', regional = false, sound = false, extended = false, scenario = 'annihilation', precision = false, reimagined = false } = {}) => {
@@ -221,6 +253,10 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     // Reimagined only. A classic or extended war carries an empty list, and old saves
     // may lack the field entirely, so every reader defaults to [].
     terrain: isReimagined ? generateTerrain(normalizedSeed, gridSize, xanaduPosition) : [],
+    // Which alliance holds each relay node (relayId -> faction), Reimagined only.
+    // Resolved in the computer phase like the dockyard; empty until someone ends a
+    // stardate on a node, and absent in old saves, so every reader defaults to {}.
+    held: {},
     outcome: null,
   };
 };
@@ -439,10 +475,24 @@ export const templateSystems = (ship) => {
 };
 
 /**
- * The power budget a hull can allocate: `POWER.perUnit` per live reactor unit. A
- * reactor knocked out by damage shrinks the budget and every sink that draws on it.
+ * The relay-objective bonus (round 16): every hull of the alliance holding relay
+ * nodes gains `relayPowerBonus` reactor budget per node held, so the whole fleet
+ * can overcharge a sink without starving another. Zero without `game` (the budget
+ * readers that predate the objectives), and always zero outside a Reimagined war,
+ * where no node is ever held.
  */
-export const reactorOutput = (ship) => systemUnits(ship, 'reactor') * POWER.perUnit;
+const relayPowerBonus = (game, ship) => {
+  if (!game?.held || !ship) return 0;
+  const nodes = (game.terrain ?? []).filter((feature) => feature.type === 'relay' && game.held[feature.id] === ship.faction);
+  return nodes.length * TERRAIN.relayPowerBonus;
+};
+
+/**
+ * The power budget a hull can allocate: `POWER.perUnit` per live reactor unit,
+ * plus the relay bonus its alliance holds. A reactor knocked out by damage shrinks
+ * the budget and every sink that draws on it.
+ */
+export const reactorOutput = (ship, game = null) => systemUnits(ship, 'reactor') * POWER.perUnit + relayPowerBonus(game, ship);
 
 /** Normalize an allocation to non-negative integers summing to at most the budget. */
 const clampAllocation = (allocation, budget) => {
@@ -457,8 +507,8 @@ const clampAllocation = (allocation, budget) => {
   return out;
 };
 
-/** Clamp a requested allocation to a hull's reactor budget. */
-export const clampPowerAllocation = (allocation, ship) => clampAllocation(allocation, reactorOutput(ship));
+/** Clamp a requested allocation to a hull's reactor budget, relay bonus included. */
+export const clampPowerAllocation = (allocation, ship, game = null) => clampAllocation(allocation, reactorOutput(ship, game));
 
 /**
  * The allocation a hull is running: its stored one if the player set it, otherwise an
@@ -468,7 +518,7 @@ export const clampPowerAllocation = (allocation, ship) => clampAllocation(alloca
  * result is always clamped to the hull's live reactor budget, so damage shrinks it.
  */
 export const powerAllocation = (game, ship) => {
-  const budget = reactorOutput(ship);
+  const budget = reactorOutput(ship, game);
   const stored = game?.power?.[ship?.id];
   if (stored) return clampAllocation(stored, budget);
   if (game?.reimagined && ship && ship.id !== game.playerShipId) {
