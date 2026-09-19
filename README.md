@@ -94,7 +94,11 @@ overcharged sensors pierce further. **Asteroid fields** give cover — a volley
 whose shot line crosses one can splash on a rock — and a hull that *ends* a move
 or a tractor tow inside one takes a seeded rock strike across its shields, which
 makes towing an enemy into the rocks a deliberate weapon; passing straight
-through at speed is safe. The ion-storm jam switches on in a coming round. It
+through at speed is safe. **Ion storms** jam constantly: inside the core a hull's
+weapons and radio are offline for the stardate — it cannot fire or be reached,
+though engines, sensors, and tractor still work, so it can flee or be towed out
+— and in the storm's outer ring volleys miss more and radio reach halves, which
+lets you fight at a penalty or skim a message through. It
 never changes how a classic or extended war plays — those keep the calibrated
 100-unit field and the pull-toward-you beam. New Reimagined systems land over time;
 see `docs/superpowers/specs/2026-09-17-argonaut-reimagined-roadmap.md`.

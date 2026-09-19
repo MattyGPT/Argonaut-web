@@ -1,4 +1,4 @@
-import { DOCKING, FACTIONS, GRID_SIZE, MISS_CHANCE, POWER, RANGES, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
+import { DOCKING, FACTIONS, GRID_SIZE, POWER, RANGES, STALEMATE_ROUNDS, SURRENDER } from './constants.js';
 import { damageShip, detonate, fireEvent, flushShields, killLines, resolveAsteroidStrike, resolveCollision, terminalEvent, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
@@ -19,6 +19,7 @@ import {
   strongestFederation,
   templateSystems,
   vendettaGrudge,
+  volleyMissChance,
 } from './state.js';
 
 const replaceShip = (game, replacement) => ({ ...game, ships: game.ships.map((ship) => ship.id === replacement.id ? replacement : ship) });
@@ -46,11 +47,11 @@ const resolveAiAction = (game, shipId) => {
   if (['phasers', 'photons'].includes(action.type)) {
     const target = getShip(game, action.targetId);
     const rng = rngFor(game);
-    // Autopilots miss at the same rate as the player, from the same roll order —
-    // and take the same asteroid-cover penalty (15c) when their shot line crosses
-    // a field, so terrain applies to both sides symmetrically.
+    // Autopilots miss at the same rate as the player, from the same roll order,
+    // against the same shared terrain threshold (15c + 15d): asteroid cover on the
+    // shot line and the storm-ring static both degrade the volley, symmetrically.
     const covered = segmentCrossesFeature(game, actor, target, 'asteroids');
-    if (rng.next() < MISS_CHANCE + (covered ? TERRAIN.asteroidCoverMiss : 0)) {
+    if (rng.next() < volleyMissChance(game, actor, target)) {
       const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
       return {
         game: advanceRandom(replaceShip(game, shooter)),
