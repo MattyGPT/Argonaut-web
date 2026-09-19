@@ -8,6 +8,7 @@ import {
   FACTION_IDS,
   GRID_SIZE,
   LOG_LIMIT,
+  MISS_CHANCE,
   POWER,
   POWER_SINKS,
   RANGES,
@@ -377,22 +378,35 @@ export const radioIntegrity = (ship) => {
 };
 
 /**
+ * Whether one hull's radio directly reaches another (15b + 15d): inside its
+ * hardware range scaled by the sensors sink, times the storm factor at each end —
+ * a hull in an ion storm's core neither sends nor hears (factor 0), and one in the
+ * ring works at half reach — and not swallowed by a nebula, where an outside caller
+ * only reaches the reveal range. Shared by `inRadioContact` and the radio report so
+ * the `9` traffic list and order delivery never disagree.
+ */
+export const radioReaches = (game, relay, ship) => {
+  const reach = sensorRange(game, relay, 'radio') * radioStormFactor(game, relay);
+  return reach > 0
+    && distance(relay, ship) <= reach * radioStormFactor(game, ship)
+    && !nebulaHides(game, relay, ship);
+};
+
+/**
  * Whether an order can reach a ship this stardate. Contact comes from the sending
  * ship's own radio hardware, with Xanadu relaying when it can hear both ends — so
  * a damaged radio makes you a slower admiral, the same way it makes the battle
  * narrative harder to read. Radio into a nebula degrades the same way sensors do
- * (15b): a hull parked inside one only hears callers within the reveal range, so
- * nebula camping costs you orders as well as visibility.
+ * (15b), and a hull inside an ion storm's core is unreachable outright while one
+ * in the ring hears at half reach (15d), so camping in a hazard costs you orders
+ * as well as visibility.
  */
 export const inRadioContact = (game, from, to) => {
   if (!from || !to) return false;
   if (from.id === to.id) return true;
-  const hears = (relay, ship) => sensorRange(game, relay, 'radio') > 0
-    && distance(relay, ship) <= sensorRange(game, relay, 'radio')
-    && !nebulaHides(game, relay, ship);
-  if (hears(from, to)) return true;
+  if (radioReaches(game, from, to)) return true;
   const xanadu = getShip(game, 'xanadu');
-  return Boolean(xanadu) && xanadu.status === 'active' && hears(xanadu, from) && hears(xanadu, to);
+  return Boolean(xanadu) && xanadu.status === 'active' && radioReaches(game, xanadu, from) && radioReaches(game, xanadu, to);
 };
 
 /** The standing order a ship is acting on, or null when it follows fleet default. */
@@ -509,6 +523,42 @@ export const nebulaHides = (game, observer, target) => {
   if (distance(observer, cover) <= cover.radius) return false;
   return distance(observer, target) > nebulaRevealRange(game, observer);
 };
+
+/**
+ * The ion-storm zone a point sits in (15d): `'core'` inside `ionStormCore` × the
+ * storm's radius — where weapons and radio are fully offline for the stardate —
+ * `'ring'` from the core edge out to the full radius, where the jam is only
+ * partial, or null in open space. The jam is constant, not a flicker: predictable
+ * to plan around, with the ring letting you fight at a penalty or skim a message
+ * through. Terrain is [] outside a Reimagined war, so this is always null there.
+ */
+export const ionStormZone = (game, point) => {
+  const storm = (game?.terrain ?? []).find((feature) => feature.type === 'ion-storm' && distance(point, feature) <= feature.radius);
+  if (!storm) return null;
+  return distance(point, storm) <= storm.radius * TERRAIN.ionStormCore ? 'core' : 'ring';
+};
+
+/**
+ * A hull's radio-reach multiplier under the storm jam: 0 in the core (its radio
+ * neither sends nor hears), `ionStormRingRadio` in the outer ring, else 1.
+ */
+export const radioStormFactor = (game, ship) => {
+  const zone = ionStormZone(game, ship);
+  if (zone === 'core') return 0;
+  if (zone === 'ring') return TERRAIN.ionStormRingRadio;
+  return 1;
+};
+
+/**
+ * The miss chance for one volley (15c + 15d): the calibrated base, plus the
+ * asteroid-cover penalty when the straight shot line crosses a field, plus the
+ * storm-ring penalty when the shooter fights from inside one. Shared by the
+ * player's volleys and the autopilots', and identical to `MISS_CHANCE` outside a
+ * Reimagined war, so the calibrated accuracy stands untouched there.
+ */
+export const volleyMissChance = (game, shooter, target) => MISS_CHANCE
+  + (segmentCrossesFeature(game, shooter, target, 'asteroids') ? TERRAIN.asteroidCoverMiss : 0)
+  + (ionStormZone(game, shooter) === 'ring' ? TERRAIN.ionStormRingMiss : 0);
 
 /**
  * The friendly starbase this hull is docked at, if any — close enough, and healthy

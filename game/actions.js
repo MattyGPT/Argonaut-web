@@ -7,7 +7,6 @@ import {
   HYPERSPACE_BURN_CHANCE,
   HYPERSPACE_MIN_SHIELD_LOSS,
   HYPERSPACE_SHIELD_LOSS,
-  MISS_CHANCE,
   ORDER_TYPES,
   OVERKILL_DESTROY_MARGIN,
   POWER_SINKS,
@@ -40,6 +39,7 @@ import {
   getShip,
   inRadioContact,
   insideFeature,
+  ionStormZone,
   isAce,
   isActive,
   isImmovable,
@@ -48,6 +48,7 @@ import {
   nebulaHides,
   powerAllocation,
   powerEffect,
+  radioReaches,
   reactorOutput,
   segmentCrossesFeature,
   sensorRange,
@@ -56,6 +57,7 @@ import {
   systemUnits,
   templateSystems,
   vendettaGrudge,
+  volleyMissChance,
 } from './state.js';
 
 const unitName = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
@@ -338,13 +340,17 @@ export const shipCommands = (game, targetId) => {
   if (!isActive(actor) || !target || target.status === 'destroyed' || target.id === actor.id) return [];
   const reach = distance(actor, target);
   const hostile = target.faction !== actor.faction;
+  // An ion storm's core kills the guns for the stardate (15d), so a jammed command
+  // ship is never offered a volley it cannot fire — the menu only offers commands
+  // that can land.
+  const jammed = ionStormZone(game, actor) === 'core';
   const commands = [];
   const offer = (type, label, available, range) => {
     if (available && reach <= range) commands.push({ type, label });
   };
   if (hostile && isActive(target)) {
-    offer('phasers', 'Fire phasers', systemUnits(actor, 'phasers') > 0, RANGES.phasers);
-    offer('photons', 'Fire photons', systemUnits(actor, 'photons') > 0, RANGES.photons);
+    offer('phasers', 'Fire phasers', !jammed && systemUnits(actor, 'phasers') > 0, RANGES.phasers);
+    offer('photons', 'Fire photons', !jammed && systemUnits(actor, 'photons') > 0, RANGES.photons);
     offer('tractor', 'Tractor beam', systemUnits(actor, 'tractor') > 0 && !isImmovable(target), RANGES.tractor);
     // A directed tow is a Reimagined option: aim the pull at a point or a hull to
     // slam the target into, rather than reeling it straight toward you.
@@ -428,12 +434,13 @@ const mapReport = (game, actor) => {
  * so each contact answers with its alert level as well as its range.
  */
 const radioReport = (game, actor) => {
-  const range = sensorRange(game, actor, 'radio');
-  // Radio into a nebula degrades the same way the mapper does (15b): an allied hull
-  // camped inside one only answers within the reveal range, not the full radio reach.
+  // Radio degrades with the terrain between the hulls (15b + 15d): a contact in a
+  // nebula only answers within the reveal range, one in a storm's core never
+  // answers, and one in the ring hears at half reach. `radioReaches` is the same
+  // test order delivery uses, so the traffic list and the orders never disagree.
   const contacts = getLivingShips(game)
     .filter((ship) => ship.id !== actor.id && ship.faction === actor.faction
-      && distance(actor, ship) <= range && !nebulaHides(game, actor, ship));
+      && radioReaches(game, actor, ship));
   return {
     title: 'Radio traffic',
     lines: contacts.length
@@ -458,6 +465,9 @@ const precisionSettings = (game, action, type, target) => {
 const weaponAction = (game, action, actor, type) => {
   const disabled = requiresSystem(game, actor, type);
   if (disabled) return disabled;
+  // Ion-storm jam (15d): inside the storm's core the guns are dead for the
+  // stardate — the command refuses without spending the turn.
+  if (ionStormZone(game, actor) === 'core') return invalid(game, `${actor.name}'s weapons are offline in the ion storm.`);
   const found = hostileTarget(game, action, actor);
   if (found.error) return invalid(game, found.error, found.requiresTarget);
   const range = RANGES[type];
@@ -469,12 +479,13 @@ const weaponAction = (game, action, actor, type) => {
     ...(power !== 100 ? { power } : {}),
   };
   const rng = seededRng(game);
-  // Asteroid cover (15c): a volley whose shot line crosses an asteroid field can
-  // splash on a rock — the same single roll against a higher threshold, symmetric
-  // with the autopilots' volleys. Terrain is [] outside a Reimagined war, so the
-  // calibrated 12% miss stands untouched there.
+  // Terrain accuracy (15c + 15d), one seeded roll against the shared threshold:
+  // a volley whose shot line crosses an asteroid field can splash on a rock, and a
+  // shooter fighting from an ion storm's ring works its guns through static.
+  // Symmetric with the autopilots' volleys; terrain is [] outside a Reimagined
+  // war, so the calibrated 12% miss stands untouched there.
   const covered = segmentCrossesFeature(game, actor, found.target, 'asteroids');
-  const shooterMissed = rng.next() < MISS_CHANCE + (covered ? TERRAIN.asteroidCoverMiss : 0);
+  const shooterMissed = rng.next() < volleyMissChance(game, actor, found.target);
   if (shooterMissed) {
     const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
     const updated = completeTurn(advanceRandom(replaceShip(game, shooter)));
@@ -977,6 +988,8 @@ export const applyPlayerAction = (game, action = {}) => {
     case 'radio': {
       const disabled = requiresSystem(game, actor, 'radio');
       if (disabled) return disabled;
+      // Ion-storm jam (15d): inside the core the radio neither sends nor hears.
+      if (ionStormZone(game, actor) === 'core') return invalid(game, `${actor.name}'s radio is offline in the ion storm.`);
       return result(game, 'Radio report ready.', { report: radioReport(game, actor) });
     }
     case 'transport': return transportAction(game, action, actor);

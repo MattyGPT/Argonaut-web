@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, POWER, POWER_SINKS, RANGES, REIMAGINED_GRID_SIZE, SCENARIOS, STALEMATE_ROUNDS, TERRAIN, VENDETTA } from '../game/constants.js';
+import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, RANGES, REIMAGINED_GRID_SIZE, SCENARIOS, STALEMATE_ROUNDS, TERRAIN, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioProgress } from '../game/scenarios.js';
-import { abbreviateNarrative, alertLevel, appendLog, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, inRadioContact, insideFeature, isAce, nebulaHides, nebulaRevealRange, powerAllocation, powerEffect, radioIntegrity, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, strongestFederation, templateSystems, terrainAt, vendettaGrudge } from '../game/state.js';
+import { abbreviateNarrative, alertLevel, appendLog, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, inRadioContact, insideFeature, ionStormZone, isAce, nebulaHides, nebulaRevealRange, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, strongestFederation, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
 import { applyPlayerAction, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, tractorLock, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
@@ -2699,5 +2699,168 @@ test('rock strikes never touch a classic or extended war, nor its seeded sequenc
     // — and every calibrated figure downstream of it — is unchanged.
     const moved = applyPlayerAction(game, { type: 'move', dx: 1, dy: 0 });
     assert.equal(moved.game.randomStep, game.randomStep, 'the strike check consumed no roll');
+  }
+});
+
+// --- Round 15d: the ion-storm jam (Reimagined) ---
+
+/**
+ * A Reimagined war with one hand-placed ion storm at (120,120), radius 30 — a
+ * full-jam core out to 18 units and a degraded ring from there to 30. The Axis
+ * flagship sits at the storm's heart; the Federation flagship watches from
+ * (80,120), clear of the weather. Every other hull — Xanadu included, so no radio
+ * relay interferes — is parked far away.
+ */
+const stormGame = (seed = 'ion-storm') => {
+  const base = createGame({ seed, reimagined: true });
+  return {
+    ...base,
+    terrain: [{ id: 'ion-storm-1', type: 'ion-storm', x: 120, y: 120, radius: 30 }],
+    ships: base.ships.map((ship) => {
+      if (ship.id === 'axis-flagship') return { ...ship, x: 120, y: 120 };
+      if (ship.id === 'fed-flagship') return { ...ship, x: 80, y: 120 };
+      return { ...ship, x: 230, y: 20 };
+    }),
+  };
+};
+
+test('the storm has a full-jam core and a degraded ring', () => {
+  const game = stormGame('storm-zones');
+  assert.equal(ionStormZone(game, { x: 120, y: 120 }), 'core');
+  assert.equal(ionStormZone(game, { x: 135, y: 120 }), 'core', '15 units is inside the 0.6 x 30 core');
+  assert.equal(ionStormZone(game, { x: 145, y: 120 }), 'ring', '25 units is past the core but inside the storm');
+  assert.equal(ionStormZone(game, { x: 160, y: 120 }), null, '40 units is open space');
+  const classic = createGame({ seed: 'storm-zones-classic' });
+  assert.equal(ionStormZone(classic, { x: 50, y: 50 }), null, 'a classic war has no weather');
+});
+
+test('weapons and radio are offline in the storm core, and the menu says so by omission', () => {
+  const base = stormGame('storm-core');
+  // Park the command ship in the storm's heart, an enemy 5 away — well inside phaser range.
+  const game = { ...base, ships: base.ships.map((ship) => (ship.id === 'fed-flagship' ? { ...ship, x: 120, y: 125 } : ship)) };
+  const guns = applyPlayerAction(game, { type: 'phasers', targetId: 'axis-flagship' });
+  assert.match(guns.messages.join(' '), /weapons are offline in the ion storm/);
+  assert.equal(guns.game.phase, 'player', 'the refusal does not spend the stardate');
+  assert.equal(getShip(guns.game, 'fed-flagship').shotsFired, 0, 'and no volley is loosed');
+  const radio = applyPlayerAction(game, { type: 'radio' });
+  assert.match(radio.messages.join(' '), /radio is offline in the ion storm/);
+  const commands = shipCommands(game, 'axis-flagship');
+  assert.ok(!commands.some((command) => ['phasers', 'photons'].includes(command.type)),
+    'a jammed command ship is never offered a volley it cannot fire');
+  assert.ok(commands.some((command) => command.type === 'tractor'), 'the tractor works throughout the storm');
+});
+
+test('a jammed autopilot never picks a volley, though the same captain shoots in open space', () => {
+  const base = stormGame('storm-ai');
+  // Both flagships inside the core, 10 apart: photon range for the Axis guns.
+  const game = { ...base, ships: base.ships.map((ship) => (ship.id === 'fed-flagship' ? { ...ship, x: 110, y: 120 } : ship)) };
+  const jammed = chooseAiAction(game, 'axis-flagship');
+  assert.ok(!['phasers', 'photons'].includes(jammed.type), 'the core takes the guns offline');
+  const clear = chooseAiAction({ ...game, terrain: [] }, 'axis-flagship');
+  assert.ok(['phasers', 'photons'].includes(clear.type), 'in open space the same captain opens fire');
+});
+
+test('shots fired from the storm ring miss more often', () => {
+  const base = stormGame('storm-ring');
+  // A gunnery pair at phaser range: the shooter in the ring, the target in open space.
+  const ringed = {
+    ...base,
+    ships: base.ships.map((ship) => {
+      if (ship.id === 'fed-flagship') return { ...ship, x: 145, y: 120 }; // 25 out: the ring
+      if (ship.id === 'axis-flagship') return { ...ship, x: 170, y: 120 }; // 50 out: clear
+      return ship;
+    }),
+  };
+  const actor = getShip(ringed, 'fed-flagship');
+  const target = getShip(ringed, 'axis-flagship');
+  assert.equal(ionStormZone(ringed, actor), 'ring');
+  assert.equal(volleyMissChance(ringed, actor, target), MISS_CHANCE + TERRAIN.ionStormRingMiss);
+  const open = { ...ringed, terrain: [] };
+  const missCount = (game, samples = 400) => {
+    let misses = 0;
+    for (let step = 0; step < samples; step += 1) {
+      const out = applyPlayerAction({ ...game, randomStep: step }, { type: 'phasers', targetId: 'axis-flagship' });
+      if (/Missed!/.test(out.messages.join(' '))) misses += 1;
+    }
+    return misses;
+  };
+  const openMisses = missCount(open);
+  const ringMisses = missCount(ringed);
+  assert.ok(ringMisses > openMisses * 1.5,
+    `the ring static more than doubles the miss rate (open ${openMisses}/400, ring ${ringMisses}/400)`);
+});
+
+test('asteroid cover and the ring jam stack on one roll', () => {
+  const base = stormGame('storm-stack');
+  const game = {
+    ...base,
+    terrain: [
+      { id: 'ion-storm-1', type: 'ion-storm', x: 120, y: 120, radius: 30 },
+      { id: 'asteroids-1', type: 'asteroids', x: 157, y: 120, radius: 5 },
+    ],
+    ships: base.ships.map((ship) => {
+      if (ship.id === 'fed-flagship') return { ...ship, x: 145, y: 120 };
+      if (ship.id === 'axis-flagship') return { ...ship, x: 170, y: 120 };
+      return ship;
+    }),
+  };
+  assert.equal(
+    volleyMissChance(game, getShip(game, 'fed-flagship'), getShip(game, 'axis-flagship')),
+    MISS_CHANCE + TERRAIN.asteroidCoverMiss + TERRAIN.ionStormRingMiss,
+    'a ring-bound shot line through a field carries both penalties',
+  );
+});
+
+test('the storm core silences radio, and the ring halves its reach', () => {
+  const base = stormGame('storm-radio');
+  // An allied hull in the storm's heart is unreachable from anywhere outside.
+  const cored = {
+    ...base,
+    ships: base.ships.map((ship) => {
+      if (ship.id === 'fed-cruiser-1') return { ...ship, x: 120, y: 120 };
+      if (ship.id === 'axis-flagship') return { ...ship, x: 200, y: 200 };
+      return ship;
+    }),
+  };
+  assert.equal(inRadioContact(cored, getShip(cored, 'fed-flagship'), getShip(cored, 'fed-cruiser-1')), false,
+    'a hull in the core neither sends nor hears');
+  const radio = applyPlayerAction(cored, { type: 'radio' });
+  assert.match(radio.report.lines.join(' '), /No allied stations answer within radio range/);
+  // A hull in the ring hears at half reach: 40 units is past 50 x 0.5.
+  const ringed = {
+    ...base,
+    ships: base.ships.map((ship) => {
+      if (ship.id === 'fed-cruiser-1') return { ...ship, x: 145, y: 120 };
+      if (ship.id === 'fed-flagship') return { ...ship, x: 185, y: 120 };
+      if (ship.id === 'axis-flagship') return { ...ship, x: 200, y: 20 };
+      return ship;
+    }),
+  };
+  const from = getShip(ringed, 'fed-flagship');
+  const to = getShip(ringed, 'fed-cruiser-1');
+  assert.equal(radioStormFactor(ringed, to), TERRAIN.ionStormRingRadio);
+  assert.equal(inRadioContact(ringed, from, to), false, 'the ring halves the reach: 40 units is past 25');
+  assert.equal(inRadioContact({ ...ringed, terrain: [] }, from, to), true, 'in open space the same call gets through');
+});
+
+test('engines, sensors, and tractor work throughout the storm', () => {
+  const base = stormGame('storm-works');
+  const game = { ...base, ships: base.ships.map((ship) => (ship.id === 'fed-flagship' ? { ...ship, x: 120, y: 128 } : ship)) };
+  const scan = applyPlayerAction(game, { type: 'scan', targetId: 'axis-flagship' });
+  assert.match(scan.messages.join(' '), /Scan of Firebreather complete/, 'the scanner sees through the weather');
+  const tow = applyPlayerAction(game, { type: 'tractor', targetId: 'axis-flagship' });
+  assert.match(tow.messages.join(' '), /locks a tractor beam/, 'the beam still bites in the core');
+  const move = applyPlayerAction(game, { type: 'move', dx: 0, dy: 30 });
+  assert.equal(getShip(move.game, 'fed-flagship').y, 158, 'and the engines still run');
+});
+
+test('the ion storm never touches a classic or extended war', () => {
+  for (const opts of [{}, { extended: true }]) {
+    const game = createGame({ seed: 'storm-parity', ...opts });
+    const actor = getShip(game, 'fed-flagship');
+    const target = getShip(game, 'axis-flagship');
+    assert.equal(ionStormZone(game, actor), null);
+    assert.equal(radioStormFactor(game, actor), 1);
+    assert.equal(volleyMissChance(game, actor, target), MISS_CHANCE, 'the calibrated miss rate stands');
   }
 });

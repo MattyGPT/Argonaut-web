@@ -6,6 +6,7 @@ import {
   distance,
   engineCapacity,
   getShip,
+  ionStormZone,
   isImmovable,
   isTractorHeld,
   orderFor,
@@ -28,11 +29,16 @@ const nearestTo = (from, ships) => ships
 /**
  * The best shot available on a target, in the original's order of preference:
  * photons inside 10, phasers inside 30, otherwise a tractor lock inside 35. Null
- * when the target is past every reach or the hardware is gone.
+ * when the target is past every reach or the hardware is gone. An ion storm's core
+ * takes the guns offline for the stardate (15d), so a jammed hull's engage offers
+ * only the tractor — engines, sensors, and tractor work throughout the storm — and
+ * every doctrine falls through to its movement branches, so a caught captain tries
+ * to fight its way out rather than sulk.
  */
-const engage = (actor, target, range, noTractor = false) => {
-  if (systemUnits(actor, 'photons') > 0 && range <= RANGES.photons) return { type: 'photons', targetId: target.id };
-  if (systemUnits(actor, 'phasers') > 0 && range <= RANGES.phasers) return { type: 'phasers', targetId: target.id };
+const engage = (game, actor, target, range, noTractor = false) => {
+  const jammed = ionStormZone(game, actor) === 'core';
+  if (!jammed && systemUnits(actor, 'photons') > 0 && range <= RANGES.photons) return { type: 'photons', targetId: target.id };
+  if (!jammed && systemUnits(actor, 'phasers') > 0 && range <= RANGES.phasers) return { type: 'phasers', targetId: target.id };
   if (!noTractor && systemUnits(actor, 'tractor') > 0 && range <= RANGES.tractor && !isImmovable(target)) return { type: 'tractor', targetId: target.id };
   return null;
 };
@@ -99,7 +105,7 @@ const screenPost = (ward, threat) => {
 };
 
 const shootOrChase = (game, actor, target, stopAt) => {
-  const shot = engage(actor, target, distance(actor, target));
+  const shot = engage(game, actor, target, distance(actor, target));
   if (shot) return shot;
   if (!canNavigate(game, actor)) return { type: 'pass' };
   return stepToward(actor, target, stopAt, game);
@@ -120,13 +126,13 @@ const orderedAction = (game, actor, order) => {
 
   if (order.type === 'hold') {
     const threat = nearestTo(actor, enemies);
-    return (threat && engage(actor, threat.ship, threat.range)) || { type: 'pass' };
+    return (threat && engage(game, actor, threat.ship, threat.range)) || { type: 'pass' };
   }
 
   if (order.type === 'withdraw') {
     // A retreating ship still shoots back at whatever is already in range.
     const threat = nearestTo(actor, enemies);
-    const parting = threat ? engage(actor, threat.ship, threat.range) : null;
+    const parting = threat ? engage(game, actor, threat.ship, threat.range) : null;
     if (parting) return parting;
     const home = withdrawTo(game, actor);
     if (!home || !canNavigate(game, actor)) return { type: 'pass' };
@@ -139,7 +145,7 @@ const orderedAction = (game, actor, order) => {
 
   if (order.type === 'screen') {
     if (!threat) return { type: 'pass' };
-    const shot = engage(actor, threat.ship, distance(actor, threat.ship));
+    const shot = engage(game, actor, threat.ship, distance(actor, threat.ship));
     if (shot) return shot;
     const post = screenPost(ward, threat.ship);
     if (!canNavigate(game, actor) || distance(actor, post) <= FLEET_ORDER_TUNING.screenTolerance) return { type: 'pass' };
@@ -151,7 +157,7 @@ const orderedAction = (game, actor, order) => {
     return shootOrChase(game, actor, threat.ship, FLEET_ORDER_TUNING.escortDistance);
   }
   const nearby = nearestTo(actor, enemies);
-  const firing = nearby ? engage(actor, nearby.ship, nearby.range) : null;
+  const firing = nearby ? engage(game, actor, nearby.ship, nearby.range) : null;
   if (firing) return firing;
   if (distance(actor, ward) <= FLEET_ORDER_TUNING.escortDistance || !canNavigate(game, actor)) return { type: 'pass' };
   return stepToward(actor, ward, FLEET_ORDER_TUNING.escortDistance, game);
@@ -254,7 +260,7 @@ const doctrineAction = (game, actor) => {
     if (wreck) return { type: 'tractor', targetId: target.id };
   }
 
-  const shot = engage(actor, target, range, doctrine.noTractor);
+  const shot = engage(game, actor, target, range, doctrine.noTractor);
   if (shot) return shot;
   if (!canNavigate(game, actor)) return { type: 'pass' };
   if (range > doctrine.standoff) return stepToward(actor, target, doctrine.standoff, game);
@@ -280,7 +286,7 @@ export const chooseAiAction = (game, shipId) => {
 
   const target = pickTarget(game, actor);
   if (!target) return { type: 'pass' };
-  const shot = engage(actor, target.ship, target.range);
+  const shot = engage(game, actor, target.ship, target.range);
   if (shot) return shot;
   if (canNavigate(game, actor)) {
     // Sitting on the target: hold position so the collision resolves.
