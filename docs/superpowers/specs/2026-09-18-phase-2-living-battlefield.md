@@ -45,10 +45,13 @@ feature." A cell grid would add granularity we do not need yet. (Recorded decisi
   they are today.
 - **Generation** — for each type, place `count` features at random centers inside
   a margin from the field edge, with `radius` drawn from a per-type range. Reject a
-  center that sits inside `XANADU_CLEARANCE` of the starbase, so the dockyard is
-  never buried in a hazard. Mild overlap between features is allowed (a nebula edge
-  over an asteroid field is fine and interesting); exact concentric stacking is
-  avoided by a minimum center separation.
+  center whose feature comes inside `XANADU_CLEARANCE` of the starbase — clearance
+  measured from the feature's *edge* (`distance ≥ radius + xanaduClearance`), so no
+  feature, however wide, ever buries the dockyard. Mild overlap between features is
+  allowed (a nebula edge over an asteroid field is fine and interesting); exact
+  concentric stacking is avoided by a minimum center separation. Rejection sampling
+  is bounded, so a pathological seed deterministically skips a feature rather than
+  hanging the generator.
 - **`TERRAIN` constants block** (`game/constants.js`) — every number is a balance
   dial for the Reimagined simulation harness, not a calibrated value:
 
@@ -59,7 +62,7 @@ export const TERRAIN = Object.freeze({
   counts: { nebula: 2, asteroids: 2, 'ion-storm': 2 },
   radius: { nebula: [28, 44], asteroids: [16, 26], 'ion-storm': [20, 32] },
   edgeMargin: 12,          // keep centers this far inside the field edge
-  xanaduClearance: 30,     // no feature center this close to the starbase
+  xanaduClearance: 30,     // no feature edge this close to the starbase
   minSeparation: 20,       // between feature centers
   // Q1 middle option: a feature is drawn faint beyond mapper range and crisp within.
   faintOpacity: 0.45,      // opacity multiplier for terrain beyond the mapper
