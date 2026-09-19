@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, POWER, POWER_SINKS, RANGES, REIMAGINED_GRID_SIZE, SCENARIOS, STALEMATE_ROUNDS, TERRAIN, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioProgress } from '../game/scenarios.js';
-import { abbreviateNarrative, alertLevel, appendLog, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, inRadioContact, insideFeature, isAce, nebulaHides, nebulaRevealRange, powerAllocation, powerEffect, radioIntegrity, reactorOutput, sensorRange, shieldCapacity, strongestFederation, templateSystems, terrainAt, vendettaGrudge } from '../game/state.js';
-import { applyPlayerAction, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveCollision, shipCommands, tractorLock, weaponDamage } from '../game/actions.js';
+import { abbreviateNarrative, alertLevel, appendLog, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, inRadioContact, insideFeature, isAce, nebulaHides, nebulaRevealRange, powerAllocation, powerEffect, radioIntegrity, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, strongestFederation, templateSystems, terrainAt, vendettaGrudge } from '../game/state.js';
+import { applyPlayerAction, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, tractorLock, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
@@ -2544,5 +2544,160 @@ test('the nebula rule never touches a classic or extended war', () => {
     const actor = getShip(game, 'fed-flagship');
     assert.equal(nebulaHides(game, actor, getShip(game, 'axis-flagship')), false, 'no terrain, nothing hidden');
     assert.equal(nebulaRevealRange(game, actor), TERRAIN.nebulaRevealRange, 'reveal stays at the 1.0x base without power management');
+  }
+});
+
+// --- Round 15c: asteroid cover + collision (Reimagined) ---
+
+/**
+ * A Reimagined war with one hand-placed asteroid field at (90,120), radius 20.
+ * The Federation flagship sits at (60,120) and the Axis flagship at (120,120), so
+ * the straight shot line between them runs through the rocks. Every other hull is
+ * parked far away.
+ */
+const fieldGame = (seed = 'asteroids') => {
+  const base = createGame({ seed, reimagined: true });
+  return {
+    ...base,
+    terrain: [{ id: 'asteroids-1', type: 'asteroids', x: 90, y: 120, radius: 20 }],
+    ships: base.ships.map((ship) => {
+      if (ship.id === 'fed-flagship') return { ...ship, x: 60, y: 120 };
+      if (ship.id === 'axis-flagship') return { ...ship, x: 120, y: 120 };
+      return { ...ship, x: 230, y: 20 };
+    }),
+  };
+};
+
+test('segmentCrossesFeature sees a shot line through a field, and not one around it', () => {
+  const game = fieldGame('asteroid-segment');
+  assert.equal(segmentCrossesFeature(game, { x: 60, y: 120 }, { x: 120, y: 120 }, 'asteroids'), true,
+    'the straight line runs through the rocks');
+  assert.equal(segmentCrossesFeature(game, { x: 10, y: 10 }, { x: 200, y: 10 }, 'asteroids'), false,
+    'a wide line passes outside the field');
+  assert.equal(segmentCrossesFeature(game, { x: 90, y: 120 }, { x: 200, y: 200 }, 'asteroids'), true,
+    'an endpoint inside the field counts as crossing it');
+  assert.equal(segmentCrossesFeature(game, { x: 60, y: 120 }, { x: 120, y: 120 }, 'nebula'), false,
+    'the type filter rejects the wrong feature');
+  const classic = createGame({ seed: 'asteroid-segment-classic' });
+  assert.equal(segmentCrossesFeature(classic, { x: 60, y: 120 }, { x: 120, y: 120 }, 'asteroids'), false,
+    'a classic war has no terrain to cross');
+});
+
+test('a volley fired through asteroids misses far more often, and says so', () => {
+  const base = fieldGame('asteroid-cover');
+  // Park the gunnery pair exactly at phaser range (30) with the rocks between them.
+  const covered = {
+    ...base,
+    ships: base.ships.map((ship) => {
+      if (ship.id === 'fed-flagship') return { ...ship, x: 75, y: 120 };
+      if (ship.id === 'axis-flagship') return { ...ship, x: 105, y: 120 };
+      return ship;
+    }),
+  };
+  const open = { ...covered, terrain: [] };
+  const missCount = (game, samples = 400) => {
+    let misses = 0;
+    for (let step = 0; step < samples; step += 1) {
+      const out = applyPlayerAction({ ...game, randomStep: step }, { type: 'phasers', targetId: 'axis-flagship' });
+      if (/Missed!/.test(out.messages.join(' '))) misses += 1;
+    }
+    return misses;
+  };
+  const openMisses = missCount(open);
+  const coveredMisses = missCount(covered);
+  assert.ok(coveredMisses > openMisses * 1.8,
+    `cover roughly triples the miss rate (open ${openMisses}/400, covered ${coveredMisses}/400)`);
+  // The first covered miss carries the splash flavor.
+  for (let step = 0; step < 400; step += 1) {
+    const out = applyPlayerAction({ ...covered, randomStep: step }, { type: 'phasers', targetId: 'axis-flagship' });
+    const text = out.messages.join(' ');
+    if (/Missed!/.test(text)) {
+      assert.match(text, /splashes into asteroids/);
+      break;
+    }
+  }
+});
+
+test('ending a move inside an asteroid field rolls a seeded rock strike, in band', () => {
+  const game = fieldGame('asteroid-strike');
+  let strikes = 0;
+  let minDamage = Infinity;
+  let maxDamage = 0;
+  for (let step = 0; step < 200; step += 1) {
+    // Park at the field's heart: (60,120) + 30 → (90,120).
+    const out = applyPlayerAction({ ...game, randomStep: step }, { type: 'move', dx: 30, dy: 0 });
+    assert.equal(getShip(out.game, 'fed-flagship').x, 90);
+    const line = out.messages.find((message) => /Asteroid strike/.test(message));
+    if (line) {
+      strikes += 1;
+      const damage = 200 - getShip(out.game, 'fed-flagship').shields;
+      minDamage = Math.min(minDamage, damage);
+      maxDamage = Math.max(maxDamage, damage);
+    }
+  }
+  assert.ok(strikes > 0 && strikes < 200, 'the strike is a seeded chance, not a certainty');
+  assert.ok(strikes / 200 > 0.2 && strikes / 200 < 0.5, `about 35% of parking moves strike (got ${strikes}/200)`);
+  assert.ok(minDamage >= TERRAIN.asteroidStrike.min, `the lightest strike is at least ${TERRAIN.asteroidStrike.min} (got ${minDamage})`);
+  assert.ok(maxDamage <= TERRAIN.asteroidStrike.max, `the heaviest strike is at most ${TERRAIN.asteroidStrike.max} (got ${maxDamage})`);
+});
+
+test('a move that merely crosses the field is safe — only ending inside strikes', () => {
+  const base = fieldGame('asteroid-passthrough');
+  // Move the Axis flagship out of the landing spot so the move resolves cleanly.
+  const game = { ...base, ships: base.ships.map((ship) => (ship.id === 'axis-flagship' ? { ...ship, x: 200, y: 120 } : ship)) };
+  for (let step = 0; step < 100; step += 1) {
+    // (60,120) + 60 → (120,120): the path runs through the field, the endpoint does not.
+    const out = applyPlayerAction({ ...game, randomStep: step }, { type: 'move', dx: 60, dy: 0 });
+    assert.ok(!out.messages.some((message) => /Asteroid strike/.test(message)),
+      'passing through at speed never draws a strike');
+  }
+});
+
+test('a directed tow dumps the victim into the rocks, and the strike does the work', () => {
+  const base = fieldGame('asteroid-tow');
+  // Victim just outside the field's near edge; the flagship tows it toward the heart.
+  const game = { ...base, ships: base.ships.map((ship) => (ship.id === 'axis-flagship' ? { ...ship, x: 65, y: 120 } : ship)) };
+  let strikes = 0;
+  for (let step = 0; step < 200; step += 1) {
+    const out = applyPlayerAction({ ...game, randomStep: step }, { type: 'tractor', targetId: 'axis-flagship', towardX: 90, towardY: 120 });
+    const victim = getShip(out.game, 'axis-flagship');
+    assert.equal(victim.x, 80, 'a 15-unit pull from (65,120) toward (90,120) lands inside the field');
+    if (out.messages.some((message) => /Asteroid strike: rocks rake Firebreather/.test(message))) {
+      strikes += 1;
+      assert.ok(victim.shields < 200, 'the strike burns shield power');
+      assert.ok(victim.shields >= 200 - TERRAIN.asteroidStrike.max, 'and never exceeds the band');
+    }
+  }
+  assert.ok(strikes > 35 && strikes < 115, `about a third of the dumps strike (got ${strikes}/200)`);
+});
+
+test('the rock strike reads the hull as it stands after the tow resolves', () => {
+  const game = fieldGame('asteroid-strike-direct');
+  const inside = { ...game, ships: game.ships.map((ship) => (ship.id === 'fed-flagship' ? { ...ship, x: 90, y: 120 } : ship)) };
+  const hull = getShip(inside, 'fed-flagship');
+  const out = resolveAsteroidStrike(inside, hull);
+  assert.ok(out.messages.length <= 1);
+  if (out.messages.length === 1) {
+    assert.match(out.messages[0], /Asteroid strike/);
+    assert.equal(out.events[0].kind, 'explosion', 'the strike draws as an impact burst');
+    assert.equal(out.events[0].x2, 90);
+  }
+  // A hull outside the field is untouched — and consumes no seeded roll.
+  const outside = resolveAsteroidStrike(inside, getShip(inside, 'axis-flagship'));
+  assert.equal(outside.game, inside, 'the game is returned as-is');
+  assert.deepEqual(outside.messages, []);
+  assert.deepEqual(outside.events, []);
+});
+
+test('rock strikes never touch a classic or extended war, nor its seeded sequence', () => {
+  for (const opts of [{}, { extended: true }]) {
+    const game = createGame({ seed: 'asteroid-parity', ...opts });
+    const out = resolveAsteroidStrike(game, getShip(game, 'fed-flagship'));
+    assert.equal(out.game, game, 'no terrain, no strike, no state change');
+    assert.deepEqual(out.messages, []);
+    // A classic move consumes no extra random step, so the war's seeded sequence
+    // — and every calibrated figure downstream of it — is unchanged.
+    const moved = applyPlayerAction(game, { type: 'move', dx: 1, dy: 0 });
+    assert.equal(moved.game.randomStep, game.randomStep, 'the strike check consumed no roll');
   }
 });

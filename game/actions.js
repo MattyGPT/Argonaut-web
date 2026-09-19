@@ -19,6 +19,7 @@ import {
   SHRAPNEL_EXTRA_RANGE,
   SURGICAL_DAMAGE_FACTOR,
   TARGETED_ORDERS,
+  TERRAIN,
   TRACTOR_PULL_PER_UNIT,
   VENDETTA,
   WEAPONS,
@@ -38,6 +39,7 @@ import {
   getLivingShips,
   getShip,
   inRadioContact,
+  insideFeature,
   isAce,
   isActive,
   isImmovable,
@@ -47,6 +49,7 @@ import {
   powerAllocation,
   powerEffect,
   reactorOutput,
+  segmentCrossesFeature,
   sensorRange,
   shieldCapacity,
   strongestFederation,
@@ -466,11 +469,16 @@ const weaponAction = (game, action, actor, type) => {
     ...(power !== 100 ? { power } : {}),
   };
   const rng = seededRng(game);
-  const shooterMissed = rng.next() < MISS_CHANCE;
+  // Asteroid cover (15c): a volley whose shot line crosses an asteroid field can
+  // splash on a rock — the same single roll against a higher threshold, symmetric
+  // with the autopilots' volleys. Terrain is [] outside a Reimagined war, so the
+  // calibrated 12% miss stands untouched there.
+  const covered = segmentCrossesFeature(game, actor, found.target, 'asteroids');
+  const shooterMissed = rng.next() < MISS_CHANCE + (covered ? TERRAIN.asteroidCoverMiss : 0);
   if (shooterMissed) {
     const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
     const updated = completeTurn(advanceRandom(replaceShip(game, shooter)));
-    return result(updated, `${actor.name} fires ${type} at ${found.target.name}. Missed!`, { events: [fireEvent(type, actor, found.target, false, details)] });
+    return result(updated, `${actor.name} fires ${type} at ${found.target.name}. Missed!${covered ? ' The volley splashes into asteroids.' : ''}`, { events: [fireEvent(type, actor, found.target, false, details)] });
   }
   const grudge = vendettaGrudge(game, actor, found.target);
   const roll = weaponDamage(type, actor, rng, grudge, powerEffect(game, actor, 'weapons'));
@@ -568,6 +576,34 @@ export const resolveCollision = (game, actor) => {
   return { game: next, messages, events };
 };
 
+/**
+ * Rock strikes (15c): a hull that ENDS a move or a tractor tow inside an asteroid
+ * field rolls a seeded strike for `asteroidStrike.min`–`max` shield damage. Passing
+ * through at speed is safe — parking, or being tractor-dumped inside, is not, which
+ * is what makes towing an enemy into a field lethal and gives the engines sink a
+ * defensive use (outrun the field). The strike burns shields only; the frame itself
+ * absorbs rocks once a hull is already dark, and collisions remain the killing blow
+ * a tow into the field sets up. Narrated and drawn as an impact burst. Terrain is
+ * [] outside a Reimagined war, so this never fires there and no roll is consumed —
+ * a classic or extended war keeps its exact seeded sequence (parity).
+ */
+export const resolveAsteroidStrike = (game, ship) => {
+  const current = getShip(game, ship?.id);
+  if (!isActive(current) || !insideFeature(game, current, 'asteroids')) return { game, messages: [], events: [] };
+  const rng = seededRng(game);
+  const rolled = advanceRandom(game);
+  if (rng.next() >= TERRAIN.asteroidStrike.chance) return { game: rolled, messages: [], events: [] };
+  const amount = rng.integer(TERRAIN.asteroidStrike.min, TERRAIN.asteroidStrike.max);
+  const struck = Math.min(current.shields, amount);
+  if (struck <= 0) return { game: rolled, messages: [], events: [] };
+  const updated = replaceShip(rolled, { ...current, shields: current.shields - struck });
+  return {
+    game: updated,
+    messages: [`Asteroid strike: rocks rake ${current.name} for ${struck} shield damage.`],
+    events: [{ kind: 'explosion', fromId: current.id, toId: current.id, x1: current.x, y1: current.y, x2: current.x, y2: current.y, hit: true }],
+  };
+};
+
 const moveAction = (game, action, actor) => {
   const disabled = requiresSystem(game, actor, 'engines');
   if (disabled) return disabled;
@@ -584,7 +620,9 @@ const moveAction = (game, action, actor) => {
   if (x < 0 || x > grid || y < 0 || y > grid) return invalid(game, 'Movement would leave the tactical map.');
   const movedActor = { ...actor, x, y };
   const collision = resolveCollision(replaceShip(game, movedActor), movedActor);
-  return result(completeTurn(collision.game), [`${actor.name} moves to ${x},${y}.`, ...collision.messages], { events: collision.events });
+  // Ending the move inside an asteroid field risks a rock strike (15c).
+  const strike = resolveAsteroidStrike(collision.game, movedActor);
+  return result(completeTurn(strike.game), [`${actor.name} moves to ${x},${y}.`, ...collision.messages, ...strike.messages], { events: [...collision.events, ...strike.events] });
 };
 
 const pullToward = (actor, target, pull, gridSize) => {
@@ -650,13 +688,17 @@ const tractorAction = (game, action, actor) => {
   // A beam can drag a hull straight into another one, and that is a collision like
   // any other — which makes towing an enemy into a friend a real tactic.
   const collision = resolveCollision(completeTurn(replaceShip(game, pulled)), pulled);
-  return result(collision.game, [
+  // A tow that ends inside an asteroid field exposes the victim to a rock strike
+  // (15c) — towing an enemy into the rocks is a deliberate weapon.
+  const strike = resolveAsteroidStrike(collision.game, pulled);
+  return result(strike.game, [
     `${actor.name} locks a tractor beam on ${found.target.name}.`,
     destination
       ? `Tractor beam good for ${pull} units pull. ${actor.name} hauls ${found.target.name} toward ${destination.x}, ${destination.y} — now at ${position.x}, ${position.y}.`
       : `Tractor beam good for ${pull} units pull. ${actor.name} has beamed ${found.target.name} to ${position.x}, ${position.y}.`,
     ...collision.messages,
-  ], { events: collision.events });
+    ...strike.messages,
+  ], { events: [...collision.events, ...strike.events] });
 };
 
 const transportAction = (game, action, actor) => {

@@ -1,5 +1,5 @@
-import { DOCKING, FACTIONS, GRID_SIZE, MISS_CHANCE, POWER, RANGES, STALEMATE_ROUNDS, SURRENDER } from './constants.js';
-import { damageShip, detonate, fireEvent, flushShields, killLines, resolveCollision, terminalEvent, tractorLock, weaponDamage } from './actions.js';
+import { DOCKING, FACTIONS, GRID_SIZE, MISS_CHANCE, POWER, RANGES, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
+import { damageShip, detonate, fireEvent, flushShields, killLines, resolveAsteroidStrike, resolveCollision, terminalEvent, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
 import { scenarioOutcome } from './scenarios.js';
@@ -14,6 +14,7 @@ import {
   isImmovable,
   isStranded,
   powerEffect,
+  segmentCrossesFeature,
   shieldCapacity,
   strongestFederation,
   templateSystems,
@@ -45,12 +46,15 @@ const resolveAiAction = (game, shipId) => {
   if (['phasers', 'photons'].includes(action.type)) {
     const target = getShip(game, action.targetId);
     const rng = rngFor(game);
-    // Autopilots miss at the same rate as the player, from the same roll order.
-    if (rng.next() < MISS_CHANCE) {
+    // Autopilots miss at the same rate as the player, from the same roll order —
+    // and take the same asteroid-cover penalty (15c) when their shot line crosses
+    // a field, so terrain applies to both sides symmetrically.
+    const covered = segmentCrossesFeature(game, actor, target, 'asteroids');
+    if (rng.next() < MISS_CHANCE + (covered ? TERRAIN.asteroidCoverMiss : 0)) {
       const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
       return {
         game: advanceRandom(replaceShip(game, shooter)),
-        messages: [`${actor.name} fires ${action.type} at ${target.name}. Missed!`],
+        messages: [`${actor.name} fires ${action.type} at ${target.name}. Missed!${covered ? ' The volley splashes into asteroids.' : ''}`],
         type: action.type,
         events: [fireEvent(action.type, actor, target, false)],
       };
@@ -95,14 +99,18 @@ const resolveAiAction = (game, shipId) => {
     const { pull, position } = tractorLock(actor, target, game.gridSize ?? GRID_SIZE, null, powerEffect(game, actor, 'tractor'));
     const pulled = { ...target, tractorBy: actor.id, x: position.x, y: position.y };
     const collision = resolveCollision(replaceShip(game, pulled), pulled);
+    // A tow that ends inside an asteroid field exposes the victim to a rock strike
+    // (15c) — the Cabal's tractor-ram can now dump a hull into the rocks as well.
+    const strike = resolveAsteroidStrike(collision.game, pulled);
     return {
-      game: collision.game,
+      game: strike.game,
       messages: [
         `${actor.name} locks ${target.name} in a tractor beam.`,
         `Tractor beam good for ${pull} units pull. ${actor.name} has beamed ${target.name} to ${position.x}, ${position.y}.`,
         ...collision.messages,
+        ...strike.messages,
       ],
-      events: collision.events,
+      events: [...collision.events, ...strike.events],
       type: action.type,
     };
   }
@@ -367,6 +375,11 @@ export const resolveAutopilotTurn = (game) => {
     next = collision.game;
     log.push(...collision.messages);
     events.push(...(collision.events ?? []));
+    // Ending the move inside an asteroid field risks a rock strike (15c).
+    const strike = resolveAsteroidStrike(next, getShip(next, shipId));
+    next = strike.game;
+    log.push(...strike.messages);
+    events.push(...(strike.events ?? []));
   }
   return { game: { ...next, phase: 'computer' }, messages: log, events };
 };
@@ -388,6 +401,12 @@ export const resolveComputerTurns = (initialGame) => {
       game = collision.game;
       log.push(...collision.messages);
       events.push(...(collision.events ?? []));
+      // Ending the move inside an asteroid field risks a rock strike (15c), for
+      // every alliance's hulls alike — terrain applies symmetrically.
+      const strike = resolveAsteroidStrike(game, getShip(game, shipId));
+      game = strike.game;
+      log.push(...strike.messages);
+      events.push(...(strike.events ?? []));
     }
   }
   const docked = resolveDocking(game);
