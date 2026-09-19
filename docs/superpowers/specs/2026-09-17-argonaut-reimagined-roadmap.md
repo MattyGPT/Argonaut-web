@@ -135,7 +135,39 @@ Detailed design (terrain model, hazard rules, AI interaction, open questions):
 | 17 | Prize fleet | Boarded hulls join your roster under standing orders | Capture → order eligibility → fleet report |
 | 18 | New ship classes (one per chunk) | Interceptor, then artillery, then carrier | Templates + roster; parity off |
 | 19 | Fleet loadout / points budget | Choose composition at war start | Budget enforcement; seeded generation |
+| 19b | **Force customization** (Matt's idea) | Choose faction involvement, per-faction fleet size and types, optional Xanadu | New-game panel gating; seeded generation; win/scenario tolerance; parity off |
 | 20 | Drones / fighters | Launchable subsystem, semi-independent units | Launch + AI action branch |
+
+**19b — Force customization** (Matt's idea, recorded 2026-09-19 so it is not lost).
+When starting a Reimagined war, the New game panel lets you shape the forces:
+
+- **Faction involvement** — choose how many alliances fight, from a minimum of 2
+  up to all 4, and which ones they are.
+- **Fleet strength and composition** — for every live faction, choose how many
+  ships of the line it fields (minimum 1 while the faction is live, maximum 5)
+  and of which types (battle cruiser / cruiser / scout today, plus the round-18
+  classes as they land).
+- **Xanadu is optional** — the starbase spawns only if you ask for it.
+
+Naturally sequenced after 19, whose loadout/points-budget machinery it reuses
+(19b is the free-form version of the same seam; a points budget can cap it later).
+Design notes for when it is picked up:
+
+- **Reimagined-only**, as always: a classic or extended war keeps the fixed
+  21-ship, four-alliance roster byte-identical (the parity test guards it).
+- The last-alliance-standing victory rule already generalizes, and a
+  Federation-less war already plays on spectated (PR #27), so dropping alliances
+  — or the Federation fleet itself — has a working endgame to lean on.
+- The **vendetta pick, captains stream, seeded placement, and starting
+  formations** must all tolerate a variable roster (the placement already scales
+  with `gridSize`; the per-faction `SHIP_ROSTER` becomes derived from the chosen
+  composition, on the same streams so a given seed + setup stays reproducible).
+- **Scenarios and the dockyard assume Xanadu**: `defend-xanadu` needs the base
+  (require it, or retire the scenario when Xanadu is off), and no-Xanadu wars
+  lose dockyard repair, the radio relay, and the withdraw/screen ward — the
+  panel and briefs should say so.
+- The **battle report, statistics, roll call, and AI doctrines** all iterate the
+  roster as-is and should need no changes beyond empty-alliance edge cases.
 
 ### Phase 4 — Combat depth *(#3, #4, #1, + directed tractor)*
 
