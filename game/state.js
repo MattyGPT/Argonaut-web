@@ -361,12 +361,16 @@ export const radioIntegrity = (ship) => {
  * Whether an order can reach a ship this stardate. Contact comes from the sending
  * ship's own radio hardware, with Xanadu relaying when it can hear both ends — so
  * a damaged radio makes you a slower admiral, the same way it makes the battle
- * narrative harder to read.
+ * narrative harder to read. Radio into a nebula degrades the same way sensors do
+ * (15b): a hull parked inside one only hears callers within the reveal range, so
+ * nebula camping costs you orders as well as visibility.
  */
 export const inRadioContact = (game, from, to) => {
   if (!from || !to) return false;
   if (from.id === to.id) return true;
-  const hears = (relay, ship) => sensorRange(game, relay, 'radio') > 0 && distance(relay, ship) <= sensorRange(game, relay, 'radio');
+  const hears = (relay, ship) => sensorRange(game, relay, 'radio') > 0
+    && distance(relay, ship) <= sensorRange(game, relay, 'radio')
+    && !nebulaHides(game, relay, ship);
   if (hears(from, to)) return true;
   const xanadu = getShip(game, 'xanadu');
   return Boolean(xanadu) && xanadu.status === 'active' && hears(xanadu, from) && hears(xanadu, to);
@@ -464,6 +468,28 @@ export const sensorRange = (game, ship, system) => systemRange(ship, system) * p
 
 /** Reads an allocation as the console would: "shields 4, weapons 6, engines 4, ...". */
 export const describePower = (allocation) => POWER_SINKS.map((sink) => `${sink} ${allocation?.[sink] ?? 0}`).join(', ');
+
+/**
+ * How deep an outside sensor sees into a nebula (15b): a short base reveal that
+ * scales with the observer's sensors effectiveness, so the sensors power sink is a
+ * real counter to nebula camping — overcharging pierces further, with no hard cap
+ * beyond the sink's own saturation.
+ */
+export const nebulaRevealRange = (game, observer) => TERRAIN.nebulaRevealRange * powerEffect(game, observer, 'sensors');
+
+/**
+ * Whether a nebula hides `target` from `observer`: the target sits inside a nebula
+ * the observer is not inside, beyond the observer's reveal range. Hulls sharing the
+ * nebula see each other normally. Terrain is `[]` outside a Reimagined war, so this
+ * always answers false there and the calibrated sensor reaches are untouched.
+ */
+export const nebulaHides = (game, observer, target) => {
+  if (!observer || !target || observer.id === target.id) return false;
+  const cover = (game?.terrain ?? []).find((feature) => feature.type === 'nebula' && distance(target, feature) <= feature.radius);
+  if (!cover) return false;
+  if (distance(observer, cover) <= cover.radius) return false;
+  return distance(observer, target) > nebulaRevealRange(game, observer);
+};
 
 /**
  * The friendly starbase this hull is docked at, if any — close enough, and healthy

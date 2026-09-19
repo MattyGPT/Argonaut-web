@@ -15,6 +15,7 @@ import {
   isAce,
   isActive,
   isSpectator,
+  nebulaHides,
   orderFor,
   pendingOrderFor,
   powerAllocation,
@@ -271,7 +272,10 @@ export const renderGame = (game, view = {}) => {
 
   const actorActive = Boolean(actor) && actor.status === 'active';
   const mapperRange = actorActive ? sensorRange(game, actor, 'mapper') : Infinity;
-  const isVisible = (ship) => !actorActive || ship.id === actor.id || distance(ship, actor) <= mapperRange;
+  // Fog of war, plus the nebula rule (15b): a hull inside a nebula is unseen from
+  // outside beyond the short reveal range, however wide the mapper reaches.
+  const isVisible = (ship) => !actorActive || ship.id === actor.id
+    || (distance(ship, actor) <= mapperRange && !nebulaHides(game, actor, ship));
   document.querySelector('#mapper-readout').textContent = actorActive
     ? (Number.isFinite(mapperRange) && mapperRange > 0 ? `Mapper ${mapperRange}` : 'Mapper blacked out')
     : '';

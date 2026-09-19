@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, POWER, POWER_SINKS, RANGES, REIMAGINED_GRID_SIZE, SCENARIOS, STALEMATE_ROUNDS, TERRAIN, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioProgress } from '../game/scenarios.js';
-import { abbreviateNarrative, alertLevel, appendLog, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, insideFeature, isAce, powerAllocation, powerEffect, radioIntegrity, reactorOutput, sensorRange, shieldCapacity, strongestFederation, templateSystems, terrainAt, vendettaGrudge } from '../game/state.js';
+import { abbreviateNarrative, alertLevel, appendLog, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, inRadioContact, insideFeature, isAce, nebulaHides, nebulaRevealRange, powerAllocation, powerEffect, radioIntegrity, reactorOutput, sensorRange, shieldCapacity, strongestFederation, templateSystems, terrainAt, vendettaGrudge } from '../game/state.js';
 import { applyPlayerAction, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveCollision, shipCommands, tractorLock, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
@@ -2438,4 +2438,111 @@ test('terrain helpers tolerate a classic war and an old save with no terrain fie
   delete oldSave.terrain;
   assert.equal(insideFeature(oldSave, { x: 50, y: 50 }), false, 'a save predating terrain reads as empty');
   assert.equal(terrainAt(oldSave, { x: 50, y: 50 }), null);
+});
+
+// --- Round 15b: nebula sensor denial (Reimagined) ---
+
+/**
+ * A Reimagined war with one hand-placed nebula at the field center. The Axis
+ * flagship lurks at its heart; the Federation flagship watches from 40 away —
+ * well inside its 60-unit mapper, so only the nebula rule can hide the lurker.
+ * Every other hull (Xanadu included) is parked far away so no report, and no
+ * Xanadu radio relay, interferes with the assertions.
+ */
+const nebulaGame = (seed = 'nebula') => {
+  const base = createGame({ seed, reimagined: true });
+  return {
+    ...base,
+    terrain: [{ id: 'nebula-1', type: 'nebula', x: 120, y: 120, radius: 30 }],
+    ships: base.ships.map((ship) => {
+      if (ship.id === 'axis-flagship') return { ...ship, x: 120, y: 120 };
+      if (ship.id === 'fed-flagship') return { ...ship, x: 80, y: 120 };
+      return { ...ship, x: 230, y: 20 };
+    }),
+  };
+};
+
+test('a hull inside a nebula is hidden from an outside observer the mapper would otherwise reach', () => {
+  const game = nebulaGame('nebula-hidden');
+  const actor = getShip(game, 'fed-flagship');
+  const lurker = getShip(game, 'axis-flagship');
+  assert.ok(distance(actor, lurker) <= sensorRange(game, actor, 'mapper'), 'plain fog of war would see it');
+  assert.equal(nebulaHides(game, actor, lurker), true);
+  const out = applyPlayerAction(game, { type: 'scan', targetId: 'axis-flagship' });
+  assert.match(out.messages.join(' '), /lost in the static of a nebula/);
+  assert.equal(out.game.scanned?.['axis-flagship'], undefined, 'a refused scan reveals no captain');
+});
+
+test('hulls sharing a nebula see each other normally', () => {
+  const base = nebulaGame('nebula-inside');
+  const game = { ...base, ships: base.ships.map((ship) => (ship.id === 'fed-flagship' ? { ...ship, x: 110, y: 110 } : ship)) };
+  const actor = getShip(game, 'fed-flagship');
+  assert.equal(nebulaHides(game, actor, getShip(game, 'axis-flagship')), false, 'inside the same nebula, nothing is hidden');
+  const out = applyPlayerAction(game, { type: 'scan', targetId: 'axis-flagship' });
+  assert.match(out.messages.join(' '), /Scan of Firebreather complete/);
+  assert.equal(out.game.scanned?.['axis-flagship'], true);
+});
+
+test('overcharged sensors pierce further into a nebula', () => {
+  const base = nebulaGame('nebula-pierce');
+  const game = {
+    ...base,
+    ships: base.ships.map((ship) => {
+      if (ship.id === 'axis-flagship') return { ...ship, x: 145, y: 120 }; // near the nebula's edge
+      if (ship.id === 'fed-flagship') return { ...ship, x: 156, y: 120 }; // outside it, 11 away
+      return ship;
+    }),
+  };
+  assert.equal(nebulaRevealRange(game, getShip(game, 'fed-flagship')), TERRAIN.nebulaRevealRange, 'the base reveal at 1.0x sensors');
+  assert.equal(nebulaHides(game, getShip(game, 'fed-flagship'), getShip(game, 'axis-flagship')), true,
+    '11 units is beyond the base reveal of 8');
+  // A battle cruiser's reactor budget is 25; this allocation spends 22 of it and
+  // drives the sensors sink to its 1.5x saturation, revealing 12 units deep.
+  const hot = { ...game, power: { ...game.power, 'fed-flagship': { shields: 4, weapons: 6, engines: 4, sensors: 6, tractor: 2 } } };
+  assert.equal(powerEffect(hot, getShip(hot, 'fed-flagship'), 'sensors'), 1.5);
+  assert.equal(nebulaRevealRange(hot, getShip(hot, 'fed-flagship')), TERRAIN.nebulaRevealRange * 1.5);
+  assert.equal(nebulaHides(hot, getShip(hot, 'fed-flagship'), getShip(hot, 'axis-flagship')), false,
+    'the overcharged sensors reach the lurker');
+});
+
+test('the computer, map, and radio reports all honor the nebula', () => {
+  const game = nebulaGame('nebula-reports');
+  const computer = applyPlayerAction(game, { type: 'computer' });
+  assert.ok(!computer.report.lines.join(' ').includes('Firebreather'), 'the lurker is not on the mapper');
+  assert.match(computer.report.lines.join(' '), /Nearest enemy: none within mapper range/);
+  const map = applyPlayerAction(game, { type: 'map' });
+  assert.ok(!map.report.lines.some((line) => /Firebreather/.test(line)), 'the local map stays silent too');
+  // An allied hull camping in the same nebula does not answer the radio either.
+  const camper = {
+    ...game,
+    ships: game.ships.map((ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 118, y: 120 } : ship)),
+  };
+  assert.equal(inRadioContact(camper, getShip(camper, 'fed-flagship'), getShip(camper, 'fed-cruiser-1')), false,
+    'radio into a nebula degrades to the reveal range');
+  const radio = applyPlayerAction(camper, { type: 'radio' });
+  assert.match(radio.report.lines.join(' '), /No allied stations answer within radio range/);
+});
+
+test('radio reaches a nebula-docked hull from just outside, within the reveal range', () => {
+  const base = nebulaGame('nebula-radio-edge');
+  const game = {
+    ...base,
+    ships: base.ships.map((ship) => {
+      if (ship.id === 'fed-cruiser-1') return { ...ship, x: 146, y: 120 }; // inside, near the edge
+      if (ship.id === 'fed-flagship') return { ...ship, x: 153, y: 120 };  // outside, 7 away
+      return ship;
+    }),
+  };
+  assert.equal(inRadioContact(game, getShip(game, 'fed-flagship'), getShip(game, 'fed-cruiser-1')), true,
+    '7 units is inside the base reveal of 8');
+});
+
+test('the nebula rule never touches a classic or extended war', () => {
+  for (const opts of [{}, { extended: true }]) {
+    const game = createGame({ seed: 'nebula-parity', ...opts });
+    assert.deepEqual(game.terrain, []);
+    const actor = getShip(game, 'fed-flagship');
+    assert.equal(nebulaHides(game, actor, getShip(game, 'axis-flagship')), false, 'no terrain, nothing hidden');
+    assert.equal(nebulaRevealRange(game, actor), TERRAIN.nebulaRevealRange, 'reveal stays at the 1.0x base without power management');
+  }
 });
