@@ -123,7 +123,7 @@ Detailed design (terrain model, hazard rules, AI interaction, open questions):
 | Round | Chunk | Builds | Tested by | Status |
 | --- | --- | --- | --- | --- |
 | 15a | Terrain data layer + render | Seeded nebula/asteroid/ion placement — no combat effect yet | Deterministic placement; renders; parity | ✅ PR #35 |
-| 15b | Nebula = sensor denial | Blocks mapper/scanner inside | Visibility/fog through nebula | |
+| 15b | Nebula = sensor denial | Blocks mapper/scanner inside | Visibility/fog through nebula | ✅ PR #36 |
 | 15c | Asteroids = cover + collision | Blocks/degrades shots; collision on entry | Shot interception; collision path reused | |
 | 15d | Ion storm = jam | Disables weapons/radio per stardate | Effect window applies/clears | |
 | 16 | Capturable objectives | Relay/cache nodes grant a bonus while held | Hold/contest flips bonus | |
