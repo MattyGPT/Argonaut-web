@@ -440,3 +440,30 @@ test('a classic or extended war draws no terrain anywhere', () => {
     assert.equal(read('#minimap').innerHTML, '', 'and the minimap stays dark');
   }
 });
+
+// --- Round 15b: nebula sensor denial on the map ---
+
+test('a hull lurking in a nebula vanishes from map and minimap, and reappears from inside', () => {
+  const base = createGame({ seed: 'render-nebula', reimagined: true });
+  const setup = {
+    ...base,
+    terrain: [{ id: 'nebula-1', type: 'nebula', x: 120, y: 120, radius: 30 }],
+    ships: base.ships.map((ship) => {
+      if (ship.id === 'axis-flagship') return { ...ship, x: 120, y: 120 };
+      if (ship.id === 'fed-flagship') return { ...ship, x: 80, y: 120 }; // 40 away, mapper reaches 60
+      return { ...ship, x: 230, y: 20 }; // everyone else is beyond the mapper, so no other Axis dot exists
+    }),
+  };
+  elements.clear();
+  renderGame(setup);
+  assert.ok(!/data-ship-id="axis-flagship"/.test(read('#map-field').innerHTML),
+    'the lurker is inside mapper range but the nebula hides it');
+  assert.ok(!/mini-dot Axis/.test(read('#minimap').innerHTML), 'the minimap agrees with the map');
+  assert.match(read('#map-field').innerHTML, /class="terrain nebula"/, 'the nebula itself is known geography');
+
+  const inside = { ...setup, ships: setup.ships.map((ship) => (ship.id === 'fed-flagship' ? { ...ship, x: 110, y: 110 } : ship)) };
+  elements.clear();
+  renderGame(inside);
+  assert.match(read('#map-field').innerHTML, /data-ship-id="axis-flagship"/, 'from inside the same nebula, it is plain to see');
+  assert.match(read('#minimap').innerHTML, /mini-dot Axis/);
+});

@@ -43,6 +43,7 @@ import {
   isImmovable,
   isSpectator,
   isTractorHeld,
+  nebulaHides,
   powerAllocation,
   powerEffect,
   reactorOutput,
@@ -361,9 +362,11 @@ export const shipCommands = (game, targetId) => {
 const computerReport = (game, actor) => {
   // A standard command must not out-see the mapper. The hidden reports are the ones
   // the manual says give information your enemies do not have; this one is not.
+  // The mapper does not out-see the nebula rule either (15b): a hull hidden in one
+  // is absent from the counts and the nearest-contact lines, exactly as on the map.
   const mapperRange = sensorRange(game, actor, 'mapper');
   const mapped = game.ships.filter((ship) => isActive(ship)
-    && (ship.id === actor.id || distance(actor, ship) <= mapperRange));
+    && (ship.id === actor.id || (distance(actor, ship) <= mapperRange && !nebulaHides(game, actor, ship))));
   const allies = mapped.filter((ship) => ship.id !== actor.id && ship.faction === actor.faction);
   const enemies = mapped.filter((ship) => ship.faction !== actor.faction);
   const nearest = (ships) => ships
@@ -409,7 +412,7 @@ const scanReport = (game, target) => ({
 const mapReport = (game, actor) => {
   const range = sensorRange(game, actor, 'mapper');
   const visible = getLivingShips(game)
-    .filter((ship) => distance(actor, ship) <= range)
+    .filter((ship) => distance(actor, ship) <= range && !nebulaHides(game, actor, ship))
     .sort((left, right) => distance(actor, left) - distance(actor, right));
   return {
     title: 'Local tactical map',
@@ -423,8 +426,11 @@ const mapReport = (game, actor) => {
  */
 const radioReport = (game, actor) => {
   const range = sensorRange(game, actor, 'radio');
+  // Radio into a nebula degrades the same way the mapper does (15b): an allied hull
+  // camped inside one only answers within the reveal range, not the full radio reach.
   const contacts = getLivingShips(game)
-    .filter((ship) => ship.id !== actor.id && ship.faction === actor.faction && distance(actor, ship) <= range);
+    .filter((ship) => ship.id !== actor.id && ship.faction === actor.faction
+      && distance(actor, ship) <= range && !nebulaHides(game, actor, ship));
   return {
     title: 'Radio traffic',
     lines: contacts.length
@@ -914,6 +920,7 @@ export const applyPlayerAction = (game, action = {}) => {
       const found = targetFor(game, action, actor);
       if (found.error) return invalid(game, found.error, found.requiresTarget);
       if (distance(actor, found.target) > sensorRange(game, actor, 'scanner')) return invalid(game, `${found.target.name} is out of scanner range.`);
+      if (nebulaHides(game, actor, found.target)) return invalid(game, `${found.target.name} is lost in the static of a nebula.`);
       return result(
         { ...game, scanned: { ...(game.scanned ?? {}), [found.target.id]: true } },
         `Scan of ${found.target.name} complete.`,
