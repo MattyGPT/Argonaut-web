@@ -23,11 +23,15 @@ requests when this file was started.
   balance numbers in `game/constants.js` currently rest on the manual, the
   binary's string table, and the full-war simulations cited in the calibration
   tables — not on side-by-side transcripts.
-- **The simulation harness is not committed.** Every figure in `CALIBRATION.md`
-  that says "simulate N whole wars" came from a throwaway script that was never
-  checked in, so none of those numbers can be reproduced or re-measured without
-  rebuilding the harness. The one used for the hull retune currently sits
-  untracked under `.qwen/tmp/`.
+- **The simulation harness is committed** (`scripts/sim-wars.mjs`, `npm run sim`,
+  added 2026-09-19 as step 0 of the roadmap's play-test balance pass): headless
+  whole wars across seeds in all three modes, reporting war length, winner
+  spread, volleys per kill, self-destruct last stands and blast sizes, and
+  Reimagined prize counts. The *original* figures in `CALIBRATION.md` still
+  came from a throwaway script whose constant-sweep hooks were never checked
+  in (it sits untracked under `.qwen/tmp/`), so those exact numbers remain
+  unreproducible — re-measure with the committed harness rather than trusting
+  them to the decimal.
 
 ## Balance follow-ups from the hull retune
 

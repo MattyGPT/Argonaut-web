@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
-    "start": "node server.js"
+    "start": "node server.js",
+    "sim": "node scripts/sim-wars.mjs"
   }
 }

@@ -272,10 +272,12 @@ fleets are still being destroyed, **mostly by Axis last stands**; and the whole
 is not yet as fun or immersive as it should be. None of the items below is
 order-dependent against rounds 19–29, and none may change a number a classic
 war reads. The two balance items should be *measured*, not eyeballed: the
-whole-war simulation harness is still uncommitted (BACKLOG), so committing a
-headless harness is effectively **step 0** of this pass, and results are
-recorded in a new "Reimagined balance" section of `CALIBRATION.md` (the same
-section the roadmap's "Future calibration" note calls for).
+whole-war simulation harness — **step 0** of this pass — is committed
+(`scripts/sim-wars.mjs`, `npm run sim`; headless wars in all three modes
+reporting war length, winner spread, volleys per kill, last-stand blast sizes,
+and prize counts), and results are recorded in a new "Reimagined balance"
+section of `CALIBRATION.md` (the same section the roadmap's "Future
+calibration" note calls for).
 
 | Item | Builds | Tested by | Status |
 | --- | --- | --- | --- |
