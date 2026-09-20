@@ -528,3 +528,42 @@ test('the Reimagined order picker offers Board…; an extended war does not', ()
   assert.match(menu, /data-order="hold"/, 'the extended order picker is unchanged');
   assert.ok(!/data-order="board"/.test(menu), 'boarding parties are Reimagined-only');
 });
+
+// --- Play-test balance pass: the battlefield legend ---
+
+test('a Reimagined legend keys every color the map draws', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'legend-reimagined', reimagined: true }));
+  const legend = read('#map-legend').innerHTML;
+  for (const swatch of ['ring-phasers', 'ring-photons', 'ring-engines', 'threat', 'wreck',
+    'pip-order', 'star-ace', 'ring-dock',
+    'terrain-nebula', 'terrain-asteroids', 'terrain-ion', 'terrain-relay', 'pip-prize']) {
+    assert.match(legend, new RegExp(`legend-swatch ${swatch}`), `${swatch} is keyed`);
+  }
+  for (const faction of ['Federation', 'Axis', 'Bloc', 'Cabal']) {
+    assert.match(legend, new RegExp(`■ ${faction}`), 'the alliance colors stay');
+  }
+  assert.match(read('#legend-note').textContent, /click a ship for its commands/, 'and the click hints');
+  assert.match(read('#legend-note').textContent, /terrain fades beyond mapper reach/);
+});
+
+test('a classic legend keys only what a classic map draws', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'legend-classic' }));
+  const legend = read('#map-legend').innerHTML;
+  assert.match(legend, /legend-swatch threat/);
+  assert.match(legend, /legend-swatch wreck/);
+  assert.match(legend, /legend-swatch ring-phasers/);
+  assert.ok(!/terrain-/.test(legend), 'no terrain in a classic war');
+  assert.ok(!/pip-prize|pip-order|star-ace|ring-dock/.test(legend), 'no extended or Reimagined markers');
+});
+
+test('an extended legend adds the admiralty markers but no terrain', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'legend-extended', extended: true }));
+  const legend = read('#map-legend').innerHTML;
+  assert.match(legend, /legend-swatch pip-order/);
+  assert.match(legend, /legend-swatch star-ace/);
+  assert.match(legend, /legend-swatch ring-dock/);
+  assert.ok(!/terrain-|pip-prize/.test(legend), 'terrain and prizes are Reimagined-only');
+});

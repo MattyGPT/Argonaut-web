@@ -268,6 +268,49 @@ const powerBar = (game, actor, view) => {
     + `</div>`;
 };
 
+/** One legend entry: a color chip (optionally carrying a glyph) and its label. */
+const legendEntry = (swatch, label, content = '') => `<span class="legend-entry"><span class="legend-swatch ${swatch}" aria-hidden="true">${content}</span>${label}</span>`;
+
+/**
+ * The map legend (play-test balance pass): a full color key for everything the
+ * tactical display draws, filtered by war mode — alliance colors, range rings,
+ * threats, and wrecks always; the orders pip, ace star, and dockyard ring in an
+ * extended war; the terrain hues and the prize pip in a Reimagined one. The
+ * living battlefield used to be unreadable without memorizing the guide; now
+ * every color on the map appears here, and the chips mirror the real thing
+ * (rings dashed, pips glowing, terrain translucent).
+ */
+const renderMapLegend = (game) => {
+  const legend = document.querySelector('#map-legend');
+  if (!legend) return;
+  const factions = ['Federation', 'Axis', 'Bloc', 'Cabal'].map((name) => `<span class="${name}">■ ${name}</span>`).join('');
+  const entries = [
+    legendEntry('ring-phasers', 'phaser ring'),
+    legendEntry('ring-photons', 'photon ring'),
+    legendEntry('ring-engines', 'engine ring'),
+    legendEntry('threat', 'can reach you'),
+    legendEntry('wreck', 'wreck', '+'),
+    ...(game.extended ? [
+      legendEntry('pip-order', 'under orders'),
+      legendEntry('star-ace', 'scanned ace', '★'),
+      legendEntry('ring-dock', 'dockyard'),
+    ] : []),
+    ...(game.reimagined ? [
+      legendEntry('terrain-nebula', 'nebula'),
+      legendEntry('terrain-asteroids', 'asteroids'),
+      legendEntry('terrain-ion', 'ion storm'),
+      legendEntry('terrain-relay', 'relay node'),
+      legendEntry('pip-prize', 'prize of war'),
+    ] : []),
+  ].join('');
+  legend.innerHTML = factions + entries + '<span class="legend-note" id="legend-note"></span>';
+  // Set through the element rather than into the markup so the note stays a live
+  // node (and the screen-reader/legend tests read it the same way as before).
+  document.querySelector('#legend-note').textContent = game.reimagined
+    ? 'click a ship for its commands · click empty space to maneuver · terrain fades beyond mapper reach'
+    : 'click a ship for its commands · click empty space to maneuver';
+};
+
 export const renderGame = (game, view = {}) => {
   const actor = getShip(game, game.playerShipId);
   const map = document.querySelector('#map-field');
@@ -290,9 +333,7 @@ export const renderGame = (game, view = {}) => {
     : game.extended
       ? (scenarioFor(game).id === 'annihilation' ? 'EXTENDED WAR' : `EXTENDED · ${scenarioFor(game).title.toUpperCase()}`)
       : '';
-  document.querySelector('#legend-note').textContent = game.extended
-    ? 'click a ship for its commands · click empty space to maneuver · dashed rings = your phaser / photon / engine range · green ring = Xanadu dockyard range · red outline = enemy that can reach you · white pip = ship under orders'
-    : 'click a ship for its commands · click empty space to maneuver · dashed rings = your phaser / photon / engine range · red outline = enemy that can reach you';
+  renderMapLegend(game);
 
   const actorActive = Boolean(actor) && actor.status === 'active';
   const mapperRange = actorActive ? sensorRange(game, actor, 'mapper') : Infinity;
