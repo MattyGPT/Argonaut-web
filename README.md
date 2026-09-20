@@ -79,8 +79,11 @@ the prizes it takes (its drone bay arrives in a later round). And its fleets are
 adjustable per alliance) on its ships of the line — you build the Federation
 fleet hull by hull in the New game panel, while enemy alliances draw seeded
 doctrine-flavored fleets within theirs, so the same seed replays the same war
-and a new seed fields new navies. Prizes are won, not budgeted: what you take
-exceeds your starting fleet by design.
+and a new seed fields new navies. You also choose **who fights**: any two to
+four alliances — the Federation always flies, and at least one enemy must —
+and **Xanadu is optional**: without the starbase there is no dockyard, no
+radio relay, and withdraw runs to the fleet. Prizes are won, not budgeted:
+what you take exceeds your starting fleet by design.
 
 The **New game** panel exposes the replay seed, the regional fleet setup, the
 optional tactical sound, the precision fire mode, the extended war mode, the

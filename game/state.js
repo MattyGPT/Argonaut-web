@@ -124,23 +124,43 @@ const rosterFromSpec = (spec) => {
   return slots;
 };
 
-/** Every alliance on the default budget fielding the default fleet — the panel's reset, and tests that need stable ids. */
+/**
+ * The full default war: every alliance live on the default budget fielding the
+ * default fleet, Xanadu spawned — the panel's reset, and tests that need
+ * stable ids.
+ */
 export const defaultLoadout = () => ({
   budgets: Object.fromEntries(Object.values(FACTIONS).map((faction) => [faction, LOADOUT.budget])),
   fleets: Object.fromEntries(Object.values(FACTIONS).map((faction) => [faction, { ...LOADOUT.defaultFleet }])),
+  factions: [...Object.values(FACTIONS)],
+  xanadu: true,
 });
+
+/**
+ * The alliances a war is fought between (round 19b): the player's Federation
+ * always fights — Captain Jason needs a flag to fly — plus at least one enemy.
+ * A list naming no enemy (or no list at all) falls back to the four-alliance
+ * war. The order is always the canonical FACTIONS order, so the seeded AI draws
+ * and the placement stream stay deterministic per seed + loadout.
+ */
+const resolveFactions = (requested) => {
+  const all = Object.values(FACTIONS);
+  if (!Array.isArray(requested)) return all;
+  const picked = all.filter((faction) => faction === FACTIONS.FEDERATION || requested.includes(faction));
+  return picked.some((faction) => faction !== FACTIONS.FEDERATION) ? picked : all;
+};
 
 /**
  * Resolves the war's loadout: budgets clamped to the panel bounds, the
  * Federation — and any alliance given an explicit spec — normalized, and every
- * other AI alliance drawn on the seeded sub-stream. Deterministic per
+ * other live AI alliance drawn on the seeded sub-stream. Deterministic per
  * seed + loadout, and the sub-stream never touches the war's own RNG.
  */
-const resolveLoadout = (seed, loadout) => {
+const resolveLoadout = (seed, loadout, factions) => {
   const rng = createRng(`${seed}:loadouts`);
   const budgets = {};
   const fleets = {};
-  for (const faction of Object.values(FACTIONS)) {
+  for (const faction of factions) {
     const requested = Number(loadout?.budgets?.[faction]);
     budgets[faction] = Number.isFinite(requested)
       ? Math.min(LOADOUT.maxBudget, Math.max(LOADOUT.minBudget, Math.trunc(requested)))
@@ -317,26 +337,41 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     y: Math.round(XANADU_POSITION.y * (gridSize / GRID_SIZE)),
   };
   const occupied = new Set([`${xanaduPosition.x},${xanaduPosition.y}`]);
+  // A scenario is an extended-war option; a classic war always fights to annihilation.
+  const scenarioId = isExtended && SCENARIO_IDS.includes(scenario) ? scenario : 'annihilation';
+  // Force customization (round 19b): a Reimagined war picks which alliances fight
+  // — the Federation always, plus at least one enemy — and whether Xanadu spawns.
+  // Hold Xanadu needs its base, so that scenario forces the starbase on. A classic
+  // or extended war reads neither option and keeps its fixed four-alliance,
+  // 21-hull, starbase-defended shape byte-identical.
+  const factions = isReimagined ? resolveFactions(loadout?.factions) : Object.values(FACTIONS);
+  const spawnXanadu = !isReimagined || loadout?.xanadu !== false || scenarioId === 'defend-xanadu';
   // The fleet loadout (round 19): a Reimagined war's alliances are composed from
   // their budgets — the Federation from the panel's spec (or the round-18
   // default), the AI alliances drawn on their own seeded sub-stream. A classic or
   // extended war resolves none of it and fields the fixed roster.
-  const resolvedLoadout = isReimagined ? resolveLoadout(normalizedSeed, loadout) : null;
-  const fleets = Object.values(FACTIONS).flatMap((faction) => createFleet(faction, rng, regional, occupied, gridSize, isReimagined, resolvedLoadout?.fleets?.[faction] ?? null));
-  const xanadu = createShip({
-    id: 'xanadu',
-    name: 'Xanadu',
-    faction: FACTIONS.FEDERATION,
-    kind: 'starbase',
-    reimagined: isReimagined,
-    ...xanaduPosition,
-  });
+  const resolvedLoadout = isReimagined
+    ? { ...resolveLoadout(normalizedSeed, loadout, factions), factions, xanadu: spawnXanadu }
+    : null;
+  const fleets = factions.flatMap((faction) => createFleet(faction, rng, regional, occupied, gridSize, isReimagined, resolvedLoadout?.fleets?.[faction] ?? null));
+  // Xanadu is optional in a Reimagined war (round 19b): without it there is no
+  // dockyard, no radio relay, and withdraw runs to the fleet centroid. The center
+  // point stays reserved for placement, and the relay nodes still mirror through
+  // where the base would have stood.
+  const xanadu = spawnXanadu
+    ? createShip({
+      id: 'xanadu',
+      name: 'Xanadu',
+      faction: FACTIONS.FEDERATION,
+      kind: 'starbase',
+      reimagined: isReimagined,
+      ...xanaduPosition,
+    })
+    : null;
   const enemyFlagships = fleets.filter((ship) => ship.id.endsWith('-flagship') && ship.faction !== FACTIONS.FEDERATION);
-  const roster = [...fleets, xanadu];
+  const roster = xanadu ? [...fleets, xanadu] : fleets;
   const captains = assignCaptains(normalizedSeed, roster.length);
   const vendettaShipId = rng.pick(enemyFlagships).id;
-  // A scenario is an extended-war option; a classic war always fights to annihilation.
-  const scenarioId = isExtended && SCENARIO_IDS.includes(scenario) ? scenario : 'annihilation';
 
   return {
     seed: normalizedSeed,

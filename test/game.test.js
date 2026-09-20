@@ -3683,3 +3683,80 @@ test('a war of lopsided budgets still resolves', () => {
   }
   assert.ok(war.turn > 1);
 });
+
+// --- Argonaut Reimagined, round 19b: force customization ---
+
+test('faction involvement picks who fights; the Federation always does', () => {
+  const game = createGame({ seed: 'involvement', reimagined: true, loadout: { factions: ['Federation', 'Axis'] } });
+  const factions = [...new Set(game.ships.map((ship) => ship.faction))].sort();
+  assert.deepEqual(factions, ['Axis', 'Federation']);
+  assert.deepEqual(game.loadout.factions, ['Federation', 'Axis'], 'canonical order, as resolved');
+  assert.ok(getShip(game, 'xanadu'), 'Xanadu still stands by default');
+  assert.equal(getShip(game, 'bloc-flagship'), undefined);
+  assert.equal(game.loadout.budgets.Bloc, undefined, 'a dropped alliance has no budget');
+  const hunter = getShip(game, game.vendettaShipId);
+  assert.equal(hunter.faction, 'Axis', 'the vendetta picks from the alliances that fight');
+});
+
+test('the Federation is forced in, and a war needs an enemy', () => {
+  const noFed = createGame({ seed: 'involvement-forced', reimagined: true, loadout: { factions: ['Axis', 'Bloc'] } });
+  assert.deepEqual(noFed.loadout.factions, ['Federation', 'Axis', 'Bloc'], 'Captain Jason needs a flag to fly');
+  const noEnemy = createGame({ seed: 'involvement-forced', reimagined: true, loadout: { factions: ['Federation'] } });
+  assert.deepEqual(noEnemy.loadout.factions, ['Federation', 'Axis', 'Bloc', 'Cabal'], 'no enemy, no war — fall back to all four');
+  const garbage = createGame({ seed: 'involvement-forced', reimagined: true, loadout: { factions: 'Axis' } });
+  assert.deepEqual(garbage.loadout.factions, ['Federation', 'Axis', 'Bloc', 'Cabal']);
+});
+
+test('Xanadu is optional, and Hold Xanadu needs it', () => {
+  const off = createGame({ seed: 'no-xanadu', reimagined: true, loadout: { xanadu: false } });
+  assert.equal(getShip(off, 'xanadu'), undefined);
+  assert.equal(off.loadout.xanadu, false);
+  assert.ok(off.ships.every((ship) => ship.className !== 'Starbase'));
+  // The relay nodes still mirror through where the base would have stood.
+  assert.equal(off.terrain.filter((feature) => feature.type === 'relay').length, 2);
+  // No dockyard: parking at the field center repairs nothing.
+  const parkedCenter = withShips(off, (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 120, y: 120, shields: 50 } : ship));
+  assert.deepEqual(resolveDocking(parkedCenter).messages, []);
+  // The computer report says the bearing is unknown.
+  const report = applyPlayerAction(off, { type: 'computer' });
+  assert.match(report.report.lines.join(' '), /Distance to Xanadu: unknown/);
+  // The scenario forces the starbase back on — and is not instantly lost.
+  const defend = createGame({ seed: 'no-xanadu', reimagined: true, scenario: 'defend-xanadu', loadout: { xanadu: false } });
+  assert.ok(getShip(defend, 'xanadu'), 'Hold Xanadu without Xanadu is not a scenario');
+  assert.equal(defend.loadout.xanadu, true);
+  assert.equal(scenarioOutcome(defend), null);
+});
+
+test('a two-alliance war without Xanadu resolves', () => {
+  // Small budgets keep the duel short: four-ish hulls a side, no dockyard, and
+  // the capitulation rule has a real chance to fire.
+  let war = createGame({
+    seed: 'duel',
+    reimagined: true,
+    loadout: { factions: ['Federation', 'Axis'], xanadu: false, budgets: { Federation: 10, Axis: 10 } },
+  });
+  for (let round = 0; round < 400 && !war.outcome; round += 1) {
+    war = resolveComputerTurns({ ...war, phase: 'computer' });
+  }
+  assert.ok(war.outcome, 'the duel ends inside the cap');
+  assert.ok(['federation-win', 'alliance-win', 'hopeless-draw', 'draw'].includes(war.outcome.kind));
+});
+
+test('classic and extended wars ignore force customization entirely', () => {
+  const custom = { factions: ['Federation', 'Cabal'], xanadu: false };
+  for (const opts of [{}, { extended: true }]) {
+    const game = createGame({ seed: 'force-parity', ...opts, loadout: custom });
+    assert.deepEqual(game, createGame({ seed: 'force-parity', ...opts }));
+    assert.equal(game.ships.length, 21);
+    assert.ok(getShip(game, 'xanadu'));
+    assert.equal(game.loadout, null);
+  }
+});
+
+test('the same seed and loadout replay the same customized war', () => {
+  const loadout = { factions: ['Federation', 'Bloc', 'Cabal'], xanadu: false, budgets: { Bloc: 30, Cabal: 12 } };
+  const a = createGame({ seed: 'custom-replay', reimagined: true, loadout });
+  const b = createGame({ seed: 'custom-replay', reimagined: true, loadout });
+  assert.deepEqual(a.ships, b.ships);
+  assert.deepEqual(a.loadout, b.loadout);
+});

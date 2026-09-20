@@ -427,19 +427,21 @@ const syncScenarioAvailability = () => {
 };
 
 /**
- * The fleet loadout draft (round 19, Reimagined): per-alliance budgets and the
- * Federation composition the panel edits. Enemy alliances draw their seeded
- * fleets within their budgets at war creation — only what is yours is shapeable
- * here. Every nudge runs through `normalizeFleetSpec`, the same gate `createGame`
- * uses, so the panel cannot produce a spec the rules would not.
+ * The fleet loadout draft (rounds 19 + 19b, Reimagined): which alliances fight,
+ * whether Xanadu spawns, the per-alliance budgets, and the Federation
+ * composition the panel edits. Enemy alliances draw their seeded fleets within
+ * their budgets at war creation — only what is yours is shapeable here. Every
+ * nudge runs through `normalizeFleetSpec`, the same gate `createGame` uses, so
+ * the panel cannot produce a spec the rules would not.
  */
 const freshLoadoutDraft = () => {
   const base = defaultLoadout();
-  return { budgets: base.budgets, fleet: base.fleets.Federation };
+  return { budgets: base.budgets, fleet: base.fleets.Federation, factions: base.factions, xanadu: base.xanadu };
 };
 
 let loadoutDraft = freshLoadoutDraft();
 
+const LOADOUT_FACTIONS = ['Federation', 'Axis', 'Bloc', 'Cabal'];
 const LOADOUT_CLASS_LABELS = { cruiser: 'Cruiser', scout: 'Scout', interceptor: 'Interceptor', artillery: 'Artillery', carrier: 'Carrier' };
 
 const renderLoadoutPanel = () => {
@@ -447,14 +449,15 @@ const renderLoadoutPanel = () => {
   const fleetRoot = document.querySelector('#loadout-fleet');
   const summary = document.querySelector('#loadout-summary');
   if (!budgetsRoot || !fleetRoot || !summary) return;
-  budgetsRoot.innerHTML = Object.keys(loadoutDraft.budgets).map((faction) => {
-    const budget = loadoutDraft.budgets[faction];
+  // Only the alliances actually fighting get a budget row (round 19b).
+  budgetsRoot.innerHTML = LOADOUT_FACTIONS.filter((faction) => loadoutDraft.factions.includes(faction)).map((faction) => {
+    const budget = loadoutDraft.budgets[faction] ?? LOADOUT.budget;
     return `<div class="loadout-row"><span class="loadout-label ${faction}">${faction} budget</span>`
       + `<button type="button" class="secondary tiny" data-budget-faction="${faction}" data-budget-delta="-1"${budget <= LOADOUT.minBudget ? ' disabled' : ''} aria-label="Lower ${faction} budget">&minus;</button>`
       + `<b>${budget}</b>`
       + `<button type="button" class="secondary tiny" data-budget-faction="${faction}" data-budget-delta="1"${budget >= LOADOUT.maxBudget ? ' disabled' : ''} aria-label="Raise ${faction} budget">+</button></div>`;
   }).join('');
-  const budget = loadoutDraft.budgets.Federation;
+  const budget = loadoutDraft.budgets.Federation ?? LOADOUT.budget;
   const spent = fleetCost(loadoutDraft.fleet);
   const hulls = fleetHulls(loadoutDraft.fleet);
   const flagshipRow = `<div class="loadout-row"><span class="loadout-label">Battle cruiser <i>flagship · ${LOADOUT.costs['battle-cruiser']} pts</i></span><b>1</b><span class="loadout-fixed">required</span></div>`;
@@ -473,7 +476,7 @@ const renderLoadoutPanel = () => {
 };
 
 const nudgeBudget = (faction, delta) => {
-  const next = Math.min(LOADOUT.maxBudget, Math.max(LOADOUT.minBudget, loadoutDraft.budgets[faction] + delta));
+  const next = Math.min(LOADOUT.maxBudget, Math.max(LOADOUT.minBudget, (loadoutDraft.budgets[faction] ?? LOADOUT.budget) + delta));
   loadoutDraft = { ...loadoutDraft, budgets: { ...loadoutDraft.budgets, [faction]: next } };
   // Lowering your own budget may trim the fleet you composed; the shared gate decides.
   if (faction === 'Federation') loadoutDraft = { ...loadoutDraft, fleet: normalizeFleetSpec(loadoutDraft.fleet, next) };
@@ -486,10 +489,50 @@ const nudgeClass = (kind, delta) => {
   renderLoadoutPanel();
 };
 
+/**
+ * Hold Xanadu needs its base: with Xanadu off in a Reimagined war the scenario
+ * option is disabled and the picker falls back to annihilation. The rules force
+ * the starbase back on for that scenario regardless — the panel simply does not
+ * offer a dead choice.
+ */
+const syncXanaduScenarioGate = () => {
+  const off = document.querySelector('#reimagined').checked && !loadoutDraft.xanadu;
+  const option = document.querySelector('#scenario option[value="defend-xanadu"]');
+  if (option) option.disabled = off;
+  const select = document.querySelector('#scenario');
+  if (off && select.value === 'defend-xanadu') select.value = 'annihilation';
+};
+
 /** The loadout is a Reimagined option; the section shows only in that mode. */
 const syncLoadoutAvailability = () => {
   document.querySelector('#loadout-section').hidden = !document.querySelector('#reimagined').checked;
+  syncXanaduScenarioGate();
 };
+
+/** The alliances the panel has ticked, in canonical order. */
+const readFactionPicks = () => LOADOUT_FACTIONS.filter((faction) => document.querySelector(`#faction-${faction}`).checked);
+
+// Force customization (round 19b): dropping alliances re-renders the budget rows,
+// and the last enemy cannot be dropped — a war needs someone to fight.
+for (const faction of ['Axis', 'Bloc', 'Cabal']) {
+  document.querySelector(`#faction-${faction}`).addEventListener('change', (event) => {
+    const picked = readFactionPicks();
+    if (!picked.some((name) => name !== 'Federation')) {
+      event.target.checked = true;
+      return;
+    }
+    // An alliance rejoining the war may not carry a budget in this draft yet.
+    const budgets = { ...loadoutDraft.budgets };
+    for (const name of picked) if (budgets[name] == null) budgets[name] = LOADOUT.budget;
+    loadoutDraft = { ...loadoutDraft, factions: picked, budgets };
+    renderLoadoutPanel();
+  });
+}
+
+document.querySelector('#loadout-xanadu').addEventListener('change', (event) => {
+  loadoutDraft = { ...loadoutDraft, xanadu: event.target.checked };
+  syncXanaduScenarioGate();
+});
 
 // The stepper buttons live in re-rendered markup, so clicks are delegated on the
 // dialog; they are type="button", so none of them submits the form.
@@ -505,7 +548,10 @@ document.querySelector('#new-game-dialog').addEventListener('click', (event) => 
 
 document.querySelector('#loadout-reset').addEventListener('click', () => {
   loadoutDraft = freshLoadoutDraft();
+  for (const faction of ['Axis', 'Bloc', 'Cabal']) document.querySelector(`#faction-${faction}`).checked = true;
+  document.querySelector('#loadout-xanadu').checked = true;
   renderLoadoutPanel();
+  syncXanaduScenarioGate();
 });
 
 document.querySelector('#user-guide').addEventListener('click', whenPlaybackUnlocked(playbackLocked, () => {
@@ -524,8 +570,17 @@ document.querySelector('#new-game').addEventListener('click', whenPlaybackUnlock
   // The panel pre-fills from the war being left, so "same as last time" is one
   // click away; an old save without a loadout gets the defaults.
   loadoutDraft = game.loadout
-    ? { budgets: { ...game.loadout.budgets }, fleet: { ...(game.loadout.fleets?.Federation ?? LOADOUT.defaultFleet) } }
+    ? {
+      budgets: { ...game.loadout.budgets },
+      fleet: { ...(game.loadout.fleets?.Federation ?? LOADOUT.defaultFleet) },
+      factions: [...(game.loadout.factions ?? LOADOUT_FACTIONS)],
+      xanadu: game.loadout.xanadu !== false,
+    }
     : freshLoadoutDraft();
+  for (const faction of ['Axis', 'Bloc', 'Cabal']) {
+    document.querySelector(`#faction-${faction}`).checked = loadoutDraft.factions.includes(faction);
+  }
+  document.querySelector('#loadout-xanadu').checked = loadoutDraft.xanadu;
   renderLoadoutPanel();
   syncLoadoutAvailability();
   document.querySelector('#new-game-dialog').showModal();
@@ -568,9 +623,14 @@ document.querySelector('#new-game-form').addEventListener('submit', whenPlayback
       extended: document.querySelector('#extended').checked,
       reimagined: document.querySelector('#reimagined').checked,
       scenario: document.querySelector('#scenario').value,
-      // The composed forces (round 19): ignored unless the war is Reimagined.
+      // The composed forces (rounds 19 + 19b): ignored unless the war is Reimagined.
       loadout: document.querySelector('#reimagined').checked
-        ? { budgets: loadoutDraft.budgets, fleets: { Federation: loadoutDraft.fleet } }
+        ? {
+          budgets: loadoutDraft.budgets,
+          fleets: { Federation: loadoutDraft.fleet },
+          factions: loadoutDraft.factions,
+          xanadu: loadoutDraft.xanadu,
+        }
         : null,
     });
     precisionSettings = { power: 100, focus: null };

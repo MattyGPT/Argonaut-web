@@ -644,6 +644,13 @@ body.classic .legend-swatch.pip-prize {
   gap: .5rem;
 }
 
+/* Force customization (round 19b): the alliance checkboxes sit in a wrapped row. */
+.loadout-factions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .3rem .9rem;
+}
+
 .loadout-row b {
   min-width: 1.6rem;
   text-align: center;
