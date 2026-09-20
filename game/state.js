@@ -34,6 +34,23 @@ const SHIP_ROSTER = Object.freeze([
   ['scout', 'scout'],
 ]);
 
+/**
+ * The extra hulls a Reimagined war fields on top of the classic roster (round
+ * 18): every alliance launches one of each new class as an additional ship of
+ * the line, so a Reimagined navy grows past the manual's 21 as the classes
+ * land. A classic or extended war reads `SHIP_ROSTER` alone and keeps its
+ * 21-hull war byte-identical; the extra placement draws shift a Reimagined
+ * seed's own geography, which parity never bound. The new slots take the next
+ * names in `SHIP_NAMES` — original expression, like the captains. When 19b's
+ * force customization lands, its recorded 1–5 hull cap gets revisited against
+ * this wider default roster.
+ */
+const REIMAGINED_EXTRA_ROSTER = Object.freeze([
+  ['interceptor', 'interceptor'],
+]);
+
+const rosterFor = (reimagined) => (reimagined ? [...SHIP_ROSTER, ...REIMAGINED_EXTRA_ROSTER] : SHIP_ROSTER);
+
 const createShip = ({ id, name, faction, kind, x, y, reimagined }) => {
   const template = SHIP_TEMPLATES[kind];
   // A Reimagined hull carries a reactor subsystem; a classic or extended one does
@@ -85,7 +102,7 @@ const randomPosition = (rng, faction, regional, occupied, gridSize) => {
   return position;
 };
 
-const createFleet = (faction, rng, regional, occupied, gridSize, reimagined) => SHIP_ROSTER.map(([suffix, kind], index) => {
+const createFleet = (faction, rng, regional, occupied, gridSize, reimagined) => rosterFor(reimagined).map(([suffix, kind], index) => {
   const position = randomPosition(rng, faction, regional, occupied, gridSize);
   const factionId = FACTION_IDS[faction];
   return createShip({
