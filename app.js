@@ -1,6 +1,6 @@
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets } from './game/actions.js';
-import { SPECTATOR_TICK_MS, GRID_SIZE, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
-import { alertLevel, appendLog, createGame, getShip, isSpectator, systemUnits } from './game/state.js';
+import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
+import { alertLevel, appendLog, createGame, defaultLoadout, fleetCost, fleetHulls, getShip, isSpectator, normalizeFleetSpec, systemUnits } from './game/state.js';
 import { scenarioFor } from './game/scenarios.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './game/turns.js';
 import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget, promptForTowDestination } from './ui/input.js';
@@ -426,6 +426,88 @@ const syncScenarioAvailability = () => {
   if (!extended) scenario.value = 'annihilation';
 };
 
+/**
+ * The fleet loadout draft (round 19, Reimagined): per-alliance budgets and the
+ * Federation composition the panel edits. Enemy alliances draw their seeded
+ * fleets within their budgets at war creation — only what is yours is shapeable
+ * here. Every nudge runs through `normalizeFleetSpec`, the same gate `createGame`
+ * uses, so the panel cannot produce a spec the rules would not.
+ */
+const freshLoadoutDraft = () => {
+  const base = defaultLoadout();
+  return { budgets: base.budgets, fleet: base.fleets.Federation };
+};
+
+let loadoutDraft = freshLoadoutDraft();
+
+const LOADOUT_CLASS_LABELS = { cruiser: 'Cruiser', scout: 'Scout', interceptor: 'Interceptor', artillery: 'Artillery', carrier: 'Carrier' };
+
+const renderLoadoutPanel = () => {
+  const budgetsRoot = document.querySelector('#loadout-budgets');
+  const fleetRoot = document.querySelector('#loadout-fleet');
+  const summary = document.querySelector('#loadout-summary');
+  if (!budgetsRoot || !fleetRoot || !summary) return;
+  budgetsRoot.innerHTML = Object.keys(loadoutDraft.budgets).map((faction) => {
+    const budget = loadoutDraft.budgets[faction];
+    return `<div class="loadout-row"><span class="loadout-label ${faction}">${faction} budget</span>`
+      + `<button type="button" class="secondary tiny" data-budget-faction="${faction}" data-budget-delta="-1"${budget <= LOADOUT.minBudget ? ' disabled' : ''} aria-label="Lower ${faction} budget">&minus;</button>`
+      + `<b>${budget}</b>`
+      + `<button type="button" class="secondary tiny" data-budget-faction="${faction}" data-budget-delta="1"${budget >= LOADOUT.maxBudget ? ' disabled' : ''} aria-label="Raise ${faction} budget">+</button></div>`;
+  }).join('');
+  const budget = loadoutDraft.budgets.Federation;
+  const spent = fleetCost(loadoutDraft.fleet);
+  const hulls = fleetHulls(loadoutDraft.fleet);
+  const flagshipRow = `<div class="loadout-row"><span class="loadout-label">Battle cruiser <i>flagship · ${LOADOUT.costs['battle-cruiser']} pts</i></span><b>1</b><span class="loadout-fixed">required</span></div>`;
+  const rows = LOADOUT.classOrder.filter((kind) => kind !== 'battle-cruiser').map((kind) => {
+    const label = LOADOUT_CLASS_LABELS[kind];
+    const count = loadoutDraft.fleet[kind] ?? 0;
+    const cost = LOADOUT.costs[kind];
+    const full = spent + cost > budget || hulls >= LOADOUT.maxHulls;
+    return `<div class="loadout-row"><span class="loadout-label">${label} <i>${cost} pt${cost === 1 ? '' : 's'}</i></span>`
+      + `<button type="button" class="secondary tiny" data-loadout-class="${kind}" data-class-delta="-1"${count <= 0 ? ' disabled' : ''} aria-label="Fewer ${label}s">&minus;</button>`
+      + `<b>${count}</b>`
+      + `<button type="button" class="secondary tiny" data-loadout-class="${kind}" data-class-delta="1"${full ? ' disabled' : ''} aria-label="More ${label}s">+</button></div>`;
+  }).join('');
+  fleetRoot.innerHTML = `<p class="menu-sub">Your Federation fleet</p>${flagshipRow}${rows}`;
+  summary.textContent = `Federation spends ${spent} of ${budget} points · ${hulls} of ${LOADOUT.maxHulls} hulls`;
+};
+
+const nudgeBudget = (faction, delta) => {
+  const next = Math.min(LOADOUT.maxBudget, Math.max(LOADOUT.minBudget, loadoutDraft.budgets[faction] + delta));
+  loadoutDraft = { ...loadoutDraft, budgets: { ...loadoutDraft.budgets, [faction]: next } };
+  // Lowering your own budget may trim the fleet you composed; the shared gate decides.
+  if (faction === 'Federation') loadoutDraft = { ...loadoutDraft, fleet: normalizeFleetSpec(loadoutDraft.fleet, next) };
+  renderLoadoutPanel();
+};
+
+const nudgeClass = (kind, delta) => {
+  const count = Math.max(0, (loadoutDraft.fleet[kind] ?? 0) + delta);
+  loadoutDraft = { ...loadoutDraft, fleet: normalizeFleetSpec({ ...loadoutDraft.fleet, [kind]: count }, loadoutDraft.budgets.Federation) };
+  renderLoadoutPanel();
+};
+
+/** The loadout is a Reimagined option; the section shows only in that mode. */
+const syncLoadoutAvailability = () => {
+  document.querySelector('#loadout-section').hidden = !document.querySelector('#reimagined').checked;
+};
+
+// The stepper buttons live in re-rendered markup, so clicks are delegated on the
+// dialog; they are type="button", so none of them submits the form.
+document.querySelector('#new-game-dialog').addEventListener('click', (event) => {
+  const budgetButton = event.target.closest('[data-budget-delta]');
+  if (budgetButton) {
+    nudgeBudget(budgetButton.dataset.budgetFaction, Number(budgetButton.dataset.budgetDelta));
+    return;
+  }
+  const classButton = event.target.closest('[data-class-delta]');
+  if (classButton) nudgeClass(classButton.dataset.loadoutClass, Number(classButton.dataset.classDelta));
+});
+
+document.querySelector('#loadout-reset').addEventListener('click', () => {
+  loadoutDraft = freshLoadoutDraft();
+  renderLoadoutPanel();
+});
+
 document.querySelector('#user-guide').addEventListener('click', whenPlaybackUnlocked(playbackLocked, () => {
   document.querySelector('#guide-dialog').showModal();
 }));
@@ -439,16 +521,24 @@ document.querySelector('#new-game').addEventListener('click', whenPlaybackUnlock
   document.querySelector('#reimagined').checked = game.reimagined ?? false;
   document.querySelector('#scenario').value = game.scenario ?? 'annihilation';
   syncScenarioAvailability();
+  // The panel pre-fills from the war being left, so "same as last time" is one
+  // click away; an old save without a loadout gets the defaults.
+  loadoutDraft = game.loadout
+    ? { budgets: { ...game.loadout.budgets }, fleet: { ...(game.loadout.fleets?.Federation ?? LOADOUT.defaultFleet) } }
+    : freshLoadoutDraft();
+  renderLoadoutPanel();
+  syncLoadoutAvailability();
   document.querySelector('#new-game-dialog').showModal();
 }));
 
 document.querySelector('#extended').addEventListener('change', syncScenarioAvailability);
 
 // Argonaut Reimagined carries the extended layer with it, so ticking it ticks
-// extended too and live-enables the scenario picker.
+// extended too and live-enables the scenario picker — and the fleet loadout.
 document.querySelector('#reimagined').addEventListener('change', (event) => {
   if (event.target.checked) document.querySelector('#extended').checked = true;
   syncScenarioAvailability();
+  syncLoadoutAvailability();
 });
 
 /**
@@ -478,6 +568,10 @@ document.querySelector('#new-game-form').addEventListener('submit', whenPlayback
       extended: document.querySelector('#extended').checked,
       reimagined: document.querySelector('#reimagined').checked,
       scenario: document.querySelector('#scenario').value,
+      // The composed forces (round 19): ignored unless the war is Reimagined.
+      loadout: document.querySelector('#reimagined').checked
+        ? { budgets: loadoutDraft.budgets, fleets: { Federation: loadoutDraft.fleet } }
+        : null,
     });
     precisionSettings = { power: 100, focus: null };
     view = { entries: openingLines(game), camera: null };

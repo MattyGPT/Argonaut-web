@@ -65,8 +65,8 @@ original ship names:
 - **Bloc** — Killjoy, Laserblast, Mephisto, Notorious, Onerous
 - **Cabal** — Pequod, Queen Mab, Ragnarok, Saboteur, Terrorist
 
-A **Reimagined** war fields a bigger navy: beyond the canonical 21, every
-alliance also launches extra hulls of the new classes — the **interceptor**,
+A **Reimagined** war fields a bigger navy: beyond the canonical 21, fleets can
+include extra hulls of the new classes — the **interceptor**,
 the fastest hull afloat, a glass raider of light guns and thin shields that
 wins by speed rather than by trading volleys; its opposite, the **artillery**
 ship, whose six phaser banks throw the hardest volley of any warship, on two
@@ -74,12 +74,18 @@ engine units that hold the edge instead of chasing; and the **carrier**, a
 slow, sturdy tender built for the prize fleet — the longest boarding arm of
 any hull that moves, a starbase's tow for hauling prizes and wreck-rams,
 modest guns of its own, and the biggest crew pool afloat after Xanadu to man
-the prizes it takes (its drone bay arrives in a later round).
+the prizes it takes (its drone bay arrives in a later round). And its fleets are
+**composed, not fixed**: every alliance spends a points budget (24 by default,
+adjustable per alliance) on its ships of the line — you build the Federation
+fleet hull by hull in the New game panel, while enemy alliances draw seeded
+doctrine-flavored fleets within theirs, so the same seed replays the same war
+and a new seed fields new navies. Prizes are won, not budgeted: what you take
+exceeds your starting fleet by design.
 
 The **New game** panel exposes the replay seed, the regional fleet setup, the
 optional tactical sound, the precision fire mode, the extended war mode, the
-**Argonaut Reimagined** mode, and — in an extended war — the scenario. Use the
-same seed to reproduce the opening state.
+**Argonaut Reimagined** mode, the scenario in an extended war, and the **fleet
+loadout** in a Reimagined one. Use the same seed to reproduce the opening state.
 
 **Argonaut Reimagined** is an opt-in expansion mode, under active development, that
 carries the extended war and opens the fight on a much wider 240-unit battlefield

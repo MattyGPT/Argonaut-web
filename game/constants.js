@@ -346,6 +346,59 @@ export const PRIZE = Object.freeze({
   aiParty: 10,
 });
 
+/**
+ * Fleet loadout (Argonaut Reimagined, round 19). A Reimagined war's alliances
+ * are composed, not fixed: each spends a points budget on ships of the line —
+ * the player composes the Federation fleet in the New game panel and may also
+ * adjust every alliance's budget, while AI alliances draw seeded
+ * doctrine-flavored fleets within theirs on a `${seed}:loadouts` sub-stream (the
+ * captains pattern), so the same seed + loadout replays the same war and no
+ * other stream shifts. Prizes are WON, not budgeted — they exceed the starting
+ * budget by design and it is never re-checked mid-war. Settled with Matt,
+ * 2026-09-19; every number is a balance dial, not a calibrated value. A classic
+ * or extended war reads none of it and keeps the fixed 21-hull roster.
+ */
+export const LOADOUT = Object.freeze({
+  /** Default points per alliance; the player may adjust each faction's budget. */
+  budget: 24,
+  /** Panel bounds: the flagship alone, up to the priciest 8-hull fleet plus slack. */
+  minBudget: 5,
+  maxBudget: 36,
+  /** Ships of the line per alliance — the size of the per-faction name pool. */
+  maxHulls: 8,
+  /** Point cost per class. The flagship is mandatory and always exactly one. */
+  costs: Object.freeze({
+    'battle-cruiser': 5,
+    cruiser: 2,
+    scout: 1,
+    interceptor: 2,
+    artillery: 3,
+    carrier: 4,
+  }),
+  /**
+   * Slot order: the flagship first, then classes in this fixed order, so a given
+   * spec always yields the same ids (`fed-cruiser-2`) and the same names (by slot
+   * index into SHIP_NAMES). The default spec below reproduces the round-18
+   * roster exactly — ids, names, and draw order — so an untouched Reimagined war
+   * opens byte-identical to how it did before loadouts existed.
+   */
+  classOrder: Object.freeze(['battle-cruiser', 'cruiser', 'scout', 'interceptor', 'artillery', 'carrier']),
+  /** The fleet a Reimagined war fields when the panel is untouched (spends 21 of 24). */
+  defaultFleet: Object.freeze({ 'battle-cruiser': 1, cruiser: 3, scout: 1, interceptor: 1, artillery: 1, carrier: 1 }),
+  /**
+   * Doctrine-flavored draw tables for AI alliances (Matt's pick): relative pick
+   * weights after the mandatory flagship, so Axis swarms cheap gunboats, Bloc
+   * stands on an artillery line, and Cabal leans on carriers and mobility — with
+   * seeded variation inside the archetype. The draw spends the budget down until
+   * nothing weighted is affordable or the hull cap binds.
+   */
+  archetypes: Object.freeze({
+    Axis: Object.freeze({ cruiser: 3, interceptor: 4, artillery: 2, scout: 1, carrier: 1 }),
+    Bloc: Object.freeze({ cruiser: 2, interceptor: 1, artillery: 4, scout: 2, carrier: 1 }),
+    Cabal: Object.freeze({ cruiser: 2, interceptor: 3, artillery: 1, scout: 2, carrier: 3 }),
+  }),
+});
+
 /** Shots can miss. The same roll governs the player's volleys and the autopilots'. */
 export const MISS_CHANCE = 0.12;
 
