@@ -413,6 +413,19 @@ export const SHRAPNEL_DAMAGE = Object.freeze({ base: 20, min: 10, max: 50 });
 export const STARBASE_BLAST_RADIUS = 40;
 
 /**
+ * Reimagined self-destruct scale (play-test balance pass, 2026-09-19). The
+ * manual's blast (20, starbase 40) was tuned for 21 hulls on a 100-unit field;
+ * on the 240 field with 33 hulls the fleets cluster big enough that one Axis
+ * last stand measurably deleted wars — a 15-hull worst blast, and a 4+-hull
+ * blast in two thirds of Reimagined wars *after* the trigger retune (2%
+ * shields, five enemies; before it, 80%). Reimagined blasts scale by this
+ * factor and the shrapnel ring rides the scaled blast; a classic or extended
+ * war keeps the manual figure byte-identical, since the radius there is
+ * recovered behavior, not a balance dial. Measured with `npm run sim`.
+ */
+export const REIMAGINED_SELF_DESTRUCT_SCALE = 0.6;
+
+/**
  * A collision destroys one ship and cripples the other, per the manual. The
  * survivor loses its shields and this fraction of its crew and subsystems — a
  * share, not a flat number, because the old flat 120 damage exceeded a scout's
@@ -505,17 +518,20 @@ export const PERSONALITIES = Object.freeze({
     // Swarm: goes for the nearest hull and stays inside photon range, which is where
     // the heavy damage is. Gives ground only when practically dead. Detonating is a
     // rare last stand, not a routine exchange-ender: the hull must be all but
-    // destroyed (4% shields, down from 8%) with four enemies — and more enemies than
-    // friends — stacked inside its blast. At 8% a focused brawl ended too often on one
-    // detonation wiping the player's cluster, which played smart but felt awful and
-    // closed out wars early. The vendetta captain is exempt (see suicideRun): it keeps
-    // hunting rather than trading itself away.
+    // destroyed (2% shields — a volley from death; 8% → 4% → 2% over two retunes)
+    // with five enemies — and more enemies than friends — stacked inside its blast.
+    // At 8% a focused brawl ended too often on one detonation wiping the player's
+    // cluster; at 4%/4 the harness measured 0.88 last stands per extended war, an
+    // 11-hull worst blast, and a 4+-hull blast in 71.6% of extended wars (80% of
+    // Reimagined ones, worst blast 15) — whole fleets dying to a single captain's
+    // spite, exactly the play-test complaint. The vendetta captain is exempt (see
+    // suicideRun): it keeps hunting rather than trading itself away.
     standoff: 6,
     minRange: 0,
     flushBelow: 0.2,
     retreatBelow: 0.08,
-    suicideBelow: 0.04,
-    suicideMinEnemies: 4,
+    suicideBelow: 0.02,
+    suicideMinEnemies: 5,
   }),
   Bloc: Object.freeze({
     // Artillery: works the phaser edge and will not let anything sit at point-blank,

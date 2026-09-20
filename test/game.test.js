@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, SCENARIOS, STALEMATE_ROUNDS, TERRAIN, VENDETTA } from '../game/constants.js';
+import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, SCENARIOS, STALEMATE_ROUNDS, TERRAIN, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioOutcome, scenarioProgress } from '../game/scenarios.js';
-import { abbreviateNarrative, alertLevel, appendLog, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, inRadioContact, insideFeature, ionStormZone, isAce, nebulaHides, nebulaRevealRange, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
+import { abbreviateNarrative, alertLevel, appendLog, blastRadius, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, inRadioContact, insideFeature, ionStormZone, isAce, nebulaHides, nebulaRevealRange, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
 import { applyPlayerAction, captureHull, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, tractorLock, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolveObjectives, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
@@ -459,7 +459,8 @@ test('a lethal computer weapon hit records truthful destruction attribution for 
 
 test('computer self-destruction keeps every destruction event', () => {
   const game = withShips(createGame({ seed: 'axis-suicide-events', extended: true }), (ship) => {
-    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 5 };
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 2 };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 58, y: 50, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0 } };
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 55, y: 50, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0 } };
     if (ship.id === 'fed-cruiser-2') return { ...ship, x: 50, y: 55, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0 } };
     if (ship.id === 'fed-cruiser-3') return { ...ship, x: 45, y: 50, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0 } };
@@ -470,6 +471,11 @@ test('computer self-destruction keeps every destruction event', () => {
   const result = resolveComputerTurns({ ...game, phase: 'computer' });
   const destructions = result.events.filter((event) => event.kind === 'destruction' && event.cause === 'self-destruct');
   assert.deepEqual(destructions, [
+    {
+      kind: 'destruction', shipId: 'fed-flagship', shipName: 'Argo', faction: 'Federation',
+      x: 58, y: 50, cause: 'self-destruct',
+      attackerId: 'axis-cruiser-1', attackerName: 'Grendel', attackerFaction: 'Axis',
+    },
     {
       kind: 'destruction', shipId: 'fed-cruiser-1', shipName: 'Bonhomme', faction: 'Federation',
       x: 55, y: 50, cause: 'self-destruct',
@@ -495,9 +501,9 @@ test('computer self-destruction keeps every destruction event', () => {
       x: 50, y: 50, cause: 'self-destruct',
     },
   ]);
-  // Grendel took four Federation hulls with it; the autopilot detonator is credited
+  // Grendel took five Federation hulls with it; the autopilot detonator is credited
   // with each enemy kill exactly as the player's `=` would be.
-  assert.equal(getShip(result, 'axis-cruiser-1').kills, 4);
+  assert.equal(getShip(result, 'axis-cruiser-1').kills, 5);
 });
 
 test('the resigned Federation autopilot surrenders when collapsed', () => {
@@ -1399,7 +1405,8 @@ test('a ship cannot end its move overlapping another live hull', () => {
 
 test('a gutted Axis captain takes the enemy fleet with it', () => {
   const setup = (isExtended) => withShips(createGame({ seed: 'axis-suicide', extended: isExtended }), (ship) => {
-    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 5 };
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 2 };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 58, y: 50 };
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 55, y: 50 };
     if (ship.id === 'fed-cruiser-2') return { ...ship, x: 50, y: 55 };
     if (ship.id === 'fed-cruiser-3') return { ...ship, x: 45, y: 50 };
@@ -1408,20 +1415,27 @@ test('a gutted Axis captain takes the enemy fleet with it', () => {
     return { ...ship, x: 95, y: 95 };
   });
   assert.equal(chooseAiAction(setup(true), 'axis-cruiser-1').type, 'self-destruct',
-    'four enemies inside the blast and none of its own');
+    'five enemies inside the blast and none of its own');
   assert.notEqual(chooseAiAction(setup(false), 'axis-cruiser-1').type, 'self-destruct',
     'a classic autopilot never gives up its hull');
 });
 
 test('an Axis captain will not detonate over its own fleet', () => {
-  const game = extended('axis-restraint', (ship) => {
-    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 5 };
+  // A Reimagined staging, so there are enough Axis hulls afloat to stack five of
+  // them inside the blast beside five enemies: at five-and-five the enemy count
+  // clears the trigger, and only the friendly-fire guard (enemies > friends) says
+  // no. In an extended war just four consorts exist, and the count gate would
+  // mask the guard being tested.
+  const game = withShips(createGame({ seed: 'axis-restraint', reimagined: true }), (ship) => {
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 2 };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 58, y: 50 };
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 55, y: 50 };
     if (ship.id === 'fed-cruiser-2') return { ...ship, x: 50, y: 55 };
     if (ship.id === 'fed-cruiser-3') return { ...ship, x: 45, y: 50 };
     if (ship.id === 'fed-scout') return { ...ship, x: 50, y: 45 };
-    if (ship.faction === 'Axis') return { ...ship, x: 52, y: 52 }; // four of its own inside the blast
-    return { ...ship, x: 95, y: 95 };
+    if (['axis-cruiser-2', 'axis-cruiser-3', 'axis-scout', 'axis-interceptor', 'axis-artillery'].includes(ship.id)) return { ...ship, x: 52, y: 52 }; // five of its own inside the blast
+    if (ship.faction === 'Axis') return { ...ship, x: 5, y: 5 };
+    return { ...ship, x: 230, y: 230 };
   });
   assert.notEqual(chooseAiAction(game, 'axis-cruiser-1').type, 'self-destruct');
 });
@@ -1439,10 +1453,12 @@ test('an Axis captain with nothing in range closes to contact', () => {
 });
 
 test('an Axis captain no longer detonates at 8% — it waits until nearly destroyed', () => {
-  // ~6% shields (9 of 140) sat inside the old 8% trigger; at the 4% bar the captain
+  // ~6% shields (9 of 140) sat inside the old 8% trigger; at the 2% bar the captain
   // keeps fighting instead of ending the exchange — and often the war — on a blast.
+  // Five enemies sit inside the blast, so only the shield gate can be what refuses.
   const game = extended('axis-no-early-blast', (ship) => {
     if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 9 };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 58, y: 50 };
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 55, y: 50 };
     if (ship.id === 'fed-cruiser-2') return { ...ship, x: 50, y: 55 };
     if (ship.id === 'fed-cruiser-3') return { ...ship, x: 45, y: 50 };
@@ -1451,13 +1467,14 @@ test('an Axis captain no longer detonates at 8% — it waits until nearly destro
     return { ...ship, x: 95, y: 95 };
   });
   assert.notEqual(chooseAiAction(game, 'axis-cruiser-1').type, 'self-destruct',
-    'four enemies point-blank is no longer enough at 6% shields');
+    'five enemies point-blank is no longer enough at 6% shields');
 });
 
 test("the vendetta captain never detonates, even cornered at death's door", () => {
   const game = {
     ...extended('vendetta-no-suicide', (ship) => {
-      if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 3 };
+      if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 2 };
+      if (ship.id === 'fed-flagship') return { ...ship, x: 58, y: 50 };
       if (ship.id === 'fed-cruiser-1') return { ...ship, x: 55, y: 50 };
       if (ship.id === 'fed-cruiser-2') return { ...ship, x: 50, y: 55 };
       if (ship.id === 'fed-cruiser-3') return { ...ship, x: 45, y: 50 };
@@ -1468,7 +1485,7 @@ test("the vendetta captain never detonates, even cornered at death's door", () =
     vendettaShipId: 'axis-cruiser-1',
   };
   assert.notEqual(chooseAiAction(game, 'axis-cruiser-1').type, 'self-destruct',
-    'the hunter keeps hunting rather than trading itself away');
+    'the hunter keeps hunting rather than trading itself away — every other gate is passed');
 });
 
 test('a Bloc gunner backs off anything inside its minimum range', () => {
@@ -3462,4 +3479,55 @@ test('a carrier boards a derelict no other warship can reach, and mans it proper
   assert.equal(getShip(out.game, 'fed-carrier').crew, 215);
   assert.equal(powerEffect(out.game, prize, 'engines'), 1,
     '25 hands clear a scout\'s 17-crew manning floor — the carrier\'s pool crews prizes properly');
+});
+
+// --- Play-test balance pass: the Reimagined last stand ---
+
+test('the self-destruct blast scales only in a Reimagined war', () => {
+  const game = createGame({ seed: 'blast-scale' });
+  const ship = getShip(game, 'fed-cruiser-1');
+  const starbase = getShip(game, 'xanadu');
+  assert.equal(blastRadius(ship), RANGES.selfDestruct, 'the manual figure');
+  assert.equal(blastRadius(ship, createGame({ seed: 'blast-scale', extended: true })), RANGES.selfDestruct,
+    'an extended war keeps the calibrated blast');
+  const reimagined = createGame({ seed: 'blast-scale', reimagined: true });
+  assert.equal(blastRadius(ship, reimagined), Math.round(RANGES.selfDestruct * REIMAGINED_SELF_DESTRUCT_SCALE));
+  assert.equal(blastRadius(starbase, reimagined), Math.round(40 * REIMAGINED_SELF_DESTRUCT_SCALE),
+    'the starbase\'s doubled blast scales with the rest');
+});
+
+test('a Reimagined detonation spares a hull 15 out that the manual blast would delete', () => {
+  // One staging: the command ship detonates with a cruiser 15 units away — inside
+  // the manual's 20-unit blast, outside the scaled Reimagined one (12), but inside
+  // the shrapnel ring either way.
+  const staged = (opts) => withShips(createGame({ seed: 'blast-reach', ...opts }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 50, y: 50 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 65, y: 50 };
+    return ship;
+  });
+  const classic = applyPlayerAction(staged({}), { type: 'self-destruct' });
+  assert.equal(getShip(classic.game, 'fed-cruiser-1').status, 'destroyed',
+    '15 units dies inside the manual blast — a classic war is untouched');
+  const reimagined = applyPlayerAction(staged({ reimagined: true }), { type: 'self-destruct' });
+  const survivor = getShip(reimagined.game, 'fed-cruiser-1');
+  assert.equal(survivor.status, 'active', 'the scaled Reimagined blast no longer reaches it');
+  assert.ok(survivor.shields < shieldCapacity(survivor), 'but the shrapnel ring still bites');
+  assert.match(reimagined.messages.join(' '), /Blast range 12\./, 'the narrative reports the scaled range');
+});
+
+test('an Axis last stand in a Reimagined war counts the scaled blast', () => {
+  // Four enemies sit 15 out — inside the manual blast the old trigger would have
+  // counted them; the scaled Reimagined blast (12) reaches none, so even a gutted
+  // captain with a grudge keeps fighting.
+  const game = withShips(createGame({ seed: 'axis-blast-scale', reimagined: true }), (ship) => {
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 100, y: 100, shields: 2 };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 115, y: 100 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 100, y: 115 };
+    if (ship.id === 'fed-cruiser-2') return { ...ship, x: 85, y: 100 };
+    if (ship.id === 'fed-cruiser-3') return { ...ship, x: 100, y: 85 };
+    if (ship.id === 'fed-scout') return { ...ship, x: 111, y: 111 };
+    return ship;
+  });
+  assert.notEqual(chooseAiAction(game, 'axis-cruiser-1').type, 'self-destruct',
+    'nothing sits inside the scaled blast but its own spite');
 });

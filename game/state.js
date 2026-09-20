@@ -14,6 +14,7 @@ import {
   PRIZE,
   RANGES,
   REIMAGINED_GRID_SIZE,
+  REIMAGINED_SELF_DESTRUCT_SCALE,
   SCENARIO_IDS,
   SHIP_NAMES,
   SHIP_TEMPLATES,
@@ -374,8 +375,18 @@ export const systemRange = (ship, system) => systemUnits(ship, system) * (SYSTEM
  */
 export const engineCapacity = (ship, gridSize = GRID_SIZE, enginesEff = 1) => systemUnits(ship, 'engines') * ENGINE_MOVE_PER_UNIT * (gridSize / GRID_SIZE) * enginesEff;
 
-/** Self-destruct blast radius; the Xanadu starbase's is doubled. */
-export const blastRadius = (ship) => ship?.className === 'Starbase' ? STARBASE_BLAST_RADIUS : RANGES.selfDestruct;
+/**
+ * Self-destruct blast radius; the Xanadu starbase's is doubled. A Reimagined
+ * war scales every blast by `REIMAGINED_SELF_DESTRUCT_SCALE` (balance pass):
+ * the manual's radius was tuned for 21 hulls on a 100-unit field, and on the
+ * wide field one last stand was deleting whole fleet clusters. A classic or
+ * extended war keeps the manual figure exactly, so the calibrated blast — and
+ * every hopeless-draw reach that reads it — stands untouched there.
+ */
+export const blastRadius = (ship, game = null) => {
+  const base = ship?.className === 'Starbase' ? STARBASE_BLAST_RADIUS : RANGES.selfDestruct;
+  return game?.reimagined ? Math.round(base * REIMAGINED_SELF_DESTRUCT_SCALE) : base;
+};
 
 /**
  * Whether a ship can still change the war. Working engines mean it can close any
@@ -392,7 +403,7 @@ const canStillAct = (game, ship) => {
     systemUnits(ship, 'phasers') > 0 ? RANGES.phasers : 0,
     systemUnits(ship, 'photons') > 0 ? RANGES.photons : 0,
     systemUnits(ship, 'tractor') > 0 ? RANGES.tractor : 0,
-    blastRadius(ship),
+    blastRadius(ship, game),
   );
   const hostileInRange = game.ships
     .some((other) => other.status === 'active' && other.faction !== ship.faction && distance(ship, other) <= reach);
