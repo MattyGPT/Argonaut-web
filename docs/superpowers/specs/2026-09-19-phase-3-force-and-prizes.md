@@ -297,6 +297,29 @@ share it, so the UI cannot produce a spec the rules would not.
 
 ### 19b — Force customization (Matt's idea, recorded in the roadmap)
 
+**Decisions (Matt: "do 19b", 2026-09-19; two edges decided in implementation,
+flagged to overrule):** the loadout panel grows **alliance checkboxes** and an
+**optional-Xanadu toggle**. The **Federation always fights** — Captain Jason
+needs a flag to fly, and PR #27's spectator mode stays the *mid-war* fallback
+it was built for — plus at least one enemy; a list naming no enemy (or garbage)
+falls back to the four-alliance war. **Hold Xanadu forces the starbase on**
+(the roadmap's "require it" option): the panel disables the scenario with the
+base off, and `createGame` re-forces it regardless, so the scenario can never
+open instantly lost. Fleet strength and types are the round-19 budget/spec
+machinery unchanged — the recorded "1–5 hulls while live" cap is superseded by
+the budget + `LOADOUT.maxHulls` (8), as flagged in round 18. Without Xanadu:
+no dockyard, no radio relay, withdraw runs to the fleet centroid (round 17's
+generalization), the computer report says "Distance to Xanadu: unknown", the
+relay nodes still mirror through the center point, and placement still
+reserves it. `game.loadout` grows `factions` (canonical FACTIONS order) and
+`xanadu`; dropped alliances get no budget/fleet entries and consume no
+`${seed}:loadouts` draws, so a given seed + loadout replays identically. The
+vendetta picks from the enemy flagships that fight; captains deal to the
+roster that exists; reports, statistics, scenarios, and doctrines iterate the
+roster as-is and needed **no changes** — the roadmap's prediction held.
+Measured: the default war is digit-for-digit unchanged on the harness (median
+53; Fed 31.6 / Bloc 28.4 / Axis 17.2 / Cabal 10).
+
 - Faction involvement (2–4), per-faction fleet size and types (1–5 hulls while
   live), optional Xanadu. Full design notes live in the roadmap; 17 must not
   pre-empt them.

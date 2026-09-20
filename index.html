@@ -188,6 +188,14 @@
         </label>
         <div class="loadout" id="loadout-section" hidden>
           <p class="menu-sub">Fleet loadout — every alliance spends a points budget on its ships of the line. Compose your Federation fleet and set each alliance's budget; enemy captains draw seeded fleets within theirs, leaning to their doctrines. Prizes taken in the war are won, not budgeted.</p>
+          <p class="menu-sub">Alliances at war — the Federation always fights; pick at least one enemy</p>
+          <div class="loadout-factions">
+            <label class="check"><input id="faction-Federation" type="checkbox" checked disabled> Federation (you)</label>
+            <label class="check"><input id="faction-Axis" type="checkbox" checked> Axis</label>
+            <label class="check"><input id="faction-Bloc" type="checkbox" checked> Bloc</label>
+            <label class="check"><input id="faction-Cabal" type="checkbox" checked> Cabal</label>
+          </div>
+          <label class="check"><input id="loadout-xanadu" type="checkbox" checked> Federation starbase Xanadu — the dockyard, a radio relay, and where withdraw runs to. Hold Xanadu needs it.</label>
           <div id="loadout-budgets"></div>
           <div id="loadout-fleet"></div>
           <p class="console-note" id="loadout-summary"></p>
@@ -389,6 +397,7 @@
             </ul>
             <p><b>New hull classes.</b> A Reimagined war fields a bigger navy than the canonical 21: fleets can include three classes beyond the classic five. The <b>interceptor</b> is the fastest hull on the field (seven engine units), with light guns, thin shields, and a skeleton complement; a glass raider that wins by speed, screening and running down derelicts and being somewhere else when the volleys land. The <b>artillery</b> ship is its opposite: two engine units that hold the phaser edge rather than chase, and six phaser banks throwing the hardest volley of any warship — sturdy but unquick, a sitting duck for anything faster that gets inside its guns. And the <b>carrier</b> is a slow, sturdy tender built for the prize fleet: the longest boarding arm of any hull that moves (forty units), a starbase's tow for hauling prizes and wreck-rams, modest guns of its own, and the biggest crew pool afloat after Xanadu to man the prizes it takes. Its drone bay arrives in a later round.</p>
             <p><b>Fleet loadout.</b> A Reimagined war's fleets are composed, not fixed. Tick Reimagined in the <b>New game</b> panel and the <b>fleet loadout</b> appears: spend your points budget (24 by default) on ships of the line — the flagship battle cruiser is required, and carriers, artillery, cruisers, interceptors, and scouts cost 4 / 3 / 2 / 2 / 1, up to eight hulls. You also set <b>every alliance's budget</b>: enemy captains draw seeded fleets within theirs, leaning to their doctrines — Axis gunboat swarms, Bloc artillery lines, Cabal carriers — so the same seed replays the same war, and a new seed fields new navies. Prizes taken in the war are won, not budgeted.</p>
+            <p><b>Force customization.</b> The same panel chooses <b>who fights</b> — any two to four alliances, though the Federation always flies and at least one enemy must — and whether <b>Xanadu spawns</b>. Without the starbase there is no dockyard, no radio relay, and withdraw runs to the fleet centroid; the computer report simply says the distance to Xanadu is unknown, and the relay nodes still sit mirrored around where the base would have stood. <b>Hold Xanadu</b> needs its base, so that scenario is unavailable with the starbase off — and the rules force it back on if the war somehow starts that way.</p>
             <p class="dialog-note">Reimagined is balanced by whole-war simulation as it matures, not calibrated against the 1992 original, so enemy strength and war length can differ from a classic war. The build roadmap lives in the repository under <code>docs/superpowers/specs</code>.</p>
           </section>
           <section id="guide-comfort">
