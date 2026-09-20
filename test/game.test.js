@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, SCENARIOS, STALEMATE_ROUNDS, TERRAIN, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioOutcome, scenarioProgress } from '../game/scenarios.js';
-import { abbreviateNarrative, alertLevel, appendLog, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, inRadioContact, insideFeature, ionStormZone, isAce, nebulaHides, nebulaRevealRange, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, strongestFederation, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
+import { abbreviateNarrative, alertLevel, appendLog, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, inRadioContact, insideFeature, ionStormZone, isAce, nebulaHides, nebulaRevealRange, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
 import { applyPlayerAction, captureHull, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, tractorLock, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolveObjectives, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
@@ -3010,9 +3010,27 @@ test('relay objectives never touch a classic or extended war, and tolerate old s
 // --- Argonaut Reimagined, Phase 3 round 17: the prize fleet ---
 
 /**
+ * Parks every hull a capture test is not about in a far corner, spread out so
+ * doctrine movement toward a shared target cannot stack them into collisions.
+ * Ships seed randomly across the field, so without this a stranger could sit
+ * inside gun or transporter reach of the staged pair on some seeds — and every
+ * roster addition (round 18) shifts all seeded positions, which would otherwise
+ * quietly destabilize these tests. Xanadu is never parked: it holds the field
+ * center as the withdraw destination. New roster slots must be added here.
+ */
+const PRIZE_PARKING = {
+  'fed-flagship': [10, 230], 'fed-cruiser-1': [14, 234], 'fed-cruiser-2': [18, 226], 'fed-cruiser-3': [12, 222], 'fed-scout': [16, 218], 'fed-interceptor': [20, 226],
+  'axis-flagship': [10, 10], 'axis-cruiser-2': [14, 14], 'axis-cruiser-3': [16, 8], 'axis-scout': [20, 12], 'axis-interceptor': [22, 16],
+  'bloc-flagship': [230, 10], 'bloc-cruiser-1': [226, 14], 'bloc-cruiser-2': [222, 8], 'bloc-cruiser-3': [228, 16], 'bloc-scout': [224, 20], 'bloc-interceptor': [234, 18],
+  'cabal-flagship': [225, 225], 'cabal-cruiser-1': [230, 230], 'cabal-cruiser-2': [220, 232], 'cabal-cruiser-3': [228, 222], 'cabal-scout': [232, 226], 'cabal-interceptor': [224, 228],
+};
+
+const parked = (ship) => (PRIZE_PARKING[ship.id] ? { ...ship, x: PRIZE_PARKING[ship.id][0], y: PRIZE_PARKING[ship.id][1] } : ship);
+
+/**
  * A Reimagined war staged for capture tests: the command ship and a Federation
- * cruiser mid-field beside Grendel, an Axis cruiser left vacant, everyone else at
- * their seeded corners. Xanadu sits at (120, 120), inside whose 40-unit
+ * cruiser mid-field beside Grendel, an Axis cruiser left vacant, everyone else
+ * parked in the far corners. Xanadu sits at (120, 120), inside whose 40-unit
  * transporter reach the derelict also lies — but the ship order puts
  * fed-cruiser-1 (second to act) long ahead of the starbase (last).
  */
@@ -3020,27 +3038,18 @@ const prizeWar = (seed) => withShips(createGame({ seed, reimagined: true }), (sh
   if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
   if (ship.id === 'fed-cruiser-1') return { ...ship, x: 95, y: 100 };
   if (ship.id === 'axis-cruiser-1') return { ...ship, status: 'vacant', crew: 0, x: 104, y: 100 };
-  return ship;
+  return parked(ship);
 });
 
 /**
  * A Reimagined war for AI prize-taking: an Axis cruiser alone mid-field beside a
- * vacant Federation scout, and every other hull parked by hand in a far corner
- * (spread out, since ships seed randomly across the field and doctrine movement
- * toward a shared target could otherwise stack them into collisions). No enemy
- * sits inside any gun's reach of the pair, whatever the seed.
+ * vacant Federation scout, and no enemy inside any gun's reach of the pair,
+ * whatever the seed.
  */
-const AI_PRIZE_PARKING = {
-  'fed-flagship': [10, 230], 'fed-cruiser-1': [14, 234], 'fed-cruiser-2': [18, 226], 'fed-cruiser-3': [12, 222],
-  'axis-flagship': [10, 10], 'axis-cruiser-2': [14, 14], 'axis-cruiser-3': [16, 8], 'axis-scout': [20, 12],
-  'bloc-flagship': [230, 10], 'bloc-cruiser-1': [226, 14], 'bloc-cruiser-2': [222, 8], 'bloc-cruiser-3': [228, 16], 'bloc-scout': [224, 20],
-  'cabal-flagship': [225, 225], 'cabal-cruiser-1': [230, 230], 'cabal-cruiser-2': [220, 232], 'cabal-cruiser-3': [228, 222], 'cabal-scout': [232, 226],
-};
-
 const aiPrizeWar = (seed) => withShips(createGame({ seed, reimagined: true }), (ship) => {
   if (ship.id === 'axis-cruiser-1') return { ...ship, x: 220, y: 120 };
   if (ship.id === 'fed-scout') return { ...ship, status: 'vacant', crew: 0, x: 226, y: 120 };
-  return AI_PRIZE_PARKING[ship.id] ? { ...ship, x: AI_PRIZE_PARKING[ship.id][0], y: AI_PRIZE_PARKING[ship.id][1] } : ship;
+  return parked(ship);
 });
 
 test('boarding a derelict in a Reimagined war stamps the prize record', () => {
@@ -3247,4 +3256,79 @@ test('old saves tolerate the absent prize fields', () => {
   assert.equal(retaken.game.prizeDraws, 1, 'a fresh capture starts the count');
   assert.deepEqual(retaken.game.prizesTaken, { Bloc: 1 }, 'and the ledger');
   assert.equal(getShip(retaken.game, 'axis-cruiser-1').prize.times, 1);
+});
+
+// --- Argonaut Reimagined, round 18a: the interceptor class ---
+
+test('a Reimagined war fields an interceptor for every alliance', () => {
+  const game = createGame({ seed: 'interceptor-roster', reimagined: true });
+  assert.equal(game.ships.length, 25, 'six hulls per alliance plus Xanadu');
+  const names = { fed: 'Vanguard', axis: 'Whiplash', bloc: 'Ultimatum', cabal: 'Zephyr' };
+  for (const [factionId, name] of Object.entries(names)) {
+    const ship = getShip(game, `${factionId}-interceptor`);
+    assert.ok(ship, `${factionId} fields an interceptor`);
+    assert.equal(ship.className, 'Interceptor');
+    assert.equal(ship.name, name, 'the new slot takes the next name in the faction list');
+    assert.equal(ship.status, 'active');
+    assert.ok(ship.x >= 1 && ship.x <= game.gridSize - 1 && ship.y >= 1 && ship.y <= game.gridSize - 1, 'placed in bounds');
+  }
+});
+
+test('the interceptor is a glass raider: fastest hull afloat, light guns, thin shields', () => {
+  const game = createGame({ seed: 'interceptor-stats', reimagined: true });
+  const ship = getShip(game, 'fed-interceptor');
+  assert.equal(shieldCapacity(ship), 80);
+  assert.equal(crewCapacity(ship), 60);
+  assert.equal(systemUnits(ship, 'phasers'), 3);
+  assert.equal(systemUnits(ship, 'photons'), 1);
+  const reach = engineCapacity(ship, game.gridSize, 1);
+  assert.equal(reach, 168, 'seven engine units across the wide field');
+  assert.ok(reach > engineCapacity(getShip(game, 'fed-flagship'), game.gridSize, 1), 'outruns the flagship');
+  assert.ok(reach > engineCapacity(getShip(game, 'fed-scout'), game.gridSize, 1), 'and the scout it hunts beside');
+});
+
+test('a Reimagined interceptor runs a reactor the dockyard can repair', () => {
+  const ship = getShip(createGame({ seed: 'interceptor-power', reimagined: true }), 'fed-interceptor');
+  assert.equal(systemUnits(ship, 'reactor'), POWER.reactor.Interceptor);
+  assert.equal(reactorOutput(ship), POWER.reactor.Interceptor * POWER.perUnit);
+  assert.equal(templateSystems(ship).reactor, POWER.reactor.Interceptor, 'the class is in the dockyard complement');
+});
+
+test('classic and extended wars never field the interceptor and stay 21 hulls', () => {
+  for (const opts of [{}, { extended: true }]) {
+    const game = createGame({ seed: 'interceptor-parity', ...opts });
+    assert.equal(game.ships.length, 21);
+    assert.ok(game.ships.every((ship) => ship.className !== 'Interceptor'));
+    assert.ok(!game.ships.some((ship) => ship.id.endsWith('-interceptor')));
+  }
+  assert.deepEqual(createGame({ seed: 'interceptor-parity' }), createGame({ seed: 'interceptor-parity', reimagined: false }),
+    'the standing parity scaffold still holds');
+  // And a Reimagined seed still reproduces itself, extra hulls and all.
+  assert.deepEqual(createGame({ seed: 'interceptor-parity', reimagined: true }).ships,
+    createGame({ seed: 'interceptor-parity', reimagined: true }).ships);
+});
+
+test('a captured interceptor is an under-manned prize like any other hull', () => {
+  const game = withShips(createGame({ seed: 'interceptor-prize', reimagined: true }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
+    if (ship.id === 'axis-interceptor') return { ...ship, status: 'vacant', crew: 0, x: 104, y: 100 };
+    return ship;
+  });
+  const out = applyPlayerAction(game, { type: 'transport', targetId: 'axis-interceptor', amount: 10 });
+  const prize = getShip(out.game, 'axis-interceptor');
+  assert.equal(prize.faction, 'Federation');
+  assert.equal(prize.prize?.from, 'Axis');
+  assert.equal(powerEffect(out.game, prize, 'engines'), PRIZE.manningPenalty, '10 hands cannot work a 60-crew hull');
+  const floor = Math.ceil(crewCapacity(prize) * PRIZE.manningFloor);
+  const crewed = withShips(out.game, (ship) => (ship.id === 'axis-interceptor' ? { ...ship, crew: floor } : ship));
+  assert.equal(powerEffect(crewed, getShip(crewed, 'axis-interceptor'), 'engines'), 1, 'the floor is a quarter of its own complement');
+});
+
+test('a Reimagined war with the extra hull still resolves its rounds', () => {
+  let war = createGame({ seed: 'interceptor-war', reimagined: true });
+  for (let round = 0; round < 12 && !war.outcome; round += 1) {
+    war = resolveComputerTurns({ ...war, phase: 'computer' });
+  }
+  assert.ok(war.turn > 1, 'the computer phase runs the wider roster');
+  assert.equal(war.ships.length, 25);
 });

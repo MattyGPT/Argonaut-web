@@ -85,6 +85,29 @@ export const SHIP_TEMPLATES = Object.freeze({
       radio: 1,
     }),
   }),
+  /**
+   * Round 18 (Argonaut Reimagined): the first new class. A glass raider — the
+   * fastest hull afloat, light guns, thin shields, and a skeleton complement, so
+   * it wins by speed (screening, running down derelicts, being somewhere else
+   * when the volleys land) rather than by trading fire. Reimagined rosters only;
+   * a classic or extended war never fields one, so nothing calibrated reads it.
+   * Every figure is a balance dial for the Reimagined simulation harness.
+   */
+  interceptor: Object.freeze({
+    className: 'Interceptor',
+    shields: 80,
+    crew: 60,
+    systems: Object.freeze({
+      engines: 7,
+      phasers: 3,
+      photons: 1,
+      tractor: 1,
+      scanner: 3,
+      mapper: 2,
+      transporter: 1,
+      radio: 1,
+    }),
+  }),
   starbase: Object.freeze({
     className: 'Starbase',
     shields: 320,
@@ -102,11 +125,17 @@ export const SHIP_TEMPLATES = Object.freeze({
   }),
 });
 
+/**
+ * The manual's 21 canonical names are exactly the classic roster — the first five
+ * per faction. Names beyond those are this remake's own expression (like the
+ * captains), for the extra hulls a Reimagined war fields (round 18); initials are
+ * kept unique within a faction so the map glyph stays unambiguous.
+ */
 export const SHIP_NAMES = Object.freeze({
-  [FACTIONS.FEDERATION]: Object.freeze(['Argo', 'Bonhomme', 'Crusader', 'Defender', 'Empyreal']),
-  [FACTIONS.AXIS]: Object.freeze(['Firebreather', 'Grendel', 'Hellhound', 'Iscariot', 'Jawbreaker']),
-  [FACTIONS.BLOC]: Object.freeze(['Killjoy', 'Laserblast', 'Mephisto', 'Notorious', 'Onerous']),
-  [FACTIONS.CABAL]: Object.freeze(['Pequod', 'Queen Mab', 'Ragnarok', 'Saboteur', 'Terrorist']),
+  [FACTIONS.FEDERATION]: Object.freeze(['Argo', 'Bonhomme', 'Crusader', 'Defender', 'Empyreal', 'Vanguard']),
+  [FACTIONS.AXIS]: Object.freeze(['Firebreather', 'Grendel', 'Hellhound', 'Iscariot', 'Jawbreaker', 'Whiplash']),
+  [FACTIONS.BLOC]: Object.freeze(['Killjoy', 'Laserblast', 'Mephisto', 'Notorious', 'Onerous', 'Ultimatum']),
+  [FACTIONS.CABAL]: Object.freeze(['Pequod', 'Queen Mab', 'Ragnarok', 'Saboteur', 'Terrorist', 'Zephyr']),
 });
 
 export const STARTING_FORMATIONS = Object.freeze({
@@ -169,7 +198,7 @@ export const POWER = Object.freeze({
   /** A sink may be driven this far past its need (1.5 = +50%) before it saturates. */
   overcharge: 1.5,
   /** Reactor units per hull class, keyed by className. */
-  reactor: Object.freeze({ 'Battle cruiser': 5, Cruiser: 4, Scout: 4, Starbase: 8 }),
+  reactor: Object.freeze({ 'Battle cruiser': 5, Cruiser: 4, Scout: 4, Interceptor: 4, Starbase: 8 }),
   /** Points each sink needs for 1.0x; the default profile spends exactly these. */
   need: Object.freeze({ shields: 4, weapons: 6, engines: 4, sensors: 4, tractor: 2 }),
   /** Shield power restored per stardate, as a fraction of capacity at 1.0x shields power. */

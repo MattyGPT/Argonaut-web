@@ -226,13 +226,36 @@ recorded here is how round 17's prize layer must be shaped so they slot in.
 
 ### 18 — New ship classes (one per chunk: interceptor, artillery, carrier)
 
+**Decisions (settled with Matt, 2026-09-19):** all three classes ship in round
+18 as sequential chunks (18a interceptor, 18b artillery, 18c carrier), entering
+a Reimagined war as **extra hulls** — a 6th, 7th, and 8th ship of the line per
+alliance (25 hulls after 18a, 33 + Xanadu after 18c), each with a new original
+name per faction (`SHIP_NAMES` grows past the canonical five; initials stay
+unique within a faction). Consequences accepted: Reimagined seed positions
+shift (the extra placement draws ride the main stream — parity binds only
+classic/extended, which keep exactly 21 hulls), and 19b's recorded "1–5 hulls
+while live" cap gets revisited against this wider default roster when force
+customization lands.
+
 - **Data**: a new `SHIP_TEMPLATES` entry + `POWER.reactor` line per class;
   `createShip` needs no change (it is class-agnostic), and a captured
   round-18 hull gets its reactor, power default, and manning rules for free.
-- **Naming**: `SHIP_NAMES` pins five canonical names per faction. New classes
-  enter the game either through 19/19b rosters (needing names) or **as prizes
-  only** (keeping the enemy name they were taken with, which the prize record
-  already preserves). Decide per class in 18.
+  `REIMAGINED_EXTRA_ROSTER` (state.js) grows one slot per chunk;
+  `rosterFor(reimagined)` picks the roster, so classic/extended read the
+  canonical five alone.
+- **Class identities** (balance dials, all in `SHIP_TEMPLATES`):
+  **interceptor** — fastest hull afloat (7 engines → 168/stardate on the wide
+  field), light guns (3 phasers, 1 photon), thin (80 shields / 60 crew),
+  reactor 4; a glass raider that wins by speed. **Artillery** — slow gun
+  platform (2 engines), the hardest class volley short of a starbase (6
+  phasers), sturdy but unquick (160/120), reactor 5. **Carrier** — slow tender
+  (3 engines) built for the prize fleet: transporter 4 (a 40-unit boarding
+  reach), tractor 4, and a big crew pool (180/240) to hand to prize parties,
+  reactor 6; its drone bay arrives in round 20.
+- **Naming**: interceptors are *Vanguard / Whiplash / Ultimatum / Zephyr*
+  (Federation / Axis / Bloc / Cabal); artillery and carrier names land with
+  18b/18c. Names beyond the canonical five are this remake's own expression,
+  like the captains.
 - **Seam with 17**: the prize record, manning, and reports are class-blind
   (they read `className` only for display). The map glyph is `ship.name[0]`,
   so any name works.
