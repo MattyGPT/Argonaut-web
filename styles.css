@@ -563,6 +563,68 @@ body.classic #ship-menu .menu-sub {
   border-top: 1px solid var(--line);
 }
 
+/* The battlefield legend (play-test balance pass): each chip mirrors the real
+   thing on the map — rings dashed in their own colors, pips glowing, terrain
+   translucent, the threat outline a red ring — so the key teaches by looking
+   like what it explains. Entries are built per war mode in render.js. */
+.legend-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+}
+
+.legend-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.legend-swatch.ring-phasers { border: 1px dashed var(--axis); }
+.legend-swatch.ring-photons { border: 1px dashed var(--bloc); }
+.legend-swatch.ring-engines { border: 1px dashed var(--cyan); }
+.legend-swatch.ring-dock { border: 1px dashed var(--fed); }
+.legend-swatch.threat { outline: 2px solid #ff5d5d; outline-offset: 1px; }
+
+.legend-swatch.pip-order {
+  width: 6px;
+  height: 6px;
+  background: #fff;
+  box-shadow: 0 0 6px #fff;
+}
+
+.legend-swatch.pip-prize {
+  width: 6px;
+  height: 6px;
+  background: #ffd76a;
+  box-shadow: 0 0 6px #ffd76a;
+}
+
+.legend-swatch.star-ace {
+  color: var(--bloc);
+  font-size: .7rem;
+  text-shadow: 0 0 5px currentColor;
+}
+
+.legend-swatch.wreck {
+  color: #8fa3ad;
+  font-size: .7rem;
+}
+
+.legend-swatch.terrain-nebula { border: 1px solid #b48cff59; background: #9a63ff40; }
+.legend-swatch.terrain-asteroids { border: 1px solid #9fb2bf4d; background: #7d8f9c38; }
+.legend-swatch.terrain-ion { border: 1px solid #ffc36b59; background: #ffb04d3d; }
+.legend-swatch.terrain-relay { border: 2px solid #cfe8ff; background: #cfe8ff22; }
+
+body.classic .legend-swatch.pip-order,
+body.classic .legend-swatch.pip-prize {
+  background: #38ff38;
+  box-shadow: none;
+}
+
 .panel-meta {
   display: flex;
   gap: .9rem;
