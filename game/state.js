@@ -7,6 +7,7 @@ import {
   FACTIONS,
   FACTION_IDS,
   GRID_SIZE,
+  LOADOUT,
   LOG_LIMIT,
   MISS_CHANCE,
   POWER,
@@ -36,23 +37,121 @@ const SHIP_ROSTER = Object.freeze([
 ]);
 
 /**
- * The extra hulls a Reimagined war fields on top of the classic roster (round
- * 18): every alliance launches one of each new class as an additional ship of
- * the line, so a Reimagined navy grows past the manual's 21 as the classes
- * land. A classic or extended war reads `SHIP_ROSTER` alone and keeps its
- * 21-hull war byte-identical; the extra placement draws shift a Reimagined
- * seed's own geography, which parity never bound. The new slots take the next
- * names in `SHIP_NAMES` — original expression, like the captains. When 19b's
- * force customization lands, its recorded 1–5 hull cap gets revisited against
- * this wider default roster.
+ * Fleet loadout (round 19, Reimagined). A fleet spec is a class → count map
+ * that always includes the mandatory single flagship. `normalizeFleetSpec` is
+ * the permissive gate every spec passes through — the panel, a save prefill,
+ * and the AI draws all produce legal specs, but `createGame` never trusts its
+ * input: counts floor to whole numbers, the budget binds in class order (the
+ * later a class sits in `LOADOUT.classOrder`, the sooner it is trimmed), and
+ * the hull cap is absolute. A classic or extended war reads none of this and
+ * keeps the fixed 21-hull roster byte-identical; a composed Reimagined fleet's
+ * placement draws ride the main stream, which parity never bound.
  */
-const REIMAGINED_EXTRA_ROSTER = Object.freeze([
-  ['interceptor', 'interceptor'],
-  ['artillery', 'artillery'],
-  ['carrier', 'carrier'],
-]);
+export const fleetCost = (spec) => LOADOUT.classOrder.reduce((total, kind) => total + (spec?.[kind] ?? 0) * LOADOUT.costs[kind], 0);
 
-const rosterFor = (reimagined) => (reimagined ? [...SHIP_ROSTER, ...REIMAGINED_EXTRA_ROSTER] : SHIP_ROSTER);
+export const fleetHulls = (spec) => LOADOUT.classOrder.reduce((total, kind) => total + (spec?.[kind] ?? 0), 0);
+
+export const normalizeFleetSpec = (spec, budget = LOADOUT.budget) => {
+  const out = { 'battle-cruiser': 1 };
+  let spent = LOADOUT.costs['battle-cruiser'];
+  let hulls = 1;
+  for (const kind of LOADOUT.classOrder) {
+    if (kind === 'battle-cruiser') continue;
+    const cost = LOADOUT.costs[kind];
+    // Clamp the request to what actually fits: the remaining budget buys this
+    // many, and the hull cap binds — whichever is tighter. (Checking one hull at
+    // a time would wave a whole over-budget class through.)
+    const affordable = Math.max(0, Math.floor((budget - spent) / cost));
+    const count = Math.min(Math.max(0, Math.trunc(Number(spec?.[kind]) || 0)), affordable, LOADOUT.maxHulls - hulls);
+    if (count > 0) {
+      out[kind] = count;
+      spent += count * cost;
+      hulls += count;
+    }
+  }
+  return out;
+};
+
+/**
+ * One AI alliance's seeded fleet draw: picks classes by its doctrine archetype's
+ * weights until the budget or the hull cap binds, so every legal budget yields a
+ * fleet that fights like its alliance — Axis swarms cheap gunboats, Bloc stands
+ * on an artillery line, Cabal leans on carriers. Consumes only the
+ * `${seed}:loadouts` sub-stream (the captains pattern), so ship positions and
+ * the vendetta pick stay on their own draws.
+ */
+const drawAiFleet = (rng, faction, budget) => {
+  const weights = LOADOUT.archetypes[faction] ?? {};
+  const spec = { 'battle-cruiser': 1 };
+  let spent = LOADOUT.costs['battle-cruiser'];
+  let hulls = 1;
+  for (;;) {
+    const options = LOADOUT.classOrder.filter((kind) => kind !== 'battle-cruiser'
+      && (weights[kind] ?? 0) > 0
+      && spent + LOADOUT.costs[kind] <= budget
+      && hulls < LOADOUT.maxHulls);
+    if (options.length === 0) break;
+    const totalWeight = options.reduce((total, kind) => total + weights[kind], 0);
+    let roll = rng.next() * totalWeight;
+    let picked = options[options.length - 1];
+    for (const kind of options) {
+      roll -= weights[kind];
+      if (roll < 0) { picked = kind; break; }
+    }
+    spec[picked] = (spec[picked] ?? 0) + 1;
+    spent += LOADOUT.costs[picked];
+    hulls += 1;
+  }
+  return spec;
+};
+
+/**
+ * The roster slots a spec fields, in `LOADOUT.classOrder`: the flagship keeps
+ * its id, a lone class keeps its bare id (`fed-scout`, exactly as the round-18
+ * roster had it), and multiples number from 1 (`fed-cruiser-2`). Names follow
+ * the slot index into `SHIP_NAMES`, so the default spec reproduces the round-18
+ * fleet exactly — ids, names, and placement draw order.
+ */
+const rosterFromSpec = (spec) => {
+  const slots = [];
+  for (const kind of LOADOUT.classOrder) {
+    const count = kind === 'battle-cruiser' ? 1 : (spec?.[kind] ?? 0);
+    for (let index = 0; index < count; index += 1) {
+      const suffix = kind === 'battle-cruiser' ? 'flagship' : (count === 1 ? kind : `${kind}-${index + 1}`);
+      slots.push([suffix, kind]);
+    }
+  }
+  return slots;
+};
+
+/** Every alliance on the default budget fielding the default fleet — the panel's reset, and tests that need stable ids. */
+export const defaultLoadout = () => ({
+  budgets: Object.fromEntries(Object.values(FACTIONS).map((faction) => [faction, LOADOUT.budget])),
+  fleets: Object.fromEntries(Object.values(FACTIONS).map((faction) => [faction, { ...LOADOUT.defaultFleet }])),
+});
+
+/**
+ * Resolves the war's loadout: budgets clamped to the panel bounds, the
+ * Federation — and any alliance given an explicit spec — normalized, and every
+ * other AI alliance drawn on the seeded sub-stream. Deterministic per
+ * seed + loadout, and the sub-stream never touches the war's own RNG.
+ */
+const resolveLoadout = (seed, loadout) => {
+  const rng = createRng(`${seed}:loadouts`);
+  const budgets = {};
+  const fleets = {};
+  for (const faction of Object.values(FACTIONS)) {
+    const requested = Number(loadout?.budgets?.[faction]);
+    budgets[faction] = Number.isFinite(requested)
+      ? Math.min(LOADOUT.maxBudget, Math.max(LOADOUT.minBudget, Math.trunc(requested)))
+      : LOADOUT.budget;
+    const given = loadout?.fleets?.[faction];
+    if (given) fleets[faction] = normalizeFleetSpec(given, budgets[faction]);
+    else if (faction === FACTIONS.FEDERATION) fleets[faction] = normalizeFleetSpec(LOADOUT.defaultFleet, budgets[faction]);
+    else fleets[faction] = drawAiFleet(rng, faction, budgets[faction]);
+  }
+  return { budgets, fleets };
+};
 
 const createShip = ({ id, name, faction, kind, x, y, reimagined }) => {
   const template = SHIP_TEMPLATES[kind];
@@ -105,7 +204,7 @@ const randomPosition = (rng, faction, regional, occupied, gridSize) => {
   return position;
 };
 
-const createFleet = (faction, rng, regional, occupied, gridSize, reimagined) => rosterFor(reimagined).map(([suffix, kind], index) => {
+const createFleet = (faction, rng, regional, occupied, gridSize, reimagined, spec) => (reimagined && spec ? rosterFromSpec(spec) : SHIP_ROSTER).map(([suffix, kind], index) => {
   const position = randomPosition(rng, faction, regional, occupied, gridSize);
   const factionId = FACTION_IDS[faction];
   return createShip({
@@ -204,7 +303,7 @@ const generateTerrain = (seed, gridSize, xanadu) => {
   return [...features, ...placeRelays(rng, gridSize, xanadu, features)];
 };
 
-export const createGame = ({ seed = 'xanadu', regional = false, sound = false, extended = false, scenario = 'annihilation', precision = false, reimagined = false } = {}) => {
+export const createGame = ({ seed = 'xanadu', regional = false, sound = false, extended = false, scenario = 'annihilation', precision = false, reimagined = false, loadout = null } = {}) => {
   const normalizedSeed = String(seed);
   // Argonaut Reimagined builds on the extended layer — orders, doctrine, the
   // dockyard, and the scenarios are the substrate the Reimagined systems need — so
@@ -218,7 +317,12 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     y: Math.round(XANADU_POSITION.y * (gridSize / GRID_SIZE)),
   };
   const occupied = new Set([`${xanaduPosition.x},${xanaduPosition.y}`]);
-  const fleets = Object.values(FACTIONS).flatMap((faction) => createFleet(faction, rng, regional, occupied, gridSize, isReimagined));
+  // The fleet loadout (round 19): a Reimagined war's alliances are composed from
+  // their budgets — the Federation from the panel's spec (or the round-18
+  // default), the AI alliances drawn on their own seeded sub-stream. A classic or
+  // extended war resolves none of it and fields the fixed roster.
+  const resolvedLoadout = isReimagined ? resolveLoadout(normalizedSeed, loadout) : null;
+  const fleets = Object.values(FACTIONS).flatMap((faction) => createFleet(faction, rng, regional, occupied, gridSize, isReimagined, resolvedLoadout?.fleets?.[faction] ?? null));
   const xanadu = createShip({
     id: 'xanadu',
     name: 'Xanadu',
@@ -287,6 +391,10 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     // so a recapture would otherwise erase the history. Reimagined only; absent in
     // old saves, so every reader defaults to {}.
     prizesTaken: {},
+    // The composed forces this war fights with (round 19): per-faction budgets
+    // and fleet specs, Reimagined only — null in a classic or extended war, and
+    // absent in old saves, so the New game panel pre-fill defaults safely.
+    loadout: resolvedLoadout,
     outcome: null,
   };
 };

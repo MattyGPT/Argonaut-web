@@ -266,13 +266,34 @@ customization lands.
 
 ### 19 — Fleet loadout / points budget
 
-- `createGame` grows a fleet specification (per-faction composition within a
-  points budget); `SHIP_ROSTER` becomes derived from it; generation stays on
-  the existing streams so a given seed + loadout is reproducible.
+**Decisions (settled with Matt, 2026-09-19):** the player composes the
+**Federation** fleet in the New game panel **and adjusts every alliance's
+budget** ("default to 24 each but allow the player to adjust fleet sizes for
+each faction"; bounds 5–36). AI alliances draw **doctrine-flavored
+archetypes** — Axis gunboat swarms, Bloc artillery lines, Cabal carriers and
+mobility — within their budgets, on a `${seed}:loadouts` sub-stream (the
+captains pattern): a given seed + loadout replays identically, and no other
+stream shifts — not even when the Federation spec changes. Costs: battle
+cruiser 5 (mandatory flagship), carrier 4, artillery 3, cruiser 2, interceptor
+2, scout 1; max 8 hulls per alliance (the name pool). The default Federation
+spec is the round-18 roster exactly (21 of 24 points), so an untouched panel
+reproduces the round-18 war. Every dial lives in `LOADOUT`, and
+`normalizeFleetSpec` is the one permissive gate — the panel and `createGame`
+share it, so the UI cannot produce a spec the rules would not.
+
+- `createGame` grew a `loadout` param; per-faction rosters derive from the
+  resolved specs (`rosterFromSpec`: lone classes keep bare ids, multiples
+  number from 1, names follow slot index); the composed forces are recorded on
+  `game.loadout` (null in classic/extended, absent in old saves).
 - **Seam with 17**: prizes are *won*, not *budgeted* — they exceed the starting
-  budget by design, and the budget must never be re-checked mid-war. The
-  prize record's `from`/`turn` fields are exactly what a post-war loadout
-  screen (Phase 6's persistent fleet) will read.
+  budget by design, and the budget is never re-checked mid-war. The prize
+  record's `from`/`turn` fields are exactly what a post-war loadout screen
+  (Phase 6's persistent fleet) will read.
+- **Seam with 19b**: force customization becomes panel state over this seam —
+  faction involvement drops alliances from the resolve loop, per-faction fleet
+  strength *is* the budget/cap dials, and optional Xanadu gates the starbase
+  spawn. Its recorded "1–5 hulls while live" cap is superseded by the budget
+  and `LOADOUT.maxHulls` (8).
 
 ### 19b — Force customization (Matt's idea, recorded in the roadmap)
 

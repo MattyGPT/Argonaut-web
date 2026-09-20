@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, REIMAGINED_WEAPON_DAMAGE_SCALE, SCENARIOS, STALEMATE_ROUNDS, TERRAIN, VENDETTA } from '../game/constants.js';
+import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOADOUT, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, REIMAGINED_WEAPON_DAMAGE_SCALE, SCENARIOS, SHIP_TEMPLATES, STALEMATE_ROUNDS, TERRAIN, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioOutcome, scenarioProgress } from '../game/scenarios.js';
-import { abbreviateNarrative, alertLevel, appendLog, blastRadius, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, inRadioContact, insideFeature, ionStormZone, isAce, nebulaHides, nebulaRevealRange, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
+import { abbreviateNarrative, alertLevel, appendLog, blastRadius, clampPowerAllocation, createGame, crewCapacity, defaultLoadout, distance, engineCapacity, fleetCost, fleetHulls, getShip, inRadioContact, insideFeature, ionStormZone, isAce, nebulaHides, nebulaRevealRange, normalizeFleetSpec, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
 import { applyPlayerAction, captureHull, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, tractorLock, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolveObjectives, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
@@ -1426,7 +1426,7 @@ test('an Axis captain will not detonate over its own fleet', () => {
   // clears the trigger, and only the friendly-fire guard (enemies > friends) says
   // no. In an extended war just four consorts exist, and the count gate would
   // mask the guard being tested.
-  const game = withShips(createGame({ seed: 'axis-restraint', reimagined: true }), (ship) => {
+  const game = withShips(createGame({ seed: 'axis-restraint', reimagined: true, loadout: defaultLoadout() }), (ship) => {
     if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 2 };
     if (ship.id === 'fed-flagship') return { ...ship, x: 58, y: 50 };
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 55, y: 50 };
@@ -2910,7 +2910,8 @@ test('the two relay nodes are mirrored symmetrically off Xanadu', () => {
  * parked far away.
  */
 const relayGame = (seed = 'relay') => {
-  const base = createGame({ seed, reimagined: true });
+  // Round 19 made AI fleets vary per seed, so staged-id tests pin the default loadout.
+  const base = createGame({ seed, reimagined: true, loadout: defaultLoadout() });
   return {
     ...base,
     terrain: [{ id: 'relay-1', type: 'relay', x: 160, y: 160, radius: TERRAIN.relayRadius }],
@@ -3051,7 +3052,7 @@ const parked = (ship) => (PRIZE_PARKING[ship.id] ? { ...ship, x: PRIZE_PARKING[s
  * transporter reach the derelict also lies — but the ship order puts
  * fed-cruiser-1 (second to act) long ahead of the starbase (last).
  */
-const prizeWar = (seed) => withShips(createGame({ seed, reimagined: true }), (ship) => {
+const prizeWar = (seed) => withShips(createGame({ seed, reimagined: true, loadout: defaultLoadout() }), (ship) => {
   if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
   if (ship.id === 'fed-cruiser-1') return { ...ship, x: 95, y: 100 };
   if (ship.id === 'axis-cruiser-1') return { ...ship, status: 'vacant', crew: 0, x: 104, y: 100 };
@@ -3063,7 +3064,7 @@ const prizeWar = (seed) => withShips(createGame({ seed, reimagined: true }), (sh
  * vacant Federation scout, and no enemy inside any gun's reach of the pair,
  * whatever the seed.
  */
-const aiPrizeWar = (seed) => withShips(createGame({ seed, reimagined: true }), (ship) => {
+const aiPrizeWar = (seed) => withShips(createGame({ seed, reimagined: true, loadout: defaultLoadout() }), (ship) => {
   if (ship.id === 'axis-cruiser-1') return { ...ship, x: 220, y: 120 };
   if (ship.id === 'fed-scout') return { ...ship, status: 'vacant', crew: 0, x: 226, y: 120 };
   return parked(ship);
@@ -3171,7 +3172,7 @@ test('a live fight outranks a prize, and the vendetta captain never boards', () 
 });
 
 test('AI captains never board the starbase', () => {
-  const game = withShips(createGame({ seed: 'prize-xanadu', reimagined: true }), (ship) => {
+  const game = withShips(createGame({ seed: 'prize-xanadu', reimagined: true, loadout: defaultLoadout() }), (ship) => {
     if (ship.id === 'axis-cruiser-1') return { ...ship, x: 118, y: 120 };
     if (ship.id === 'xanadu') return { ...ship, status: 'vacant', crew: 0 };
     if (ship.faction === 'Federation') return { ...ship, x: 20, y: 20 };
@@ -3207,7 +3208,7 @@ test('any allegiance flip ends the vendetta, and re-manning a friendly wreck is 
 });
 
 test('a hunter taken by a third alliance ends the hunt', () => {
-  const base = createGame({ seed: 'hunt-turned', reimagined: true, scenario: 'hunt-the-vendetta' });
+  const base = createGame({ seed: 'hunt-turned', reimagined: true, scenario: 'hunt-the-vendetta', loadout: defaultLoadout() });
   const hunterId = base.objectiveShipId;
   const hunter = getShip(base, hunterId);
   const third = ['Axis', 'Bloc', 'Cabal'].find((faction) => faction !== hunter.faction);
@@ -3277,8 +3278,8 @@ test('old saves tolerate the absent prize fields', () => {
 
 // --- Argonaut Reimagined, round 18a: the interceptor class ---
 
-test('a Reimagined war fields an interceptor for every alliance', () => {
-  const game = createGame({ seed: 'interceptor-roster', reimagined: true });
+test('the default loadout fields an interceptor for every alliance', () => {
+  const game = createGame({ seed: 'interceptor-roster', reimagined: true, loadout: defaultLoadout() });
   assert.equal(game.ships.length, 33, 'eight hulls per alliance plus Xanadu');
   const names = { fed: 'Vanguard', axis: 'Whiplash', bloc: 'Ultimatum', cabal: 'Zephyr' };
   for (const [factionId, name] of Object.entries(names)) {
@@ -3326,7 +3327,7 @@ test('classic and extended wars never field the interceptor and stay 21 hulls', 
 });
 
 test('a captured interceptor is an under-manned prize like any other hull', () => {
-  const game = withShips(createGame({ seed: 'interceptor-prize', reimagined: true }), (ship) => {
+  const game = withShips(createGame({ seed: 'interceptor-prize', reimagined: true, loadout: defaultLoadout() }), (ship) => {
     if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
     if (ship.id === 'axis-interceptor') return { ...ship, status: 'vacant', crew: 0, x: 104, y: 100 };
     return ship;
@@ -3342,7 +3343,7 @@ test('a captured interceptor is an under-manned prize like any other hull', () =
 });
 
 test('a Reimagined war with the extra hull still resolves its rounds', () => {
-  let war = createGame({ seed: 'interceptor-war', reimagined: true });
+  let war = createGame({ seed: 'interceptor-war', reimagined: true, loadout: defaultLoadout() });
   for (let round = 0; round < 12 && !war.outcome; round += 1) {
     war = resolveComputerTurns({ ...war, phase: 'computer' });
   }
@@ -3352,8 +3353,8 @@ test('a Reimagined war with the extra hull still resolves its rounds', () => {
 
 // --- Argonaut Reimagined, round 18b: the artillery class ---
 
-test('a Reimagined war fields an artillery ship for every alliance', () => {
-  const game = createGame({ seed: 'artillery-roster', reimagined: true });
+test('the default loadout fields an artillery ship for every alliance', () => {
+  const game = createGame({ seed: 'artillery-roster', reimagined: true, loadout: defaultLoadout() });
   const names = { fed: 'Yeoman', axis: 'Dreadnought', bloc: 'Broadside', cabal: 'Ambuscade' };
   for (const [factionId, name] of Object.entries(names)) {
     const ship = getShip(game, `${factionId}-artillery`);
@@ -3402,7 +3403,7 @@ test('classic and extended wars never field the artillery and stay 21 hulls', ()
 });
 
 test('a captured artillery ship is an under-manned prize like any other hull', () => {
-  const game = withShips(createGame({ seed: 'artillery-prize', reimagined: true }), (ship) => {
+  const game = withShips(createGame({ seed: 'artillery-prize', reimagined: true, loadout: defaultLoadout() }), (ship) => {
     if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
     if (ship.id === 'axis-artillery') return { ...ship, status: 'vacant', crew: 0, x: 104, y: 100 };
     return ship;
@@ -3419,8 +3420,8 @@ test('a captured artillery ship is an under-manned prize like any other hull', (
 
 // --- Argonaut Reimagined, round 18c: the carrier class ---
 
-test('a Reimagined war fields a carrier for every alliance', () => {
-  const game = createGame({ seed: 'carrier-roster', reimagined: true });
+test('the default loadout fields a carrier for every alliance', () => {
+  const game = createGame({ seed: 'carrier-roster', reimagined: true, loadout: defaultLoadout() });
   const names = { fed: 'Lexington', axis: 'Leviathan', bloc: 'Armada', cabal: 'Nestor' };
   for (const [factionId, name] of Object.entries(names)) {
     const ship = getShip(game, `${factionId}-carrier`);
@@ -3467,7 +3468,7 @@ test('classic and extended wars never field the carrier and stay 21 hulls', () =
 test('a carrier boards a derelict no other warship can reach, and mans it properly', () => {
   // The wreck sits 35 out — past a battle cruiser's 30-unit transporter arm,
   // inside the carrier's 40.
-  const game = withShips(createGame({ seed: 'carrier-reach', reimagined: true }), (ship) => {
+  const game = withShips(createGame({ seed: 'carrier-reach', reimagined: true, loadout: defaultLoadout() }), (ship) => {
     if (ship.id === 'fed-carrier') return { ...ship, x: 100, y: 100 };
     if (ship.id === 'axis-scout') return { ...ship, status: 'vacant', crew: 0, x: 135, y: 100 };
     return ship;
@@ -3519,7 +3520,7 @@ test('an Axis last stand in a Reimagined war counts the scaled blast', () => {
   // Four enemies sit 15 out — inside the manual blast the old trigger would have
   // counted them; the scaled Reimagined blast (12) reaches none, so even a gutted
   // captain with a grudge keeps fighting.
-  const game = withShips(createGame({ seed: 'axis-blast-scale', reimagined: true }), (ship) => {
+  const game = withShips(createGame({ seed: 'axis-blast-scale', reimagined: true, loadout: defaultLoadout() }), (ship) => {
     if (ship.id === 'axis-cruiser-1') return { ...ship, x: 100, y: 100, shields: 2 };
     if (ship.id === 'fed-flagship') return { ...ship, x: 115, y: 100 };
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 100, y: 115 };
@@ -3535,7 +3536,7 @@ test('an Axis last stand in a Reimagined war counts the scaled blast', () => {
 // --- Play-test balance pass: Reimagined durability ---
 
 test('the Cabal profile bites with its guns again, and still leans mobile', () => {
-  const game = createGame({ seed: 'cabal-profile', reimagined: true });
+  const game = createGame({ seed: 'cabal-profile', reimagined: true, loadout: defaultLoadout() });
   const flagship = getShip(game, 'cabal-flagship');
   // Weapons 5/6 after the retune (was 3/6 — half-damage volleys, and a 4.8% win rate).
   assert.ok(powerEffect(game, flagship, 'weapons') > 0.8, 'Cabal guns bite at five sixths');
@@ -3569,4 +3570,116 @@ test('a Reimagined volley lands softer than the same calibrated one', () => {
   const damageOf = (out) => Number(out.messages.join(' ').match(/for (\d+) damage/)[1]);
   assert.ok(Math.abs(damageOf(reimagined) - damageOf(classic) * REIMAGINED_WEAPON_DAMAGE_SCALE) <= 1,
     'the player\'s own volleys scale too — the lever is symmetric');
+});
+
+// --- Argonaut Reimagined, round 19: fleet loadout and points budget ---
+
+test('a Reimagined war records its loadout, and the untouched panel reproduces the round-18 fleet', () => {
+  const game = createGame({ seed: 'loadout-default', reimagined: true });
+  assert.deepEqual(game.loadout.budgets, { Federation: 24, Axis: 24, Bloc: 24, Cabal: 24 });
+  assert.deepEqual(game.loadout.fleets.Federation, LOADOUT.defaultFleet);
+  const expected = [
+    ['fed-flagship', 'Argo', 'Battle cruiser'], ['fed-cruiser-1', 'Bonhomme', 'Cruiser'],
+    ['fed-cruiser-2', 'Crusader', 'Cruiser'], ['fed-cruiser-3', 'Defender', 'Cruiser'],
+    ['fed-scout', 'Empyreal', 'Scout'], ['fed-interceptor', 'Vanguard', 'Interceptor'],
+    ['fed-artillery', 'Yeoman', 'Artillery'], ['fed-carrier', 'Lexington', 'Carrier'],
+  ];
+  for (const [id, name, className] of expected) {
+    const ship = getShip(game, id);
+    assert.ok(ship, `${id} exists`);
+    assert.equal(ship.name, name);
+    assert.equal(ship.className, className);
+  }
+});
+
+test('AI alliances draw legal doctrine-flavored fleets on their own seeded stream', () => {
+  const game = createGame({ seed: 'loadout-ai', reimagined: true });
+  for (const faction of ['Axis', 'Bloc', 'Cabal']) {
+    const spec = game.loadout.fleets[faction];
+    assert.equal(spec['battle-cruiser'], 1, `${faction} always fields its flagship`);
+    assert.ok(fleetCost(spec) <= game.loadout.budgets[faction], `${faction} stays inside its budget`);
+    assert.ok(fleetHulls(spec) >= 1 && fleetHulls(spec) <= LOADOUT.maxHulls);
+    const hulls = game.ships.filter((ship) => ship.faction === faction);
+    assert.equal(hulls.length, fleetHulls(spec), 'the roster matches the spec');
+    for (const kind of LOADOUT.classOrder) {
+      const count = hulls.filter((ship) => ship.className === SHIP_TEMPLATES[kind].className).length;
+      assert.equal(count, spec[kind] ?? 0, `${faction} fields ${spec[kind] ?? 0} ${kind}`);
+    }
+  }
+  // Deterministic per seed...
+  assert.deepEqual(createGame({ seed: 'loadout-ai', reimagined: true }).ships, game.ships);
+  // ...the Federation spec never perturbs the AI draws (the sub-stream is their own)...
+  const custom = createGame({ seed: 'loadout-ai', reimagined: true, loadout: { fleets: { Federation: { 'battle-cruiser': 1, scout: 2 } } } });
+  for (const faction of ['Axis', 'Bloc', 'Cabal']) {
+    assert.deepEqual(custom.loadout.fleets[faction], game.loadout.fleets[faction]);
+  }
+  // ...and different seeds draw different fleets.
+  const axisSpecs = new Set(Array.from({ length: 12 }, (_, index) => JSON.stringify(
+    createGame({ seed: `loadout-variety-${index}`, reimagined: true }).loadout.fleets.Axis,
+  )));
+  assert.ok(axisSpecs.size > 1, 'the archetype draw varies with the seed');
+});
+
+test('the budget binds and the flagship is mandatory', () => {
+  const trimmed = normalizeFleetSpec({ 'battle-cruiser': 1, carrier: 6 }, 24);
+  assert.deepEqual(trimmed, { 'battle-cruiser': 1, carrier: 4 }, '5 + 4×4 = 21 of 24; a fifth carrier does not fit');
+  const capped = normalizeFleetSpec({ 'battle-cruiser': 1, scout: 20 }, 36);
+  assert.equal(capped.scout, LOADOUT.maxHulls - 1, 'the hull cap binds before the budget does');
+  assert.deepEqual(normalizeFleetSpec(null, 5), { 'battle-cruiser': 1 }, 'a 5-point budget fields the flagship alone');
+  const noFlagship = normalizeFleetSpec({ cruiser: 2 }, 24);
+  assert.equal(noFlagship['battle-cruiser'], 1, 'a spec without a flagship still fields one');
+  assert.equal(noFlagship.cruiser, 2);
+});
+
+test('budgets clamp to the panel bounds, per faction', () => {
+  const game = createGame({ seed: 'loadout-budgets', reimagined: true, loadout: { budgets: { Federation: 100, Axis: 1, Bloc: 'x' } } });
+  assert.equal(game.loadout.budgets.Federation, LOADOUT.maxBudget);
+  assert.equal(game.loadout.budgets.Axis, LOADOUT.minBudget);
+  assert.equal(game.loadout.budgets.Bloc, LOADOUT.budget, 'garbage falls back to the default');
+  assert.equal(game.loadout.budgets.Cabal, LOADOUT.budget);
+  assert.deepEqual(game.loadout.fleets.Axis, { 'battle-cruiser': 1 }, 'a 5-point Axis fields its flagship alone');
+});
+
+test('a custom Federation loadout fields exactly the chosen hulls, ids, and names', () => {
+  const spec = { 'battle-cruiser': 1, cruiser: 1, interceptor: 3 };
+  const game = createGame({ seed: 'loadout-custom', reimagined: true, loadout: { fleets: { Federation: spec } } });
+  const fed = game.ships.filter((ship) => ship.faction === 'Federation' && ship.className !== 'Starbase');
+  assert.deepEqual(fed.map((ship) => ship.id), ['fed-flagship', 'fed-cruiser', 'fed-interceptor-1', 'fed-interceptor-2', 'fed-interceptor-3'],
+    'a lone class keeps its bare id; multiples number from 1');
+  assert.deepEqual(fed.map((ship) => ship.name), ['Argo', 'Bonhomme', 'Crusader', 'Defender', 'Empyreal'], 'names follow the slot index');
+  assert.deepEqual(fed.map((ship) => ship.className), ['Battle cruiser', 'Cruiser', 'Interceptor', 'Interceptor', 'Interceptor']);
+});
+
+test('classic and extended wars ignore the loadout entirely', () => {
+  const weird = { budgets: { Federation: 5 }, fleets: { Federation: { 'battle-cruiser': 1 } } };
+  for (const opts of [{}, { extended: true }]) {
+    const game = createGame({ seed: 'loadout-parity', ...opts, loadout: weird });
+    assert.deepEqual(game, createGame({ seed: 'loadout-parity', ...opts }));
+    assert.equal(game.ships.length, 21);
+    assert.equal(game.loadout, null);
+  }
+});
+
+test('the vendetta still picks an enemy flagship from any loadout', () => {
+  const game = createGame({ seed: 'loadout-vendetta', reimagined: true, loadout: { budgets: { Axis: 5, Bloc: 5, Cabal: 5 } } });
+  const hunter = getShip(game, game.vendettaShipId);
+  assert.ok(hunter.id.endsWith('-flagship'));
+  assert.notEqual(hunter.faction, 'Federation');
+});
+
+test('a war of lopsided budgets still resolves', () => {
+  let war = createGame({
+    seed: 'loadout-war',
+    reimagined: true,
+    loadout: {
+      budgets: { Federation: 36, Axis: 5, Bloc: 24, Cabal: 10 },
+      fleets: { Federation: { 'battle-cruiser': 1, interceptor: 7 } },
+    },
+  });
+  assert.equal(war.ships.filter((ship) => ship.faction === 'Federation' && ship.className !== 'Starbase').length, 8,
+    'flagship plus seven interceptors, at the hull cap');
+  for (let round = 0; round < 60 && !war.outcome; round += 1) {
+    war = resolveComputerTurns({ ...war, phase: 'computer' });
+  }
+  assert.ok(war.turn > 1);
 });

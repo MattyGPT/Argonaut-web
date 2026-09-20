@@ -625,6 +625,46 @@ body.classic .legend-swatch.pip-prize {
   box-shadow: none;
 }
 
+/* Fleet loadout (round 19): the New game panel's budget and composition
+   steppers. The section can grow tall, so it scrolls inside the dialog and the
+   Begin/Cancel actions stay visible. */
+.loadout {
+  display: grid;
+  gap: .5rem;
+  padding: .6rem .7rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  max-height: 42vh;
+  overflow-y: auto;
+}
+
+.loadout-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.loadout-row b {
+  min-width: 1.6rem;
+  text-align: center;
+}
+
+.loadout-label {
+  flex: 1;
+}
+
+.loadout-label.Federation { color: var(--fed); }
+.loadout-label.Axis { color: var(--axis); }
+.loadout-label.Bloc { color: var(--bloc); }
+.loadout-label.Cabal { color: var(--cabal); }
+
+.loadout-label i,
+.loadout-fixed {
+  color: #7f9fb3;
+  font-size: .68rem;
+  font-style: normal;
+}
+
 .panel-meta {
   display: flex;
   gap: .9rem;
