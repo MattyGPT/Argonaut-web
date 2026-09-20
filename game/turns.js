@@ -1,4 +1,4 @@
-import { DOCKING, FACTIONS, GRID_SIZE, POWER, PRIZE, RANGES, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
+import { DOCKING, FACTIONS, GRID_SIZE, POWER, PRIZE, RANGES, REIMAGINED_WEAPON_DAMAGE_SCALE, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
 import { captureHull, damageShip, detonate, fireEvent, flushShields, killLines, resolveAsteroidStrike, resolveCollision, terminalEvent, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
@@ -64,7 +64,7 @@ const resolveAiAction = (game, shipId) => {
       };
     }
     const grudge = vendettaGrudge(game, actor, target);
-    const amount = weaponDamage(action.type, actor, rng, grudge, powerEffect(game, actor, 'weapons'));
+    const amount = weaponDamage(action.type, actor, rng, grudge, powerEffect(game, actor, 'weapons'), game.reimagined ? REIMAGINED_WEAPON_DAMAGE_SCALE : 1);
     const before = target.status;
     const hit = damageShip(target, amount, rng);
     const kill = before === 'active' && hit.status !== 'active' ? 1 : 0;

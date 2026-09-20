@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, SCENARIOS, STALEMATE_ROUNDS, TERRAIN, VENDETTA } from '../game/constants.js';
+import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, REIMAGINED_WEAPON_DAMAGE_SCALE, SCENARIOS, STALEMATE_ROUNDS, TERRAIN, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioOutcome, scenarioProgress } from '../game/scenarios.js';
 import { abbreviateNarrative, alertLevel, appendLog, blastRadius, clampPowerAllocation, createGame, crewCapacity, distance, engineCapacity, getShip, inRadioContact, insideFeature, ionStormZone, isAce, nebulaHides, nebulaRevealRange, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
@@ -3530,4 +3530,43 @@ test('an Axis last stand in a Reimagined war counts the scaled blast', () => {
   });
   assert.notEqual(chooseAiAction(game, 'axis-cruiser-1').type, 'self-destruct',
     'nothing sits inside the scaled blast but its own spite');
+});
+
+// --- Play-test balance pass: Reimagined durability ---
+
+test('the Cabal profile bites with its guns again, and still leans mobile', () => {
+  const game = createGame({ seed: 'cabal-profile', reimagined: true });
+  const flagship = getShip(game, 'cabal-flagship');
+  // Weapons 5/6 after the retune (was 3/6 — half-damage volleys, and a 4.8% win rate).
+  assert.ok(powerEffect(game, flagship, 'weapons') > 0.8, 'Cabal guns bite at five sixths');
+  assert.ok(powerEffect(game, flagship, 'tractor') > 1, 'the tractor-ram identity stands');
+  assert.ok(powerEffect(game, flagship, 'engines') > 1, 'and the fleet stays mobile');
+  // The smallest Cabal hulls (reactor 4, budget 20) run the profile exactly as written.
+  const cruiser = getShip(game, 'cabal-cruiser-1');
+  const allocation = powerAllocation(game, cruiser);
+  assert.deepEqual(allocation, { shields: 3, weapons: 5, engines: 5, sensors: 3, tractor: 4 });
+});
+
+test('the damage scale multiplies the whole band, and only it', () => {
+  const ship = getShip(createGame({ seed: 'damage-scale' }), 'fed-flagship');
+  const full = weaponDamage('phasers', ship, createRng('band'), 0, 1);
+  const soft = weaponDamage('phasers', ship, createRng('band'), 0, 1, REIMAGINED_WEAPON_DAMAGE_SCALE);
+  assert.ok(Math.abs(soft - full * REIMAGINED_WEAPON_DAMAGE_SCALE) <= 1,
+    'the same roll on the same stream scales by the dial, within rounding');
+  const untouched = weaponDamage('phasers', ship, createRng('band'));
+  assert.equal(untouched, full, 'the default scale leaves the calibrated roll byte-identical');
+});
+
+test('a Reimagined volley lands softer than the same calibrated one', () => {
+  // Same seed, same staging, same roll stream: the only difference is the flag.
+  const staged = (opts) => withShips(createGame({ seed: 'durability-scale', ...opts }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 50, y: 50 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 60, y: 50 };
+    return ship;
+  });
+  const classic = applyPlayerAction(staged({}), { type: 'phasers', targetId: 'axis-flagship' });
+  const reimagined = applyPlayerAction({ ...staged({ reimagined: true }), terrain: [] }, { type: 'phasers', targetId: 'axis-flagship' });
+  const damageOf = (out) => Number(out.messages.join(' ').match(/for (\d+) damage/)[1]);
+  assert.ok(Math.abs(damageOf(reimagined) - damageOf(classic) * REIMAGINED_WEAPON_DAMAGE_SCALE) <= 1,
+    'the player\'s own volleys scale too — the lever is symmetric');
 });

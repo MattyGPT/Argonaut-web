@@ -125,15 +125,20 @@ parity tests hold.
 | Baseline at round 18 (33 hulls, prize fleet, terrain) | median 36 stardates (mean 63.1, max 600); 1.2 Axis last stands per war; worst blast 15 hulls; a 4+-hull blast in 80% of wars; volleys per kill 10.9; prizes 5.1 per war; winners Bloc 37.2% / Axis 31.6% / Federation 16% / Cabal 2%; hopeless draws 11%, timeouts 2% |
 | Last-stand trigger retune (`suicideBelow` 4%→2%, `suicideMinEnemies` 4→5 — dials shared with extended, see "Doctrine balance") | last stands 0.87/war; 4+-hull blasts 66.8%; median 39 |
 | Reimagined blast scale (`REIMAGINED_SELF_DESTRUCT_SCALE` 0.6 — blast 12, starbase 24, shrapnel rides the scaled blast) | last stands 0.36/war; worst blast 10; 4+-hull blasts 33.2%; median 43 (mean 76.3); volleys per kill 13.5; prizes 7.2/war; winners Federation 30.8% / Bloc 28% / Axis 21.2% / Cabal 4.8%; hopeless draws 12%, timeouts 3% |
+| Cabal power-profile retune (`POWER.profiles.Cabal` → shields 3 / weapons 5 / engines 5 / sensors 3 / tractor 4 — sums to 20, the smallest Cabal budget, so every hull runs the bias as written; guns at 5/6 instead of half damage, still the mobile tractor faction) | Cabal 4.8% → **11.2%**; spread Fed 27.2 / Axis 26.8 / Bloc 22.4 / Cabal 11.2; median 40; volleys per kill 11.9 |
+| Reimagined volley-damage scale (`REIMAGINED_WEAPON_DAMAGE_SCALE` 0.7 — the whole band scales, player and autopilot volleys symmetrically, through the one shared `weaponDamage` roll; a classic or extended volley is byte-identical, re-measured digit-for-digit on the harness) | **median 60** stardates (mean 102.1, p90 190); volleys per kill **18.9**; prizes 9.2/war with 4.0 still held at the end; winners Bloc 30.8% / Federation 25.6% / Axis 19.6% / Cabal 9.2%; timeouts 4%, hopeless draws 10% |
 
 Open findings for the rest of the balance pass:
 
-- **Cabal wins 4.8%** of Reimagined wars against 20.8% of extended ones. The
-  suspect is its Phase 1 power profile (weapons 3/6 — every Cabal volley runs
-  at half damage); the durability item should retune it and re-measure.
-- **Hopeless draws (12%) and timeouts (3%)** run higher than extended's (0%+
-  rare). Watch whether the durability levers move them; a wide field with
-  regenerating shields may need the stalemate net tightened after all.
+- **Cabal is still last** at 9.2% (from 2% at baseline). The power-profile
+  retune more than doubled its win rate; what remains is doctrine territory —
+  the tractor-ram payoff on a wide field where collision tows need setup —
+  which is beyond the recorded levers. Watch item: if Cabal keeps lagging in
+  play, a Cabal doctrine pass can be its own chunk.
+- **Timeouts rose to 4%** of Reimagined wars (2% at baseline) and hopeless
+  draws sit at 10%: softer incoming fire plus 2%/stardate shield regen
+  stretches endgames. If the long tail feels tedious in play, tighten
+  `STALEMATE_ROUNDS` or revisit the regen rate — measured, not guessed.
 
 Future calibration should record a DOS input sequence and visible output beside
 the same web seed/action pair, then tune only the values needed to preserve the

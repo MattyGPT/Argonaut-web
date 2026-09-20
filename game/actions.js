@@ -15,6 +15,7 @@ import {
   RANGES,
   REFITS,
   REFIT_OVER_TEMPLATE,
+  REIMAGINED_WEAPON_DAMAGE_SCALE,
   SHIELD_PER_ENGINE,
   SHRAPNEL_DAMAGE,
   SHRAPNEL_EXTRA_RANGE,
@@ -70,10 +71,13 @@ const unitName = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
  * the roll is exactly what it has always been, so a classic war is untouched.
  * `powerEff` is the weapons-sink multiplier (1 outside a Reimagined war, so parity
  * holds): routing reactor power into the guns scales the whole band up or down.
+ * `durabilityScale` is the Reimagined durability lever (1 elsewhere): the whole
+ * band scales with it, so the wide war's battles last long enough for terrain and
+ * objectives to matter while the manual's spread ratio is preserved.
  */
-export const weaponDamage = (type, shooter, rng, grudge = 0, powerEff = 1) => {
+export const weaponDamage = (type, shooter, rng, grudge = 0, powerEff = 1, durabilityScale = 1) => {
   const { base, perUnit, spread } = WEAPONS[type];
-  const nominal = (base + systemUnits(shooter, type) * perUnit) * (1 + grudge * VENDETTA.damagePerStep) * powerEff;
+  const nominal = (base + systemUnits(shooter, type) * perUnit) * (1 + grudge * VENDETTA.damagePerStep) * powerEff * durabilityScale;
   const low = nominal * (1 - spread);
   return Math.max(1, Math.round(low + rng.next() * nominal * 2 * spread));
 };
@@ -498,7 +502,7 @@ const weaponAction = (game, action, actor, type) => {
     return result(updated, `${actor.name} fires ${type} at ${found.target.name}. Missed!${covered ? ' The volley splashes into asteroids.' : ''}`, { events: [fireEvent(type, actor, found.target, false, details)] });
   }
   const grudge = vendettaGrudge(game, actor, found.target);
-  const roll = weaponDamage(type, actor, rng, grudge, powerEffect(game, actor, 'weapons'));
+  const roll = weaponDamage(type, actor, rng, grudge, powerEffect(game, actor, 'weapons'), game.reimagined ? REIMAGINED_WEAPON_DAMAGE_SCALE : 1);
   const damage = focus
     ? Math.round(roll * (power / 100) * SURGICAL_DAMAGE_FACTOR)
     : Math.round(roll * (power / 100));
