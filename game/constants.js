@@ -262,7 +262,13 @@ export const POWER = Object.freeze({
   profiles: Object.freeze({
     Axis: Object.freeze({ shields: 2, weapons: 9, engines: 6, sensors: 3, tractor: 2 }),
     Bloc: Object.freeze({ shields: 3, weapons: 9, engines: 3, sensors: 5, tractor: 0 }),
-    Cabal: Object.freeze({ shields: 3, weapons: 3, engines: 6, sensors: 3, tractor: 6 }),
+    // Retuned in the play-test balance pass: at weapons 3 (half-damage volleys) the
+    // harness measured Cabal winning 4.8% of Reimagined wars against 20.8% of
+    // extended ones — the tractor-ram identity was costing it every gunfight. Now
+    // the profile sums to 20, exactly the budget of its smallest hulls (reactor 4),
+    // so every Cabal ship runs the bias as written: still the most mobile fleet
+    // after Axis and the only one overcharging tractor, but its guns bite at 5/6.
+    Cabal: Object.freeze({ shields: 3, weapons: 5, engines: 5, sensors: 3, tractor: 4 }),
     Federation: Object.freeze({ shields: 6, weapons: 6, engines: 4, sensors: 4, tractor: 2 }),
   }),
 });
@@ -424,6 +430,20 @@ export const STARBASE_BLAST_RADIUS = 40;
  * recovered behavior, not a balance dial. Measured with `npm run sim`.
  */
 export const REIMAGINED_SELF_DESTRUCT_SCALE = 0.6;
+
+/**
+ * Reimagined volley-damage scale (play-test balance pass, 2026-09-19). The
+ * gunnery table is calibrated, so a classic or extended war keeps every figure
+ * byte-identical — but on the 33-hull Reimagined field wars were over before
+ * the living battlefield got its turn: a median of 40–43 stardates at ~12
+ * volleys per kill, with terrain, objectives, and prize ops decorative in a
+ * fight already decided. Every Reimagined volley — the player's and the
+ * autopilots' alike, since both share this one roll — scales its whole damage
+ * band by this factor: mean damage falls, the manual's spread ratio is
+ * preserved, and nothing outside the flag reads it. A balance dial measured
+ * with `npm run sim`, aimed at wars long enough for the battlefield to matter.
+ */
+export const REIMAGINED_WEAPON_DAMAGE_SCALE = 0.7;
 
 /**
  * A collision destroys one ship and cripples the other, per the manual. The

@@ -127,7 +127,10 @@ line; a prize whose crew dies can be retaken by anyone, including its original
 alliance. Axis last stands are scaled for the wide field as well — the
 self-destruct blast is smaller there, and the trigger needs a captain at 2%
 shields with five enemies stacked close, so one spiteful death no longer
-deletes a fleet cluster. It
+deletes a fleet cluster. Volleys are measured too: every Reimagined salvo
+lands at a scaled fraction of its calibrated band — a balance dial, not
+calibration — so wars run long enough for terrain, relay nodes, and prize work
+to decide them rather than the first exchange. It
 never changes how a classic or extended war plays — those keep the calibrated
 100-unit field and the pull-toward-you beam. New Reimagined systems land over time;
 see `docs/superpowers/specs/2026-09-17-argonaut-reimagined-roadmap.md`.
