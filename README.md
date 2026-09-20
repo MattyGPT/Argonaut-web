@@ -124,7 +124,10 @@ hull is a resource every alliance races for. A fresh prize is under-manned (its
 engines and guns run at half effectiveness below a quarter of its complement)
 and withdraws toward Xanadu until you dock it, crew it up, and order it into the
 line; a prize whose crew dies can be retaken by anyone, including its original
-alliance. It
+alliance. Axis last stands are scaled for the wide field as well — the
+self-destruct blast is smaller there, and the trigger needs a captain at 2%
+shields with five enemies stacked close, so one spiteful death no longer
+deletes a fleet cluster. It
 never changes how a classic or extended war plays — those keep the calibrated
 100-unit field and the pull-toward-you beam. New Reimagined systems land over time;
 see `docs/superpowers/specs/2026-09-17-argonaut-reimagined-roadmap.md`.
@@ -219,7 +222,7 @@ you issue an order.
 - **Each alliance fights its own way.** In the original every autopilot ran the
   same doctrine. In an extended war: **Axis** swarms the nearest hull and refuses
   to give ground, refits late, and — only as a last stand when all but destroyed
-  (4% shields) with at least four enemy ships, more enemies than friends, stacked
+  (2% shields) with at least five enemy ships, more enemies than friends, stacked
   inside its blast — detonates rather than be destroyed (the vendetta captain never
   does, and keeps hunting);
   **Bloc** works the phaser edge, backs off anything that closes to point-blank,

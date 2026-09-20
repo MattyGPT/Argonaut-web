@@ -212,7 +212,7 @@ const suicideRun = (game, actor, doctrine, enemies) => {
   // is destroyed or its target is, so it never trades itself for the fleet.
   if (isVendetta(game, actor)) return null;
   if (actor.shields > shieldCapacity(actor) * doctrine.suicideBelow) return null;
-  const blast = blastRadius(actor);
+  const blast = blastRadius(actor, game);
   const inside = (list) => list.filter((ship) => distance(actor, ship) <= blast).length;
   const friendlies = game.ships.filter((ship) => isActive(ship) && ship.faction === actor.faction && ship.id !== actor.id);
   if (inside(enemies) < Math.max(doctrine.suicideMinEnemies, inside(friendlies) + 1)) return null;

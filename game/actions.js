@@ -824,7 +824,7 @@ const destroyedShip = (ship) => ({ ...ship, status: 'destroyed', crew: 0, shield
  */
 export const detonate = (game, actor) => {
   const rng = seededRng(game);
-  const blast = blastRadius(actor);
+  const blast = blastRadius(actor, game);
   const shrapnel = blast + SHRAPNEL_EXTRA_RANGE;
   const messages = [`${actor.name} is self-destructing.  Blast range ${blast}.`];
   const events = [];
