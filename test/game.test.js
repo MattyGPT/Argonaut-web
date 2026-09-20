@@ -3019,10 +3019,10 @@ test('relay objectives never touch a classic or extended war, and tolerate old s
  * center as the withdraw destination. New roster slots must be added here.
  */
 const PRIZE_PARKING = {
-  'fed-flagship': [10, 230], 'fed-cruiser-1': [14, 234], 'fed-cruiser-2': [18, 226], 'fed-cruiser-3': [12, 222], 'fed-scout': [16, 218], 'fed-interceptor': [20, 226], 'fed-artillery': [8, 226],
-  'axis-flagship': [10, 10], 'axis-cruiser-2': [14, 14], 'axis-cruiser-3': [16, 8], 'axis-scout': [20, 12], 'axis-interceptor': [22, 16], 'axis-artillery': [12, 18],
-  'bloc-flagship': [230, 10], 'bloc-cruiser-1': [226, 14], 'bloc-cruiser-2': [222, 8], 'bloc-cruiser-3': [228, 16], 'bloc-scout': [224, 20], 'bloc-interceptor': [234, 18], 'bloc-artillery': [218, 12],
-  'cabal-flagship': [225, 225], 'cabal-cruiser-1': [230, 230], 'cabal-cruiser-2': [220, 232], 'cabal-cruiser-3': [228, 222], 'cabal-scout': [232, 226], 'cabal-interceptor': [224, 228], 'cabal-artillery': [216, 220],
+  'fed-flagship': [10, 230], 'fed-cruiser-1': [14, 234], 'fed-cruiser-2': [18, 226], 'fed-cruiser-3': [12, 222], 'fed-scout': [16, 218], 'fed-interceptor': [20, 226], 'fed-artillery': [8, 226], 'fed-carrier': [8, 218],
+  'axis-flagship': [10, 10], 'axis-cruiser-2': [14, 14], 'axis-cruiser-3': [16, 8], 'axis-scout': [20, 12], 'axis-interceptor': [22, 16], 'axis-artillery': [12, 18], 'axis-carrier': [18, 18],
+  'bloc-flagship': [230, 10], 'bloc-cruiser-1': [226, 14], 'bloc-cruiser-2': [222, 8], 'bloc-cruiser-3': [228, 16], 'bloc-scout': [224, 20], 'bloc-interceptor': [234, 18], 'bloc-artillery': [218, 12], 'bloc-carrier': [220, 16],
+  'cabal-flagship': [225, 225], 'cabal-cruiser-1': [230, 230], 'cabal-cruiser-2': [220, 232], 'cabal-cruiser-3': [228, 222], 'cabal-scout': [232, 226], 'cabal-interceptor': [224, 228], 'cabal-artillery': [216, 220], 'cabal-carrier': [218, 228],
 };
 
 const parked = (ship) => (PRIZE_PARKING[ship.id] ? { ...ship, x: PRIZE_PARKING[ship.id][0], y: PRIZE_PARKING[ship.id][1] } : ship);
@@ -3262,7 +3262,7 @@ test('old saves tolerate the absent prize fields', () => {
 
 test('a Reimagined war fields an interceptor for every alliance', () => {
   const game = createGame({ seed: 'interceptor-roster', reimagined: true });
-  assert.equal(game.ships.length, 29, 'seven hulls per alliance plus Xanadu');
+  assert.equal(game.ships.length, 33, 'eight hulls per alliance plus Xanadu');
   const names = { fed: 'Vanguard', axis: 'Whiplash', bloc: 'Ultimatum', cabal: 'Zephyr' };
   for (const [factionId, name] of Object.entries(names)) {
     const ship = getShip(game, `${factionId}-interceptor`);
@@ -3330,7 +3330,7 @@ test('a Reimagined war with the extra hull still resolves its rounds', () => {
     war = resolveComputerTurns({ ...war, phase: 'computer' });
   }
   assert.ok(war.turn > 1, 'the computer phase runs the wider roster');
-  assert.equal(war.ships.length, 29);
+  assert.equal(war.ships.length, 33);
 });
 
 // --- Argonaut Reimagined, round 18b: the artillery class ---
@@ -3398,4 +3398,68 @@ test('a captured artillery ship is an under-manned prize like any other hull', (
   const floor = Math.ceil(crewCapacity(prize) * PRIZE.manningFloor);
   const crewed = withShips(out.game, (ship) => (ship.id === 'axis-artillery' ? { ...ship, crew: floor } : ship));
   assert.equal(powerEffect(crewed, getShip(crewed, 'axis-artillery'), 'weapons'), 1);
+});
+
+// --- Argonaut Reimagined, round 18c: the carrier class ---
+
+test('a Reimagined war fields a carrier for every alliance', () => {
+  const game = createGame({ seed: 'carrier-roster', reimagined: true });
+  const names = { fed: 'Lexington', axis: 'Leviathan', bloc: 'Armada', cabal: 'Nestor' };
+  for (const [factionId, name] of Object.entries(names)) {
+    const ship = getShip(game, `${factionId}-carrier`);
+    assert.ok(ship, `${factionId} fields a carrier`);
+    assert.equal(ship.className, 'Carrier');
+    assert.equal(ship.name, name, 'the new slot takes the next name in the faction list');
+    assert.equal(ship.status, 'active');
+    assert.ok(ship.x >= 1 && ship.x <= game.gridSize - 1 && ship.y >= 1 && ship.y <= game.gridSize - 1, 'placed in bounds');
+  }
+});
+
+test('the carrier is the prize fleet\'s tender: a starbase\'s boarding arm that can move', () => {
+  const game = createGame({ seed: 'carrier-stats', reimagined: true });
+  const ship = getShip(game, 'fed-carrier');
+  assert.equal(shieldCapacity(ship), 180);
+  assert.equal(crewCapacity(ship), 240, 'the biggest crew pool afloat after Xanadu');
+  assert.ok(crewCapacity(ship) > crewCapacity(getShip(game, 'fed-flagship')));
+  assert.equal(sensorRange(game, ship, 'transporter'), 40, 'four units reach 40 — farther than anything else that moves');
+  assert.ok(sensorRange(game, ship, 'transporter') > sensorRange(game, getShip(game, 'fed-flagship'), 'transporter'));
+  assert.equal(systemUnits(ship, 'tractor'), 4, 'and a starbase\'s tow, for hauling prizes and wreck-rams');
+  assert.equal(engineCapacity(ship, game.gridSize, 1), 72, 'three engines — a tender, not a chaser');
+  assert.ok(systemUnits(ship, 'phasers') < systemUnits(getShip(game, 'fed-artillery'), 'phasers'),
+    'its own guns are modest: it projects force through what it carries');
+});
+
+test('a Reimagined carrier runs a reactor the dockyard can repair', () => {
+  const ship = getShip(createGame({ seed: 'carrier-power', reimagined: true }), 'fed-carrier');
+  assert.equal(systemUnits(ship, 'reactor'), POWER.reactor.Carrier);
+  assert.equal(reactorOutput(ship), POWER.reactor.Carrier * POWER.perUnit);
+  assert.equal(templateSystems(ship).reactor, POWER.reactor.Carrier, 'the class is in the dockyard complement');
+});
+
+test('classic and extended wars never field the carrier and stay 21 hulls', () => {
+  for (const opts of [{}, { extended: true }]) {
+    const game = createGame({ seed: 'carrier-parity', ...opts });
+    assert.equal(game.ships.length, 21);
+    assert.ok(game.ships.every((ship) => ship.className !== 'Carrier'));
+    assert.ok(!game.ships.some((ship) => ship.id.endsWith('-carrier')));
+  }
+  assert.deepEqual(createGame({ seed: 'carrier-parity' }), createGame({ seed: 'carrier-parity', reimagined: false }),
+    'the standing parity scaffold still holds');
+});
+
+test('a carrier boards a derelict no other warship can reach, and mans it properly', () => {
+  // The wreck sits 35 out — past a battle cruiser's 30-unit transporter arm,
+  // inside the carrier's 40.
+  const game = withShips(createGame({ seed: 'carrier-reach', reimagined: true }), (ship) => {
+    if (ship.id === 'fed-carrier') return { ...ship, x: 100, y: 100 };
+    if (ship.id === 'axis-scout') return { ...ship, status: 'vacant', crew: 0, x: 135, y: 100 };
+    return ship;
+  });
+  const out = applyPlayerAction({ ...game, playerShipId: 'fed-carrier' }, { type: 'transport', targetId: 'axis-scout', amount: 25 });
+  const prize = getShip(out.game, 'axis-scout');
+  assert.equal(prize.faction, 'Federation');
+  assert.equal(prize.crew, 25);
+  assert.equal(getShip(out.game, 'fed-carrier').crew, 215);
+  assert.equal(powerEffect(out.game, prize, 'engines'), 1,
+    '25 hands clear a scout\'s 17-crew manning floor — the carrier\'s pool crews prizes properly');
 });

@@ -68,10 +68,13 @@ original ship names:
 A **Reimagined** war fields a bigger navy: beyond the canonical 21, every
 alliance also launches extra hulls of the new classes — the **interceptor**,
 the fastest hull afloat, a glass raider of light guns and thin shields that
-wins by speed rather than by trading volleys; and its opposite, the
-**artillery** ship, whose six phaser banks throw the hardest volley of any
-warship, on two engine units that hold the edge instead of chasing. More
-classes follow as the expansion continues.
+wins by speed rather than by trading volleys; its opposite, the **artillery**
+ship, whose six phaser banks throw the hardest volley of any warship, on two
+engine units that hold the edge instead of chasing; and the **carrier**, a
+slow, sturdy tender built for the prize fleet — the longest boarding arm of
+any hull that moves, a starbase's tow for hauling prizes and wreck-rams,
+modest guns of its own, and the biggest crew pool afloat after Xanadu to man
+the prizes it takes (its drone bay arrives in a later round).
 
 The **New game** panel exposes the replay seed, the regional fleet setup, the
 optional tactical sound, the precision fire mode, the extended war mode, the
