@@ -92,7 +92,10 @@ power first among the systems (Matt's pick, most on-theme); terrain next because
 it *uses* the wide field; prize fleet after terrain because disabling rather than
 destroying needs room; cheap levers (stances) before the largest single damage-model
 touch (directional shields); the sector campaign as the capstone the expanded grid
-feeds into.
+feeds into. Added from play-testing on 2026-09-19: an unnumbered **Play-test
+balance & readability pass** (battle length, self-destruct strength, a battlefield
+legend) that ships between any rounds, and a candidate **Phase 8 — real-time
+movement**, sequenced after everything else or prototyped early behind a flag.
 
 ### Phase 0 — Foundation *(prerequisite for everything positional)* — ✅ shipped
 
@@ -224,6 +227,61 @@ generalizing what the Cabal's `tractorFirst` doctrine already does for the AI.
 | --- | --- | --- | --- |
 | 28 | Seed challenges + score export | Shareable seed string, stardate score | Reproducible; export/import |
 | 29 | Async PvP / hotseat | Two-sided play off one seed | Both sides act; turn hand-off |
+
+### Phase 8 — Real-time movement *(candidate — Matt's proposal, 2026-09-19)*
+
+Step away from the turn-based model: ships **move through space continuously**
+at their own speed instead of appearing at their stardate endpoint, and a
+**pause** control (a button, and a key) stops time so you can think and plan —
+the bridge decisions (orders, power, called shots) are made paused, and the war
+unfolds between them. This is a big shift to the core loop, so it is tagged as
+a *candidate* phase and gets its own design doc — with its own open questions
+for Matt — when it is picked up. Provisional chunks, to be re-cut by that doc:
+
+| Round | Chunk | Builds | Tested by |
+| --- | --- | --- | --- |
+| 30 | Movement prototype | Continuous position integration with `engineCapacity` re-read as a speed, behind a flag; stardates stay the resolution tick | Fixed-timestep headless sim: the same seed + commands produce the same trajectories; classic/extended stay tick-based (parity) |
+| 31 | Pause & planning | A pause control that halts integration but keeps the UI live; orders/power/commands issuable while paused; the stardate becomes an elapsed-sim-time interval that still resolves dockyard/objectives/regen | Pausing halts motion but not command; tick resolutions fire on schedule; saves store sim time and resume mid-flight |
+| 32 | Combat timing | Volleys/tractor/collisions in continuous time (ordnance in flight vs instant beams with travel FX), the AI decision cadence, and the round-replay/FX story | Combat resolves identically paused and unpaused; replay reconstructs; seeded streams stay valid |
+
+Design notes for the doc:
+
+- The vector machinery already exists — move orders, pursuit, withdraw, and tows
+  are direction + magnitude, and the 13d policy (ranges fixed, movement scaled)
+  carries over with `engineCapacity` becoming units-per-time.
+- **Determinism is the hard constraint**: the seeded streams, the parity tests,
+  and seed challenges all assume discrete ticks. A fixed-timestep headless sim
+  core — the same core the uncommitted whole-war harness needs — keeps tests and
+  replays reproducible, with the UI interpolating over it on
+  requestAnimationFrame. The existing stardate glide + trail is the visual
+  precedent; the camera/minimap already pan/zoom a continuous field, so the
+  display layer is closer to ready than the rules layer.
+- The AI cadence is an open question: doctrines deciding per tick with movement
+  interpolated between (small change — doctrine, orders, and power all read
+  state, not events, which favors it) versus fully continuous steering (big
+  change).
+- Every phase before this one assumes stardate ticks: Phase 8 ships last — or is
+  prototyped behind a flag early if Matt wants the feel before the rest of the
+  roadmap lands.
+
+### Play-test balance & readability pass *(Matt's Reimagined play-test, 2026-09-19 — unnumbered; ships when picked up)*
+
+The verdict from real games: battles are still **too short** — over before the
+living battlefield (terrain, objectives, prize ops) gets to matter; entire
+fleets are still being destroyed, **mostly by Axis last stands**; and the whole
+is not yet as fun or immersive as it should be. None of the items below is
+order-dependent against rounds 19–29, and none may change a number a classic
+war reads. The two balance items should be *measured*, not eyeballed: the
+whole-war simulation harness is still uncommitted (BACKLOG), so committing a
+headless harness is effectively **step 0** of this pass, and results are
+recorded in a new "Reimagined balance" section of `CALIBRATION.md` (the same
+section the roadmap's "Future calibration" note calls for).
+
+| Item | Builds | Tested by | Status |
+| --- | --- | --- | --- |
+| Battlefield legend | An in-game color key for the tactical display (a map-side key plus the user guide): terrain hues (violet nebula, slate asteroid field, amber ion storm, relay rings neutral ice-blue / holder-colored), alliance hull colors, the threat outline, the orders pip (white), the prize pip (gold), the ace star. The living battlefield is currently unreadable without memorizing the guide | Legend renders beside the map; every color drawn on the map appears in it | — |
+| Self-destruct retune (again) | Axis last stands still wipe clustered fleets. Levers, in order of safety: **(a)** lower the AI trigger further and scale it with roster size, so `suicideBelow`/`suicideMinEnemies` stay a genuine last stand in a 33-hull Reimagined war — doctrine dials are extended-only reads, free to tune exactly as PR #33 did; **(b)** shrink the blast — but `RANGES.selfDestruct` is read by the player's `=` in *every* mode, so a radius change must be Reimagined-gated or a conscious classic re-calibration (Matt's explicit call) | Sim: last stands per war and one-blast fleet wipes down; Axis win rate back toward the pack; classic byte-identical | — |
+| Reimagined durability (battle length) | Hulls die too fast to maneuver, hide, hold nodes, and work prizes. Reimagined-gated levers, so `CALIBRATION.md` stays frozen: scale hull pools with the wider field and the bigger roster the way the 2026-09-14 doubling did, and/or a Reimagined weapon-damage multiplier — targeted so terrain and objectives actually decide wars. (Slowing *extended* too would be a re-calibration decision with precedent — the doubling changed every mode and was recorded — so it is Matt's call, not a default.) | Sim: Reimagined war length and volleys-per-kill up at target; classic/extended identical | — |
 
 ---
 
