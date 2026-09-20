@@ -136,7 +136,7 @@ Detailed design (prize layer, capture paths, manning, reports, and the seams for
 | Round | Chunk | Builds | Tested by | Status |
 | --- | --- | --- | --- | --- |
 | 17 | Prize fleet | Boarded hulls join your roster under standing orders | Capture → order eligibility → fleet report | ✅ PR #42 |
-| 18 | New ship classes (one per chunk) | Interceptor, then artillery, then carrier | Templates + roster; parity off | — |
+| 18 | New ship classes (one per chunk) | Interceptor, then artillery, then carrier | Templates + roster; parity off | 🚧 18a ✅ PR #43 · 18b/18c pending |
 | 19 | Fleet loadout / points budget | Choose composition at war start | Budget enforcement; seeded generation | — |
 | 19b | **Force customization** (Matt's idea) | Choose faction involvement, per-faction fleet size and types, optional Xanadu | New-game panel gating; seeded generation; win/scenario tolerance; parity off | — |
 | 20 | Drones / fighters | Launchable subsystem, semi-independent units | Launch + AI action branch | — |
