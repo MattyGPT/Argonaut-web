@@ -48,6 +48,7 @@ const SHIP_ROSTER = Object.freeze([
 const REIMAGINED_EXTRA_ROSTER = Object.freeze([
   ['interceptor', 'interceptor'],
   ['artillery', 'artillery'],
+  ['carrier', 'carrier'],
 ]);
 
 const rosterFor = (reimagined) => (reimagined ? [...SHIP_ROSTER, ...REIMAGINED_EXTRA_ROSTER] : SHIP_ROSTER);

@@ -254,9 +254,10 @@ customization lands.
   reach), tractor 4, and a big crew pool (180/240) to hand to prize parties,
   reactor 6; its drone bay arrives in round 20.
 - **Naming**: interceptors are *Vanguard / Whiplash / Ultimatum / Zephyr*
-  (Federation / Axis / Bloc / Cabal) and artillery *Yeoman / Dreadnought /
-  Broadside / Ambuscade*; carrier names land with 18c. Names beyond the
-  canonical five are this remake's own expression, like the captains.
+  (Federation / Axis / Bloc / Cabal), artillery *Yeoman / Dreadnought /
+  Broadside / Ambuscade*, and carriers *Lexington / Leviathan / Armada /
+  Nestor*. Names beyond the canonical five are this remake's own expression,
+  like the captains.
 - **Seam with 17**: the prize record, manning, and reports are class-blind
   (they read `className` only for display). The map glyph is `ship.name[0]`,
   so any name works.
