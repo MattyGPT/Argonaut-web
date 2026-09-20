@@ -108,6 +108,30 @@ export const SHIP_TEMPLATES = Object.freeze({
       radio: 1,
     }),
   }),
+  /**
+   * Round 18b (Argonaut Reimagined): the artillery ship — the interceptor's
+   * opposite. Two engine units, so it holds the phaser edge (30) and lets the
+   * fleet come to it rather than chasing; six phaser banks make its volley the
+   * hardest of any warship, matched only by the starbase's own banks (which
+   * still out-gun it on photons). Sturdy but unquick, and a sitting duck for
+   * anything faster that gets inside its guns. Reimagined rosters only; every
+   * figure is a balance dial.
+   */
+  artillery: Object.freeze({
+    className: 'Artillery',
+    shields: 160,
+    crew: 120,
+    systems: Object.freeze({
+      engines: 2,
+      phasers: 6,
+      photons: 2,
+      tractor: 1,
+      scanner: 3,
+      mapper: 2,
+      transporter: 1,
+      radio: 2,
+    }),
+  }),
   starbase: Object.freeze({
     className: 'Starbase',
     shields: 320,
@@ -132,10 +156,10 @@ export const SHIP_TEMPLATES = Object.freeze({
  * kept unique within a faction so the map glyph stays unambiguous.
  */
 export const SHIP_NAMES = Object.freeze({
-  [FACTIONS.FEDERATION]: Object.freeze(['Argo', 'Bonhomme', 'Crusader', 'Defender', 'Empyreal', 'Vanguard']),
-  [FACTIONS.AXIS]: Object.freeze(['Firebreather', 'Grendel', 'Hellhound', 'Iscariot', 'Jawbreaker', 'Whiplash']),
-  [FACTIONS.BLOC]: Object.freeze(['Killjoy', 'Laserblast', 'Mephisto', 'Notorious', 'Onerous', 'Ultimatum']),
-  [FACTIONS.CABAL]: Object.freeze(['Pequod', 'Queen Mab', 'Ragnarok', 'Saboteur', 'Terrorist', 'Zephyr']),
+  [FACTIONS.FEDERATION]: Object.freeze(['Argo', 'Bonhomme', 'Crusader', 'Defender', 'Empyreal', 'Vanguard', 'Yeoman']),
+  [FACTIONS.AXIS]: Object.freeze(['Firebreather', 'Grendel', 'Hellhound', 'Iscariot', 'Jawbreaker', 'Whiplash', 'Dreadnought']),
+  [FACTIONS.BLOC]: Object.freeze(['Killjoy', 'Laserblast', 'Mephisto', 'Notorious', 'Onerous', 'Ultimatum', 'Broadside']),
+  [FACTIONS.CABAL]: Object.freeze(['Pequod', 'Queen Mab', 'Ragnarok', 'Saboteur', 'Terrorist', 'Zephyr', 'Ambuscade']),
 });
 
 export const STARTING_FORMATIONS = Object.freeze({
@@ -198,7 +222,7 @@ export const POWER = Object.freeze({
   /** A sink may be driven this far past its need (1.5 = +50%) before it saturates. */
   overcharge: 1.5,
   /** Reactor units per hull class, keyed by className. */
-  reactor: Object.freeze({ 'Battle cruiser': 5, Cruiser: 4, Scout: 4, Interceptor: 4, Starbase: 8 }),
+  reactor: Object.freeze({ 'Battle cruiser': 5, Cruiser: 4, Scout: 4, Interceptor: 4, Artillery: 5, Starbase: 8 }),
   /** Points each sink needs for 1.0x; the default profile spends exactly these. */
   need: Object.freeze({ shields: 4, weapons: 6, engines: 4, sensors: 4, tractor: 2 }),
   /** Shield power restored per stardate, as a fraction of capacity at 1.0x shields power. */
