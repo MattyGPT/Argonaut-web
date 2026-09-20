@@ -3019,10 +3019,10 @@ test('relay objectives never touch a classic or extended war, and tolerate old s
  * center as the withdraw destination. New roster slots must be added here.
  */
 const PRIZE_PARKING = {
-  'fed-flagship': [10, 230], 'fed-cruiser-1': [14, 234], 'fed-cruiser-2': [18, 226], 'fed-cruiser-3': [12, 222], 'fed-scout': [16, 218], 'fed-interceptor': [20, 226],
-  'axis-flagship': [10, 10], 'axis-cruiser-2': [14, 14], 'axis-cruiser-3': [16, 8], 'axis-scout': [20, 12], 'axis-interceptor': [22, 16],
-  'bloc-flagship': [230, 10], 'bloc-cruiser-1': [226, 14], 'bloc-cruiser-2': [222, 8], 'bloc-cruiser-3': [228, 16], 'bloc-scout': [224, 20], 'bloc-interceptor': [234, 18],
-  'cabal-flagship': [225, 225], 'cabal-cruiser-1': [230, 230], 'cabal-cruiser-2': [220, 232], 'cabal-cruiser-3': [228, 222], 'cabal-scout': [232, 226], 'cabal-interceptor': [224, 228],
+  'fed-flagship': [10, 230], 'fed-cruiser-1': [14, 234], 'fed-cruiser-2': [18, 226], 'fed-cruiser-3': [12, 222], 'fed-scout': [16, 218], 'fed-interceptor': [20, 226], 'fed-artillery': [8, 226],
+  'axis-flagship': [10, 10], 'axis-cruiser-2': [14, 14], 'axis-cruiser-3': [16, 8], 'axis-scout': [20, 12], 'axis-interceptor': [22, 16], 'axis-artillery': [12, 18],
+  'bloc-flagship': [230, 10], 'bloc-cruiser-1': [226, 14], 'bloc-cruiser-2': [222, 8], 'bloc-cruiser-3': [228, 16], 'bloc-scout': [224, 20], 'bloc-interceptor': [234, 18], 'bloc-artillery': [218, 12],
+  'cabal-flagship': [225, 225], 'cabal-cruiser-1': [230, 230], 'cabal-cruiser-2': [220, 232], 'cabal-cruiser-3': [228, 222], 'cabal-scout': [232, 226], 'cabal-interceptor': [224, 228], 'cabal-artillery': [216, 220],
 };
 
 const parked = (ship) => (PRIZE_PARKING[ship.id] ? { ...ship, x: PRIZE_PARKING[ship.id][0], y: PRIZE_PARKING[ship.id][1] } : ship);
@@ -3262,7 +3262,7 @@ test('old saves tolerate the absent prize fields', () => {
 
 test('a Reimagined war fields an interceptor for every alliance', () => {
   const game = createGame({ seed: 'interceptor-roster', reimagined: true });
-  assert.equal(game.ships.length, 25, 'six hulls per alliance plus Xanadu');
+  assert.equal(game.ships.length, 29, 'seven hulls per alliance plus Xanadu');
   const names = { fed: 'Vanguard', axis: 'Whiplash', bloc: 'Ultimatum', cabal: 'Zephyr' };
   for (const [factionId, name] of Object.entries(names)) {
     const ship = getShip(game, `${factionId}-interceptor`);
@@ -3330,5 +3330,72 @@ test('a Reimagined war with the extra hull still resolves its rounds', () => {
     war = resolveComputerTurns({ ...war, phase: 'computer' });
   }
   assert.ok(war.turn > 1, 'the computer phase runs the wider roster');
-  assert.equal(war.ships.length, 25);
+  assert.equal(war.ships.length, 29);
+});
+
+// --- Argonaut Reimagined, round 18b: the artillery class ---
+
+test('a Reimagined war fields an artillery ship for every alliance', () => {
+  const game = createGame({ seed: 'artillery-roster', reimagined: true });
+  const names = { fed: 'Yeoman', axis: 'Dreadnought', bloc: 'Broadside', cabal: 'Ambuscade' };
+  for (const [factionId, name] of Object.entries(names)) {
+    const ship = getShip(game, `${factionId}-artillery`);
+    assert.ok(ship, `${factionId} fields an artillery ship`);
+    assert.equal(ship.className, 'Artillery');
+    assert.equal(ship.name, name, 'the new slot takes the next name in the faction list');
+    assert.equal(ship.status, 'active');
+    assert.ok(ship.x >= 1 && ship.x <= game.gridSize - 1 && ship.y >= 1 && ship.y <= game.gridSize - 1, 'placed in bounds');
+  }
+});
+
+test('the artillery trades speed for the hardest warship volley on the field', () => {
+  const game = createGame({ seed: 'artillery-stats', reimagined: true });
+  const ship = getShip(game, 'fed-artillery');
+  assert.equal(shieldCapacity(ship), 160);
+  assert.equal(crewCapacity(ship), 120);
+  assert.equal(systemUnits(ship, 'phasers'), 6);
+  assert.equal(systemUnits(ship, 'photons'), 2);
+  assert.equal(engineCapacity(ship, game.gridSize, 1), 48, 'two engine units — it holds the edge, it does not chase');
+  assert.ok(engineCapacity(ship, game.gridSize, 1) < engineCapacity(getShip(game, 'fed-interceptor'), game.gridSize, 1));
+  // Nominal phaser volley: WEAPONS.phasers is 12 + 4 per unit — 36 for six banks,
+  // ahead of every warship afloat and matched only by the starbase's own banks,
+  // which still out-gun it overall on photons.
+  const nominal = (hull) => 12 + systemUnits(hull, 'phasers') * 4;
+  assert.ok(nominal(ship) > nominal(getShip(game, 'fed-flagship')), 'out-hits the battle cruiser');
+  assert.equal(nominal(ship), nominal(getShip(game, 'xanadu')), 'six banks — the starbase\'s own phaser count');
+  assert.ok(systemUnits(getShip(game, 'xanadu'), 'photons') > systemUnits(ship, 'photons'), 'and Xanadu remains the harder fortress');
+});
+
+test('a Reimagined artillery ship runs a reactor the dockyard can repair', () => {
+  const ship = getShip(createGame({ seed: 'artillery-power', reimagined: true }), 'fed-artillery');
+  assert.equal(systemUnits(ship, 'reactor'), POWER.reactor.Artillery);
+  assert.equal(reactorOutput(ship), POWER.reactor.Artillery * POWER.perUnit);
+  assert.equal(templateSystems(ship).reactor, POWER.reactor.Artillery, 'the class is in the dockyard complement');
+});
+
+test('classic and extended wars never field the artillery and stay 21 hulls', () => {
+  for (const opts of [{}, { extended: true }]) {
+    const game = createGame({ seed: 'artillery-parity', ...opts });
+    assert.equal(game.ships.length, 21);
+    assert.ok(game.ships.every((ship) => ship.className !== 'Artillery'));
+    assert.ok(!game.ships.some((ship) => ship.id.endsWith('-artillery')));
+  }
+  assert.deepEqual(createGame({ seed: 'artillery-parity' }), createGame({ seed: 'artillery-parity', reimagined: false }),
+    'the standing parity scaffold still holds');
+});
+
+test('a captured artillery ship is an under-manned prize like any other hull', () => {
+  const game = withShips(createGame({ seed: 'artillery-prize', reimagined: true }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
+    if (ship.id === 'axis-artillery') return { ...ship, status: 'vacant', crew: 0, x: 104, y: 100 };
+    return ship;
+  });
+  const out = applyPlayerAction(game, { type: 'transport', targetId: 'axis-artillery', amount: 10 });
+  const prize = getShip(out.game, 'axis-artillery');
+  assert.equal(prize.faction, 'Federation');
+  assert.equal(prize.prize?.from, 'Axis');
+  assert.equal(powerEffect(out.game, prize, 'weapons'), PRIZE.manningPenalty, '10 hands cannot work a 120-crew gun platform');
+  const floor = Math.ceil(crewCapacity(prize) * PRIZE.manningFloor);
+  const crewed = withShips(out.game, (ship) => (ship.id === 'axis-artillery' ? { ...ship, crew: floor } : ship));
+  assert.equal(powerEffect(crewed, getShip(crewed, 'axis-artillery'), 'weapons'), 1);
 });

@@ -247,15 +247,16 @@ customization lands.
   **interceptor** — fastest hull afloat (7 engines → 168/stardate on the wide
   field), light guns (3 phasers, 1 photon), thin (80 shields / 60 crew),
   reactor 4; a glass raider that wins by speed. **Artillery** — slow gun
-  platform (2 engines), the hardest class volley short of a starbase (6
-  phasers), sturdy but unquick (160/120), reactor 5. **Carrier** — slow tender
+  platform (2 engines), the hardest warship volley on the field (6 phasers,
+  matched only by the starbase's own banks), sturdy but unquick (160/120),
+  reactor 5. **Carrier** — slow tender
   (3 engines) built for the prize fleet: transporter 4 (a 40-unit boarding
   reach), tractor 4, and a big crew pool (180/240) to hand to prize parties,
   reactor 6; its drone bay arrives in round 20.
 - **Naming**: interceptors are *Vanguard / Whiplash / Ultimatum / Zephyr*
-  (Federation / Axis / Bloc / Cabal); artillery and carrier names land with
-  18b/18c. Names beyond the canonical five are this remake's own expression,
-  like the captains.
+  (Federation / Axis / Bloc / Cabal) and artillery *Yeoman / Dreadnought /
+  Broadside / Ambuscade*; carrier names land with 18c. Names beyond the
+  canonical five are this remake's own expression, like the captains.
 - **Seam with 17**: the prize record, manning, and reports are class-blind
   (they read `className` only for display). The map glyph is `ship.name[0]`,
   so any name works.

@@ -66,10 +66,12 @@ original ship names:
 - **Cabal** — Pequod, Queen Mab, Ragnarok, Saboteur, Terrorist
 
 A **Reimagined** war fields a bigger navy: beyond the canonical 21, every
-alliance also launches extra hulls of the new classes — beginning with the
-**interceptor**, the fastest hull afloat, a glass raider of light guns and thin
-shields that wins by speed rather than by trading volleys. More classes follow
-as the expansion continues.
+alliance also launches extra hulls of the new classes — the **interceptor**,
+the fastest hull afloat, a glass raider of light guns and thin shields that
+wins by speed rather than by trading volleys; and its opposite, the
+**artillery** ship, whose six phaser banks throw the hardest volley of any
+warship, on two engine units that hold the edge instead of chasing. More
+classes follow as the expansion continues.
 
 The **New game** panel exposes the replay seed, the regional fleet setup, the
 optional tactical sound, the precision fire mode, the extended war mode, the
