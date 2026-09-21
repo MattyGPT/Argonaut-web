@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, GRID_SIZE, LOADOUT, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, REIMAGINED_WEAPON_DAMAGE_SCALE, SCENARIOS, SHIP_TEMPLATES, STALEMATE_ROUNDS, TERRAIN, VENDETTA } from '../game/constants.js';
+import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, DRONE, GRID_SIZE, LOADOUT, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, REIMAGINED_WEAPON_DAMAGE_SCALE, SCENARIOS, SHIP_TEMPLATES, STALEMATE_ROUNDS, TERRAIN, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioOutcome, scenarioProgress } from '../game/scenarios.js';
-import { abbreviateNarrative, alertLevel, appendLog, blastRadius, clampPowerAllocation, createGame, crewCapacity, defaultLoadout, distance, engineCapacity, fleetCost, fleetHulls, getShip, inRadioContact, insideFeature, ionStormZone, isAce, nebulaHides, nebulaRevealRange, normalizeFleetSpec, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
-import { applyPlayerAction, captureHull, damageShip, defaultTargetFor, eligibleTargets, killLines, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, tractorLock, weaponDamage } from '../game/actions.js';
+import { abbreviateNarrative, alertLevel, appendLog, blastRadius, clampPowerAllocation, createGame, crewCapacity, defaultLoadout, distance, dockedAt, engineCapacity, fleetCost, fleetHulls, getShip, inRadioContact, insideFeature, ionStormZone, isAce, isDrone, nebulaHides, nebulaRevealRange, normalizeFleetSpec, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
+import { applyPlayerAction, canLaunchDrones, captureHull, damageShip, defaultTargetFor, eligibleTargets, killLines, launchDrones, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, tractorLock, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
-import { applySurrender, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolveObjectives, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
+import { applySurrender, darkenOrphanDrones, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolveObjectives, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
 
 const withShips = (game, update) => ({ ...game, ships: game.ships.map(update) });
@@ -3344,11 +3344,16 @@ test('a captured interceptor is an under-manned prize like any other hull', () =
 
 test('a Reimagined war with the extra hull still resolves its rounds', () => {
   let war = createGame({ seed: 'interceptor-war', reimagined: true, loadout: defaultLoadout() });
+  assert.equal(war.ships.length, 33);
   for (let round = 0; round < 12 && !war.outcome; round += 1) {
     war = resolveComputerTurns({ ...war, phase: 'computer' });
   }
   assert.ok(war.turn > 1, 'the computer phase runs the wider roster');
-  assert.equal(war.ships.length, 33);
+  // Round 20: carriers loose their bays during these rounds, so the ships array
+  // grows — the 33 ships of the line are all still there, plus drone hulls with
+  // deterministic ids riding alongside them.
+  assert.equal(war.ships.filter((ship) => !isDrone(ship)).length, 33);
+  assert.ok(war.ships.every((ship) => !isDrone(ship) || ship.id === `${ship.droneOf}-drone-${ship.droneIndex}`));
 });
 
 // --- Argonaut Reimagined, round 18b: the artillery class ---
@@ -3759,4 +3764,352 @@ test('the same seed and loadout replay the same customized war', () => {
   const b = createGame({ seed: 'custom-replay', reimagined: true, loadout });
   assert.deepEqual(a.ships, b.ships);
   assert.deepEqual(a.loadout, b.loadout);
+});
+
+// --- Argonaut Reimagined, round 20: drones / fighters ---
+
+/**
+ * A Reimagined war staged for bay tests: the Federation carrier mid-field, every
+ * other ship of the line parked in the far corners (the round-17 parking pattern,
+ * so no stranger wanders inside a trigger, gun, or transporter reach). Xanadu
+ * holds the field center 28 out — outside the dockyard ring of anything spawned
+ * at the carrier, and friendly, so it never trips the launch trigger.
+ */
+const droneWar = (seed) => withShips(createGame({ seed, reimagined: true, loadout: defaultLoadout() }), (ship) => {
+  if (ship.id === 'fed-carrier') return { ...ship, x: 100, y: 100 };
+  // PRIZE_PARKING leaves axis-cruiser-1 unstaged (the round-17 tests own it), so
+  // the bay tests park it themselves — no seeded stranger inside a trigger.
+  if (ship.id === 'axis-cruiser-1') return { ...ship, x: 12, y: 16 };
+  return parked(ship);
+});
+
+/** The same war with the Federation carrier's complement already aloft. */
+const flownWar = (seed) => {
+  const base = droneWar(seed);
+  return launchDrones(base, getShip(base, 'fed-carrier')).game;
+};
+
+test('flying the carrier, the launch command puts a deterministic wing on the field', () => {
+  const game = { ...droneWar('drone-launch'), playerShipId: 'fed-carrier' };
+  const out = applyPlayerAction(game, { type: 'launch' });
+  assert.equal(out.game.phase, 'computer', 'the launch spends the stardate');
+  assert.equal(out.game.randomStep, game.randomStep, 'and consumes no RNG');
+  const wing = out.game.ships.filter(isDrone);
+  assert.deepEqual(wing.map((drone) => drone.id), ['fed-carrier-drone-1', 'fed-carrier-drone-2', 'fed-carrier-drone-3']);
+  assert.deepEqual(wing.map((drone) => drone.name), ['Lexington D1', 'Lexington D2', 'Lexington D3']);
+  assert.deepEqual(wing.map((drone) => [drone.x, drone.y]), [[102, 100], [100, 102], [98, 100]],
+    'deterministic posts around the flight deck, clear of the carrier');
+  for (const drone of wing) {
+    assert.equal(drone.faction, 'Federation');
+    assert.equal(drone.className, 'Drone');
+    assert.equal(drone.status, 'active');
+    assert.equal(drone.crew, 0, 'nobody aboard');
+    assert.equal(drone.captain, undefined, 'and no captain is dealt');
+    assert.equal(drone.droneOf, 'fed-carrier');
+  }
+  assert.equal(getShip(out.game, 'fed-carrier').dronesLaunched, true, 'the bay is marked empty');
+  assert.match(out.messages.join(' '), /Lexington opens its bay and launches 3 fighter drones: Lexington D1, Lexington D2, Lexington D3\./);
+  // Deterministic: the same state launches the same wing...
+  assert.deepEqual(applyPlayerAction(game, { type: 'launch' }).game, out.game);
+  // ...and one complement per war: a spent bay refuses without spending the turn.
+  const again = applyPlayerAction({ ...out.game, phase: 'player' }, { type: 'launch' });
+  assert.equal(again.game.phase, 'player');
+  assert.match(again.messages.join(' '), /bay is empty/);
+});
+
+test('the drone is a fast, fragile, uncrewed gunboat that runs a real reactor', () => {
+  const game = flownWar('drone-stats');
+  const drone = getShip(game, 'fed-carrier-drone-1');
+  assert.equal(shieldCapacity(drone), 40);
+  assert.equal(crewCapacity(drone), 0);
+  assert.equal(systemUnits(drone, 'phasers'), 2);
+  assert.equal(systemUnits(drone, 'photons'), 0);
+  assert.equal(systemUnits(drone, 'transporter'), 0);
+  // A 0-unit reactor would zero the whole power budget and with it the engines
+  // and guns (the POWER.reactor trap) — the class carries a real entry.
+  assert.equal(systemUnits(drone, 'reactor'), POWER.reactor.Drone);
+  assert.equal(reactorOutput(drone), POWER.reactor.Drone * POWER.perUnit);
+  assert.equal(powerEffect(game, drone, 'engines'), 1, 'the default allocation runs every sink at 1.0x');
+  assert.equal(powerEffect(game, drone, 'weapons'), 1);
+  assert.equal(engineCapacity(drone, game.gridSize, 1), 144, 'six engines across the wide field — interceptor speed');
+});
+
+test('only a Reimagined carrier with drones aboard can launch', () => {
+  const flagship = { ...droneWar('drone-refusals'), playerShipId: 'fed-flagship' };
+  const out = applyPlayerAction(flagship, { type: 'launch' });
+  assert.equal(out.game.phase, 'player', 'a refusal costs no turn');
+  assert.match(out.messages.join(' '), /carries no drone bay/);
+  for (const opts of [{}, { extended: true }]) {
+    const refused = applyPlayerAction(createGame({ seed: 'drone-refused', ...opts }), { type: 'launch' });
+    assert.match(refused.messages.join(' '), /Reimagined/);
+    assert.equal(refused.game.phase, 'player');
+  }
+});
+
+test('a drone can never go vacant, so no path can ever prize it', () => {
+  const game = flownWar('drone-vacant');
+  const drone = getShip(game, 'fed-carrier-drone-1');
+  // Every dose of damage, from a scratch to an apocalypse: a crew-0 hull dies
+  // straight to wreckage — the vacant state only exists for crews killed from
+  // above zero, so non-prizeability is structural.
+  for (const amount of [1, 5, 20, 39, 40, 41, 60, 120, 500]) {
+    const hit = damageShip(drone, amount, createRng(`dose-${amount}`));
+    assert.ok(hit.status === 'active' || hit.status === 'destroyed', `${amount} damage: fighting or wrecked, never adrift`);
+  }
+  // The board order's target list never names one, however gutted it is.
+  const gutted = withShips(game, (ship) => (ship.id === drone.id ? { ...ship, shields: 0 } : ship));
+  assert.ok(!orderTargets(gutted, 'fed-flagship', 'board').some(isDrone));
+  // And the friendly-reinforce path of the transporter finds no berth to fill.
+  const reinforced = applyPlayerAction({ ...game, playerShipId: 'fed-carrier', phase: 'player' },
+    { type: 'transport', targetId: drone.id, amount: 5 });
+  assert.equal(reinforced.game.phase, 'player');
+  assert.match(reinforced.messages.join(' '), /no space for additional crew/);
+  assert.equal(getShip(reinforced.game, drone.id).crew, 0);
+  // The menu never offers the transfer that could not land.
+  assert.ok(!shipCommands({ ...game, playerShipId: 'fed-carrier' }, drone.id).some((command) => command.type === 'transport'));
+  assert.ok(!eligibleTargets({ ...game, playerShipId: 'fed-carrier' }, 'transport').some(isDrone));
+});
+
+test('an AI carrier looses its bay when the enemy closes, and spends no roll', () => {
+  // Staged well clear of every parked corner — the Cabal fleet sits 60-ish off
+  // the northeast approaches, so the trigger must come from the scout alone.
+  const staged = (scoutX) => withShips(droneWar(`drone-ai-${scoutX}`), (ship) => {
+    if (ship.id === 'axis-carrier') return { ...ship, x: 100, y: 180 };
+    if (ship.id === 'fed-scout') return { ...ship, x: scoutX, y: 180 };
+    return ship;
+  });
+  const closing = staged(100 - DRONE.launchRange);
+  assert.deepEqual(chooseAiAction(closing, 'axis-carrier'), { type: 'launch' }, 'the trigger is the approach, not a shot');
+  const shy = staged(100 - DRONE.launchRange - 1);
+  assert.notEqual(chooseAiAction(shy, 'axis-carrier').type, 'launch', 'one unit farther and the bay stays shut');
+  // Through the computer phase, the launch lands on the field and in the log.
+  const out = resolveComputerTurns({ ...closing, phase: 'computer' });
+  assert.ok(out.ships.some((ship) => isDrone(ship) && ship.faction === 'Axis'));
+  assert.ok(out.log.some((line) => /Leviathan opens its bay/.test(line)));
+});
+
+test('the launch order is Reimagined, carrier-only, and fires on the same trigger', () => {
+  // The flagship rides along beside the carrier so the order arrives this
+  // stardate instead of travelling by radio.
+  const game = withShips(droneWar('drone-order'), (ship) => (ship.id === 'fed-flagship' ? { ...ship, x: 90, y: 100 } : ship));
+  const ordered = applyPlayerAction(game, { type: 'orders', shipId: 'fed-carrier', order: { type: 'launch' } });
+  assert.equal(ordered.game.phase, 'player', 'issuing the order is free');
+  assert.deepEqual(ordered.game.orders['fed-carrier'], { type: 'launch', targetId: null });
+  assert.match(ordered.messages.join(' '), /launch its drones when the enemy closes/);
+  const wrongHull = applyPlayerAction(game, { type: 'orders', shipId: 'fed-flagship', order: { type: 'launch' } });
+  assert.match(wrongHull.messages.join(' '), /carries no drone bay/);
+  const extended = applyPlayerAction(createGame({ seed: 'drone-order-off', extended: true }),
+    { type: 'orders', shipId: 'fed-flagship', order: { type: 'launch' } });
+  assert.match(extended.messages.join(' '), /Reimagined/);
+  // Far field: the carrier behaves normally. Closing enemy: it launches.
+  assert.notEqual(chooseAiAction(ordered.game, 'fed-carrier').type, 'launch');
+  const closing = withShips(ordered.game, (ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, x: 140, y: 100 } : ship));
+  assert.deepEqual(chooseAiAction(closing, 'fed-carrier'), { type: 'launch' });
+  // Once away, the order is spent — the bay never rebuilds — and re-issuing refuses.
+  const flown = launchDrones(closing, getShip(closing, 'fed-carrier')).game;
+  assert.notEqual(chooseAiAction(flown, 'fed-carrier').type, 'launch');
+  const reorder = applyPlayerAction({ ...flown, phase: 'player' }, { type: 'orders', shipId: 'fed-carrier', order: { type: 'launch' } });
+  assert.match(reorder.messages.join(' '), /bay is empty/);
+});
+
+test('a drone screens its carrier, and fights on alone when the carrier is lost', () => {
+  const wing = flownWar('drone-escort');
+  // A menace inside the escort ring: the wingman in gun reach shoots it...
+  const menace = withShips(wing, (ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, x: 115, y: 100 } : ship));
+  assert.deepEqual(chooseAiAction(menace, 'fed-carrier-drone-1'), { type: 'phasers', targetId: 'axis-cruiser-1' });
+  // ...and one out of gun reach is closed on, not rammed — pursuit stops at the standoff.
+  const chasing = withShips(menace, (ship) => (ship.id === 'fed-carrier-drone-1' ? { ...ship, x: 60, y: 60 } : ship));
+  const chase = chooseAiAction(chasing, 'fed-carrier-drone-1');
+  assert.equal(chase.type, 'move');
+  assert.ok(chase.dx > 0 && chase.dy > 0, 'it closes on whatever menaces the carrier');
+  // Quiet field: the wing rides at its posts — D1 stations 10 out at bearing 0.
+  const atPost = withShips(wing, (ship) => (ship.id === 'fed-carrier-drone-1' ? { ...ship, x: 110, y: 100 } : ship));
+  assert.deepEqual(chooseAiAction(atPost, 'fed-carrier-drone-1'), { type: 'pass' });
+  const offPost = chooseAiAction(wing, 'fed-carrier-drone-1');
+  assert.equal(offPost.type, 'move', 'off post, it flies back to the carrier');
+  assert.ok(offPost.dx > 0, 'east, to its own bearing — the wing spreads out instead of stacking');
+  // Carrier destroyed: the drones become independent hunters.
+  const orphaned = withShips(menace, (ship) => (ship.id === 'fed-carrier' ? { ...ship, status: 'destroyed' } : ship));
+  assert.deepEqual(chooseAiAction(orphaned, 'fed-carrier-drone-1'), { type: 'phasers', targetId: 'axis-cruiser-1' },
+    'the wing keeps fighting');
+  const hunting = withShips(orphaned, (ship) => (ship.id === 'fed-carrier-drone-1' ? { ...ship, x: 40, y: 100 } : ship));
+  const hunt = chooseAiAction(hunting, 'fed-carrier-drone-1');
+  assert.equal(hunt.type, 'move', 'and hunts the nearest enemy when its guns cannot reach');
+  assert.ok(hunt.dx > 0);
+});
+
+test('a captured carrier brings its wing, and the drones are no prize themselves', () => {
+  const wing = flownWar('drone-capture');
+  const dark = withShips(wing, (ship) => {
+    if (ship.id === 'fed-carrier') return { ...ship, status: 'vacant', crew: 0 };
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 104, y: 100 };
+    return ship;
+  });
+  const out = captureHull(dark, getShip(dark, 'axis-cruiser-1'), getShip(dark, 'fed-carrier'), PRIZE.aiParty);
+  assert.equal(getShip(out.game, 'fed-carrier').faction, 'Axis');
+  for (const index of [1, 2, 3]) {
+    const drone = getShip(out.game, `fed-carrier-drone-${index}`);
+    assert.equal(drone.faction, 'Axis', `D${index} flies for whoever flies her`);
+    assert.equal(drone.prize, undefined, 'the wing comes along; it is not itself taken');
+    assert.equal(drone.status, 'active');
+  }
+  assert.ok(out.messages.some((line) => /The drones of Lexington come over with the prize\./.test(line)));
+});
+
+test('drones never hold a faction in the war, and go dark with its last hull', () => {
+  const base = droneWar('drone-endgame');
+  const cabal = withShips(base, (ship) => (ship.id === 'cabal-carrier' ? { ...ship, x: 200, y: 200 } : ship));
+  const flown = launchDrones(cabal, getShip(cabal, 'cabal-carrier')).game;
+  const rump = withShips(flown, (ship) => (ship.faction === 'Cabal' && !isDrone(ship) ? { ...ship, status: 'destroyed' } : ship));
+  assert.equal(rump.ships.filter((ship) => isDrone(ship) && ship.status === 'active').length, DRONE.baySize,
+    'the wing is still flying');
+  // Wipe every crewed hull in the war: a drone-only rump cannot be the last
+  // alliance standing — the war reads as the draw it is.
+  const ghosts = withShips(rump, (ship) => (!isDrone(ship) ? { ...ship, status: 'destroyed' } : ship));
+  assert.equal(evaluateOutcome(ghosts).kind, 'draw');
+  const darkened = darkenOrphanDrones(ghosts);
+  assert.ok(darkened.messages.some((line) => /The last Cabal hull is gone; its drones go dark\./.test(line)));
+  assert.ok(darkened.game.ships.every((ship) => !isDrone(ship) || ship.status === 'destroyed'));
+  // A faction that still has crews keeps its wing: darkening is for orphans only.
+  const held = darkenOrphanDrones(flown);
+  assert.equal(held.game.ships.filter((ship) => isDrone(ship) && ship.status === 'active').length, DRONE.baySize);
+  assert.deepEqual(held.messages, []);
+});
+
+test('command never transfers to a drone, and a Federation of drones is a Federation lost', () => {
+  const wing = flownWar('drone-command');
+  const wiped = withShips(wing, (ship) => (ship.faction === 'Federation' && !isDrone(ship) ? { ...ship, status: 'destroyed' } : ship));
+  assert.equal(strongestFederation(wiped, null), undefined, 'there is nobody aboard to take the conn');
+  const transfer = transferCommandIfNeeded({ ...wiped, playerShipId: 'fed-flagship' });
+  assert.equal(transfer.game.commandLost, true, 'the wing cannot keep the Federation in the war');
+  assert.match(transfer.message, /Federation command has no hull left/);
+});
+
+test('a collapsed alliance capitulates on its crewed hulls alone, and its wing stands down with it', () => {
+  const base = droneWar('drone-surrender');
+  const cabal = withShips(base, (ship) => (ship.id === 'cabal-carrier' ? { ...ship, x: 200, y: 200 } : ship));
+  const flown = launchDrones(cabal, getShip(cabal, 'cabal-carrier')).game;
+  const keep = ['cabal-cruiser-1', 'cabal-cruiser-2'];
+  const collapsed = withShips(flown, (ship) => {
+    if (ship.faction !== 'Cabal' || isDrone(ship)) return ship;
+    if (keep.includes(ship.id)) return { ...ship, shields: 5, crew: 5 };
+    return { ...ship, status: 'destroyed' };
+  });
+  // Two gutted cruisers is a capitulating fleet — the three drones beside them
+  // neither pad the ship-count gate nor add an ounce of surrender strength.
+  const out = applySurrender(collapsed);
+  const cabalShips = out.game.ships.filter((ship) => ship.faction === 'Cabal');
+  const standing = cabalShips.filter((ship) => ship.status !== 'destroyed');
+  assert.equal(standing.filter((ship) => !isDrone(ship)).length, 2, 'the two gutted cruisers are the fleet that capitulates');
+  assert.ok(standing.every((ship) => ship.status === 'surrendered'), 'the whole alliance stands down, wing included');
+  assert.equal(standing.filter(isDrone).length, DRONE.baySize, 'the three drones stand down with it');
+});
+
+test('a drone neither holds nor contests a relay node, and never docks', () => {
+  const wing = flownWar('drone-support');
+  const relay = wing.terrain.find((feature) => feature.type === 'relay'
+    && !wing.ships.some((ship) => ship.status === 'active' && distance(ship, feature) <= feature.radius));
+  assert.ok(relay, 'a relay with nobody parked inside it');
+  const camping = withShips(wing, (ship) => (ship.id === 'fed-carrier-drone-1' ? { ...ship, x: relay.x, y: relay.y } : ship));
+  const held = resolveObjectives(camping);
+  assert.equal(held.game.held?.[relay.id], undefined, 'an unmanned hull cannot work the node');
+  // The dockyard is a crew story: the drone beside Xanadu gets nothing, while the
+  // hull parked next to it repairs as always.
+  const docked = withShips(wing, (ship) => {
+    if (ship.id === 'fed-carrier-drone-1') return { ...ship, x: 120, y: 120, shields: 10 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 121, y: 120, shields: 50 };
+    return ship;
+  });
+  assert.equal(dockedAt(docked, getShip(docked, 'fed-carrier-drone-1')), null);
+  const yard = resolveDocking(docked);
+  assert.equal(getShip(yard.game, 'fed-carrier-drone-1').shields, 10, 'the bay is never rebuilt');
+  assert.ok(yard.messages.every((line) => !/Lexington D1/.test(line)));
+  assert.ok(yard.messages.some((line) => /Bonhomme docks at Xanadu/.test(line)), 'the crewed hull beside it is tended');
+});
+
+test('a drone reads as unmanned on every surface, never as "Captain undefined"', () => {
+  // Terrain cleared so no seeded nebula sits between the carrier and its wing.
+  const wing = { ...flownWar('drone-surfaces'), terrain: [] };
+  const scanned = applyPlayerAction({ ...wing, playerShipId: 'fed-carrier', phase: 'player' },
+    { type: 'scan', targetId: 'fed-carrier-drone-1' });
+  assert.ok(scanned.report.lines.includes('Command: none — an unmanned fighter drone.'));
+  assert.ok(scanned.report.lines.every((line) => !/undefined/.test(line)));
+  const rollcall = reportFor(wing, 'rollcall').lines.find((line) => line.startsWith('Lexington D1'));
+  assert.match(rollcall, /Lexington D1 — Federation Drone at 102,100/);
+  assert.ok(!rollcall.includes('undefined'));
+  const fleet = reportFor(wing, 'fleet').lines.find((line) => line.startsWith('Lexington D1'));
+  assert.ok(fleet && !fleet.includes('undefined'), 'the fleet report lists the wing');
+  // A drone's kill is credited to the hull — no captain, no ace, no vendetta.
+  // (killLines reads the shooter's pre-kill tally, so the credit line is one ahead.)
+  const credited = withShips(wing, (ship) => (ship.id === 'fed-carrier-drone-1' ? { ...ship, kills: ACE_KILLS + 3 } : ship));
+  const lines = killLines(credited, getShip(credited, 'fed-carrier-drone-1'), { name: 'Grendel', status: 'destroyed' });
+  assert.deepEqual(lines, ['Grendel is destroyed.', 'Lexington D1 is credited with 6 kills.']);
+  const gunner = reportFor(credited, 'battle-report').lines.find((line) => line.startsWith('Top gun:'));
+  assert.equal(gunner, 'Top gun: Lexington D1 of the Federation, 5 credited kills.');
+});
+
+test('the computer phase launches bays, flies the wing, and darkens orphans', () => {
+  // Both a Federation and an Axis carrier with an enemy inside the trigger from
+  // the first stardate: the bays open in round one and the war plays on around
+  // the wing.
+  let war = withShips(droneWar('drone-war'), (ship) => {
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 140, y: 100 };
+    if (ship.id === 'axis-carrier') return { ...ship, x: 200, y: 200 };
+    if (ship.id === 'fed-interceptor') return { ...ship, x: 224, y: 200 };
+    return ship;
+  });
+  for (let round = 0; round < 30 && !war.outcome; round += 1) {
+    war = resolveComputerTurns({ ...war, phase: 'computer' });
+  }
+  assert.ok(war.turn > 1);
+  // Both staged bays flew in round one, and over 30 stardates the parked
+  // carriers' wars converge — every drone ever spawned rides the array, exactly
+  // one complement per launched carrier and never a second.
+  const launched = war.ships.filter((ship) => ship.className === 'Carrier' && ship.dronesLaunched);
+  assert.ok(launched.length >= 2, 'at least the two staged bays flew');
+  assert.equal(war.ships.filter(isDrone).length, launched.length * DRONE.baySize, 'each launched bay flew once');
+  const crewedFactions = new Set(war.ships.filter((ship) => ship.status === 'active' && !isDrone(ship)).map((ship) => ship.faction));
+  assert.ok(war.ships.every((ship) => !isDrone(ship) || ship.status !== 'active' || crewedFactions.has(ship.faction)),
+    'no orphan drone is left flying for an alliance that is out of the war');
+});
+
+test('drones are Reimagined-only, and the parity scaffold holds', () => {
+  for (const opts of [{}, { extended: true }]) {
+    const game = createGame({ seed: 'drone-parity-war', ...opts });
+    assert.ok(game.ships.every((ship) => !isDrone(ship)));
+  }
+  assert.deepEqual(createGame({ seed: 'drone-parity-war' }), createGame({ seed: 'drone-parity-war', reimagined: false }),
+    'the standing parity scaffold still holds');
+  assert.ok(!('drone' in LOADOUT.costs), 'the bay is not a loadout class — drones are won in the field, never budgeted');
+  // A whole extended war plays out without a whiff of drone.
+  let war = createGame({ seed: 'drone-extended-war', extended: true });
+  for (let round = 0; round < 30 && !war.outcome; round += 1) {
+    war = resolveComputerTurns({ ...war, phase: 'computer' });
+  }
+  assert.ok(war.ships.every((ship) => !isDrone(ship)));
+  assert.ok(!(war.log ?? []).some((line) => /drone/i.test(line)));
+});
+
+test('an old save with a wing aloft tolerates the missing bay flag', () => {
+  const wing = flownWar('drone-old-save');
+  // A mid-war save serialized before the flag existed: strip it, and the wing
+  // aloft is the record — the carrier must never launch a second complement.
+  const old = withShips(wing, (ship) => {
+    if (ship.id !== 'fed-carrier') return ship;
+    const { dronesLaunched, ...rest } = ship;
+    return rest;
+  });
+  assert.equal(getShip(old, 'fed-carrier').dronesLaunched, undefined);
+  assert.equal(canLaunchDrones(old, getShip(old, 'fed-carrier')), false);
+  const closing = withShips(old, (ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, x: 140, y: 100 } : ship));
+  assert.notEqual(chooseAiAction(closing, 'fed-carrier').type, 'launch');
+  const refused = applyPlayerAction({ ...closing, playerShipId: 'fed-carrier', phase: 'player' }, { type: 'launch' });
+  assert.match(refused.messages.join(' '), /bay is empty/);
+  let war = closing;
+  for (let round = 0; round < 5 && !war.outcome; round += 1) {
+    war = resolveComputerTurns({ ...war, phase: 'computer' });
+  }
+  assert.ok(war.turn > 1, 'the save plays on');
+  assert.equal(war.ships.filter((ship) => isDrone(ship) && ship.droneOf === 'fed-carrier').length, DRONE.baySize,
+    'no second complement from the unflagged carrier');
 });

@@ -16,6 +16,8 @@ const keys = Object.freeze({
   Tab: 'pass',
   '`': 'autopilot',
   Escape: 'resign',
+  d: 'launch',
+  D: 'launch',
   p: 'pass',
   P: 'pass',
   f: 'fleet',

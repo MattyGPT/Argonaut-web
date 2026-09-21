@@ -4,6 +4,7 @@ import {
   CREW_DAMAGE_WEIGHT,
   CRIPPLE,
   DEFAULT_CREW_TRANSFER,
+  DRONE,
   GRID_SIZE,
   HYPERSPACE_BURN_CHANCE,
   HYPERSPACE_MIN_SHIELD_LOSS,
@@ -37,14 +38,17 @@ import {
   describePower,
   distance,
   dockedAt,
+  dronesOf,
   engineCapacity,
   getLivingShips,
   getShip,
+  hasLaunchedDrones,
   inRadioContact,
   insideFeature,
   ionStormZone,
   isAce,
   isActive,
+  isDrone,
   isImmovable,
   isSpectator,
   isTractorHeld,
@@ -56,6 +60,7 @@ import {
   segmentCrossesFeature,
   sensorRange,
   shieldCapacity,
+  spawnDrone,
   strongestFederation,
   systemUnits,
   templateSystems,
@@ -95,6 +100,11 @@ export const killLines = (game, shooter, victim) => {
   const fate = victim.status === 'vacant'
     ? `${victim.name} is adrift, its crew dead.`
     : `${victim.name} is destroyed.`;
+  // A drone has nobody aboard (round 20): the hull itself is credited, and there
+  // is no captain to make an ace, hunt a vendetta, or read as "undefined".
+  if (isDrone(shooter)) {
+    return [fate, `${shooter.name} is credited with ${credited} kill${credited === 1 ? '' : 's'}.`];
+  }
   const lines = [
     fate,
     `${captainOf(shooter)} is credited with ${credited} kill${credited === 1 ? '' : 's'}.`,
@@ -251,7 +261,11 @@ export const damageShip = (ship, amount, rng = createRng('damage'), options = {}
     shields,
     crew,
     systems,
-    ...(crew <= 0 ? { status: 'vacant', tractorBy: null } : {}),
+    // `vacant` means a crew was killed from above zero and the frame survived —
+    // a hull that never carried a crew (a round-20 drone) can never be adrift
+    // and boardable, so a scratch that only burns its shields leaves it active,
+    // and stripping its systems destroys it outright via the empty-lottery path.
+    ...(crew <= 0 && ship.crew > 0 ? { status: 'vacant', tractorBy: null } : {}),
   };
 };
 
@@ -309,7 +323,9 @@ export const eligibleTargets = (game, actionType) => {
   if (['phasers', 'photons', 'tractor'].includes(actionType)) {
     return ships.filter((ship) => isActive(ship) && ship.faction !== actor.faction);
   }
-  if (actionType === 'transport') return ships.filter((ship) => ship.status !== 'destroyed');
+  // A drone is never a transporter subject (round 20): no crew to reinforce, and
+  // an uncrewed hull is never `vacant`, so it can never be boarded.
+  if (actionType === 'transport') return ships.filter((ship) => ship.status !== 'destroyed' && !isDrone(ship));
   if (actionType === 'scan') return ships;
   return ships;
 };
@@ -369,7 +385,9 @@ export const shipCommands = (game, targetId) => {
     }
   }
   offer('scan', 'Scan', systemUnits(actor, 'scanner') > 0, sensorRange(game, actor, 'scanner'));
-  if (!hostile && isActive(target)) {
+  // A drone has no crew berths and never will (round 20), so the transfer that
+  // could not land is never offered.
+  if (!hostile && isActive(target) && !isDrone(target)) {
     offer('transport', 'Transport crew', systemUnits(actor, 'transporter') > 0, sensorRange(game, actor, 'transporter'));
   }
   if (target.status === 'vacant') {
@@ -417,9 +435,12 @@ const scanReport = (game, target) => ({
     `Class: ${target.className}`,
     `Affiliation: ${target.faction}`,
     // Scanning is how you learn who is aboard — in an extended war that is the only
-    // way to work out which hull has sworn to hunt Captain Jason.
+    // way to work out which hull has sworn to hunt Captain Jason. A drone has
+    // nobody aboard (round 20), and must never read as "Captain undefined".
     ...(game.extended
-      ? [`Captain: ${target.captain}${isAce(target) ? ` — an ace, ${target.kills} kills` : ''}`]
+      ? (isDrone(target)
+        ? ['Command: none — an unmanned fighter drone.']
+        : [`Captain: ${target.captain}${isAce(target) ? ` — an ace, ${target.kills} kills` : ''}`])
       : []),
     `Status: ${target.status}`,
     `Shields: ${target.shields}`,
@@ -774,6 +795,12 @@ export const captureHull = (game, boarder, target, party) => {
       `${captured.name} is taken as a prize of the ${boarder.faction} — Captain ${captain} commands her now, and she withdraws ${dest}.`,
       ...(times > 1 ? [`${captured.name} has changed hands ${times} times.`] : []),
     );
+    // The bay comes with the hull (round 20): a captured carrier keeps whatever
+    // drone complement it launched, and the drones fly for whoever flies her.
+    // The prize layer itself never sees a drone — an uncrewed hull is never
+    // `vacant`, so it is structurally unprizeable.
+    const wing = dronesOf(game, captured.id);
+    if (wing.length > 0) messages.push(`The drones of ${captured.name} come over with the prize.`);
   } else if (game.reimagined) {
     messages.push(`A party from ${boarder.name} brings ${captured.name} back into the fight.`);
   }
@@ -783,10 +810,59 @@ export const captureHull = (game, boarder, target, party) => {
     ships: next.ships.map((ship) => {
       if (ship.id === captured.id) return captured;
       if (ship.id === source.id) return source;
+      // The launched complement follows its carrier's colors (round 20).
+      if (flip && isDrone(ship) && ship.droneOf === captured.id && isActive(ship)) return { ...ship, faction: captured.faction };
       return ship;
     }),
   };
   return { game: next, captured, source, placed, messages };
+};
+
+/**
+ * Whether a hull can open its bay (round 20): a Reimagined war, an active
+ * carrier, and its one complement still aboard. Shared by the player's command,
+ * the ship menu, the `launch` order's validation, and the AI branch, so every
+ * path reads the same rule.
+ */
+export const canLaunchDrones = (game, ship) => game.reimagined && isActive(ship)
+  && ship.className === 'Carrier' && !hasLaunchedDrones(game, ship);
+
+/**
+ * Opens the bay: the carrier's one complement of `DRONE.baySize` fighter drones
+ * takes the field at deterministic posts around it, and the bay is marked empty
+ * for the rest of the war. Rides the ships array, so every reader — targeting,
+ * combat, terrain, fog, reports, the minimap, warSignature — sees the drones
+ * like any hull. Consumes NO RNG draws (the board pattern): posts are tried in
+ * `DRONE.spawnOffsets` order and skipped only when an active hull already sits
+ * there, so the same war state always launches the same complement to the same
+ * coordinates and no seeded stream shifts. Returns the raw game (no turn
+ * completion) for the AI branch; the player's command wraps it.
+ */
+export const launchDrones = (game, carrier) => {
+  const grid = game.gridSize ?? GRID_SIZE;
+  const clamp = (value) => Math.max(0, Math.min(grid, value));
+  const taken = (list, x, y) => list.some((hull) => isActive(hull) && Math.hypot(hull.x - x, hull.y - y) < 1);
+  const posts = DRONE.spawnOffsets.map(([ox, oy]) => ({ x: clamp(carrier.x + ox), y: clamp(carrier.y + oy) }));
+  const open = posts.filter((post) => !taken(game.ships, post.x, post.y));
+  // Every post blocked is a field edge case, not a launch failure: the bay flies
+  // anyway, at its deterministic posts, and any overlap resolves like the
+  // collision it is the moment anything moves.
+  const chosen = [...open, ...posts.filter((post) => !open.includes(post))].slice(0, DRONE.baySize);
+  const drones = chosen.map((post, index) => spawnDrone(carrier, index + 1, post.x, post.y));
+  const flown = { ...carrier, dronesLaunched: true };
+  return {
+    game: { ...game, ships: [...game.ships.map((ship) => (ship.id === flown.id ? flown : ship)), ...drones] },
+    drones,
+    messages: [`${carrier.name} opens its bay and launches ${unitName(drones.length, 'fighter drone')}: ${drones.map((drone) => drone.name).join(', ')}.`],
+  };
+};
+
+const launchAction = (game, actor) => {
+  if (!game.reimagined) return invalid(game, 'Fighter drones fly only in a Reimagined war.');
+  if (actor.className !== 'Carrier') return invalid(game, `${actor.name} carries no drone bay.`);
+  if (hasLaunchedDrones(game, actor)) return invalid(game, `${actor.name}'s bay is empty — its drones are already away.`);
+  const out = launchDrones(game, actor);
+  return result(completeTurn(out.game), out.messages);
 };
 
 const transportAction = (game, action, actor) => {
@@ -937,6 +1013,13 @@ const setOrder = (game, action, actor) => {
     const target = getShip(game, action.targetId);
     if (!target || target.status !== 'vacant') return invalid(game, 'A board order names a derelict hull.', true);
     order.targetId = target.id;
+  } else if (type === 'launch') {
+    // The bay order (round 20), Reimagined-only like board: it names no target —
+    // the carrier looses its complement when the enemy closes inside
+    // DRONE.launchRange — and only a carrier with drones still aboard can take it.
+    if (!game.reimagined) return invalid(game, 'Fighter drones fly only in a Reimagined war.');
+    if (ship.className !== 'Carrier') return invalid(game, `${ship.name} carries no drone bay.`);
+    if (hasLaunchedDrones(game, ship)) return invalid(game, `${ship.name}'s bay is empty — its drones are already away.`);
   } else if (TARGETED_ORDERS.includes(type)) {
     const target = getShip(game, action.targetId);
     if (!target || !isActive(target)) return invalid(game, 'That order needs an active ship to name.', true);
@@ -1076,6 +1159,7 @@ export const applyPlayerAction = (game, action = {}) => {
       return result(game, 'Radio report ready.', { report: radioReport(game, actor) });
     }
     case 'transport': return transportAction(game, action, actor);
+    case 'launch': return launchAction(game, actor);
     case 'orders': return setOrder(game, action, actor);
     case 'refit': return setRefit(game, action, actor);
     case 'power': return setPower(game, action, actor);

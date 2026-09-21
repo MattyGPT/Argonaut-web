@@ -1,5 +1,5 @@
-import { AI_PURSUIT, FLEET_ORDER_TUNING, GRID_SIZE, PERSONALITIES, RANGES } from './constants.js';
-import { flushShields, tractorLock } from './actions.js';
+import { AI_PURSUIT, DRONE, FLEET_ORDER_TUNING, GRID_SIZE, PERSONALITIES, RANGES } from './constants.js';
+import { canLaunchDrones, flushShields, tractorLock } from './actions.js';
 import { createRng } from './rng.js';
 import {
   blastRadius,
@@ -7,6 +7,7 @@ import {
   engineCapacity,
   getShip,
   ionStormZone,
+  isDrone,
   isImmovable,
   isTractorHeld,
   orderFor,
@@ -154,6 +155,14 @@ const orderedAction = (game, actor, order) => {
     if (distance(actor, target) <= sensorRange(game, actor, 'transporter')) return { type: 'board', targetId: target.id };
     if (!canNavigate(game, actor)) return null;
     return stepToward(actor, target, 0, game);
+  }
+
+  if (order.type === 'launch') {
+    // The bay order (round 20): launch the moment the trigger trips; until then
+    // the carrier fights and flies normally (null falls through to its own
+    // opportunistic branch below, which reads the same trigger). Once away, the
+    // order is spent — the bay never rebuilds — and falls through for good.
+    return launchOpportunity(game, actor);
   }
 
   const ward = getShip(game, order.targetId);
@@ -308,6 +317,68 @@ const prizeOpportunity = (game, actor) => {
   return hull ? { type: 'board', targetId: hull.id } : null;
 };
 
+/**
+ * The carrier's bay (round 20, Reimagined): a carrier with its complement still
+ * aboard launches it the moment an enemy closes inside `DRONE.launchRange` — one
+ * deterministic trigger shared by the opportunistic branch and the `launch`
+ * standing order, consuming no RNG and firing at most once per war, since the
+ * launch itself marks the bay empty.
+ */
+const launchOpportunity = (game, actor) => {
+  if (!canLaunchDrones(game, actor)) return null;
+  const closing = enemiesOf(game, actor).some((enemy) => distance(actor, enemy) <= DRONE.launchRange);
+  return closing ? { type: 'launch' } : null;
+};
+
+/**
+ * A drone's escort station: its own bearing around the carrier at
+ * `DRONE.escortDistance`, so the wing spreads out instead of stacking on one
+ * point (and colliding with itself). Deterministic off the drone's launch index.
+ */
+const escortPost = (game, carrier, actor) => {
+  const grid = game.gridSize ?? GRID_SIZE;
+  const angle = ((actor.droneIndex ?? 1) - 1) * (2 * Math.PI / Math.max(1, DRONE.baySize));
+  return {
+    x: Math.max(0, Math.min(grid, Math.round(carrier.x + Math.cos(angle) * DRONE.escortDistance))),
+    y: Math.max(0, Math.min(grid, Math.round(carrier.y + Math.sin(angle) * DRONE.escortDistance))),
+  };
+};
+
+/**
+ * How a drone fights (round 20 — Matt's pick: escort, then fight on alone).
+ * While its carrier lives under the same colors the complement screens it:
+ * anything closing inside `DRONE.escortRange` of the carrier is intercepted,
+ * anything already inside the drone's own guns is shot at, and otherwise the
+ * wing rides at its posts. A carrier destroyed or lost leaves the drones
+ * independent hunters on the nearest enemy until they are shot down — they
+ * never idle, never strike colors (no crew to take to the pods), and never
+ * hold their faction in the war (`evaluateOutcome` does not count them, and
+ * `darkenOrphanDrones` ends them with it). Drones skip the doctrine stack
+ * entirely: no flush, no retreat, no last stand — nobody aboard to mind its
+ * own skin. Deterministic: nearest targets, ties by id, no RNG draws.
+ */
+const droneAction = (game, actor) => {
+  const enemies = enemiesOf(game, actor);
+  if (enemies.length === 0) return { type: 'pass' };
+  const carrier = getShip(game, actor.droneOf);
+  if (carrier && isActive(carrier) && carrier.faction === actor.faction) {
+    const menace = nearestTo(carrier, enemies);
+    if (menace && menace.range <= DRONE.escortRange) {
+      return shootOrChase(game, actor, menace.ship, DRONE.standoff);
+    }
+    // Nothing menacing the carrier: shoot at whatever is already in the guns,
+    // else hold the post.
+    const nearby = nearestTo(actor, enemies);
+    const firing = nearby ? engage(game, actor, nearby.ship, nearby.range) : null;
+    if (firing) return firing;
+    const post = escortPost(game, carrier, actor);
+    if (distance(actor, post) <= FLEET_ORDER_TUNING.screenTolerance || !canNavigate(game, actor)) return { type: 'pass' };
+    return stepToward(actor, post, 0, game);
+  }
+  const target = nearestTo(actor, enemies);
+  return shootOrChase(game, actor, target.ship, DRONE.standoff);
+};
+
 export const chooseAiAction = (game, shipId) => {
   const actor = getShip(game, shipId);
   if (!isActive(actor)) return { type: 'pass' };
@@ -319,6 +390,16 @@ export const chooseAiAction = (game, shipId) => {
     const ordered = orderedAction(game, actor, order);
     if (ordered) return ordered;
   }
+
+  // Drones are semi-independent (round 20, Reimagined only): unordered, they fly
+  // their own escort-then-hunt branch and skip doctrine entirely — there is no
+  // crew aboard to flush shields, retreat, or make a last stand.
+  if (isDrone(actor)) return droneAction(game, actor);
+
+  // A carrier looses its bay when the enemy closes (round 20) — the same
+  // trigger the `launch` order reads, and like boarding it consumes no rolls.
+  const launch = launchOpportunity(game, actor);
+  if (launch) return launch;
 
   // Prize-taking outranks doctrine but not orders: a captain with nothing to
   // shoot at grabs a derelict in reach (round 17, Reimagined only).

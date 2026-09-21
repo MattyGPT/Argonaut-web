@@ -200,6 +200,47 @@ const createShip = ({ id, name, faction, kind, x, y, reimagined }) => {
   };
 };
 
+/**
+ * A carrier's fighter drone (round 20, Reimagined): spawned at runtime when the
+ * bay launches, never part of a roster. Rides the ships array like every hull —
+ * so targeting, combat, terrain, fog, reports, and the minimap all see it — with
+ * a deterministic id and name off its carrier, a `droneOf` link the escort AI
+ * and the capture rules read, and no captain (assignCaptains runs at createGame
+ * only, and there is nobody aboard). Crew 0 means the damage lottery can never
+ * leave it `vacant`: a drone dies straight to wreckage and is structurally
+ * unprizeable.
+ */
+export const spawnDrone = (carrier, index, x, y) => ({
+  ...createShip({
+    id: `${carrier.id}-drone-${index}`,
+    name: `${carrier.name} D${index}`,
+    faction: carrier.faction,
+    kind: 'drone',
+    x,
+    y,
+    reimagined: true,
+  }),
+  droneOf: carrier.id,
+  droneIndex: index,
+});
+
+/** Whether a hull is an uncrewed fighter drone rather than a ship of the line. */
+export const isDrone = (ship) => ship?.className === 'Drone';
+
+/** The carrier's complement still flying, in launch order. */
+export const dronesOf = (game, carrierId) => game.ships
+  .filter((ship) => ship.droneOf === carrierId && isActive(ship))
+  .sort((a, b) => (a.droneIndex ?? 0) - (b.droneIndex ?? 0));
+
+/**
+ * Whether a carrier's bay is already empty: it launched its one complement this
+ * war (the flag), or drones of its id exist at all (the fallback an old save
+ * needs — a mid-war game serialized before the flag existed still has its
+ * drones on the field, and they are never rebuilt).
+ */
+export const hasLaunchedDrones = (game, carrier) => Boolean(carrier?.dronesLaunched)
+  || game.ships.some((ship) => ship.droneOf && ship.droneOf === carrier?.id);
+
 const randomPosition = (rng, faction, regional, occupied, gridSize) => {
   // Regional formations are pinned in 100-unit space; scale them onto the actual
   // field so a Reimagined war spreads them across the wider map. At gridSize 100
@@ -492,11 +533,13 @@ export const segmentCrossesFeature = (game, a, b, type) => (game?.terrain ?? [])
  * The Federation hull command should shift to. Xanadu out-masses every ship afloat,
  * so ranking on raw strength alone handed command to an immobile starbase — no move,
  * no hyperspace — and froze the mid-game. Prefer a hull that can still maneuver, and
- * fall back to the strongest of whatever is left only when nothing can move.
+ * fall back to the strongest of whatever is left only when nothing can move. Drones
+ * are never candidates (round 20): there is nobody aboard to take the conn, so a
+ * fleet reduced to drones is a fleet that has lost its command ship for good.
  */
 export const strongestFederation = (game, excludeId) => {
   const candidates = game.ships
-    .filter((ship) => ship.status === 'active' && ship.faction === FACTIONS.FEDERATION && ship.id !== excludeId);
+    .filter((ship) => ship.status === 'active' && ship.faction === FACTIONS.FEDERATION && ship.id !== excludeId && !isDrone(ship));
   const mobile = candidates.filter((ship) => systemUnits(ship, 'engines') > 0);
   const pool = mobile.length > 0 ? mobile : candidates;
   return [...pool].sort((a, b) => (b.shields + b.crew) - (a.shields + a.crew) || a.id.localeCompare(b.id))[0];
@@ -813,10 +856,12 @@ export const volleyMissChance = (game, shooter, target) => MISS_CHANCE
 
 /**
  * The friendly starbase this hull is docked at, if any — close enough, and healthy
- * enough to spare the resources. Starbases and tractor-held hulls never dock.
+ * enough to spare the resources. Starbases and tractor-held hulls never dock, and
+ * neither does a drone (round 20): the dockyard's story is crew transfers and
+ * refits, and there is nobody aboard — a carrier's bay is spent for the war.
  */
 export const dockedAt = (game, ship) => {
-  if (!isActive(ship) || ship?.className === 'Starbase' || isTractorHeld(game, ship)) return null;
+  if (!isActive(ship) || ship?.className === 'Starbase' || isDrone(ship) || isTractorHeld(game, ship)) return null;
   return game.ships.find((other) => isActive(other)
     && other.className === 'Starbase'
     && other.faction === ship.faction
@@ -841,6 +886,7 @@ export const describeOrder = (game, order) => {
     case 'intercept': return `intercept ${name}`;
     case 'screen': return `screen ${name}`;
     case 'board': return `board ${name}`;
+    case 'launch': return 'launch its drones when the enemy closes';
     default: return 'concentrate with the fleet';
   }
 };

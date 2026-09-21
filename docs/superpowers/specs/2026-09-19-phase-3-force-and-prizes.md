@@ -335,12 +335,84 @@ Measured: the default war is digit-for-digit unchanged on the harness (median
 
 ### 20 — Drones / fighters
 
-- Launchable subsystem, semi-independent units: a carrier spends an action to
-  put drone hulls on the field, and a new AI branch flies them.
+**Decisions (settled with Matt, 2026-09-20):** the carrier's bay is built out of
+four answers plus a set of implementation defaults, all recorded here in the
+§17/§18/§19 style.
+
+- **Entity model — drones are ships.** A drone is an entry in `game.ships`
+  (`SHIP_TEMPLATES.drone`, className `Drone`), not a separate layer, so
+  targeting, movement, combat, terrain, fog, the minimap, `warSignature`, and
+  every report see it for free. Ids are deterministic (`${carrierId}-drone-N`),
+  names are the carrier's own (`Lexington D1/D2/D3`), and the launch consumes
+  **no RNG** (posts are tried in a fixed offset order), so no seeded stream
+  shifts. A drone carries a real reactor entry (`POWER.reactor.Drone` = 4) — a
+  0-unit reactor would zero its power budget and, through `powerEffect`, its
+  engines and guns.
+- **Launch path — all three.** Mirroring round 17's capture decision: a manual
+  **Launch drones** command (`D`, or the console button) while flying a carrier,
+  a `launch` standing order any Federation carrier can take (fires when an enemy
+  closes inside `DRONE.launchRange`), and AI carriers launching opportunistically
+  on the same trigger. One shared rule (`canLaunchDrones`) gates all three.
+- **Bay — 3 drones, one complement per war.** A carrier launches its three
+  fighters once and the bay is spent (`ship.dronesLaunched`); losses are never
+  rebuilt, not even at the Xanadu dockyard (a drone never docks — `dockedAt`
+  excludes it). Old saves that predate the flag fall back on "does this carrier
+  have drones on the field", so a resumed mid-war game never launches twice.
+- **Behavior — escort, then fight on alone.** While its carrier lives under the
+  same colors the wing screens it (intercepting anything inside
+  `DRONE.escortRange`, else riding at bearing posts so it spreads instead of
+  stacking); a carrier destroyed or lost leaves the drones independent hunters
+  on the nearest enemy until shot down. Drones skip the doctrine stack entirely
+  — no flush, no retreat, no last stand — but do run their alliance's power
+  profile, so an Axis/Bloc drone's guns bite at 1.5× and a Cabal's at 0.83×.
+- **Endgame — excluded everywhere.** A drone never holds a faction in the war
+  (`evaluateOutcome` filters it) and adds nothing to surrender strength or the
+  last-ships-standing gate. When a faction's last *crewed* hull dies its orphaned
+  wing goes dark in the same computer phase (`darkenOrphanDrones`), so no
+  drone-only rump can win, surrender, or be hunted, and command never transfers
+  to a drone (`strongestFederation` excludes them — a Federation of drones is a
+  Federation lost, and the war goes on spectated per PR #27).
+
+Mechanical edges settled the same way:
+
+- **Non-prizeability is structural, and pinned.** `damageShip` leaves a hull
+  `vacant` only when its crew dies *from above zero* — a crew-0 drone takes
+  shield-only damage and stays `active`, and stripping its systems destroys it
+  outright, so no capture path (all of which require `vacant`) can ever take it.
+  A round-20 fix made this explicit: the final-return vacant stamp now also
+  requires `ship.crew > 0`, closing a path where a shield-scratched drone would
+  have gone adrift and boardable. `resolveDisabledSurrender` already skips
+  crew ≤ 0, and the transporter's friendly-reinforce path finds no berth
+  (`crewCapacity` 0), so crew can never be beamed onto a drone.
+- **A captured carrier brings its wing.** `captureHull` flips the allegiance of
+  a captured carrier's active drones with it ("come over with the prize"); the
+  drones are attachments, never prizes themselves, so they carry no prize record.
+- **Crediting and surfaces read unmanned, never "Captain undefined".** A drone's
+  kill is credited to the hull (`killLines` special-cases it — no captain, no
+  ace line, no vendetta), scan reads "Command: none — an unmanned fighter
+  drone", and the battle report's Top gun falls back to the hull form when the
+  leader has no captain. Roll call, radio, statistics, and the fleet report list
+  drones as the hulls they are.
+- **Objectives ignore drones.** A drone neither holds nor contests a relay node
+  (`resolveObjectives` filters it) — an unmanned hull cannot work the objective.
+- **Collision/ram rides the generic path.** Drones collide and can be collision-
+  rammed like any hull (`resolveCollision` is class-blind), but the escort AI
+  stops its pursuit at `DRONE.standoff` rather than ramming, so a kamikaze is a
+  player/AI choice, not the default. Measured on the harness: the extra hulls
+  moved the Reimagined winner spread (Bloc to the lead at 38%) — recorded in
+  CALIBRATION's "Reimagined balance" table with the levers, not silently tuned.
+- **Map glyph is `D`.** A drone is drawn smaller with a `D` glyph (not the
+  carrier's initial, which must stay unique to the carrier), a faction-colored
+  ring, a legend chip, and its own `drone` class; the visuals still want a
+  manual browser play-test.
+- **Not a loadout class.** Drones are won in the field, never budgeted, so
+  `LOADOUT.costs` has no drone entry and `PRIZE_PARKING` needs none (they spawn
+  at runtime at their carrier, not on a roster slot).
+
 - **Seams with 17**: drones are **not prizeable** — the capture paths all
-  require the target to be `vacant`, which an uncrewed drone never is (decide
-  in 20 what a shot-down drone leaves behind; the prize layer will not see
-  it). A captured *carrier* is a prize like any other hull — whatever drone
+  require the target to be `vacant`, which an uncrewed drone never is (a
+  shot-down drone leaves wreckage, `destroyed`, which the prize layer never
+  sees). A captured *carrier* is a prize like any other hull — whatever drone
   complement 20 attaches to it comes along, since the prize record does not
   care.
 

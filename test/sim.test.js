@@ -18,7 +18,10 @@ test('the harness plays a classic war to a terminal outcome', () => {
 test('the harness plays a Reimagined war and reports prize metrics', () => {
   const war = runWar(0, { mode: 'reimagined' });
   assert.notEqual(war.outcome, 'timeout');
-  assert.ok(war.hulls >= 5 && war.hulls <= 33, 'composed fleets vary inside the loadout bounds');
+  // Composed fleets vary inside the loadout bounds (5..33 crewed hulls), and
+  // carriers launch drone complements at runtime (round 20): the ceiling is the
+  // 33-hull default war plus four alliances of seven carriers × three drones.
+  assert.ok(war.hulls >= 5 && war.hulls <= 33 + 4 * 7 * 3, 'composed fleets vary inside the loadout bounds');
   assert.ok(war.prizesTaken >= 0);
   assert.ok(war.selfDestructs >= 0);
 });
