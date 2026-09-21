@@ -131,7 +131,7 @@ Detailed design (terrain model, hazard rules, AI interaction, open questions):
 | 15d | Ion storm = jam | Disables weapons/radio per stardate | Effect window applies/clears | ✅ PR #39 |
 | 16 | Capturable objectives | Relay/cache nodes grant a bonus while held | Hold/contest flips bonus | ✅ PR #40 |
 
-### Phase 3 — Force & prizes *(#7, #9, #8, #10)*
+### Phase 3 — Force & prizes *(#7, #9, #8, #10)* — ✅ complete
 
 Detailed design (prize layer, capture paths, manning, reports, and the seams for
 18/19/19b/20): `docs/superpowers/specs/2026-09-19-phase-3-force-and-prizes.md`.
@@ -142,7 +142,7 @@ Detailed design (prize layer, capture paths, manning, reports, and the seams for
 | 18 | New ship classes (one per chunk) | Interceptor, then artillery, then carrier | Templates + roster; parity off | ✅ PRs #43–#45 |
 | 19 | Fleet loadout / points budget | Choose composition at war start | Budget enforcement; seeded generation | ✅ PR #51 |
 | 19b | **Force customization** (Matt's idea) | Choose faction involvement, per-faction fleet size and types, optional Xanadu | New-game panel gating; seeded generation; win/scenario tolerance; parity off | ✅ PR #52 |
-| 20 | Drones / fighters | Launchable subsystem, semi-independent units | Launch + AI action branch | — |
+| 20 | Drones / fighters | Launchable subsystem, semi-independent units | Launch + AI action branch | ✅ PR #53 |
 
 **19b — Force customization** (Matt's idea, recorded 2026-09-19 so it is not lost).
 When starting a Reimagined war, the New game panel lets you shape the forces:
