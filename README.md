@@ -74,7 +74,8 @@ engine units that hold the edge instead of chasing; and the **carrier**, a
 slow, sturdy tender built for the prize fleet — the longest boarding arm of
 any hull that moves, a starbase's tow for hauling prizes and wreck-rams,
 modest guns of its own, and the biggest crew pool afloat after Xanadu to man
-the prizes it takes (its drone bay arrives in a later round). And its fleets are
+the prizes it takes, plus a **drone bay** that looses a one-time complement of
+three fighter drones (see below). And its fleets are
 **composed, not fixed**: every alliance spends a points budget (24 by default,
 adjustable per alliance) on its ships of the line — you build the Federation
 fleet hull by hull in the New game panel, while enemy alliances draw seeded
@@ -133,7 +134,20 @@ hull is a resource every alliance races for. A fresh prize is under-manned (its
 engines and guns run at half effectiveness below a quarter of its complement)
 and withdraws toward Xanadu until you dock it, crew it up, and order it into the
 line; a prize whose crew dies can be retaken by anyone, including its original
-alliance. Axis last stands are scaled for the wide field as well — the
+alliance. It also gives the carrier a **drone bay**: flying a carrier, **Launch
+drones** (`D`) spends the stardate to put a one-time complement of three
+**fighter drones** on the field, any carrier can instead take the **Launch
+drones** standing order (it looses the bay when an enemy closes), and enemy
+carriers launch on the same trigger. Drones are fast, fragile gunboats with
+nobody aboard — an interceptor's near-speed, a phaser pair, paper shields — drawn
+small with a `D` glyph and named after their carrier (Lexington D1, D2, D3).
+They **escort their carrier**, intercepting anything that closes on it, and when
+the carrier is destroyed the wing **fights on alone**, hunting the nearest enemy
+until shot down. A drone is never a prize (no crew to kill, no hull to board) and
+counts for nothing in the endgame: an alliance down to drones is out of the war
+and its wing goes dark with its last crewed hull. The bay is never rebuilt — not
+even at the dockyard, which drones never dock at — and a captured carrier keeps
+its complement, the drones flying for whoever flies her. Axis last stands are scaled for the wide field as well — the
 self-destruct blast is smaller there, and the trigger needs a captain at 2%
 shields with five enemies stacked close, so one spiteful death no longer
 deletes a fleet cluster. Volleys are measured too: every Reimagined salvo

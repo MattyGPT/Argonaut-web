@@ -98,6 +98,14 @@ test('F opens the fleet order report', () => {
   assert.deepEqual(dispatched, [{ type: 'fleet' }, { type: 'fleet' }]);
 });
 
+test('D launches the carrier bay (round 20)', () => {
+  openDialog = null;
+  const dispatched = bind();
+  press('d');
+  press('D');
+  assert.deepEqual(dispatched, [{ type: 'launch' }, { type: 'launch' }]);
+});
+
 test('an order button carries the ship it was pressed for', () => {
   openDialog = null;
   const dispatched = bind();

@@ -128,18 +128,29 @@ parity tests hold.
 | Cabal power-profile retune (`POWER.profiles.Cabal` → shields 3 / weapons 5 / engines 5 / sensors 3 / tractor 4 — sums to 20, the smallest Cabal budget, so every hull runs the bias as written; guns at 5/6 instead of half damage, still the mobile tractor faction) | Cabal 4.8% → **11.2%**; spread Fed 27.2 / Axis 26.8 / Bloc 22.4 / Cabal 11.2; median 40; volleys per kill 11.9 |
 | Reimagined volley-damage scale (`REIMAGINED_WEAPON_DAMAGE_SCALE` 0.7 — the whole band scales, player and autopilot volleys symmetrically, through the one shared `weaponDamage` roll; a classic or extended volley is byte-identical, re-measured digit-for-digit on the harness) | **median 60** stardates (mean 102.1, p90 190); volleys per kill **18.9**; prizes 9.2/war with 4.0 still held at the end; winners Bloc 30.8% / Federation 25.6% / Axis 19.6% / Cabal 9.2%; timeouts 4%, hopeless draws 10% |
 | Fleet loadouts (round 19): AI alliances field seeded doctrine-flavored fleets within their budgets (default 24, player-adjustable per faction; the Federation default stays the 21-point round-18 roster), so fleet *shapes* now vary per seed | median 53 stardates (mean 93.9); volleys per kill 19; prizes 8.3/war with 3.7 held at the end; winners **Federation 31.6%** / Bloc 28.4% / Axis 17.2% / Cabal 10%; last stands 0.47/war, worst blast 12, 4+-hull blasts 42.4% (cluster geometry varies with composition — watch, was 33.2% at fixed fleets); hopeless draws 9%, timeouts 4% |
+| Drones / fighters (round 20): every carrier looses a one-time complement of three uncrewed fighter hulls when the enemy closes; they ride the ships array, escort-then-hunt on their own AI branch, run their alliance's doctrine power profile, and never count toward surrender, command, objectives, or a faction's survival | median 55 stardates (mean 98.4, p90 190, max 600); volleys per kill **15.9** (from 19 — the extra gunboats concentrate fire); prizes 8.4/war with 3.7 held; winners **Bloc 38%** / Federation 26% / Axis 15.2% / Cabal 8.4%; last stands 0.56/war, worst blast 15, 4+-hull blasts 47.6%; hopeless draws 8%, timeouts 5%; fleets now run to ~52 hulls on the array as bays fly |
 
 Open findings for the rest of the balance pass:
 
-- **Cabal is still last** at 9.2% (from 2% at baseline). The power-profile
-  retune more than doubled its win rate; what remains is doctrine territory —
-  the tractor-ram payoff on a wide field where collision tows need setup —
-  which is beyond the recorded levers. Watch item: if Cabal keeps lagging in
-  play, a Cabal doctrine pass can be its own chunk.
-- **Timeouts rose to 4%** of Reimagined wars (2% at baseline) and hopeless
-  draws sit at 10%: softer incoming fire plus 2%/stardate shield regen
-  stretches endgames. If the long tail feels tedious in play, tighten
-  `STALEMATE_ROUNDS` or revisit the regen rate — measured, not guessed.
+- **Bloc surged to the lead at 38%** once carriers field drones (was 28.4% at
+  round 19, behind the Federation's 31.6%). Its artillery-line archetype runs
+  the hardest-hitting doctrine power profile (weapons 9 → 1.5× guns), and that
+  bias now rides its drone screen too — three extra glass cannons that skip
+  doctrine's retreat and just close and fire. Federation (balanced 1.0× guns)
+  and Cabal (weakest 0.83× guns) get less out of the same bay. Watch item: if
+  Bloc keeps dominating in play, the drone's reactor/phaser dials — or giving
+  every alliance's drones the *flat* default profile instead of the doctrine
+  one — are the levers, and both are measured, not guessed.
+- **Cabal is still last** at 8.4% (9.2% before drones, 2% at baseline). The
+  power-profile retune more than doubled its win rate; what remains is doctrine
+  territory — the tractor-ram payoff on a wide field where collision tows need
+  setup — plus the weakest drone guns of any alliance. Watch item: if Cabal
+  keeps lagging in play, a Cabal doctrine pass can be its own chunk.
+- **Timeouts rose to 5%** of Reimagined wars (4% before drones, 2% at baseline)
+  and hopeless draws sit at 8%: more hulls on the field stretch endgames, and
+  an orphaned wing that can still move keeps a war from stranding. If the long
+  tail feels tedious in play, tighten `STALEMATE_ROUNDS` or revisit the regen
+  rate — measured, not guessed.
 
 Future calibration should record a DOS input sequence and visible output beside
 the same web seed/action pair, then tune only the values needed to preserve the

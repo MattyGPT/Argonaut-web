@@ -1,5 +1,5 @@
 import { DOCKING, FACTIONS, GRID_SIZE, POWER, PRIZE, RANGES, REIMAGINED_WEAPON_DAMAGE_SCALE, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
-import { captureHull, damageShip, detonate, fireEvent, flushShields, killLines, resolveAsteroidStrike, resolveCollision, terminalEvent, tractorLock, weaponDamage } from './actions.js';
+import { captureHull, canLaunchDrones, damageShip, detonate, fireEvent, flushShields, killLines, launchDrones, resolveAsteroidStrike, resolveCollision, terminalEvent, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
 import { scenarioOutcome } from './scenarios.js';
@@ -11,6 +11,7 @@ import {
   dockedAt,
   getShip,
   isActive,
+  isDrone,
   isImmovable,
   isStranded,
   isTractorHeld,
@@ -135,6 +136,17 @@ const resolveAiAction = (game, shipId) => {
       type: action.type,
     };
   }
+  if (action.type === 'launch') {
+    // The bay (round 20, Reimagined): revalidated like board, because the
+    // carrier may have been hit since the action was chosen earlier in the same
+    // computer phase. The launch helper stamps the bay empty and spawns the
+    // complement; no RNG is consumed.
+    if (!canLaunchDrones(game, actor)) {
+      return { game, messages: [`${actor.name} holds position.`], type: 'pass' };
+    }
+    const out = launchDrones(game, actor);
+    return { game: out.game, messages: out.messages, type: action.type };
+  }
   if (action.type === 'move') {
     const grid = game.gridSize ?? GRID_SIZE;
     const x = Math.max(0, Math.min(grid, actor.x + action.dx));
@@ -185,7 +197,11 @@ export const evaluateOutcome = (game) => {
   // the field is down to one — or none. Losing the Federation does not hand the
   // victory to whoever happens to be strongest at that instant: the surviving
   // alliances keep fighting until one of them is left standing.
-  const activeFactions = [...new Set(game.ships.filter((ship) => isActive(ship)).map((ship) => ship.faction))];
+  // Drones never hold a faction in the war (round 20, Matt's call): a bay with no
+  // fleet behind it is wreckage in the making, and a drone-only rump cannot win,
+  // surrender, or be hunted down for a victory it cannot lose. The orphans go
+  // dark in the same computer phase (`darkenOrphanDrones`).
+  const activeFactions = [...new Set(game.ships.filter((ship) => isActive(ship) && !isDrone(ship)).map((ship) => ship.faction))];
   if (activeFactions.length === 0) {
     return { kind: 'draw', message: victoryMessage('draw') };
   }
@@ -209,8 +225,12 @@ export const evaluateOutcome = (game) => {
   return { kind: 'active' };
 };
 
+// Drones count for nothing in the endgame math (round 20): neither here nor in
+// the last-ships-standing gate below, so a faction's surrender turns only on the
+// crewed hulls that can still fight. Its drones stand down with it regardless —
+// `markFactionSurrendered` marks every active ship of the faction.
 const factionStrength = (game, faction) => game.ships
-  .filter((ship) => isActive(ship) && ship.faction === faction)
+  .filter((ship) => isActive(ship) && !isDrone(ship) && ship.faction === faction)
   .reduce((total, ship) => total + ship.shields + ship.crew, 0);
 
 const surrenderWinner = (game, faction, active, factions) => {
@@ -250,7 +270,10 @@ export const applySurrender = (game) => {
   const events = [];
   const factions = [...new Set(game.ships.map((ship) => ship.faction))];
   for (const faction of factions) {
-    const active = next.ships.filter((ship) => isActive(ship) && ship.faction === faction);
+    // The last-ships-standing gate counts crewed hulls only (round 20): drones
+    // neither delay their alliance's capitulation nor are they left out of it —
+    // the marking below stands every active ship of the faction down.
+    const active = next.ships.filter((ship) => isActive(ship) && !isDrone(ship) && ship.faction === faction);
     const winner = surrenderWinner(next, faction, active, factions);
     if (!winner) continue;
     for (const ship of active) {
@@ -286,6 +309,32 @@ export const resolveDisabledSurrender = (game) => {
   });
   if (messages.length === 0) return { game, messages, events };
   return { game: { ...game, ships }, messages, events };
+};
+
+/**
+ * When a faction loses its last crewed hull its bays go dark with it (round 20):
+ * drones never hold a faction in the war — `evaluateOutcome` does not count them
+ * — so orphaned units are switched off in the same computer phase instead of
+ * haunting the field as the ghost of an alliance that is already out. Runs even
+ * on the stardate the war itself ends, so no final report shows a defeated
+ * alliance's drones still flying. Inert outside a Reimagined war, where no drone
+ * ever exists.
+ */
+export const darkenOrphanDrones = (game) => {
+  if (!game.reimagined) return { game, messages: [] };
+  const crewed = new Set(game.ships.filter((ship) => isActive(ship) && !isDrone(ship)).map((ship) => ship.faction));
+  const messages = [];
+  const darkened = new Set();
+  const ships = game.ships.map((ship) => {
+    if (!isActive(ship) || !isDrone(ship) || crewed.has(ship.faction)) return ship;
+    if (!darkened.has(ship.faction)) {
+      darkened.add(ship.faction);
+      messages.push(`The last ${ship.faction} hull is gone; its drones go dark.`);
+    }
+    return { ...ship, status: 'destroyed', tractorBy: null };
+  });
+  if (messages.length === 0) return { game, messages };
+  return { game: { ...game, ships }, messages };
 };
 
 /**
@@ -383,7 +432,10 @@ export const resolveObjectives = (game) => {
   const held = { ...(game.held ?? {}) };
   const messages = [];
   for (const relay of relays) {
-    const inside = game.ships.filter((ship) => isActive(ship) && !isTractorHeld(game, ship)
+    // A drone neither holds nor contests a node (round 20): an unmanned hull
+    // camped on the objective cannot work it, and its alliance's war is fought
+    // by the crews, not the bays.
+    const inside = game.ships.filter((ship) => isActive(ship) && !isDrone(ship) && !isTractorHeld(game, ship)
       && distance(ship, relay) <= relay.radius);
     const factions = [...new Set(inside.map((ship) => ship.faction))];
     const before = held[relay.id] ?? null;
@@ -467,6 +519,12 @@ export const resolveComputerTurns = (initialGame) => {
       events.push(...(strike.events ?? []));
     }
   }
+  // An alliance whose last crewed hull died this stardate takes its drones with
+  // it (round 20), before the dockyard, the objectives, and the outcome checks
+  // read the field.
+  const darkened = darkenOrphanDrones(game);
+  game = darkened.game;
+  log.push(...darkened.messages);
   const docked = resolveDocking(game);
   game = docked.game;
   log.push(...docked.messages);

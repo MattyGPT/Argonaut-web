@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame } from '../game/state.js';
+import { createGame, getShip } from '../game/state.js';
+import { launchDrones } from '../game/actions.js';
 import { renderGame, terminalNarrative } from '../ui/render.js';
 
 // render.js only touches the document inside renderGame, so a bare element stub
@@ -537,7 +538,7 @@ test('a Reimagined legend keys every color the map draws', () => {
   const legend = read('#map-legend').innerHTML;
   for (const swatch of ['ring-phasers', 'ring-photons', 'ring-engines', 'threat', 'wreck',
     'pip-order', 'star-ace', 'ring-dock',
-    'terrain-nebula', 'terrain-asteroids', 'terrain-ion', 'terrain-relay', 'pip-prize']) {
+    'terrain-nebula', 'terrain-asteroids', 'terrain-ion', 'terrain-relay', 'pip-prize', 'drone-glyph']) {
     assert.match(legend, new RegExp(`legend-swatch ${swatch}`), `${swatch} is keyed`);
   }
   for (const faction of ['Federation', 'Axis', 'Bloc', 'Cabal']) {
@@ -555,7 +556,7 @@ test('a classic legend keys only what a classic map draws', () => {
   assert.match(legend, /legend-swatch wreck/);
   assert.match(legend, /legend-swatch ring-phasers/);
   assert.ok(!/terrain-/.test(legend), 'no terrain in a classic war');
-  assert.ok(!/pip-prize|pip-order|star-ace|ring-dock/.test(legend), 'no extended or Reimagined markers');
+  assert.ok(!/pip-prize|pip-order|star-ace|ring-dock|drone-glyph/.test(legend), 'no extended or Reimagined markers');
 });
 
 test('an extended legend adds the admiralty markers but no terrain', () => {
@@ -565,5 +566,72 @@ test('an extended legend adds the admiralty markers but no terrain', () => {
   assert.match(legend, /legend-swatch pip-order/);
   assert.match(legend, /legend-swatch star-ace/);
   assert.match(legend, /legend-swatch ring-dock/);
-  assert.ok(!/terrain-|pip-prize/.test(legend), 'terrain and prizes are Reimagined-only');
+  assert.ok(!/terrain-|pip-prize|drone-glyph/.test(legend), 'terrain and prizes are Reimagined-only');
+});
+
+// --- Round 20: the carrier's bay on the map, in the menus, and in the console ---
+
+/**
+ * A Reimagined war staged for bay rendering: flagship and carrier close together
+ * mid-field so the mapper sees the wing, with the complement launched off the
+ * real launcher — the drones it spawns are plain ships in the array.
+ */
+const bayGame = (seed, launch = true) => {
+  const staged = withPair(createGame({ seed, reimagined: true }),
+    'fed-flagship', { x: 100, y: 100 },
+    'fed-carrier', { x: 104, y: 100 });
+  return launch ? launchDrones(staged, getShip(staged, 'fed-carrier')).game : staged;
+};
+
+test('a drone is drawn small with the D glyph and reads as unmanned in its menu', () => {
+  elements.clear();
+  renderGame(bayGame('render-drone'), { contextShipId: 'fed-carrier-drone-1' });
+  const field = read('#map-field').innerHTML;
+  assert.match(field, /class="ship Federation active drone"/, 'the wing is marked as drones');
+  assert.match(field, /data-ship-id="fed-carrier-drone-1"[^>]*><span class="glyph">D<\/span>/,
+    "the glyph is D, not the carrier's initial");
+  const menu = read('#ship-menu').innerHTML;
+  assert.match(menu, /Unmanned fighter drone of the Lexington · no crew, never boarded/);
+  assert.ok(!/Captain undefined/.test(menu), 'nobody aboard is never read as a captain');
+  assert.ok(!/Transport crew/.test(menu), 'no berth, no transfer button');
+});
+
+test('the Launch drones order grows out of a carrier menu alone', () => {
+  const staged = withPair(bayGame('render-launch-order', false), 'fed-cruiser-1', { x: 108, y: 100 });
+  elements.clear();
+  renderGame(staged, { contextShipId: 'fed-carrier' });
+  assert.match(read('#ship-menu').innerHTML, /data-order="launch"/);
+
+  elements.clear();
+  renderGame(staged, { contextShipId: 'fed-cruiser-1' });
+  assert.ok(!/data-order="launch"/.test(read('#ship-menu').innerHTML), 'only a carrier carries a bay');
+
+  elements.clear();
+  renderGame(bayGame('render-launch-spent'), { contextShipId: 'fed-carrier' });
+  assert.ok(!/data-order="launch"/.test(read('#ship-menu').innerHTML), 'a spent bay offers nothing');
+
+  elements.clear();
+  const extended = withPair(createGame({ seed: 'render-launch-extended', extended: true }),
+    'fed-flagship', { x: 100, y: 100 }, 'fed-cruiser-1', { x: 104, y: 100 });
+  renderGame(extended, { contextShipId: 'fed-cruiser-1' });
+  assert.ok(!/data-order="launch"/.test(read('#ship-menu').innerHTML), 'drones are Reimagined-only');
+});
+
+test('the console carries Launch drones only while flying a carrier with a full bay', () => {
+  elements.clear();
+  renderGame(bayGame('render-console', false));
+  assert.ok(!/data-command="launch"/.test(read('#console').innerHTML), 'the flagship has no bay');
+
+  elements.clear();
+  const game = bayGame('render-console', false);
+  renderGame({ ...game, playerShipId: 'fed-carrier' });
+  assert.match(read('#console').innerHTML, /data-command="launch"/);
+
+  elements.clear();
+  renderGame({ ...bayGame('render-console-spent'), playerShipId: 'fed-carrier' });
+  assert.ok(!/data-command="launch"/.test(read('#console').innerHTML), 'a spent bay has no button');
+
+  elements.clear();
+  renderGame(createGame({ seed: 'render-console-classic' }));
+  assert.ok(!/data-command="launch"/.test(read('#console').innerHTML), 'a classic console never grows one');
 });

@@ -1,5 +1,5 @@
 import { DOCKING, FACTIONS, GRID_SIZE, POWER_SINKS, PRIZE, RANGES, REFITS, TERRAIN } from '../game/constants.js';
-import { shipCommands } from '../game/actions.js';
+import { canLaunchDrones, shipCommands } from '../game/actions.js';
 import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
 import { cameraWindow, fieldTransform, viewportFromWorld } from './camera.js';
 import { drawMove } from './fx.js';
@@ -15,6 +15,7 @@ import {
   inRadioContact,
   isAce,
   isActive,
+  isDrone,
   isSpectator,
   nebulaHides,
   orderFor,
@@ -48,8 +49,16 @@ const commands = [
   ['fullmap', 'War zone', 'Bksp'],
 ];
 
-/** Fleet orders only exist in an extended war, so the button appears only there. */
-const commandList = (game) => (game.extended ? [...commands, ['fleet', 'Fleet orders', 'F']] : commands);
+/**
+ * Fleet orders only exist in an extended war, so the button appears only there.
+ * The bay command (round 20) appears only while the conn is on a Reimagined
+ * carrier whose drones are still aboard — a command that could not land never
+ * gets a button.
+ */
+const commandList = (game, actor) => {
+  const list = game.extended ? [...commands, ['fleet', 'Fleet orders', 'F']] : commands;
+  return canLaunchDrones(game, actor) ? [...list, ['launch', 'Launch drones', 'D']] : list;
+};
 
 const cap = (value) => value[0].toUpperCase() + value.slice(1);
 
@@ -82,10 +91,19 @@ const ORDER_BUTTONS = Object.freeze([
   // Round 17: mustering a boarding party is a Reimagined-war order, so the button
   // only appears there (setOrder refuses it elsewhere regardless).
   ['board', 'Board…'],
+  // Round 20: the bay order, Reimagined-only and carrier-only — the button grows
+  // out of a carrier's menu alone, and setOrder refuses it anywhere else.
+  ['launch', 'Launch drones'],
 ]);
 
-/** The order buttons a war mode offers: `board` is Reimagined-only. */
-const orderButtonsFor = (game) => (game.reimagined ? ORDER_BUTTONS : ORDER_BUTTONS.filter(([type]) => type !== 'board'));
+/** The order buttons a war mode offers: `board` and `launch` are Reimagined-only. */
+const orderButtonsFor = (game, ship) => ORDER_BUTTONS.filter(([type]) => {
+  if (type === 'board') return game.reimagined;
+  // The bay order only appears where the rules would accept it: a Reimagined
+  // carrier whose complement is still aboard.
+  if (type === 'launch') return canLaunchDrones(game, ship);
+  return true;
+});
 
 /** How the fleet report and the ship menu read a prize of war (round 17). */
 const prizeNote = (ship) => {
@@ -108,6 +126,9 @@ const shipMenu = (game, actor, ship) => {
     `${ship.faction} ${ship.className.toLowerCase()} · ${ship.status}`,
     `${own ? 'your command ship' : `${distance(actor, ship).toFixed(1)} away`} · shields ${ship.shields} · crew ${ship.crew}`,
     ...(captain ? [`Captain ${captain}${isAce(ship) ? ` · an ace, ${ship.kills} kills` : ''}`] : []),
+    // A drone has nobody aboard (round 20): the menu says so plainly instead of
+    // reading an absent captain.
+    ...(isDrone(ship) ? [`Unmanned fighter drone of the ${getShip(game, ship.droneOf)?.name ?? 'fleet'} · no crew, never boarded`] : []),
     // A prize of your alliance tells its story in the menu (round 17); the record
     // only exists in a Reimagined war, so no mode check is needed here.
     ...(ship.prize && ship.faction === actor?.faction
@@ -130,7 +151,7 @@ const shipMenu = (game, actor, ship) => {
         : (contact ? null : 'Out of radio contact — orders arrive one stardate late.'),
       ...(own ? ['Your own hull obeys these orders whenever the autopilot has the conn.'] : []),
     ].filter(Boolean);
-    const buttons = orderButtonsFor(game)
+    const buttons = orderButtonsFor(game, ship)
       .map(([type, label]) => `<button data-order="${type}" data-order-ship="${ship.id}"${standing?.type === type ? ' class="current"' : ''}${disabled}>${label}</button>`)
       .join('');
     const docked = dockedAt(game, ship);
@@ -301,6 +322,7 @@ const renderMapLegend = (game) => {
       legendEntry('terrain-ion', 'ion storm'),
       legendEntry('terrain-relay', 'relay node'),
       legendEntry('pip-prize', 'prize of war'),
+      legendEntry('drone-glyph', 'fighter drone', 'D'),
     ] : []),
   ].join('');
   legend.innerHTML = factions + entries + '<span class="legend-note" id="legend-note"></span>';
@@ -397,7 +419,12 @@ export const renderGame = (game, view = {}) => {
     // A hull taken as a prize wears a gold pip (round 17), opposite the white
     // under-orders pip; the capture was narrated, so this is public knowledge.
     const prize = ship.prize ? ' prize' : '';
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}"${view.battlePaused ? ' disabled' : ''}><span class="glyph">${ship.name[0]}</span>${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}</button>`;
+    // A drone wears 'D' rather than its name's initial (round 20): the wing is
+    // named after its carrier ("Lexington D1"), and the carrier's own glyph must
+    // stay unique to itself.
+    const glyph = isDrone(ship) ? 'D' : ship.name[0];
+    const drone = isDrone(ship) ? ' drone' : '';
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}"${view.battlePaused ? ' disabled' : ''}><span class="glyph">${glyph}</span>${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}</button>`;
   }).join('');
   map.innerHTML = terrainHtml + ringHtml + shipHtml;
   // Slide and scale the world layer so the camera window fills the viewport. The
@@ -438,7 +465,7 @@ export const renderGame = (game, view = {}) => {
     </div>
     <div class="system-grid">${Object.entries(actor.systems).map(([name, amount]) => `<span>${cap(name)} <b>${amount}</b></span>`).join('')}</div>
     ${powerBar(game, actor, view)}
-    <div class="command-grid">${commandList(game).map(([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || isSpectator(game) || view.battlePaused ? 'disabled' : ''}>${label}<kbd>${key}</kbd></button>`).join('')}</div>
+    <div class="command-grid">${commandList(game, actor).map(([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || isSpectator(game) || view.battlePaused ? 'disabled' : ''}>${label}<kbd>${key}</kbd></button>`).join('')}</div>
     ${game.commandLost
       ? '<p class="console-note">Federation command is lost. The remaining alliances fight on, and you watch the war from here.</p>'
       : ''}
@@ -581,8 +608,10 @@ export const reportFor = (game, type) => {
     const topGun = best(game.ships, (ship) => ship.kills);
     const punished = best(survivors, (ship) => ship.shotsTaken);
     const clumsy = best(game.ships, (ship) => ship.collisions ?? 0);
+    // A drone has no captain to credit (round 20): the hull form reads for it,
+    // so the report never names "Captain undefined".
     const gunner = topGun?.kills
-      ? `Top gun: ${game.extended ? `Captain ${topGun.captain} of the ${topGun.name}` : `${topGun.name} of the ${topGun.faction}`}, ${topGun.kills} credited kills.`
+      ? `Top gun: ${game.extended && topGun.captain ? `Captain ${topGun.captain} of the ${topGun.name}` : `${topGun.name} of the ${topGun.faction}`}, ${topGun.kills} credited kills.`
       : 'No ship scored a kill.';
     // Prizes (round 17): taken counts every capture your side ever made (the
     // cumulative ledger — the per-ship record only remembers the last one), and

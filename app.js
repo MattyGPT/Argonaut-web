@@ -259,6 +259,10 @@ const dispatch = async (action) => {
     return;
   }
 
+  // The bay command (round 20) is Reimagined-only. Its key does nothing in a
+  // classic or extended war, so a stray keystroke never draws a refusal there.
+  if (action.type === 'launch' && !game.reimagined) return;
+
   // Transport needs a crew count even when the ship menu has already named the
   // hull, so the prompt opens with the clicked ship preselected. In a precision
   // war phaser fire goes through the prompt even with a named target, because

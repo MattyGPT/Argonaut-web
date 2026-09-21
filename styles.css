@@ -235,6 +235,17 @@ h1 {
   outline-offset: 2px;
 }
 
+/* A fighter drone (round 20) is a smaller dot than a ship of the line, so a
+   carrier's wing reads as a screen around it rather than three more capital
+   hulls. Faction color still rings it; the glyph is always 'D'. */
+.ship.drone {
+  width: 1.05rem;
+  height: 1.05rem;
+  font-size: .55rem;
+  border-width: 1px;
+  box-shadow: 0 0 7px currentColor;
+}
+
 .range-ring {
   position: absolute;
   left: calc(var(--x) * 1%);
@@ -618,6 +629,12 @@ body.classic #ship-menu .menu-sub {
 .legend-swatch.terrain-asteroids { border: 1px solid #9fb2bf4d; background: #7d8f9c38; }
 .legend-swatch.terrain-ion { border: 1px solid #ffc36b59; background: #ffb04d3d; }
 .legend-swatch.terrain-relay { border: 2px solid #cfe8ff; background: #cfe8ff22; }
+
+.legend-swatch.drone-glyph {
+  border: 1px solid #9fb2bf;
+  color: #9fb2bf;
+  font-size: .55rem;
+}
 
 body.classic .legend-swatch.pip-order,
 body.classic .legend-swatch.pip-prize {
@@ -1219,6 +1236,10 @@ body.classic .ship {
 body.classic .ship .glyph {
   color: inherit;
   font-size: .95rem;
+}
+
+body.classic .ship.drone .glyph {
+  font-size: .68rem;
 }
 
 body.classic .ship.vacant .glyph {

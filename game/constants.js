@@ -138,8 +138,9 @@ export const SHIP_TEMPLATES = Object.freeze({
    * a hull that can move), four tractor units haul prizes and wreck-rams, and
    * the biggest crew pool afloat after Xanadu (240) is the reservoir its
    * boarding parties draw from. Its own guns are modest: it projects force
-   * through what it carries, not what it fires — and in round 20 that means a
-   * drone bay. Reimagined rosters only; every figure is a balance dial.
+   * through what it carries, not what it fires — and since round 20 that means
+   * a drone bay (`DRONE`): one complement of fighter drones, launched once per
+   * war. Reimagined rosters only; every figure is a balance dial.
    */
   carrier: Object.freeze({
     className: 'Carrier',
@@ -154,6 +155,30 @@ export const SHIP_TEMPLATES = Object.freeze({
       mapper: 3,
       transporter: 4,
       radio: 3,
+    }),
+  }),
+  /**
+   * Round 20 (Argonaut Reimagined): the carrier's fighter drone — the bay it
+   * projects force through. Uncrewed (0 complement, so it can never go `vacant`
+   * and is structurally unprizeable), fast as an interceptor on six engines,
+   * armed with a light phaser pair, and paper-thin at 40 shields: a screen that
+   * swarms, not a ship of the line. Never in any roster — drones are spawned at
+   * runtime by a carrier's launch, one complement per war, with deterministic
+   * ids and names. Reimagined only; every figure is a balance dial.
+   */
+  drone: Object.freeze({
+    className: 'Drone',
+    shields: 40,
+    crew: 0,
+    systems: Object.freeze({
+      engines: 6,
+      phasers: 2,
+      photons: 0,
+      tractor: 0,
+      scanner: 1,
+      mapper: 1,
+      transporter: 0,
+      radio: 1,
     }),
   }),
   starbase: Object.freeze({
@@ -246,7 +271,7 @@ export const POWER = Object.freeze({
   /** A sink may be driven this far past its need (1.5 = +50%) before it saturates. */
   overcharge: 1.5,
   /** Reactor units per hull class, keyed by className. */
-  reactor: Object.freeze({ 'Battle cruiser': 5, Cruiser: 4, Scout: 4, Interceptor: 4, Artillery: 5, Carrier: 6, Starbase: 8 }),
+  reactor: Object.freeze({ 'Battle cruiser': 5, Cruiser: 4, Scout: 4, Interceptor: 4, Artillery: 5, Carrier: 6, Drone: 4, Starbase: 8 }),
   /** Points each sink needs for 1.0x; the default profile spends exactly these. */
   need: Object.freeze({ shields: 4, weapons: 6, engines: 4, sensors: 4, tractor: 2 }),
   /** Shield power restored per stardate, as a fraction of capacity at 1.0x shields power. */
@@ -344,6 +369,37 @@ export const PRIZE = Object.freeze({
   manningPenalty: 0.5,
   /** Crew an AI captain or a `board` standing order beams over. */
   aiParty: 10,
+});
+
+/**
+ * The carrier's bay (Argonaut Reimagined, round 20). A carrier spends an action
+ * to launch its one complement of fighter drones for the war — uncrewed hulls
+ * that ride the ships array, so targeting, combat, terrain, fog, and the minimap
+ * all see them like any ship. Settled with Matt, 2026-09-20: all three launch
+ * paths (a command while flying the carrier, a `launch` standing order, and AI
+ * carriers triggering on approach), one 3-drone complement per war with no
+ * replenishment, escort-then-hunt behavior, and drones excluded from every
+ * endgame count — a faction down to drones is out of the war and its bay goes
+ * dark with it. Every number is a balance dial for the Reimagined harness.
+ */
+export const DRONE = Object.freeze({
+  /** Drones one carrier's bay holds — one complement per war, never rebuilt. */
+  baySize: 3,
+  /** An enemy this close trips a `launch` order or an AI carrier's bay. */
+  launchRange: 60,
+  /** A menace this close to the carrier brings the escort off its post. */
+  escortRange: 40,
+  /** How far off the carrier an unengaged drone stations itself. */
+  escortDistance: 10,
+  /** Drones fight to their guns, not to a ram: pursuit stops this short. */
+  standoff: 6,
+  /**
+   * Spawn posts around the carrier, tried in order for each drone so the bay
+   * never materializes on top of the flight deck (or a wingman). Deterministic,
+   * clamped to the field; a post is skipped only if an active hull already sits
+   * on it.
+   */
+  spawnOffsets: Object.freeze([[2, 0], [0, 2], [-2, 0], [0, -2], [3, 0], [0, 3], [-3, 0], [0, -3]]),
 });
 
 /**
@@ -534,9 +590,11 @@ export const SPECTATOR_TICK_MS = 400;
 /**
  * Fleet orders, available only in an extended war. `focus` is the original's
  * behavior — concentrate with the fleet — so it is also the default. The targeted
- * orders need a second ship named alongside them.
+ * orders need a second ship named alongside them. `launch` (round 20) names no
+ * target: it tells a carrier to loose its drones when the enemy closes, and like
+ * `board` it is Reimagined-only — `setOrder` refuses it elsewhere.
  */
-export const ORDER_TYPES = Object.freeze(['focus', 'hold', 'withdraw', 'escort', 'intercept', 'screen', 'board']);
+export const ORDER_TYPES = Object.freeze(['focus', 'hold', 'withdraw', 'escort', 'intercept', 'screen', 'board', 'launch']);
 /**
  * The targeted orders. `board` (round 17) is the odd one out: it names a
  * *vacant* hull rather than an active ship, and it is Reimagined-only — `setOrder`
