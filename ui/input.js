@@ -18,6 +18,8 @@ const keys = Object.freeze({
   Escape: 'resign',
   d: 'launch',
   D: 'launch',
+  x: 'disengage',
+  X: 'disengage',
   p: 'pass',
   P: 'pass',
   f: 'fleet',
@@ -48,6 +50,13 @@ export const bindInput = (root, dispatch, getCamera = () => ({ minX: 0, minY: 0,
       dispatch({ type: 'orders', shipId: orderButton.dataset.orderShip, order: { type: orderButton.dataset.order } });
       return;
     }
+    // Combat-stance buttons live in the ship menu (round 21) and carry the hull
+    // they are for. Setting a stance is a free action, so this never spends the turn.
+    const shipStanceButton = event.target.closest('[data-ship-stance]');
+    if (shipStanceButton) {
+      dispatch({ type: 'stance', stance: shipStanceButton.dataset.shipStance, shipId: shipStanceButton.dataset.stanceShip });
+      return;
+    }
     // Ship-menu commands carry the hull they were opened for, so they skip the
     // target prompt the console buttons need.
     const menuCommand = event.target.closest('[data-ship-command]');
@@ -60,6 +69,13 @@ export const bindInput = (root, dispatch, getCamera = () => ({ minX: 0, minY: 0,
     const powerButton = event.target.closest('[data-power-sink]');
     if (powerButton) {
       dispatch({ type: 'power', sink: powerButton.dataset.powerSink, delta: Number(powerButton.dataset.powerDelta) });
+      return;
+    }
+    // Combat-stance buttons live in the console (round 21) and set the command
+    // ship's stance — also a free action.
+    const stanceButton = event.target.closest('[data-stance]');
+    if (stanceButton) {
+      dispatch({ type: 'stance', stance: stanceButton.dataset.stance });
       return;
     }
     // The menu body is not empty space: clicking it may never become a maneuver.

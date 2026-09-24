@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, getShip } from '../game/state.js';
 import { launchDrones } from '../game/actions.js';
-import { renderGame, terminalNarrative } from '../ui/render.js';
+import { renderGame, reportFor, terminalNarrative } from '../ui/render.js';
 
 // render.js only touches the document inside renderGame, so a bare element stub
 // is enough to exercise it under node --test, keeping the suite dependency-free.
@@ -538,7 +538,8 @@ test('a Reimagined legend keys every color the map draws', () => {
   const legend = read('#map-legend').innerHTML;
   for (const swatch of ['ring-phasers', 'ring-photons', 'ring-engines', 'threat', 'wreck',
     'pip-order', 'star-ace', 'ring-dock',
-    'terrain-nebula', 'terrain-asteroids', 'terrain-ion', 'terrain-relay', 'pip-prize', 'drone-glyph']) {
+    'terrain-nebula', 'terrain-asteroids', 'terrain-ion', 'terrain-relay', 'pip-prize', 'drone-glyph',
+    'stance-firing', 'stance-evasive']) {
     assert.match(legend, new RegExp(`legend-swatch ${swatch}`), `${swatch} is keyed`);
   }
   for (const faction of ['Federation', 'Axis', 'Bloc', 'Cabal']) {
@@ -556,7 +557,7 @@ test('a classic legend keys only what a classic map draws', () => {
   assert.match(legend, /legend-swatch wreck/);
   assert.match(legend, /legend-swatch ring-phasers/);
   assert.ok(!/terrain-/.test(legend), 'no terrain in a classic war');
-  assert.ok(!/pip-prize|pip-order|star-ace|ring-dock|drone-glyph/.test(legend), 'no extended or Reimagined markers');
+  assert.ok(!/pip-prize|pip-order|star-ace|ring-dock|drone-glyph|stance-/.test(legend), 'no extended or Reimagined markers');
 });
 
 test('an extended legend adds the admiralty markers but no terrain', () => {
@@ -566,7 +567,7 @@ test('an extended legend adds the admiralty markers but no terrain', () => {
   assert.match(legend, /legend-swatch pip-order/);
   assert.match(legend, /legend-swatch star-ace/);
   assert.match(legend, /legend-swatch ring-dock/);
-  assert.ok(!/terrain-|pip-prize|drone-glyph/.test(legend), 'terrain and prizes are Reimagined-only');
+  assert.ok(!/terrain-|pip-prize|drone-glyph|stance-/.test(legend), 'terrain and prizes are Reimagined-only');
 });
 
 // --- Round 20: the carrier's bay on the map, in the menus, and in the console ---
@@ -634,4 +635,63 @@ test('the console carries Launch drones only while flying a carrier with a full 
   elements.clear();
   renderGame(createGame({ seed: 'render-console-classic' }));
   assert.ok(!/data-command="launch"/.test(read('#console').innerHTML), 'a classic console never grows one');
+});
+
+// --- Round 21: combat stances and disengage on the console, map, and menus ---
+
+test('the Reimagined console carries the stance selector and Disengage; a classic one does not', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'render-stance-console', reimagined: true }));
+  const console = read('#console').innerHTML;
+  assert.match(console, /Combat stance/);
+  assert.match(console, /data-stance="standard" aria-pressed="true"/, 'the command ship defaults to standard, lit');
+  assert.match(console, /data-stance="firing"/);
+  assert.match(console, /data-stance="evasive"/);
+  assert.match(console, /data-command="disengage"/);
+  assert.match(read('#map-legend').innerHTML, /legend-swatch stance-firing/, 'and the legend keys the markers');
+
+  elements.clear();
+  renderGame(createGame({ seed: 'render-stance-classic' }));
+  const classic = read('#console').innerHTML;
+  assert.ok(!/Combat stance/.test(classic), 'no stance control outside Reimagined');
+  assert.ok(!/data-command="disengage"/.test(classic), 'no disengage command');
+});
+
+test('a firing hull wears its stance marker on the map', () => {
+  // The Axis flagship runs its firing doctrine; staged 40 out so it is visible but
+  // not a threat (no threat outline competing for the class list). Terrain cleared
+  // so no seeded nebula hides it at that range.
+  const game = { ...withPair(createGame({ seed: 'render-stance-map', reimagined: true }),
+    'fed-flagship', { x: 100, y: 100 }, 'axis-flagship', { x: 140, y: 100 }), terrain: [] };
+  elements.clear();
+  renderGame(game);
+  assert.match(read('#map-field').innerHTML, /class="ship Axis active stance-firing"/);
+});
+
+test('a Federation menu offers the stance selector; an enemy menu reads its stance', () => {
+  const own = withPair(createGame({ seed: 'render-stance-menu', reimagined: true }),
+    'fed-flagship', { x: 100, y: 100 }, 'fed-cruiser-1', { x: 104, y: 100 });
+  elements.clear();
+  renderGame(own, { contextShipId: 'fed-cruiser-1' });
+  const menu = read('#ship-menu').innerHTML;
+  assert.match(menu, /Combat stance/);
+  assert.match(menu, /data-ship-stance="firing" data-stance-ship="fed-cruiser-1"/);
+  assert.match(menu, /data-ship-stance="standard"[^>]*class="current"|class="current"[^>]*data-ship-stance="standard"/,
+    'the current stance is marked');
+
+  const enemy = withPair(createGame({ seed: 'render-stance-enemy', reimagined: true }),
+    'fed-flagship', { x: 100, y: 100 }, 'axis-flagship', { x: 104, y: 100 });
+  elements.clear();
+  renderGame(enemy, { contextShipId: 'axis-flagship' });
+  const enemyMenu = read('#ship-menu').innerHTML;
+  assert.match(enemyMenu, /Combat stance: firing/, 'the Axis swarm stance is readable intel');
+  assert.ok(!/data-ship-stance/.test(enemyMenu), 'you cannot set the stance of an enemy');
+});
+
+test('the fleet report reads the stance of each hull in a Reimagined war', () => {
+  elements.clear();
+  const game = { ...createGame({ seed: 'render-stance-report', reimagined: true }), stances: { 'fed-cruiser-1': 'evasive' } };
+  const lines = reportFor(game, 'fleet').lines;
+  assert.match(lines.find((line) => line.startsWith('Bonhomme')), /evasive stance/, 'an ordered hull reads its stance');
+  assert.match(lines.find((line) => line.startsWith('Argo')), /standard stance/, 'the command ship defaults to standard');
 });

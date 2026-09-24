@@ -635,6 +635,40 @@ export const DOCKING = Object.freeze({
  */
 export const STALEMATE_ROUNDS = 12;
 
+/** The three combat stances a Reimagined hull may hold (round 21). */
+export const STANCES = Object.freeze(['standard', 'firing', 'evasive']);
+
+/**
+ * Combat stances (Argonaut Reimagined, round 21 — Phase 4 opens). A per-turn
+ * accuracy-vs-evasion trade, settled with Matt 2026-09-21: three stances, each a
+ * miss-chance term folded into the ONE shared `volleyMissChance` roll, so the
+ * player's volleys and the autopilots' read a single formula and the stance bias
+ * stacks additively with the asteroid-cover and ion-ring terms already there.
+ *
+ * **Firing** — the hull holds a steady gun solution: its own volleys are more
+ * accurate (`firingSelfMiss`, negative), but it is not maneuvering, so incoming
+ * fire finds it more easily (`firingIncomingMiss`, negative on the defender).
+ * **Evasive** — the hull weaves: incoming fire misses more (`evasiveIncomingMiss`,
+ * positive on the defender), but its own shots are thrown off (`evasiveSelfMiss`,
+ * positive). **Standard** is neutral and the default, and is exactly the
+ * calibrated `MISS_CHANCE` — a classic or extended war never leaves it, so the
+ * calibrated accuracy stands untouched (parity).
+ *
+ * The roll is clamped to `[missFloor, missCeil]` so the most aggressive pairing
+ * (firing shooter on a firing target) approaches — but never reaches — a
+ * guaranteed hit, preserving "shots can miss". Every figure is a balance dial for
+ * the Reimagined harness, not a calibrated value.
+ */
+export const STANCE = Object.freeze({
+  /** Shooter's own miss chance while in this stance (added to the roll). */
+  selfMiss: Object.freeze({ standard: 0, firing: -0.05, evasive: 0.08 }),
+  /** Miss chance of shots fired AT a hull in this stance (added to the roll). */
+  incomingMiss: Object.freeze({ standard: 0, firing: -0.05, evasive: 0.15 }),
+  /** Clamp on the total miss chance, so no volley is a certain hit or a certain miss. */
+  missFloor: 0.05,
+  missCeil: 0.95,
+});
+
 /**
  * How each alliance's captains fight, in an extended war. The original ran every
  * autopilot on one doctrine — pursue the fleet's target, fire, and never mind your
@@ -642,7 +676,9 @@ export const STALEMATE_ROUNDS = 12;
  *
  * `standoff` is the range a captain tries to fight from; `minRange` is the range it
  * will not let an enemy inside, backing off instead of shooting. `flushBelow` and
- * `retreatBelow` are fractions of the ship's own shield capacity.
+ * `retreatBelow` are fractions of the ship's own shield capacity. `stance` (round
+ * 21, Reimagined) is the combat stance its captains hold by default — a hurt hull
+ * below `retreatBelow` sheds it for `evasive` as it breaks off (see `stanceOf`).
  */
 export const PERSONALITIES = Object.freeze({
   Axis: Object.freeze({
@@ -663,6 +699,9 @@ export const PERSONALITIES = Object.freeze({
     retreatBelow: 0.08,
     suicideBelow: 0.02,
     suicideMinEnemies: 5,
+    // Round 21: the swarm presses home its attack — accurate guns, no thought for
+    // the weaving it would take to spoil the enemy's aim on it.
+    stance: 'firing',
   }),
   Bloc: Object.freeze({
     // Artillery: works the phaser edge and will not let anything sit at point-blank,
@@ -673,6 +712,8 @@ export const PERSONALITIES = Object.freeze({
     retreatBelow: 0.12,
     focusWeakest: true,
     noTractor: true,
+    // Round 21: the artillery line stands off and lands its hard volleys true.
+    stance: 'firing',
   }),
   Cabal: Object.freeze({
     // Tricksters: concentrate with the fleet like anyone else, but spend a tractor
@@ -683,6 +724,9 @@ export const PERSONALITIES = Object.freeze({
     retreatBelow: 0.15,
     fleetFocus: true,
     tractorFirst: true,
+    // Round 21: the mobile tricksters weave — hard to pin down, at some cost to
+    // their own aim, which suits a fleet that wins by towing hulls into wrecks.
+    stance: 'evasive',
   }),
   Federation: Object.freeze({
     // By the book: the original's fleet concentration, plus the damage discipline
@@ -692,6 +736,9 @@ export const PERSONALITIES = Object.freeze({
     flushBelow: 0.35,
     retreatBelow: 0.12,
     fleetFocus: true,
+    // Round 21: by the book means no standing bias — the player's own fleet keeps
+    // the neutral default until ordered otherwise.
+    stance: 'standard',
   }),
 });
 

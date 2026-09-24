@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, DRONE, GRID_SIZE, LOADOUT, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, REIMAGINED_WEAPON_DAMAGE_SCALE, SCENARIOS, SHIP_TEMPLATES, STALEMATE_ROUNDS, TERRAIN, VENDETTA } from '../game/constants.js';
+import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, DRONE, GRID_SIZE, LOADOUT, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, REIMAGINED_WEAPON_DAMAGE_SCALE, SCENARIOS, SHIP_TEMPLATES, STALEMATE_ROUNDS, STANCE, STANCES, TERRAIN, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioOutcome, scenarioProgress } from '../game/scenarios.js';
-import { abbreviateNarrative, alertLevel, appendLog, blastRadius, clampPowerAllocation, createGame, crewCapacity, defaultLoadout, distance, dockedAt, engineCapacity, fleetCost, fleetHulls, getShip, inRadioContact, insideFeature, ionStormZone, isAce, isDrone, nebulaHides, nebulaRevealRange, normalizeFleetSpec, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
+import { abbreviateNarrative, alertLevel, appendLog, blastRadius, clampPowerAllocation, createGame, crewCapacity, defaultLoadout, distance, dockedAt, engineCapacity, fleetCost, fleetHulls, getShip, inRadioContact, insideFeature, ionStormZone, isAce, isDrone, nebulaHides, nebulaRevealRange, normalizeFleetSpec, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, stanceOf, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
 import { applyPlayerAction, canLaunchDrones, captureHull, damageShip, defaultTargetFor, eligibleTargets, killLines, launchDrones, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, tractorLock, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, darkenOrphanDrones, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolveObjectives, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
@@ -2785,9 +2785,12 @@ test('a jammed autopilot never picks a volley, though the same captain shoots in
 
 test('shots fired from the storm ring miss more often', () => {
   const base = stormGame('storm-ring');
-  // A gunnery pair at phaser range: the shooter in the ring, the target in open space.
+  // A gunnery pair at phaser range: the shooter in the ring, the target in open
+  // space. Both stances pinned to standard so this isolates the terrain term from
+  // the round-21 stance bias (the target would otherwise run Axis 'firing').
   const ringed = {
     ...base,
+    stances: { 'fed-flagship': 'standard', 'axis-flagship': 'standard' },
     ships: base.ships.map((ship) => {
       if (ship.id === 'fed-flagship') return { ...ship, x: 145, y: 120 }; // 25 out: the ring
       if (ship.id === 'axis-flagship') return { ...ship, x: 170, y: 120 }; // 50 out: clear
@@ -2817,6 +2820,8 @@ test('asteroid cover and the ring jam stack on one roll', () => {
   const base = stormGame('storm-stack');
   const game = {
     ...base,
+    // Stances pinned to standard so the assertion isolates the two terrain terms.
+    stances: { 'fed-flagship': 'standard', 'axis-flagship': 'standard' },
     terrain: [
       { id: 'ion-storm-1', type: 'ion-storm', x: 120, y: 120, radius: 30 },
       { id: 'asteroids-1', type: 'asteroids', x: 157, y: 120, radius: 5 },
@@ -4112,4 +4117,164 @@ test('an old save with a wing aloft tolerates the missing bay flag', () => {
   assert.ok(war.turn > 1, 'the save plays on');
   assert.equal(war.ships.filter((ship) => isDrone(ship) && ship.droneOf === 'fed-carrier').length, DRONE.baySize,
     'no second complement from the unflagged carrier');
+});
+
+// --- Argonaut Reimagined, round 21: combat stances + disengage ---
+
+/**
+ * A Reimagined war staged for stance tests: the command ship and an Axis flagship
+ * at phaser range mid-field, everyone else parked in the corners (the round-17
+ * parking pattern), and terrain cleared so the accuracy roll isolates the stance
+ * terms. Pass `stances` to pin hulls; anything unpinned falls to doctrine.
+ */
+const stancePair = (seed, stances = {}) => {
+  const game = withShips(createGame({ seed, reimagined: true, loadout: defaultLoadout() }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 120, y: 100 };
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 12, y: 16 };
+    return parked(ship);
+  });
+  return { ...game, terrain: [], stances };
+};
+
+test('combat stances bend the one shared accuracy roll, and only in a Reimagined war', () => {
+  const shooter = (game) => getShip(game, 'fed-flagship');
+  const target = (game) => getShip(game, 'axis-flagship');
+  const miss = (stances) => {
+    const game = stancePair('stance-mods', stances);
+    return volleyMissChance(game, shooter(game), target(game));
+  };
+  // Neutral is exactly the calibrated base.
+  assert.equal(miss({ 'fed-flagship': 'standard', 'axis-flagship': 'standard' }), MISS_CHANCE);
+  // Firing sharpens the shooter's own guns; a firing target is easier to hit.
+  assert.ok(miss({ 'fed-flagship': 'firing', 'axis-flagship': 'standard' }) < MISS_CHANCE, 'firing shooter is more accurate');
+  assert.ok(miss({ 'fed-flagship': 'standard', 'axis-flagship': 'firing' }) < MISS_CHANCE, 'a firing target is easier to hit');
+  // Evasive is the mirror: the target dodges, the shooter's own fire goes wild.
+  assert.ok(miss({ 'fed-flagship': 'standard', 'axis-flagship': 'evasive' }) > MISS_CHANCE, 'an evasive target is harder to hit');
+  assert.ok(miss({ 'fed-flagship': 'evasive', 'axis-flagship': 'standard' }) > MISS_CHANCE, 'an evasive shooter is less accurate');
+  // Both ends stack on the one roll, and the total is clamped to the floor/ceiling.
+  const bothEvasive = miss({ 'fed-flagship': 'evasive', 'axis-flagship': 'evasive' });
+  assert.ok(Math.abs(bothEvasive - (MISS_CHANCE + STANCE.selfMiss.evasive + STANCE.incomingMiss.evasive)) < 1e-9);
+  const bothFiring = miss({ 'fed-flagship': 'firing', 'axis-flagship': 'firing' });
+  assert.ok(bothFiring >= STANCE.missFloor, 'the most accurate pairing never reaches a guaranteed hit');
+  // Stances are inert outside a Reimagined war — the field is present but ignored.
+  for (const opts of [{}, { extended: true }]) {
+    const off = withShips(createGame({ seed: 'stance-parity', ...opts }), (ship) => {
+      if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
+      if (ship.id === 'axis-flagship') return { ...ship, x: 120, y: 100 };
+      return ship;
+    });
+    const staged = { ...off, stances: { 'fed-flagship': 'evasive', 'axis-flagship': 'evasive' } };
+    assert.equal(volleyMissChance(staged, getShip(off, 'fed-flagship'), getShip(off, 'axis-flagship')), MISS_CHANCE,
+      'the calibrated accuracy stands untouched');
+  }
+  assert.deepEqual(createGame({ seed: 'stance-parity' }), createGame({ seed: 'stance-parity', reimagined: false }),
+    'the standing parity scaffold still holds');
+});
+
+test('stance resolves stored > doctrine > neutral, exactly like power allocation', () => {
+  const game = createGame({ seed: 'stance-resolve', reimagined: true, loadout: defaultLoadout() });
+  assert.equal(stanceOf(game, getShip(game, 'fed-flagship')), 'standard', 'the command ship is neutral until ordered');
+  const stored = { ...game, stances: { 'fed-flagship': 'evasive' } };
+  assert.equal(stanceOf(stored, getShip(stored, 'fed-flagship')), 'evasive', 'a stored stance wins');
+  assert.equal(stanceOf(game, getShip(game, 'axis-flagship')), 'firing', 'the Axis swarm fires');
+  assert.equal(stanceOf(game, getShip(game, 'bloc-flagship')), 'firing', 'the Bloc artillery line fires');
+  assert.equal(stanceOf(game, getShip(game, 'cabal-flagship')), 'evasive', 'Cabal tricksters weave');
+  // A hull beaten below its retreat threshold sheds its bias and weaves as it breaks off.
+  const hurt = withShips(game, (ship) => (ship.id === 'axis-flagship' ? { ...ship, shields: 1 } : ship));
+  assert.equal(stanceOf(hurt, getShip(hurt, 'axis-flagship')), 'evasive', 'a gutted hull stops standing still');
+  // Classic and extended never leave neutral, whatever the doctrine table says.
+  for (const opts of [{}, { extended: true }]) {
+    const off = createGame({ seed: 'stance-resolve', ...opts });
+    assert.equal(stanceOf(off, getShip(off, 'axis-flagship')), 'standard');
+  }
+});
+
+test('setting a stance is free, persistent, Federation-only, and Reimagined-only', () => {
+  const game = createGame({ seed: 'stance-set', reimagined: true, loadout: defaultLoadout() });
+  const out = applyPlayerAction(game, { type: 'stance', stance: 'evasive' });
+  assert.equal(out.game.phase, 'player', 'a stance costs no stardate');
+  assert.equal(out.game.stances['fed-flagship'], 'evasive');
+  assert.match(out.messages.join(' '), /sets evasive stance/);
+  assert.equal(stanceOf(out.game, getShip(out.game, 'fed-flagship')), 'evasive', 'and the roll reads it');
+  const other = applyPlayerAction(game, { type: 'stance', stance: 'firing', shipId: 'fed-cruiser-1' });
+  assert.equal(other.game.stances['fed-cruiser-1'], 'firing', 'any Federation hull takes a stance by id');
+  assert.match(applyPlayerAction(game, { type: 'stance', stance: 'firing', shipId: 'axis-flagship' }).messages.join(' '), /Only Federation hulls/);
+  assert.match(applyPlayerAction(game, { type: 'stance', stance: 'aggressive' }).messages.join(' '), /Unknown stance/);
+  for (const opts of [{}, { extended: true }]) {
+    const off = applyPlayerAction(createGame({ seed: 'stance-set', ...opts }), { type: 'stance', stance: 'evasive' });
+    assert.match(off.messages.join(' '), /Reimagined/);
+    assert.equal(off.game.phase, 'player');
+  }
+});
+
+test('a firing command ship lands more volleys; an evasive target dodges more', () => {
+  const missCount = (stances, samples = 600) => {
+    const base = stancePair('stance-e2e', stances);
+    let misses = 0;
+    for (let step = 0; step < samples; step += 1) {
+      const out = applyPlayerAction({ ...base, randomStep: step }, { type: 'phasers', targetId: 'axis-flagship' });
+      if (/Missed!/.test(out.messages.join(' '))) misses += 1;
+    }
+    return misses;
+  };
+  const neutral = missCount({ 'fed-flagship': 'standard', 'axis-flagship': 'standard' });
+  const firing = missCount({ 'fed-flagship': 'firing', 'axis-flagship': 'standard' });
+  const evasiveTarget = missCount({ 'fed-flagship': 'standard', 'axis-flagship': 'evasive' });
+  assert.ok(firing < neutral, `firing sharpens the guns (firing ${firing} vs neutral ${neutral} misses of 600)`);
+  assert.ok(evasiveTarget > neutral, `evasive dodges (evasive target ${evasiveTarget} vs neutral ${neutral} misses of 600)`);
+});
+
+test('AI captains fight in their doctrine stance, and shooting a weaving hull misses more', () => {
+  const game = { ...createGame({ seed: 'stance-ai', reimagined: true, loadout: defaultLoadout() }), terrain: [] };
+  const axis = getShip(game, 'axis-flagship');
+  const fed = getShip(game, 'fed-flagship');
+  const cabal = getShip(game, 'cabal-flagship');
+  assert.ok(volleyMissChance(game, axis, fed) < MISS_CHANCE, 'an Axis shooter fires true');
+  assert.ok(volleyMissChance(game, axis, cabal) > volleyMissChance(game, axis, fed),
+    'the same shot misses a weaving Cabal hull more than a by-the-book Federation one');
+});
+
+test('disengage burns away from the nearest threat and spends the stardate', () => {
+  const game = stancePair('stance-disengage');
+  const actor = getShip(game, 'fed-flagship');
+  const out = applyPlayerAction(game, { type: 'disengage' });
+  assert.equal(out.game.phase, 'computer', 'disengage is the maneuver for the turn');
+  const fed = getShip(out.game, 'fed-flagship');
+  const capacity = engineCapacity(actor, game.gridSize, powerEffect(game, actor, 'engines'));
+  assert.ok(fed.x < 100, 'it runs directly away from the threat to the east');
+  assert.equal(fed.y, 100, 'with no lateral drift');
+  assert.ok(Math.abs(100 - fed.x) <= capacity + 1, 'at up to a full engine burn');
+  assert.match(out.messages.join(' '), /disengages from Firebreather/);
+});
+
+test('disengage refuses without engines, under a lock, with no threat, or out of a Reimagined war', () => {
+  const game = stancePair('stance-disengage-refuse');
+  const noEngines = withShips(game, (ship) => (ship.id === 'fed-flagship' ? { ...ship, systems: { ...ship.systems, engines: 0 } } : ship));
+  assert.match(applyPlayerAction(noEngines, { type: 'disengage' }).messages.join(' '), /Engines are disabled/);
+  const held = withShips(game, (ship) => (ship.id === 'fed-flagship' ? { ...ship, tractorBy: 'axis-flagship' } : ship));
+  assert.match(applyPlayerAction(held, { type: 'disengage' }).messages.join(' '), /tractor lock/);
+  const alone = { ...game, ships: game.ships.filter((ship) => ship.faction === 'Federation') };
+  assert.match(applyPlayerAction(alone, { type: 'disengage' }).messages.join(' '), /no enemy to disengage/);
+  assert.match(applyPlayerAction(createGame({ seed: 'stance-disengage-classic' }), { type: 'disengage' }).messages.join(' '), /Reimagined/);
+});
+
+test('stances never touch a classic or extended war, even one played out', () => {
+  for (const opts of [{}, { extended: true }]) {
+    assert.deepEqual(createGame({ seed: 'stance-war-parity', ...opts }).stances, {}, 'the field exists but stays empty');
+  }
+  let war = createGame({ seed: 'stance-extended-war', extended: true });
+  for (let round = 0; round < 30 && !war.outcome; round += 1) {
+    war = resolveComputerTurns({ ...war, phase: 'computer' });
+  }
+  assert.equal(Object.keys(war.stances ?? {}).length, 0, 'no captain stores a stance outside a Reimagined war');
+});
+
+test('an old save without the stances field resolves every hull to its default', () => {
+  const game = createGame({ seed: 'stance-old-save', reimagined: true, loadout: defaultLoadout() });
+  const old = { ...game, stances: undefined };
+  assert.equal(stanceOf(old, getShip(old, 'fed-flagship')), 'standard');
+  assert.equal(stanceOf(old, getShip(old, 'axis-flagship')), 'firing', 'doctrine still resolves without the field');
+  const out = applyPlayerAction(old, { type: 'stance', stance: 'evasive' });
+  assert.equal(out.game.stances['fed-flagship'], 'evasive', 'setting a stance creates the field');
 });

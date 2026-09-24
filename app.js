@@ -259,9 +259,10 @@ const dispatch = async (action) => {
     return;
   }
 
-  // The bay command (round 20) is Reimagined-only. Its key does nothing in a
-  // classic or extended war, so a stray keystroke never draws a refusal there.
-  if (action.type === 'launch' && !game.reimagined) return;
+  // The bay command (round 20) and disengage (round 21) are Reimagined-only, and
+  // both are bound to a key. Their keys do nothing in a classic or extended war, so
+  // a stray keystroke never draws a refusal there.
+  if ((action.type === 'launch' || action.type === 'disengage') && !game.reimagined) return;
 
   // Transport needs a crew count even when the ship menu has already named the
   // hull, so the prompt opens with the clicked ship preselected. In a precision
@@ -346,9 +347,9 @@ const dispatch = async (action) => {
     ...view,
     entries: acted || outcome.report ? [] : outcome.messages,
     ...(outcome.report ? { report: outcome.report } : {}),
-    // Orders and refits are free actions issued from the ship menu, so it stays
-    // open to issue another; anything that spends the stardate puts it away.
-    ...(['orders', 'refit'].includes(action.type) ? {} : { contextShipId: null }),
+    // Orders, refits, and stances are free actions issued from the ship menu, so it
+    // stays open to issue another; anything that spends the stardate puts it away.
+    ...(['orders', 'refit', 'stance'].includes(action.type) ? {} : { contextShipId: null }),
   };
   if (!['phasers', 'photons'].includes(action.type)) playEffect('command', game.sound);
   showEvents(outcome.events);
