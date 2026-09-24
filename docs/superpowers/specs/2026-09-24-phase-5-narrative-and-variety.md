@@ -196,7 +196,7 @@ seams round 24 leaves it:
 
 | Round | Chunk | Ships | Tested by | Status |
 | --- | --- | --- | --- | --- |
-| 24 | Random encounters | Seeded derelicts / distress calls / neutral merchants at stardate boundaries on `${seed}:encounters:<turn>`; the rescue window; the full civilian-exclusion pass; seizure-as-prize; gray hulls, blinker, legend, guide | Deterministic draws; replay-safe; arrivals off-field and off the main stream; the cap; the exclusions (victory/surrender/relay/stalemate/targeting/statistics); seizure + boarding + tow + window; parity off | ✅ shipped (main `cb03d4c` — pushed straight to main, no PR) |
+| 24 | Random encounters | Seeded derelicts / distress calls / neutral merchants at stardate boundaries on `${seed}:encounters:<turn>`; the rescue window; the full civilian-exclusion pass; seizure-as-prize; gray hulls, blinker, legend, guide | Deterministic draws; replay-safe; arrivals off-field and off the main stream; the cap; the exclusions (victory/surrender/relay/stalemate/targeting/statistics); seizure + boarding + tow + window; parity off | ✅ shipped (PR below) |
 | 25 | Officers & morale | Named officers grant passives; morale affects surrender; the merchant-reputation price | Passive applies; morale→surrender threshold; parity off | — |
 
 ## Parity & determinism guardrails
