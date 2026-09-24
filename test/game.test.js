@@ -3509,8 +3509,8 @@ test('the self-destruct blast scales only in a Reimagined war', () => {
 
 test('a Reimagined detonation spares a hull 15 out that the manual blast would delete', () => {
   // One staging: the command ship detonates with a cruiser 15 units away — inside
-  // the manual's 20-unit blast, outside the scaled Reimagined one (12), but inside
-  // the shrapnel ring either way.
+  // the manual's 20-unit blast, outside the scaled Reimagined one (9 since the 23e
+  // retune, 12 before it), but inside the shrapnel ring either way.
   const staged = (opts) => withShips(createGame({ seed: 'blast-reach', ...opts }), (ship) => {
     if (ship.id === 'fed-flagship') return { ...ship, x: 50, y: 50 };
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 65, y: 50 };
@@ -3523,7 +3523,8 @@ test('a Reimagined detonation spares a hull 15 out that the manual blast would d
   const survivor = getShip(reimagined.game, 'fed-cruiser-1');
   assert.equal(survivor.status, 'active', 'the scaled Reimagined blast no longer reaches it');
   assert.ok(survivor.shields < shieldCapacity(survivor), 'but the shrapnel ring still bites');
-  assert.match(reimagined.messages.join(' '), /Blast range 12\./, 'the narrative reports the scaled range');
+  const scaled = Math.round(RANGES.selfDestruct * REIMAGINED_SELF_DESTRUCT_SCALE);
+  assert.match(reimagined.messages.join(' '), new RegExp(`Blast range ${scaled}\\.`), 'the narrative reports the scaled range');
 });
 
 test('an Axis last stand in a Reimagined war counts the scaled blast', () => {
@@ -4848,7 +4849,7 @@ const arcShip = (over = {}) => ({
 
 const arcSum = (ship) => ARCS.reduce((total, arc) => total + ship.arcs[arc], 0);
 
-test('a struck arc absorbs first and the overflow goes straight to the internals', () => {
+test('a struck arc absorbs first, the overflow spills across the others, and the rest reaches the internals', () => {
   const rng = createRng('arc-absorb');
   const ship = arcShip();
   // 30 into the 40-point aft arc: all shield, no internals touched.
@@ -4858,20 +4859,36 @@ test('a struck arc absorbs first and the overflow goes straight to the internals
   assert.equal(soaked.crew, 200, 'the arc pool held the whole hit');
   assert.deepEqual(soaked.systems, ship.systems);
   assert.equal(arcSum(soaked), soaked.shields, 'the breakdown invariant holds');
-  // 60 into the 40-point aft arc: the arc dies and 20 points reach the lottery.
+  // 60 into the 40-point aft arc: the arc dies, the 23e spill dial bleeds part of
+  // the overflow across the other arcs, and only the rest reaches the lottery.
+  const overflow = 20;
+  const spill = Math.min(overflow, Math.round(overflow * ARC.spillFraction));
   const through = damageShip(ship, 60, createRng('arc-absorb'), { arc: 'aft' });
   assert.equal(through.arcs.aft, 0, 'the struck arc is burnt out');
-  assert.equal(through.shields, 160, 'the total only lost the 40 the arc absorbed');
+  assert.equal(through.shields, 200 - 40 - spill, 'the total lost the arc pool plus the spill');
   const internals = 200 - through.crew + Object.keys(ship.systems).reduce((lost, name) => lost + (ship.systems[name] - through.systems[name]), 0);
-  assert.equal(internals, 20, 'the overflow ran the crew/system lottery');
+  assert.equal(internals, overflow - spill, 'only the unspilled overflow ran the crew/system lottery');
   assert.equal(arcSum(through), through.shields);
-  // No spill: the burnt-out aft never drains its neighbors.
-  assert.equal(through.arcs.fore, 60);
-  assert.equal(through.arcs.port, 50);
-  // A killing blow through a weak arc still ends the hull the same way.
+  // The spill lands on the neighbors exactly as a positional loss of that size would.
+  assert.deepEqual(through.arcs, { ...deductArcsProportionally({ ...ship.arcs, aft: 0 }, spill), aft: 0 });
+  // A gutted hull with nothing left to spill into takes the whole overflow below decks.
   const gutted = damageShip(arcShip({ shields: 40, crew: 3, arcs: { fore: 0, starboard: 0, aft: 40, port: 0 } }), 200, createRng('arc-kill'), { arc: 'aft' });
   assert.ok(['vacant', 'destroyed'].includes(gutted.status), 'the lottery governs the kill, not the arc');
   if (gutted.arcs) assert.equal(arcSum(gutted), gutted.shields);
+  assert.equal(gutted.shields, 0, 'the arc and the pool both died');
+});
+
+test('the spill keeps a gutted arc more dangerous than a fresh one (23e)', () => {
+  const fresh = arcShip();
+  const gutted = arcShip({ shields: 140, arcs: { fore: 0, starboard: 50, aft: 40, port: 50 } });
+  const internals = (before, after) => (before.crew - after.crew)
+    + Object.keys(before.systems).reduce((lost, name) => lost + (before.systems[name] - after.systems[name]), 0);
+  const a = damageShip(fresh, 80, createRng('spill-direction'), { arc: 'fore' });
+  const b = damageShip(gutted, 80, createRng('spill-direction'), { arc: 'fore' });
+  assert.ok(internals(gutted, b) > internals(fresh, a),
+    'the hull with the dead fore arc takes more below decks from the same volley');
+  assert.equal(arcSum(a), a.shields);
+  assert.equal(arcSum(b), b.shields);
 });
 
 test('positional damage on an arced hull burns the breakdown proportionally', () => {

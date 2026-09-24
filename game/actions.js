@@ -1,5 +1,6 @@
 import {
   ACE_KILLS,
+  ARC,
   ARCS,
   CAPTAIN_NAMES,
   CREW_DAMAGE_WEIGHT,
@@ -216,21 +217,30 @@ export const damageShip = (ship, amount, rng = createRng('damage'), options = {}
 
   let remaining = Math.floor(amount);
   // Directional shields (round 23): an aimed volley carries the arc it struck —
-  // that arc's OWN pool absorbs the hit and the overflow goes straight to the
-  // internals, with no spill to neighboring arcs, so presenting a gutted arc to
-  // the enemy genuinely hurts. Any other hit on a hull with arcs is positional:
-  // the total absorbs as always and the arcs burn down proportionally. A hull
-  // without arcs (classic, extended, a drone, an old save) keeps the single-pool
-  // math byte-identically, which is how parity holds.
+  // that arc's OWN pool absorbs first, then `ARC.spillFraction` of the overflow
+  // bleeds into the other arcs in proportion (the 23e durability lever: at 0 one
+  // worn flank exposed the crew to every volley, measured far too lethal), and
+  // only the rest reaches the internals lottery. A gutted arc still lets the
+  // enemy through sooner — its own pool is gone and there is less left to spill
+  // into — so presenting the wrong arc genuinely hurts. Any other hit on a hull
+  // with arcs is positional: the total absorbs as always and the arcs burn down
+  // proportionally. A hull without arcs (classic, extended, a drone, an old save)
+  // keeps the single-pool math byte-identically, which is how parity holds.
   const arc = options.arc && ship.arcs ? options.arc : null;
   let arcs = ship.arcs;
   let shields;
   if (arc) {
     const pool = Math.max(0, ship.arcs[arc] ?? 0);
     const absorbed = Math.min(pool, remaining);
-    arcs = { ...ship.arcs, [arc]: pool - absorbed };
-    shields = ship.shields - absorbed;
     remaining -= absorbed;
+    const others = { ...ship.arcs, [arc]: 0 };
+    const spill = Math.min(remaining, Math.round(remaining * ARC.spillFraction));
+    const bled = deductArcsProportionally(others, spill);
+    const othersSum = ARCS.reduce((sum, name) => sum + others[name], 0);
+    const spillAbsorbed = Math.min(spill, othersSum);
+    arcs = { ...bled, [arc]: pool - absorbed };
+    shields = ship.shields - absorbed - spillAbsorbed;
+    remaining -= spillAbsorbed;
   } else {
     const absorbed = Math.min(ship.shields, remaining);
     shields = ship.shields - absorbed;
