@@ -20,6 +20,7 @@ import {
   SHIELD_PER_ENGINE,
   SHRAPNEL_DAMAGE,
   SHRAPNEL_EXTRA_RANGE,
+  SPREAD,
   STANCES,
   SURGICAL_DAMAGE_FACTOR,
   TARGETED_ORDERS,
@@ -359,7 +360,7 @@ export const eligibleTargets = (game, actionType) => {
   const actor = getShip(game, game.playerShipId);
   if (!actor) return [];
   const ships = getLivingShips(game).filter((ship) => ship.id !== actor.id);
-  if (['phasers', 'photons', 'tractor', 'ion'].includes(actionType)) {
+  if (['phasers', 'photons', 'tractor', 'ion', 'spread'].includes(actionType)) {
     return ships.filter((ship) => isActive(ship) && ship.faction !== actor.faction);
   }
   // A drone is never a transporter subject (round 20): no crew to reinforce, and
@@ -387,7 +388,7 @@ export const defaultTargetFor = (game, actionType) => {
   }
   const enemies = targets.filter((ship) => isActive(ship) && ship.faction !== actor.faction);
   const sorted = [...(enemies.length ? enemies : targets)].sort(byDistance);
-  const range = { phasers: RANGES.phasers, photons: RANGES.photons, tractor: RANGES.tractor, ion: RANGES.ion }[actionType];
+  const range = { phasers: RANGES.phasers, photons: RANGES.photons, tractor: RANGES.tractor, ion: RANGES.ion, spread: RANGES.spread }[actionType];
   if (range) return sorted.find((ship) => distance(actor, ship) <= range)?.id ?? sorted[0].id;
   return sorted[0].id;
 };
@@ -416,6 +417,8 @@ export const shipCommands = (game, targetId) => {
   if (hostile && isActive(target)) {
     offer('phasers', 'Fire phasers', !jammed && systemUnits(actor, 'phasers') > 0, RANGES.phasers);
     offer('photons', 'Fire photons', !jammed && systemUnits(actor, 'photons') > 0, RANGES.photons);
+    // Spread torpedoes (round 22c): only a hull with the tubes is offered the salvo.
+    offer('spread', 'Fire spread', !jammed && systemUnits(actor, 'spread') > 0, RANGES.spread);
     // Ion/EMP (round 22a): only a hull that carries the emitter is offered it, so
     // this is Reimagined-gated by construction (no classic hull has ion units).
     offer('ion', 'Fire ion', !jammed && systemUnits(actor, 'ion') > 0, RANGES.ion);
@@ -644,6 +647,70 @@ const ionAction = (game, action, actor) => {
       : `${actor.name} fires an ion burst at ${found.target.name}; its shields absorb the charge.`,
     ...(burned.length ? [`${found.target.name}'s ${burned.join(', ')} ${burned.length === 1 ? 'is' : 'are'} disabled.`] : []),
   ], { events: [fireEvent('ion', actor, found.target, true)] });
+};
+
+/**
+ * Applies one spread-torpedo hit (round 22c): the full rolled damage at the impact
+ * point (the target's position) falls off linearly to zero at `SPREAD.splashRadius`,
+ * hitting EVERY active hull inside — the primary hardest, and any friendly wingman
+ * caught in the blast too (the shooter spares its own hull). Lethal: each hit runs
+ * the normal `damageShip` lottery, so a hull in the splash can be gutted, left
+ * vacant, or destroyed, and the shooter is credited with every enemy hull the salvo
+ * finishes. Shared by the player's command and the autopilots' so both splashes are
+ * identical. Returns the raw game (no turn completion); the caller wraps it.
+ */
+export const spreadSplash = (game, actor, target, full, rng) => {
+  const impact = { x: target.x, y: target.y };
+  const radius = SPREAD.splashRadius;
+  const messages = [];
+  const events = [];
+  let kills = 0;
+  const splashed = game.ships.map((ship) => {
+    if (!isActive(ship) || ship.id === actor.id) return ship; // the shooter spares itself
+    const dist = distance(impact, ship);
+    if (dist > radius) return ship;
+    const factor = Math.max(0, 1 - dist / radius);
+    const amount = Math.max(1, Math.round(full * factor));
+    const before = ship.status;
+    const hit = damageShip(ship, amount, rng);
+    if (before === 'active' && hit.status !== 'active') {
+      if (ship.faction !== actor.faction) kills += 1;
+      events.push({ kind: 'explosion', fromId: actor.id, toId: ship.id, x1: ship.x, y1: ship.y, x2: ship.x, y2: ship.y, hit: true });
+      events.push(terminalEvent('destruction', 'spread', hit, { attacker: actor }));
+    }
+    messages.push(ship.id === target.id
+      ? `${ship.name} takes the full spread for ${amount} damage.`
+      : `${ship.name} is caught in the spread for ${amount} damage.`);
+    return { ...hit, shotsTaken: hit.shotsTaken + 1 };
+  });
+  const ships = splashed.map((ship) => (ship.id === actor.id
+    ? { ...ship, shotsFired: ship.shotsFired + 1, kills: ship.kills + kills }
+    : ship));
+  return { game: { ...game, ships }, messages, events, kills };
+};
+
+const spreadAction = (game, action, actor) => {
+  const disabled = requiresSystem(game, actor, 'spread');
+  if (disabled) return disabled;
+  // The ion storm's core jams the tubes like any gun (15d).
+  if (ionStormZone(game, actor) === 'core') return invalid(game, `${actor.name}'s torpedo tubes are offline in the ion storm.`);
+  const found = hostileTarget(game, action, actor);
+  if (found.error) return invalid(game, found.error, found.requiresTarget);
+  if (distance(actor, found.target) > RANGES.spread) return invalid(game, `${found.target.name} is out of range for the spread torpedoes.`);
+  const rng = seededRng(game);
+  if (rng.next() < volleyMissChance(game, actor, found.target)) {
+    const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
+    return result(completeTurn(advanceRandom(replaceShip(game, shooter))),
+      `${actor.name} fires a spread of torpedoes at ${found.target.name}. Missed — the salvo splashes nothing.`,
+      { events: [fireEvent('spread', actor, found.target, false)] });
+  }
+  const grudge = vendettaGrudge(game, actor, found.target);
+  const full = weaponDamage('spread', actor, rng, grudge, powerEffect(game, actor, 'weapons'), game.reimagined ? REIMAGINED_WEAPON_DAMAGE_SCALE : 1);
+  const splash = spreadSplash(game, actor, found.target, full, rng);
+  return result(completeTurn(advanceRandom(splash.game)), [
+    `${actor.name} fires a spread of torpedoes at ${found.target.name}.`,
+    ...splash.messages,
+  ], { events: [fireEvent('spread', actor, found.target, true), ...splash.events] });
 };
 
 /** Counts a collision on both hulls; the battle report names the clumsiest captain. */
@@ -1271,6 +1338,7 @@ export const applyPlayerAction = (game, action = {}) => {
     case 'disengage': return disengageAction(game, actor);
     case 'phasers': return weaponAction(game, action, actor, 'phasers');
     case 'photons': return weaponAction(game, action, actor, 'photons');
+    case 'spread': return spreadAction(game, action, actor);
     case 'ion': return ionAction(game, action, actor);
     case 'tractor': return tractorAction(game, action, actor);
     case 'hyperspace': return hyperspaceAction(game, action, actor);

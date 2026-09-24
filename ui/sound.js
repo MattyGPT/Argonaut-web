@@ -41,6 +41,7 @@ export const playEvent = (kind, enabled) => {
   try {
     if (kind === 'phasers') tone(c, { type: 'sawtooth', from: 900, to: 140, duration: 0.18, gain: 0.05 });
     else if (kind === 'photons') tone(c, { type: 'square', from: 130, to: 55, duration: 0.22, gain: 0.06 });
+    else if (kind === 'spread') { tone(c, { type: 'square', from: 150, to: 60, duration: 0.2, gain: 0.05 }); tone(c, { type: 'sine', from: 80, to: 40, duration: 0.28, gain: 0.05, delay: 0.16 }); }
     else if (kind === 'ion') tone(c, { type: 'square', from: 1400, to: 300, duration: 0.16, gain: 0.04 });
     else if (kind === 'explosion') { noise(c, { duration: 0.4, gain: 0.1 }); tone(c, { type: 'sine', from: 90, to: 40, duration: 0.3, gain: 0.06 }); }
     else if (kind === 'miss') tone(c, { type: 'sine', from: 320, to: 220, duration: 0.08, gain: 0.02 });

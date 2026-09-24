@@ -53,14 +53,15 @@ const commands = [
 /**
  * Fleet orders only exist in an extended war, so the button appears only there.
  * The bay command (round 20) appears only while the conn is on a Reimagined
- * carrier whose drones are still aboard, and the ion emitter (round 22a) and
- * Disengage (round 21) only in a Reimagined war — a command that could not land
- * never gets a button.
+ * carrier whose drones are still aboard; the spread tubes (round 22c) and ion
+ * emitter (round 22a) only on a hull that carries them; and Disengage (round 21)
+ * in any Reimagined war — a command that could not land never gets a button.
  */
 const commandList = (game, actor) => {
   let list = game.extended ? [...commands, ['fleet', 'Fleet orders', 'F']] : commands;
   if (canLaunchDrones(game, actor)) list = [...list, ['launch', 'Launch drones', 'D']];
   if (game.reimagined) {
+    if ((actor?.systems?.spread ?? 0) > 0) list = [...list, ['spread', 'Spread', 'T']];
     if ((actor?.systems?.ion ?? 0) > 0) list = [...list, ['ion', 'Ion', 'I']];
     list = [...list, ['disengage', 'Disengage', 'X']];
   }

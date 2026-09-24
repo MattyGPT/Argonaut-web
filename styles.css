@@ -774,6 +774,27 @@ body.classic .legend-swatch.stance-evasive { background: #40e0ff; box-shadow: no
   stroke: var(--axis);
 }
 
+/* Spread torpedoes (round 22c): an orange warhead run, then a dashed ring drawn at
+   the real splash radius (SPREAD.splashRadius, set on the element) that fades — so
+   the caught area reads exactly, and stays in sync if the radius is retuned. */
+.fx-spread {
+  fill: var(--axis);
+}
+
+.fx-splash {
+  fill: none;
+  stroke: var(--axis);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+  animation: fx-splash-fade .5s ease-out forwards;
+}
+
+@keyframes fx-splash-fade {
+  from { opacity: .9; }
+  to { opacity: 0; }
+}
+
 .fx-terminal-destruction {
   fill: none;
   stroke: currentColor;
@@ -1456,6 +1477,7 @@ body.classic .ship .prize-pip {
   .fx-move,
   .fx-phaser,
   .fx-ion,
+  .fx-splash,
   .fx-terminal-destruction,
   .fx-terminal-surrender,
   .terminal-event {

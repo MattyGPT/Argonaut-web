@@ -1,5 +1,5 @@
 import { DOCKING, FACTIONS, GRID_SIZE, POWER, PRIZE, RANGES, REIMAGINED_WEAPON_DAMAGE_SCALE, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
-import { captureHull, canLaunchDrones, damageShip, detonate, fireEvent, flushShields, ionDamage, killLines, launchDrones, resolveAsteroidStrike, resolveCollision, terminalEvent, tractorLock, weaponDamage } from './actions.js';
+import { captureHull, canLaunchDrones, damageShip, detonate, fireEvent, flushShields, ionDamage, killLines, launchDrones, resolveAsteroidStrike, resolveCollision, spreadSplash, terminalEvent, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
 import { scenarioOutcome } from './scenarios.js';
@@ -137,6 +137,32 @@ const resolveAiAction = (game, shipId) => {
       ],
       type: action.type,
       events: [fireEvent('ion', actor, target, true)],
+    };
+  }
+  if (action.type === 'spread') {
+    // Spread torpedoes (round 22c): the area salvo. Same shared accuracy roll as
+    // the guns, then a splash that damages every hull near the impact — the AI only
+    // looses it into a clean cluster (engage/spreadWorthIt guarantees no friendly
+    // fire). spreadSplash credits the shooter's shotsFired and any kills itself.
+    const target = getShip(game, action.targetId);
+    const rng = rngFor(game);
+    if (rng.next() < volleyMissChance(game, actor, target)) {
+      const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
+      return {
+        game: advanceRandom(replaceShip(game, shooter)),
+        messages: [`${actor.name} fires a spread of torpedoes at ${target.name}. Missed — the salvo splashes nothing.`],
+        type: action.type,
+        events: [fireEvent('spread', actor, target, false)],
+      };
+    }
+    const grudge = vendettaGrudge(game, actor, target);
+    const full = weaponDamage('spread', actor, rng, grudge, powerEffect(game, actor, 'weapons'), game.reimagined ? REIMAGINED_WEAPON_DAMAGE_SCALE : 1);
+    const splash = spreadSplash(game, actor, target, full, rng);
+    return {
+      game: advanceRandom(splash.game),
+      messages: [`${actor.name} fires a spread of torpedoes at ${target.name}.`, ...splash.messages],
+      type: action.type,
+      events: [fireEvent('spread', actor, target, true), ...splash.events],
     };
   }
   if (action.type === 'tractor') {

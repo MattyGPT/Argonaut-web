@@ -21,6 +21,7 @@ import {
   SCENARIO_IDS,
   SHIP_NAMES,
   SHIP_TEMPLATES,
+  SPREAD,
   STANCE,
   STANCES,
   STARBASE_BLAST_RADIUS,
@@ -181,12 +182,19 @@ const createShip = ({ id, name, faction, kind, x, y, reimagined }) => {
   const template = SHIP_TEMPLATES[kind];
   // A Reimagined hull carries a reactor subsystem; a classic or extended one does
   // not, so their damage lottery — and every calibrated figure — is untouched. The
-  // ion/EMP weapon (round 22a) is Reimagined-only too, and only the classes in
-  // `ION.carry` field it — a hull that carries none never gets the key at all, so
-  // its console readout and damage lottery stay clean.
+  // ion/EMP emitter (round 22a) and the spread torpedo tubes (round 22c) are
+  // Reimagined-only too, and only the classes in `ION.carry` / `SPREAD.carry` field
+  // them — a hull that carries none never gets the key at all, so its console
+  // readout and damage lottery stay clean.
   const ionUnits = reimagined ? (ION.carry[template.className] ?? 0) : 0;
+  const spreadUnits = reimagined ? (SPREAD.carry[template.className] ?? 0) : 0;
   const systems = reimagined
-    ? { ...template.systems, reactor: POWER.reactor[template.className] ?? 0, ...(ionUnits > 0 ? { ion: ionUnits } : {}) }
+    ? {
+      ...template.systems,
+      reactor: POWER.reactor[template.className] ?? 0,
+      ...(ionUnits > 0 ? { ion: ionUnits } : {}),
+      ...(spreadUnits > 0 ? { spread: spreadUnits } : {}),
+    }
     : { ...template.systems };
 
   return {
@@ -712,6 +720,8 @@ export const templateSystems = (ship) => {
   // Ion/EMP is Reimagined-only the same way (round 22a): the dockyard rebuilds an
   // ion-stripped hull back to its class complement.
   if (ship?.systems && 'ion' in ship.systems) base.ion = ION.carry[ship.className] ?? 0;
+  // Spread torpedo tubes too (round 22c).
+  if (ship?.systems && 'spread' in ship.systems) base.spread = SPREAD.carry[ship.className] ?? 0;
   return base;
 };
 

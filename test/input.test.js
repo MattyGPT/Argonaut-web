@@ -122,6 +122,14 @@ test('I fires the ion emitter (round 22a)', () => {
   assert.deepEqual(dispatched, [{ type: 'ion' }, { type: 'ion' }]);
 });
 
+test('T fires the spread torpedoes (round 22c)', () => {
+  openDialog = null;
+  const dispatched = bind();
+  press('t');
+  press('T');
+  assert.deepEqual(dispatched, [{ type: 'spread' }, { type: 'spread' }]);
+});
+
 test('a console stance button sets the command ship stance', () => {
   openDialog = null;
   const dispatched = bind();

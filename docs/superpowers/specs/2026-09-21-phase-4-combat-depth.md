@@ -183,16 +183,48 @@ Measured (250 seeds): median 63 (flat vs 62), prizes 8.5/war, hopeless draws 5%,
 timeouts 7%, Bloc 35.6 / Fed 28.8 / Axis 12.8 / Cabal 10.8 (Cabal recovers). Full
 row in CALIBRATION's "Reimagined balance" table.
 
-### 22c — Spread torpedoes (designed, not yet built)
+### 22c — Spread torpedoes (shipped)
 
-**Settled with Matt, 2026-09-21: splash around impact.** Fire at a target/point;
-the primary takes full damage and every hull within a splash radius takes falloff
-damage. Rides the shared `volleyMissChance` (a miss splashes nothing). Rewards
-catching tight formations — a tactical counter to clustering, in natural tension
-with the last-stand-blast concern. Seam: a new weapon type + a `spreadAction`
-that damages all hulls in radius (the detonate blast is the closest precedent, but
-non-terminal and falloff-scaled); decide carrier classes, splash radius, and the
-falloff curve when built, and whether it is a photon upgrade or its own subsystem.
+**Settled with Matt, 2026-09-21: splash around impact.** Fire at a hostile target;
+the primary takes the full roll and every hull within the splash radius takes a
+linear distance-falloff share. Rides the shared `volleyMissChance` (a miss splashes
+nothing). Rewards catching tight formations — a tactical counter to clustering, in
+natural tension with the last-stand-blast concern.
+
+**Implementation decisions (defaulted + measured, all reversible dials):**
+
+- **Own subsystem, not a photon upgrade.** A Reimagined-only `spread` system added
+  in `createShip` like the reactor/ion (never in `SHIP_TEMPLATES.systems`, so the
+  classic/extended lottery is untouched). `SPREAD.carry` = Battle cruiser 2,
+  Carrier 1 (the heavy hulls field the salvo); `RANGES.spread` 15 (short-ranged);
+  `WEAPONS.spread` a torpedo-like band, lower per-hit than a single photon since one
+  salvo lands on several hulls.
+- **Splash is indiscriminate (the seam's "every hull").** Every active hull within
+  `SPREAD.splashRadius` (12) of the impact takes `round(full × (1 − dist/radius))`
+  through the normal survivable `damageShip` lottery — friendlies included, the
+  shooter spared its own blast. So firing into a melee risks your own wing: the
+  clustering counter cuts both ways. (Flagged as the main reversible decision.)
+- **Lethal, multi-kill.** Unlike ion, spread kills: a hull in the splash can be
+  gutted, left vacant, or destroyed, and the shooter is credited with every enemy
+  hull the salvo finishes (like `detonate`). It is not terminal by itself — the
+  falloff means outer hulls usually survive to fight or be boarded.
+- **AI fires it only into a clean cluster.** `spreadWorthIt` gates the AI: no
+  friendly inside the radius (it never friendly-fires, unlike a player who can
+  choose to) and ≥2 enemies caught, so the salvo beats a single gun. Sits just under
+  photons in `engage`'s preference.
+
+Shared `spreadSplash(game, actor, target, full, rng)` helper drives both the
+player's `spreadAction` and the autopilot branch, so the two splashes are identical.
+UI: `T` key + a console Spread button (only on a hull with tubes), "Fire spread" in
+the ship menu, an orange `fx-spread` warhead run + a dashed `fx-splash` ring drawn
+at the true radius, and its own sound.
+
+Measured (250 seeds): median 62 (flat), mean 98.3 (shorter tail), timeouts **5%**
+(from 7% — the anti-cluster salvo breaks logjams), prizes 8.6/war, 4+-hull blasts
+unchanged at 44.4% (spread *wounds* a cluster through the survivable lottery, it
+does not delete one like a last-stand blast), Bloc 34.4 / Fed 27.2 / Axis 15.6 /
+Cabal 10 (Axis recovers — its close swarm uses the short-range salvo well). Full row
+in CALIBRATION.
 
 ### Mines — deferred (Matt, 2026-09-21)
 
