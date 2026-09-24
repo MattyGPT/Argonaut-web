@@ -201,6 +201,12 @@ h1 {
   color: var(--cabal);
 }
 
+/* A neutral merchant (round 24) is civilian gray on the map and the minimap —
+   deliberately none of the four alliance colors. */
+.ship.Neutral, .Neutral {
+  color: #b8c4cc;
+}
+
 .ship.vacant {
   opacity: .42;
   border-style: dashed;
@@ -651,6 +657,19 @@ body.classic #ship-menu .menu-sub {
   color: #e8f4ff;
   font-size: .6rem;
   text-shadow: 0 0 5px #9fd4ff;
+}
+
+.legend-swatch.neutral-glyph {
+  border: 1px solid #b8c4cc;
+  color: #b8c4cc;
+  font-size: .55rem;
+}
+
+.legend-swatch.pip-distress {
+  width: 6px;
+  height: 6px;
+  background: #ffc36b;
+  box-shadow: 0 0 6px #ffc36b;
 }
 
 body.classic .legend-swatch.pip-order,
@@ -1463,6 +1482,29 @@ body.classic .ship.has-order::before {
 body.classic .ship .prize-pip {
   background: #38ff38;
   box-shadow: none;
+}
+
+/* A hull broadcasting distress (round 24) wears a slow amber blinker, below the
+   hull opposite the ace star. Flagged for the manual play-test pass. */
+.ship .distress-pip {
+  position: absolute;
+  bottom: -4px;
+  left: -4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffc36b;
+  box-shadow: 0 0 6px #ffc36b;
+  animation: distress-blink 1.6s ease-in-out infinite;
+}
+
+@keyframes distress-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ship .distress-pip { animation: none; }
 }
 
 .fx-impact {

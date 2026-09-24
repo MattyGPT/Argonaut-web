@@ -5,6 +5,7 @@ import {
   ARCS,
   CAPTAIN_NAMES,
   DOCKING,
+  ENCOUNTERS,
   ENGINE_MOVE_PER_UNIT,
   FACTIONS,
   FACTION_IDS,
@@ -13,6 +14,7 @@ import {
   LOADOUT,
   LOG_LIMIT,
   MISS_CHANCE,
+  NEUTRAL_FACTION,
   PERSONALITIES,
   POWER,
   POWER_SINKS,
@@ -264,6 +266,102 @@ export const dronesOf = (game, carrierId) => game.ships
  */
 export const hasLaunchedDrones = (game, carrier) => Boolean(carrier?.dronesLaunched)
   || game.ships.some((ship) => ship.droneOf && ship.droneOf === carrier?.id);
+
+/**
+ * Whether a hull is a neutral merchant rather than a warship (round 24). The
+ * `neutral` stamp — not the faction string — is the mark, because a SEIZED
+ * merchant keeps its Merchant class but joins the captor's alliance and must
+ * count as an ordinary hull from that moment. Neutrals never hold a faction in
+ * the war: the outcome, surrender, relay, targeting, and threat reads all skip
+ * them, exactly like drones.
+ */
+export const isNeutral = (ship) => Boolean(ship?.neutral);
+
+const rngFraction = (rng, [min, max]) => min + rng.next() * (max - min);
+
+/**
+ * Builds one random-encounter hull (round 24, Reimagined): a derelict ghost
+ * ship, a stranded Federation hull broadcasting distress, or a neutral merchant
+ * passing through. Every draw — class, name, condition, the derelict's ghost
+ * alliance, the heading it drifts on — comes from the caller's
+ * `${seed}:encounters:<turn>` sub-stream, so arrivals are deterministic per
+ * seed and no existing stream shifts. The `encounter` record stamps what it is
+ * and when it arrived (the merchant's departure clock reads it); old saves
+ * simply carry no hulls with one.
+ */
+export const spawnEncounter = (game, type, x, y, rng) => {
+  const turn = game.turn;
+  const facing = rng.integer(0, 359);
+  if (type === 'neutral') {
+    return {
+      ...createShip({
+        id: `enc-${turn}-merchant`,
+        name: rng.pick(ENCOUNTERS.names.neutral),
+        faction: NEUTRAL_FACTION,
+        kind: 'merchant',
+        x,
+        y,
+        reimagined: true,
+      }),
+      neutral: true,
+      captain: rng.pick(CAPTAIN_NAMES),
+      facing,
+      encounter: { type, turn },
+    };
+  }
+  if (type === 'distress') {
+    const kind = rng.pick(ENCOUNTERS.distressClasses);
+    const template = SHIP_TEMPLATES[kind];
+    const shields = Math.max(1, Math.round(template.shields * rngFraction(rng, ENCOUNTERS.distressShields)));
+    const crew = Math.max(1, Math.round(template.crew * rngFraction(rng, ENCOUNTERS.distressCrew)));
+    const hull = createShip({
+      id: `enc-${turn}-distress`,
+      name: rng.pick(ENCOUNTERS.names.distress),
+      faction: FACTIONS.FEDERATION,
+      kind,
+      x,
+      y,
+      reimagined: true,
+    });
+    return {
+      ...hull,
+      shields,
+      crew,
+      arcs: arcSplit(shields),
+      systems: { ...hull.systems, engines: 0 },
+      captain: rng.pick(CAPTAIN_NAMES),
+      facing,
+      encounter: { type, turn },
+    };
+  }
+  const kind = rng.pick(ENCOUNTERS.derelictClasses);
+  const template = SHIP_TEMPLATES[kind];
+  const shields = Math.max(0, Math.round(template.shields * rngFraction(rng, ENCOUNTERS.derelictShields)));
+  const hull = createShip({
+    id: `enc-${turn}-derelict`,
+    name: rng.pick(ENCOUNTERS.names.derelict),
+    faction: rng.pick(Object.values(FACTIONS)),
+    kind,
+    x,
+    y,
+    reimagined: true,
+  });
+  const systems = {};
+  for (const [name, units] of Object.entries(hull.systems)) {
+    systems[name] = rng.integer(0, Math.floor(units * ENCOUNTERS.derelictSystems));
+  }
+  return {
+    ...hull,
+    shields,
+    crew: 0,
+    status: 'vacant',
+    systems,
+    arcs: arcSplit(shields),
+    tractorBy: null,
+    facing,
+    encounter: { type, turn },
+  };
+};
 
 const randomPosition = (rng, faction, regional, occupied, gridSize) => {
   // Regional formations are pinned in 100-unit space; scale them onto the actual
@@ -635,7 +733,7 @@ const canStillAct = (game, ship) => {
     blastRadius(ship, game),
   );
   const hostileInRange = game.ships
-    .some((other) => other.status === 'active' && other.faction !== ship.faction && distance(ship, other) <= reach);
+    .some((other) => other.status === 'active' && other.faction !== ship.faction && !isNeutral(other) && distance(ship, other) <= reach);
   if (hostileInRange) return true;
   return systemUnits(ship, 'transporter') > 0
     && game.ships.some((other) => other.status === 'vacant' && distance(ship, other) <= sensorRange(game, ship, 'transporter'));
@@ -645,10 +743,12 @@ const canStillAct = (game, ship) => {
  * True when no survivor can reach anything: every active ship is out of engines and
  * has no enemy inside its weapons', tractor's, or blast reach. Nothing can ever
  * happen again, which is the original's hopeless draw — distinct from the draw where
- * all four alliances were destroyed.
+ * all four alliances were destroyed. A neutral merchant is not a survivor of the
+ * war (round 24): a civilian passing through can neither change the outcome nor
+ * keep the hope alive, exactly as in the victory math.
  */
 export const isStranded = (game) => {
-  const active = game.ships.filter((ship) => ship.status === 'active');
+  const active = game.ships.filter((ship) => ship.status === 'active' && !isNeutral(ship));
   return active.length > 0 && active.every((ship) => !canStillAct(game, ship));
 };
 
