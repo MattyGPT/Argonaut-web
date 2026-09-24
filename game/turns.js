@@ -6,6 +6,7 @@ import { scenarioOutcome } from './scenarios.js';
 import {
   appendLog,
   applyHeading,
+  bearingDeg,
   crewCapacity,
   describeOrder,
   distance,
@@ -33,10 +34,43 @@ const replaceShip = (game, replacement) => ({ ...game, ships: game.ships.map((sh
 const rngFor = (game) => createRng(`${game.seed}:${game.randomStep ?? 0}`);
 const advanceRandom = (game) => ({ ...game, randomStep: (game.randomStep ?? 0) + 1 });
 
-const resolveAiAction = (game, shipId) => {
-  const actor = getShip(game, shipId);
+/**
+ * Round 23 (23c): AI captains fight bow-on. A hull that is NOT moving this
+ * stardate snaps its facing to the target of its chosen action — or the nearest
+ * active enemy when the action names none — so the reinforced fore arc points at
+ * whatever it is shooting, towing, boarding, or simply watching. Movement actions
+ * are exempt: a burn already implies its heading (23a), which is how a retreating
+ * hull ends up running on its weak aft with no special-casing. Free (no stardate,
+ * no turn cost) and deterministic (pure bearing math, no RNG), Reimagined only;
+ * drones have no facing, and a classic or extended war never touches one.
+ */
+const faceThreat = (game, actor, action) => {
+  if (!game.reimagined || isDrone(actor)) return actor;
+  if (action.type === 'move' || action.type === 'hyperspace') return actor;
+  let threat = action.targetId ? getShip(game, action.targetId) : null;
+  if (!threat || !isActive(threat) || threat.faction === actor.faction) {
+    threat = game.ships
+      .filter((other) => isActive(other) && other.faction !== actor.faction)
+      .sort((a, b) => distance(actor, a) - distance(actor, b) || a.id.localeCompare(b.id))[0] ?? null;
+  }
+  if (!threat || (threat.x === actor.x && threat.y === actor.y)) return actor;
+  const facing = Math.round(bearingDeg(actor, threat));
+  return actor.facing === facing ? actor : { ...actor, facing };
+};
+
+const resolveAiAction = (startGame, shipId) => {
+  let game = startGame;
+  let actor = getShip(game, shipId);
   if (!isActive(actor)) return { game, messages: [], type: 'pass' };
   const action = chooseAiAction(game, shipId);
+  // The bow snaps onto the threat BEFORE the action resolves, so every volley of
+  // this stardate — the ones this hull fires and the ones fired at it later in the
+  // phase — reads the disciplined facing.
+  const faced = faceThreat(game, actor, action);
+  if (faced !== actor) {
+    actor = faced;
+    game = replaceShip(game, faced);
+  }
   if (action.type === 'pass') return { game, messages: [`${actor.name} holds position.`], type: action.type };
   if (action.type === 'shields') {
     const flushed = flushShields(actor, game);
