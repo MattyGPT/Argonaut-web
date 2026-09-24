@@ -1,4 +1,4 @@
-import { DOCKING, FACTIONS, GRID_SIZE, POWER, PRIZE, RANGES, REIMAGINED_WEAPON_DAMAGE_SCALE, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
+import { DOCKING, ENCOUNTERS, FACTIONS, GRID_SIZE, POWER, PRIZE, RANGES, REIMAGINED_WEAPON_DAMAGE_SCALE, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
 import { captureHull, canLaunchDrones, damageShip, detonate, fireEvent, flushShields, ionDamage, killLines, launchDrones, resolveAsteroidStrike, resolveCollision, spreadSplash, terminalEvent, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
@@ -16,12 +16,14 @@ import {
   isActive,
   isDrone,
   isImmovable,
+  isNeutral,
   isStranded,
   isTractorHeld,
   powerEffect,
   segmentCrossesFeature,
   sensorRange,
   shieldCapacity,
+  spawnEncounter,
   struckArc,
   strongestFederation,
   systemUnits,
@@ -258,6 +260,15 @@ const resolveAiAction = (startGame, shipId) => {
     const out = launchDrones(game, actor);
     return { game: out.game, messages: out.messages, type: action.type };
   }
+  if (action.type === 'depart') {
+    // A neutral merchant's visit is over (round 24): it jumps out and leaves the
+    // field entirely. No RNG consumed, narrated like the arrival it answers.
+    return {
+      game: { ...game, ships: game.ships.filter((ship) => ship.id !== actor.id) },
+      messages: [`${actor.name} jumps to hyperspace and is gone.`],
+      type: action.type,
+    };
+  }
   if (action.type === 'move') {
     const grid = game.gridSize ?? GRID_SIZE;
     const x = Math.max(0, Math.min(grid, actor.x + action.dx));
@@ -312,8 +323,10 @@ export const evaluateOutcome = (game) => {
   // Drones never hold a faction in the war (round 20, Matt's call): a bay with no
   // fleet behind it is wreckage in the making, and a drone-only rump cannot win,
   // surrender, or be hunted down for a victory it cannot lose. The orphans go
-  // dark in the same computer phase (`darkenOrphanDrones`).
-  const activeFactions = [...new Set(game.ships.filter((ship) => isActive(ship) && !isDrone(ship)).map((ship) => ship.faction))];
+  // dark in the same computer phase (`darkenOrphanDrones`). Neutral merchants
+  // (round 24) are excluded the same way: a civilian passing through neither
+  // prolongs nor wins anybody's war.
+  const activeFactions = [...new Set(game.ships.filter((ship) => isActive(ship) && !isDrone(ship) && !isNeutral(ship)).map((ship) => ship.faction))];
   if (activeFactions.length === 0) {
     return { kind: 'draw', message: victoryMessage('draw') };
   }
@@ -342,7 +355,7 @@ export const evaluateOutcome = (game) => {
 // crewed hulls that can still fight. Its drones stand down with it regardless —
 // `markFactionSurrendered` marks every active ship of the faction.
 const factionStrength = (game, faction) => game.ships
-  .filter((ship) => isActive(ship) && !isDrone(ship) && ship.faction === faction)
+  .filter((ship) => isActive(ship) && !isDrone(ship) && !isNeutral(ship) && ship.faction === faction)
   .reduce((total, ship) => total + ship.shields + ship.crew, 0);
 
 const surrenderWinner = (game, faction, active, factions) => {
@@ -380,7 +393,9 @@ export const applySurrender = (game) => {
   if (game.outcome) return { game, events: [] };
   let next = game;
   const events = [];
-  const factions = [...new Set(game.ships.map((ship) => ship.faction))];
+  // Round 24: only the four alliances capitulate — a neutral merchant is not a
+  // belligerent and can never be forced to "surrender" out of the field.
+  const factions = [...new Set(game.ships.filter((ship) => !isDrone(ship) && !isNeutral(ship)).map((ship) => ship.faction))];
   for (const faction of factions) {
     // The last-ships-standing gate counts crewed hulls only (round 20): drones
     // neither delay their alliance's capitulation nor are they left out of it —
@@ -419,6 +434,10 @@ export const resolveDisabledSurrender = (game) => {
   const events = [];
   const ships = game.ships.map((ship) => {
     if (!isActive(ship) || ship.crew <= 0 || ship.className === 'Starbase') return ship;
+    // A neutral merchant never strikes its colors (round 24): a civilian hull is
+    // seized whole by a transporter party or jumps out when its visit ends — it
+    // does not become a derelict of "Neutral" lingering in the field.
+    if (isNeutral(ship)) return ship;
     if (!game.resigned && ship.id === game.playerShipId) return ship;
     if (ship.systems.engines > 0 || ship.systems.phasers > 0 || ship.systems.photons > 0) return ship;
     messages.push(`${ship.name} is disabled and strikes its colors.  Its crew takes to escape pods.`);
@@ -558,7 +577,7 @@ export const resolveObjectives = (game) => {
     // A drone neither holds nor contests a node (round 20): an unmanned hull
     // camped on the objective cannot work it, and its alliance's war is fought
     // by the crews, not the bays.
-    const inside = game.ships.filter((ship) => isActive(ship) && !isDrone(ship) && !isTractorHeld(game, ship)
+    const inside = game.ships.filter((ship) => isActive(ship) && !isDrone(ship) && !isNeutral(ship) && !isTractorHeld(game, ship)
       && distance(ship, relay) <= relay.radius);
     const factions = [...new Set(inside.map((ship) => ship.faction))];
     const before = held[relay.id] ?? null;
@@ -579,11 +598,76 @@ export const resolveObjectives = (game) => {
 };
 
 /**
+ * Random encounters (round 24, Reimagined): one seeded draw per stardate
+ * boundary on the `${seed}:encounters:<turn>` sub-stream — the prize-captains
+ * pattern, so the main war stream never shifts and a seed replays the same
+ * arrivals. On a hit, one encounter hull enters the field at least
+ * `ENCOUNTERS.minDistance` from every hull (drawn, not aimed: if the field is
+ * too crowded after `placementTries` tries, the arrival is simply skipped and
+ * the war carries on — deterministically). At most `maxAlive` encounter hulls
+ * stand at once: a derelict counts until boarded or broken up, a distress hull
+ * until its engines are repaired, a merchant until it jumps out. Resolves in
+ * the computer phase after the actors have moved and before the dockyard, so an
+ * arrival never acts on the stardate it arrives.
+ */
+export const resolveEncounters = (game) => {
+  if (!game.reimagined || game.outcome) return { game, messages: [] };
+  const messages = [];
+  // The rescue window (round 24): a distress hull nobody got under tow or
+  // repair inside `distressPatience` stardates is abandoned — the crew takes to
+  // the pods and the hull goes dark as boardable salvage, so a stranded ship out
+  // in the deep field can never hold its alliance in the war forever.
+  const waiting = game.ships.map((ship) => {
+    if (ship.encounter?.type !== 'distress' || !isActive(ship) || systemUnits(ship, 'engines') > 0) return ship;
+    if (game.turn - (ship.encounter.turn ?? game.turn) < ENCOUNTERS.distressPatience) return ship;
+    messages.push(`Nobody came for the ${ship.name}. Its crew takes to the pods, and the hull goes dark.`);
+    return { ...ship, status: 'vacant', crew: 0, tractorBy: null };
+  });
+  const field = messages.length ? { ...game, ships: waiting } : game;
+  const standing = field.ships.filter((ship) => ship.encounter
+    && ((ship.encounter.type === 'derelict' && ship.status === 'vacant')
+      || (ship.encounter.type === 'distress' && isActive(ship) && systemUnits(ship, 'engines') === 0)
+      || (ship.encounter.type === 'neutral' && isActive(ship) && isNeutral(ship)))).length;
+  if (standing >= ENCOUNTERS.maxAlive) return { game: field, messages };
+  const rng = createRng(`${field.seed}:encounters:${field.turn}`);
+  if (rng.next() >= ENCOUNTERS.chance) return { game: field, messages };
+  // Weighted type draw off the same sub-stream.
+  const entries = Object.entries(ENCOUNTERS.weights);
+  const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
+  let roll = rng.next() * total;
+  let type = entries[entries.length - 1][0];
+  for (const [name, weight] of entries) {
+    if (roll < weight) { type = name; break; }
+    roll -= weight;
+  }
+  const grid = field.gridSize ?? GRID_SIZE;
+  let position = null;
+  for (let attempt = 0; attempt < ENCOUNTERS.placementTries && !position; attempt += 1) {
+    const candidate = { x: rng.integer(2, grid - 2), y: rng.integer(2, grid - 2) };
+    if (field.ships.every((ship) => ship.status === 'destroyed' || distance(candidate, ship) >= ENCOUNTERS.minDistance)) {
+      position = candidate;
+    }
+  }
+  if (!position) return { game: field, messages };
+  const hull = spawnEncounter(field, type, position.x, position.y, rng);
+  const message = type === 'derelict'
+    ? `The ${hull.name} drifts into the war zone at ${position.x}, ${position.y} — a derelict of the ${hull.faction}, dark and waiting.`
+    : type === 'distress'
+      ? `Distress call: the Federation ${hull.name} is adrift at ${position.x}, ${position.y}, engines gone, broadcasting for a tow.`
+      : `A neutral merchant, the ${hull.name}, creeps through the field at ${position.x}, ${position.y}, running silent.`;
+  return { game: { ...field, ships: [...field.ships, hull] }, messages: [...messages, message] };
+};
+
+/**
  * A fingerprint of everything that could make the war progress: where every hull
  * sits, what it can still do, and who owns it. Two consecutive rounds with the
- * same fingerprint mean nothing happened anywhere in the war zone.
+ * same fingerprint mean nothing happened anywhere in the war zone. A neutral
+ * merchant is not part of the war's progress (round 24): a civilian passing
+ * through neither resolves nor prolongs anything, so its comings and goings
+ * must not reset the stalemate net.
  */
 const warSignature = (game) => game.ships
+  .filter((ship) => !isNeutral(ship))
   .map((ship) => [
     ship.id,
     `${ship.x},${ship.y}`,
@@ -648,6 +732,12 @@ export const resolveComputerTurns = (initialGame) => {
   const darkened = darkenOrphanDrones(game);
   game = darkened.game;
   log.push(...darkened.messages);
+  // Random encounters (round 24) arrive at the stardate boundary — after the
+  // actors have moved, before the dockyard and objectives read the field, so an
+  // arrival never acts on the stardate it arrives.
+  const encounters = resolveEncounters(game);
+  game = encounters.game;
+  log.push(...encounters.messages);
   const docked = resolveDocking(game);
   game = docked.game;
   log.push(...docked.messages);

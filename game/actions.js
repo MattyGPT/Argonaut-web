@@ -59,6 +59,7 @@ import {
   isActive,
   isDrone,
   isImmovable,
+  isNeutral,
   isSpectator,
   isTractorHeld,
   nebulaHides,
@@ -481,6 +482,11 @@ export const shipCommands = (game, targetId) => {
   if (target.status === 'vacant') {
     offer('transport', 'Board ship', systemUnits(actor, 'transporter') > 0, sensorRange(game, actor, 'transporter'));
   }
+  // Round 24: an active neutral merchant can be seized outright — a transporter
+  // party across and the civilian crew strikes its colors.
+  if (isActive(target) && isNeutral(target)) {
+    offer('transport', 'Seize merchant', systemUnits(actor, 'transporter') > 0, sensorRange(game, actor, 'transporter'));
+  }
   return commands;
 };
 
@@ -493,7 +499,8 @@ const computerReport = (game, actor) => {
   const mapped = game.ships.filter((ship) => isActive(ship)
     && (ship.id === actor.id || (distance(actor, ship) <= mapperRange && !nebulaHides(game, actor, ship))));
   const allies = mapped.filter((ship) => ship.id !== actor.id && ship.faction === actor.faction);
-  const enemies = mapped.filter((ship) => ship.faction !== actor.faction);
+  // A neutral merchant shows in the mapper counts but is no one's "enemy" (round 24).
+  const enemies = mapped.filter((ship) => ship.faction !== actor.faction && !isNeutral(ship));
   const nearest = (ships) => ships
     .map((ship) => ({ ship, range: distance(actor, ship) }))
     .sort((a, b) => a.range - b.range)[0];
@@ -543,6 +550,10 @@ const scanReport = (game, target) => ({
         : [`Captain: ${target.captain}${isAce(target) ? ` — an ace, ${target.kills} kills` : ''}`])
       : []),
     `Status: ${target.status}`,
+    ...(isNeutral(target) ? ['Notes: an unarmed neutral merchant — it will run from warships.'] : []),
+    ...(target.encounter?.type === 'distress' && isActive(target) && systemUnits(target, 'engines') === 0
+      ? ['Notes: broadcasting distress — engines gone, pleading for a tow.']
+      : []),
     `Shields: ${target.shields}${arcScanNote(game, target)}`,
     `Crew: ${target.crew}`,
     ...Object.entries(target.systems).map(([name, units]) => `${name}: ${units}`),
@@ -939,8 +950,13 @@ const tractorAction = (game, action, actor) => {
     const released = game.ships.map((ship) => ship.tractorBy === actor.id ? { ...ship, tractorBy: null } : ship);
     return result(completeTurn({ ...game, ships: released }), `${actor.name} releases its tractor lock.`);
   }
-  const found = hostileTarget(game, action, actor);
+  // The beam is a weapon — aimed at enemies — with one exception (round 24): a
+  // friendly hull broadcasting distress may be towed, which is the rescue.
+  const found = targetFor(game, action, actor);
   if (found.error) return invalid(game, found.error, found.requiresTarget);
+  const rescueTow = found.target.encounter?.type === 'distress' && found.target.faction === actor.faction;
+  if (found.target.faction === actor.faction && !rescueTow) return invalid(game, 'Weapons cannot fire on a friendly target.');
+  if (!isActive(found.target)) return invalid(game, 'That target is not an active enemy ship.');
   if (distance(actor, found.target) > RANGES.tractor) return invalid(game, `${found.target.name} is out of tractor range.`);
   if (isImmovable(found.target)) return invalid(game, `${found.target.name} is far too massive for the tractor beam to move.`);
   const grid = game.gridSize ?? GRID_SIZE;
@@ -985,7 +1001,9 @@ const tractorAction = (game, action, actor) => {
 export const captureHull = (game, boarder, target, party) => {
   const placed = Math.min(party, boarder.crew - 1, crewCapacity(target));
   const flip = target.faction !== boarder.faction;
-  let captured = { ...target, faction: boarder.faction, status: 'active', crew: placed, tractorBy: null };
+  // A seized neutral merchant (round 24) sheds its stamp: from here it is an
+  // ordinary hull of the captor's alliance, counted in the war like any prize.
+  let captured = { ...target, faction: boarder.faction, status: 'active', crew: placed, tractorBy: null, ...(target.neutral ? { neutral: false } : {}) };
   let next = {
     ...game,
     // Boarding the vendetta ship ends the vendetta; otherwise that hull would
@@ -1094,10 +1112,24 @@ const transportAction = (game, action, actor) => {
   const found = targetFor(game, action, actor);
   if (found.error) return invalid(game, found.error, found.requiresTarget);
   if (distance(actor, found.target) > sensorRange(game, actor, 'transporter')) return invalid(game, `${found.target.name} is out of transporter range.`);
-  if (isActive(found.target) && found.target.faction !== actor.faction) return invalid(game, 'Cannot transport onto a live enemy ship.');
+  if (isActive(found.target) && found.target.faction !== actor.faction && !isNeutral(found.target)) return invalid(game, 'Cannot transport onto a live enemy ship.');
   const amount = Number(action.amount ?? DEFAULT_CREW_TRANSFER);
   if (!Number.isInteger(amount) || amount < 1) return invalid(game, 'Transport crew amount must be a positive whole number.');
   if (actor.crew <= amount) return invalid(game, 'Insufficient crew to complete that transport.');
+  // Seizing an active neutral merchant (round 24): the civilian crew strikes its
+  // colors rather than fight, and the hull becomes a round-17 prize — cargo hold,
+  // complement, and all. Attacking one instead works too, and costs nothing yet:
+  // the reputation price is round 25's morale hook.
+  if (isActive(found.target) && isNeutral(found.target)) {
+    const capture = captureHull(game, actor, found.target, amount);
+    return result(completeTurn({
+      ...capture.game,
+      playerShipId: action.transferCommand ? capture.captured.id : game.playerShipId,
+    }), [
+      `${capture.captured.name} is seized by ${capture.placed} of ${actor.name}'s crew${action.transferCommand ? '; command transferred.' : '.'}`,
+      ...capture.messages,
+    ]);
+  }
   if (isActive(found.target)) {
     const added = Math.min(amount, Math.max(0, crewCapacity(found.target) - found.target.crew));
     if (added === 0) return invalid(game, `${found.target.name} has no space for additional crew.`);
@@ -1422,7 +1454,7 @@ const setArcFocus = (game, action, actor) => {
 
 /** The nearest active enemy hull to `actor`, ties by id, or null in a field with none. */
 const nearestThreat = (game, actor) => game.ships
-  .filter((ship) => isActive(ship) && ship.faction !== actor.faction)
+  .filter((ship) => isActive(ship) && ship.faction !== actor.faction && !isNeutral(ship))
   .map((ship) => ({ ship, range: distance(actor, ship) }))
   .sort((a, b) => a.range - b.range || a.ship.id.localeCompare(b.ship.id))[0]?.ship ?? null;
 

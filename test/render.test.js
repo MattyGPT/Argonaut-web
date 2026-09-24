@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, getShip } from '../game/state.js';
+import { createGame, getShip, isNeutral, spawnEncounter } from '../game/state.js';
+import { createRng } from '../game/rng.js';
 import { launchDrones } from '../game/actions.js';
 import { renderGame, reportFor, terminalNarrative } from '../ui/render.js';
 
@@ -852,4 +853,58 @@ test('the fleet report reads each hull’s heading and arcs in a Reimagined war'
   assert.match(argo, /bow 123°, arcs F 60 · S 50 · A 40 · P 50/);
   const classic = reportFor(createGame({ seed: 'render-arc-report-classic' }), 'fleet').lines;
   assert.ok(classic.every((line) => !/arcs|bow \d/.test(line)), 'a classic report never reads arcs');
+});
+
+// --- Round 24: random encounters on the map, in the menus, and in the legend ---
+
+/** A Reimagined war with one encounter hull of a type staged beside the flagship. */
+const encounterGame = (seed, type, over = {}) => {
+  const base = createGame({ seed, reimagined: true });
+  const hull = spawnEncounter({ ...base, turn: 3 }, type, 104, 100, createRng(`render-${type}`));
+  return {
+    ...base,
+    terrain: [],
+    turn: 3,
+    ships: base.ships.map((ship) => (ship.id === 'fed-flagship' ? { ...ship, x: 100, y: 100 } : ship)).concat({ ...hull, ...over }),
+  };
+};
+
+test('a neutral merchant renders in civilian gray with a seize command and no stance', () => {
+  const game = encounterGame('render-enc-neutral', 'neutral');
+  const merchant = game.ships.find(isNeutral);
+  elements.clear();
+  renderGame(game, { contextShipId: merchant.id });
+  const field = read('#map-field').innerHTML;
+  assert.match(field, /class="ship Neutral active"/, 'the merchant wears the Neutral banner class');
+  assert.ok(!/threat/.test(field.match(/data-ship-id="[^"]*"[^>]*class="[^"]*"/)?.[0] ?? ''), 'it is never outlined as a threat');
+  const menu = read('#ship-menu').innerHTML;
+  assert.match(menu, /unarmed neutral merchant/, 'the menu reads what it is');
+  assert.match(menu, /data-ship-command="transport"[^>]*>Seize merchant</, 'and offers the seizure');
+  assert.ok(!/Combat stance/.test(menu), 'a civilian holds no combat stance');
+  assert.match(read('#map-legend').innerHTML, /legend-swatch neutral-glyph/, 'the legend keys the merchant');
+});
+
+test('a distressed hull wears its blinker and tells the rescue in its menu', () => {
+  const game = encounterGame('render-enc-distress', 'distress');
+  const stranded = game.ships.find((ship) => ship.encounter?.type === 'distress');
+  elements.clear();
+  renderGame(game, { contextShipId: stranded.id });
+  const field = read('#map-field').innerHTML;
+  assert.match(field, /distress-pip/, 'the amber blinker is drawn');
+  assert.match(field, /broadcasting distress/, 'and named in the hull title');
+  assert.match(read('#ship-menu').innerHTML, /Broadcasting distress: engines gone/, 'the menu tells the rescue');
+  assert.match(read('#map-legend').innerHTML, /legend-swatch pip-distress/, 'the legend keys the call');
+  // A classic legend grows neither chip.
+  elements.clear();
+  renderGame(createGame({ seed: 'render-enc-classic' }));
+  assert.ok(!/neutral-glyph|pip-distress/.test(read('#map-legend').innerHTML));
+});
+
+test('a derelict renders as the vacant ghost it is, boardable from the menu', () => {
+  const game = encounterGame('render-enc-derelict', 'derelict');
+  const ghost = game.ships.find((ship) => ship.encounter?.type === 'derelict');
+  elements.clear();
+  renderGame(game, { contextShipId: ghost.id });
+  assert.match(read('#map-field').innerHTML, new RegExp(`class="ship ${ghost.faction} vacant"`), 'dark and dashed like any derelict');
+  assert.match(read('#ship-menu').innerHTML, /data-ship-command="transport"[^>]*>Board ship</, 'and boardable');
 });
