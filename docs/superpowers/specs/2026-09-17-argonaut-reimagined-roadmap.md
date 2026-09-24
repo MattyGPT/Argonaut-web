@@ -187,7 +187,10 @@ Detailed design (stances, disengage, and the seams for 22/23):
 | 22b | **Directed tractor beam** | Aim the tow at a coordinate or a hull to slam into | Tow vector follows the named point; collision resolves; pull budget unchanged | ✅ PR #25 |
 | 22c | Spread torpedoes | Short-range area salvo: full on the target, falloff splash on every hull near the impact | Distinct damage model; rides the shared accuracy roll; parity off | ✅ PR #56 |
 | — | ~~Mines~~ | *Deferred (Matt, 2026-09-21)* | — | deferred |
-| 23 | Directional shields | Fore/aft/port/starboard arcs + facing | Arc damage; AI faces threat; largest single chunk | — |
+| 23a | Directional shields: data + facing | Weighted 4-arc breakdown of the one `shields` total; `facing` on every displacement; free `setFacing` helm order | Arcs sum to the pool; moves imply the heading; parity off; old saves tolerate the fields | ✅ PR #57 |
+| 23b | Directional shields: arc damage | Aimed volleys strike the arc they bear on; positional damage hits the total; focused/weakest-first recovery | Arc damage; the lottery still governs internals; parity off | — |
+| 23c | Directional shields: AI facing | Captains turn the strong fore arc toward the threat | AI faces threat; retreats run on the weak aft | — |
+| 23d | Directional shields: render/UI | Heading glyph, per-arc shield display, helm + focus controls, intel, legend, reports | Renders; manual play-test pass | — |
 
 **22b — Directed tractor beam** (Matt's addition). ✅ **Shipped (PR #25).** Today `5`
 locks a target and
