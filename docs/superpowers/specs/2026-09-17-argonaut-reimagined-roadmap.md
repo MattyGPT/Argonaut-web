@@ -183,8 +183,10 @@ Detailed design (stances, disengage, and the seams for 22/23):
 | Round | Chunk | Builds | Tested by | Status |
 | --- | --- | --- | --- | --- |
 | 21 | Evasive/firing stances | Per-turn accuracy-vs-evasion trade | Modifier applies; disengage tool works | ✅ PR #54 |
-| 22 | Weapon variety | Ion/EMP (disable, no crew), spread torpedoes, mines | Each damage model distinct | — |
+| 22a | Ion/EMP | Suppression beam: shields absorb, then strip systems, no crew killed; a gutted hull strikes its colors | Ion disables without killing; feeds the prize race; parity off | ✅ PR #55 |
 | 22b | **Directed tractor beam** | Aim the tow at a coordinate or a hull to slam into | Tow vector follows the named point; collision resolves; pull budget unchanged | ✅ PR #25 |
+| 22c | Spread torpedoes | Splash-around-impact volley (designed; not yet built) | Distinct damage model; rides the shared accuracy roll; parity off | — |
+| — | ~~Mines~~ | *Deferred (Matt, 2026-09-21)* | — | deferred |
 | 23 | Directional shields | Fore/aft/port/starboard arcs + facing | Arc damage; AI faces threat; largest single chunk | — |
 
 **22b — Directed tractor beam** (Matt's addition). ✅ **Shipped (PR #25).** Today `5`
