@@ -147,7 +147,16 @@ until shot down. A drone is never a prize (no crew to kill, no hull to board) an
 counts for nothing in the endgame: an alliance down to drones is out of the war
 and its wing goes dark with its last crewed hull. The bay is never rebuilt — not
 even at the dockyard, which drones never dock at — and a captured carrier keeps
-its complement, the drones flying for whoever flies her. Axis last stands are scaled for the wide field as well — the
+its complement, the drones flying for whoever flies her. Combat **stances**
+deepen every gunfight: a hull holds one of three postures — standard, **firing**
+(its own volleys land more often, but it is easier to hit), or **evasive** (harder
+to hit, its own shots go wide) — a free, persistent choice like reactor power that
+rides the one shared accuracy roll alongside asteroid cover and storm jam. Enemy
+captains hold a stance by doctrine (Axis and Bloc fire, Cabal weaves), and any hull
+beaten near destruction weaves as it breaks off; the stance shows as a colored
+halo on the map and in the fleet report. And **Disengage** (`X`) is the pilot's
+escape lever — a full engine burn straight away from the nearest threat, as the
+turn's maneuver, pairing with evasive to break off under fire. Axis last stands are scaled for the wide field as well — the
 self-destruct blast is smaller there, and the trigger needs a captain at 2%
 shields with five enemies stacked close, so one spiteful death no longer
 deletes a fleet cluster. Volleys are measured too: every Reimagined salvo

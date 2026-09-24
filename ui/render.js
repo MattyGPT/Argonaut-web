@@ -1,4 +1,4 @@
-import { DOCKING, FACTIONS, GRID_SIZE, POWER_SINKS, PRIZE, RANGES, REFITS, TERRAIN } from '../game/constants.js';
+import { DOCKING, FACTIONS, GRID_SIZE, POWER_SINKS, PRIZE, RANGES, REFITS, STANCES, TERRAIN } from '../game/constants.js';
 import { canLaunchDrones, shipCommands } from '../game/actions.js';
 import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
 import { cameraWindow, fieldTransform, viewportFromWorld } from './camera.js';
@@ -25,6 +25,7 @@ import {
   radioIntegrity,
   reactorOutput,
   sensorRange,
+  stanceOf,
 } from '../game/state.js';
 
 const commands = [
@@ -52,12 +53,14 @@ const commands = [
 /**
  * Fleet orders only exist in an extended war, so the button appears only there.
  * The bay command (round 20) appears only while the conn is on a Reimagined
- * carrier whose drones are still aboard — a command that could not land never
- * gets a button.
+ * carrier whose drones are still aboard, and Disengage (round 21) only in a
+ * Reimagined war — a command that could not land never gets a button.
  */
 const commandList = (game, actor) => {
-  const list = game.extended ? [...commands, ['fleet', 'Fleet orders', 'F']] : commands;
-  return canLaunchDrones(game, actor) ? [...list, ['launch', 'Launch drones', 'D']] : list;
+  let list = game.extended ? [...commands, ['fleet', 'Fleet orders', 'F']] : commands;
+  if (canLaunchDrones(game, actor)) list = [...list, ['launch', 'Launch drones', 'D']];
+  if (game.reimagined) list = [...list, ['disengage', 'Disengage', 'X']];
+  return list;
 };
 
 const cap = (value) => value[0].toUpperCase() + value.slice(1);
@@ -129,6 +132,12 @@ const shipMenu = (game, actor, ship) => {
     // A drone has nobody aboard (round 20): the menu says so plainly instead of
     // reading an absent captain.
     ...(isDrone(ship) ? [`Unmanned fighter drone of the ${getShip(game, ship.droneOf)?.name ?? 'fleet'} · no crew, never boarded`] : []),
+    // An enemy's combat stance is readable intel in a Reimagined war (round 21) —
+    // it tells you how hard it is to hit and how sharp its own guns are. Your own
+    // hulls show their stance as the selector below instead.
+    ...(game.reimagined && isActive(ship) && ship.faction !== actor?.faction
+      ? [`Combat stance: ${stanceOf(game, ship)}.`]
+      : []),
     // A prize of your alliance tells its story in the menu (round 17); the record
     // only exists in a Reimagined war, so no mode check is needed here.
     ...(ship.prize && ship.faction === actor?.faction
@@ -161,10 +170,22 @@ const shipMenu = (game, actor, ship) => {
       : '';
     orders = `<p class="menu-sub">${orderLines.join(' ')}</p><div class="order-grid">${buttons}</div>${refitGrid}`;
   }
+  // Combat stance (round 21, Reimagined): a free, persistent per-hull choice like
+  // power and orders. Firing sharpens this hull's guns but leaves it easier to hit;
+  // evasive does the reverse. Only your Federation hulls take the order.
+  let stanceBlock = '';
+  const canStance = game.reimagined && game.phase === 'player' && isActive(ship) && ship.faction === actor?.faction;
+  if (canStance) {
+    const current = stanceOf(game, ship);
+    const stanceButtons = STANCES
+      .map((stance) => `<button data-ship-stance="${stance}" data-stance-ship="${ship.id}"${current === stance ? ' class="current"' : ''}${disabled}>${cap(stance)}</button>`)
+      .join('');
+    stanceBlock = `<p class="menu-sub">Combat stance — firing is accurate but exposed; evasive is hard to hit but wild:</p><div class="order-grid stance-grid">${stanceButtons}</div>`;
+  }
   const note = commands || orders
     ? ''
     : `<p class="menu-sub">${own ? 'Your command ship — open another hull to act on it.' : 'Nothing can reach this hull.'}</p>`;
-  return `<h3>${ship.name}</h3><ul class="menu-info">${lines.map((line) => `<li>${line}</li>`).join('')}</ul>${commands ? `<div class="menu-grid">${commands}</div>` : ''}${orders}${note}`;
+  return `<h3>${ship.name}</h3><ul class="menu-info">${lines.map((line) => `<li>${line}</li>`).join('')}</ul>${commands ? `<div class="menu-grid">${commands}</div>` : ''}${orders}${stanceBlock}${note}`;
 };
 
 /**
@@ -289,6 +310,26 @@ const powerBar = (game, actor, view) => {
     + `</div>`;
 };
 
+/**
+ * The combat-stance selector, Reimagined only (round 21): three buttons — standard,
+ * firing, evasive — with the current one lit. Setting a stance is a free action, so
+ * like the power bar it stays live during the player's turn and greys out while a
+ * round resolves or the war is spectated. This sets the command ship's stance; other
+ * Federation hulls take theirs from their own menus.
+ */
+const stanceBar = (game, actor, view) => {
+  if (!game.reimagined || !actor || game.outcome || isSpectator(game)) return '';
+  const current = stanceOf(game, actor);
+  const locked = game.phase !== 'player' || view.battlePaused ? ' disabled' : '';
+  const buttons = STANCES
+    .map((stance) => `<button class="stance-btn ${stance}" data-stance="${stance}"${current === stance ? ' aria-pressed="true"' : ''}${locked}>${cap(stance)}</button>`)
+    .join('');
+  return `<div class="stance-bar">`
+    + `<div class="power-head"><span>Combat stance</span><span class="stance-now ${current}">${current}</span></div>`
+    + `<div class="stance-grid">${buttons}</div>`
+    + `</div>`;
+};
+
 /** One legend entry: a color chip (optionally carrying a glyph) and its label. */
 const legendEntry = (swatch, label, content = '') => `<span class="legend-entry"><span class="legend-swatch ${swatch}" aria-hidden="true">${content}</span>${label}</span>`;
 
@@ -323,6 +364,8 @@ const renderMapLegend = (game) => {
       legendEntry('terrain-relay', 'relay node'),
       legendEntry('pip-prize', 'prize of war'),
       legendEntry('drone-glyph', 'fighter drone', 'D'),
+      legendEntry('stance-firing', 'firing stance'),
+      legendEntry('stance-evasive', 'evasive stance'),
     ] : []),
   ].join('');
   legend.innerHTML = factions + entries + '<span class="legend-note" id="legend-note"></span>';
@@ -424,7 +467,13 @@ export const renderGame = (game, view = {}) => {
     // stay unique to itself.
     const glyph = isDrone(ship) ? 'D' : ship.name[0];
     const drone = isDrone(ship) ? ' drone' : '';
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}"${view.battlePaused ? ' disabled' : ''}><span class="glyph">${glyph}</span>${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}</button>`;
+    // A non-standard combat stance wears a marker (round 21): a firing hull glows
+    // hot, an evasive hull runs cold. It changes how your volleys land, so like the
+    // threat ring it is public combat intel, not hidden state.
+    const stance = game.reimagined && isActive(ship) ? stanceOf(game, ship) : 'standard';
+    const stanceClass = stance === 'standard' ? '' : ` stance-${stance}`;
+    const stanceNote = stance === 'standard' ? '' : ` — ${stance} stance`;
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}"${view.battlePaused ? ' disabled' : ''}><span class="glyph">${glyph}</span>${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}</button>`;
   }).join('');
   map.innerHTML = terrainHtml + ringHtml + shipHtml;
   // Slide and scale the world layer so the camera window fills the viewport. The
@@ -462,9 +511,11 @@ export const renderGame = (game, view = {}) => {
       <div class="status-row"><span>Shields</span><b>${actor.shields}</b></div>
       <div class="status-row"><span>Crew</span><b>${actor.crew}</b></div>
       <div class="status-row"><span>Status</span><b>${actor.status}</b></div>
+      ${game.reimagined ? `<div class="status-row"><span>Stance</span><b class="stance-now ${stanceOf(game, actor)}">${stanceOf(game, actor)}</b></div>` : ''}
     </div>
     <div class="system-grid">${Object.entries(actor.systems).map(([name, amount]) => `<span>${cap(name)} <b>${amount}</b></span>`).join('')}</div>
     ${powerBar(game, actor, view)}
+    ${stanceBar(game, actor, view)}
     <div class="command-grid">${commandList(game, actor).map(([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || isSpectator(game) || view.battlePaused ? 'disabled' : ''}>${label}<kbd>${key}</kbd></button>`).join('')}</div>
     ${game.commandLost
       ? '<p class="console-note">Federation command is lost. The remaining alliances fight on, and you watch the war from here.</p>'
@@ -592,7 +643,10 @@ export const reportFor = (game, type) => {
         const standing = travelling ?? orderFor(game, ship.id);
         const reached = ship.id === command?.id || inRadioContact(game, command, ship);
         const mark = travelling ? ' (order in transit)' : reached ? '' : ' (out of contact)';
-        return `${ship.name}${prizeNote(ship)} — ${describeOrder(game, standing)}${mark}; condition ${alertLevel(ship)} at ${ship.x},${ship.y}.`;
+        // The fleet report reads each hull's combat stance in a Reimagined war
+        // (round 21), so you can see your dispositions at a glance.
+        const stanceNote = game.reimagined && isActive(ship) ? `, ${stanceOf(game, ship)} stance` : '';
+        return `${ship.name}${prizeNote(ship)} — ${describeOrder(game, standing)}${stanceNote}${mark}; condition ${alertLevel(ship)} at ${ship.x},${ship.y}.`;
       });
     return {
       title: `Fleet orders, Stardate ${game.turn}`,

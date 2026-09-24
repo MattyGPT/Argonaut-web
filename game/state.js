@@ -10,6 +10,7 @@ import {
   LOADOUT,
   LOG_LIMIT,
   MISS_CHANCE,
+  PERSONALITIES,
   POWER,
   POWER_SINKS,
   PRIZE,
@@ -19,6 +20,8 @@ import {
   SCENARIO_IDS,
   SHIP_NAMES,
   SHIP_TEMPLATES,
+  STANCE,
+  STANCES,
   STARBASE_BLAST_RADIUS,
   STARTING_FORMATIONS,
   SYSTEM_RANGE_PER_UNIT,
@@ -450,6 +453,10 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     // Per-hull reactor power allocation (shipId -> sink -> points), Reimagined only.
     // Empty by default; a hull with no stored allocation runs its class default.
     power: {},
+    // Per-hull combat stance (shipId -> stance), Reimagined only (round 21). Empty
+    // by default; a hull with no stored stance runs its doctrine default (AI) or
+    // neutral (the player's command ship), and old saves tolerate its absence.
+    stances: {},
     // The living battlefield: seeded terrain features ({ id, type, x, y, radius, v? }),
     // Reimagined only. A classic or extended war carries an empty list, and old saves
     // may lack the field entirely, so every reader defaults to [].
@@ -844,15 +851,56 @@ export const radioStormFactor = (game, ship) => {
 };
 
 /**
- * The miss chance for one volley (15c + 15d): the calibrated base, plus the
- * asteroid-cover penalty when the straight shot line crosses a field, plus the
- * storm-ring penalty when the shooter fights from inside one. Shared by the
- * player's volleys and the autopilots', and identical to `MISS_CHANCE` outside a
- * Reimagined war, so the calibrated accuracy stands untouched there.
+ * The stance an AI captain holds (round 21): its doctrine's standing bias, except
+ * that a hull beaten below its `retreatBelow` shield fraction is breaking off and
+ * weaves evasively as it goes. Deterministic, no RNG. Only read inside a
+ * Reimagined war (see `stanceOf`).
  */
-export const volleyMissChance = (game, shooter, target) => MISS_CHANCE
-  + (segmentCrossesFeature(game, shooter, target, 'asteroids') ? TERRAIN.asteroidCoverMiss : 0)
-  + (ionStormZone(game, shooter) === 'ring' ? TERRAIN.ionStormRingMiss : 0);
+const doctrineStance = (game, ship) => {
+  const doctrine = PERSONALITIES[ship.faction];
+  if (!doctrine) return 'standard';
+  const capacity = shieldCapacity(ship);
+  if (capacity > 0 && doctrine.retreatBelow > 0 && ship.shields <= capacity * doctrine.retreatBelow) {
+    return 'evasive';
+  }
+  return doctrine.stance ?? 'standard';
+};
+
+/**
+ * The combat stance a hull is holding (round 21), mirroring `powerAllocation`: the
+ * player's stored choice if one is set, otherwise an AI hull in a Reimagined war
+ * runs its doctrine stance, and anything else — the player's own command ship
+ * before the dial is moved, or any classic or extended war — holds neutral
+ * `standard`. The stance biases the shared `volleyMissChance` roll; `standard`
+ * contributes nothing, so a classic or extended war keeps the calibrated accuracy.
+ */
+export const stanceOf = (game, ship) => {
+  if (!game?.reimagined || !ship) return 'standard';
+  const stored = game.stances?.[ship.id];
+  if (stored && STANCES.includes(stored)) return stored;
+  if (ship.id !== game.playerShipId) return doctrineStance(game, ship);
+  return 'standard';
+};
+
+/**
+ * The miss chance for one volley (15c + 15d + round 21): the calibrated base, plus
+ * the asteroid-cover penalty when the straight shot line crosses a field, plus the
+ * storm-ring penalty when the shooter fights from inside one, plus the combat-stance
+ * terms — the shooter's stance biases its own accuracy and the target's stance
+ * biases how hard it is to hit. Shared by the player's volleys and the autopilots'.
+ * Every added term is 0 outside a Reimagined war (terrain is [], stances are all
+ * `standard`), and the clamp is an identity at the calibrated base, so a classic or
+ * extended volley keeps its exact miss chance — parity holds. Clamped to
+ * `[STANCE.missFloor, STANCE.missCeil]` so no pairing is a certain hit or miss.
+ */
+export const volleyMissChance = (game, shooter, target) => {
+  const total = MISS_CHANCE
+    + (segmentCrossesFeature(game, shooter, target, 'asteroids') ? TERRAIN.asteroidCoverMiss : 0)
+    + (ionStormZone(game, shooter) === 'ring' ? TERRAIN.ionStormRingMiss : 0)
+    + (STANCE.selfMiss[stanceOf(game, shooter)] ?? 0)
+    + (STANCE.incomingMiss[stanceOf(game, target)] ?? 0);
+  return Math.max(STANCE.missFloor, Math.min(STANCE.missCeil, total));
+};
 
 /**
  * The friendly starbase this hull is docked at, if any — close enough, and healthy

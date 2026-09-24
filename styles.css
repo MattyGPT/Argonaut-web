@@ -246,6 +246,13 @@ h1 {
   box-shadow: 0 0 7px currentColor;
 }
 
+/* Combat-stance markers (round 21): a firing hull wears a warm halo, an evasive
+   hull a cold one. Drawn with drop-shadow so the marker never collides with the
+   faction glow (box-shadow), the threat outline, or the order/ace/prize pips —
+   a hull can wear all of them at once and still read. */
+.ship.stance-firing { filter: drop-shadow(0 0 5px #ff9d5c); }
+.ship.stance-evasive { filter: drop-shadow(0 0 5px #69e4ff); }
+
 .range-ring {
   position: absolute;
   left: calc(var(--x) * 1%);
@@ -636,11 +643,21 @@ body.classic #ship-menu .menu-sub {
   font-size: .55rem;
 }
 
+.legend-swatch.stance-firing { background: #ff9d5c; box-shadow: 0 0 6px #ff9d5c; }
+.legend-swatch.stance-evasive { background: #69e4ff; box-shadow: 0 0 6px #69e4ff; }
+
 body.classic .legend-swatch.pip-order,
 body.classic .legend-swatch.pip-prize {
   background: #38ff38;
   box-shadow: none;
 }
+
+/* On the phosphor theme the stance halos shift to the classic accent colors so
+   they still read against the green (round 21). */
+body.classic .ship.stance-firing { filter: drop-shadow(0 0 5px #ffe040); }
+body.classic .ship.stance-evasive { filter: drop-shadow(0 0 5px #40e0ff); }
+body.classic .legend-swatch.stance-firing { background: #ffe040; box-shadow: none; }
+body.classic .legend-swatch.stance-evasive { background: #40e0ff; box-shadow: none; }
 
 /* Fleet loadout (round 19): the New game panel's budget and composition
    steppers. The section can grow tall, so it scrolls inside the dialog and the
@@ -936,6 +953,42 @@ body.classic .legend-swatch.pip-prize {
   opacity: .35;
   cursor: default;
 }
+
+/* Combat-stance selector (round 21), mirroring the reactor power bar: a free,
+   persistent per-hull choice. The current stance is lit in its marker color. */
+.stance-bar {
+  padding: .6rem .75rem .75rem;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: .35rem;
+}
+
+.stance-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: .35rem;
+}
+
+.stance-btn {
+  min-height: 0;
+  padding: .35rem .2rem;
+  font-size: .72rem;
+  text-transform: capitalize;
+}
+
+.stance-btn[aria-pressed="true"] {
+  font-weight: bold;
+  color: #071019;
+  border-color: var(--cyan);
+  background: var(--cyan);
+}
+
+.stance-btn.firing[aria-pressed="true"] { border-color: #ff9d5c; background: #ff9d5c; }
+.stance-btn.evasive[aria-pressed="true"] { border-color: #69e4ff; background: #69e4ff; }
+
+.stance-now { text-transform: capitalize; }
+.stance-now.firing { color: #ff9d5c; }
+.stance-now.evasive { color: #69e4ff; }
 
 .report {
   grid-area: report;

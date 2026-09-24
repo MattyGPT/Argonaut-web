@@ -20,6 +20,7 @@ import {
   SHIELD_PER_ENGINE,
   SHRAPNEL_DAMAGE,
   SHRAPNEL_EXTRA_RANGE,
+  STANCES,
   SURGICAL_DAMAGE_FACTOR,
   TARGETED_ORDERS,
   TERRAIN,
@@ -1107,6 +1108,63 @@ const setPower = (game, action, actor) => {
   );
 };
 
+/**
+ * Sets a hull's combat stance (round 21). Like power and fleet orders it costs no
+ * turn — a bridge decision, not a maneuver — and persists until changed. Reimagined
+ * only, and only Federation hulls take your stance orders (the AI captains hold
+ * theirs by doctrine). The stance biases the shared `volleyMissChance` roll: firing
+ * sharpens the hull's own guns but leaves it easier to hit, evasive does the reverse.
+ */
+const setStance = (game, action, actor) => {
+  if (!game.reimagined) return invalid(game, 'Combat stances are only available in a Reimagined war.');
+  const ship = getShip(game, action.shipId ?? game.playerShipId);
+  if (!ship || !isActive(ship)) return invalid(game, 'No such hull to set a stance for.');
+  if (ship.faction !== actor.faction) return invalid(game, 'Only Federation hulls take your stance orders.');
+  const stance = action.stance;
+  if (!STANCES.includes(stance)) return invalid(game, `Unknown stance: ${stance}.`);
+  return result(
+    { ...game, stances: { ...(game.stances ?? {}), [ship.id]: stance } },
+    `${ship.name} sets ${stance} stance.`,
+  );
+};
+
+/** The nearest active enemy hull to `actor`, ties by id, or null in a field with none. */
+const nearestThreat = (game, actor) => game.ships
+  .filter((ship) => isActive(ship) && ship.faction !== actor.faction)
+  .map((ship) => ({ ship, range: distance(actor, ship) }))
+  .sort((a, b) => a.range - b.range || a.ship.id.localeCompare(b.ship.id))[0]?.ship ?? null;
+
+/**
+ * Disengage (round 21, Reimagined): the player-facing twin of the AI's break-off —
+ * a full engine burn straight away from the nearest threat, computed for you rather
+ * than clicked. It IS the turn's maneuver (it spends the stardate like any move and
+ * resolves collisions and rock strikes on arrival), so it never stacks a free
+ * escape on top of another action. The retreat is clamped to the field edge rather
+ * than refused, so a cornered hull runs along the boundary instead of stalling.
+ * Pair it with the evasive stance (free) to break off under fire.
+ */
+const disengageAction = (game, actor) => {
+  if (!game.reimagined) return invalid(game, 'Disengage is only available in a Reimagined war.');
+  const disabled = requiresSystem(game, actor, 'engines');
+  if (disabled) return disabled;
+  if (isTractorHeld(game, actor)) return invalid(game, `${actor.name} cannot disengage while held by a tractor lock.`);
+  const threat = nearestThreat(game, actor);
+  if (!threat) return invalid(game, `${actor.name} has no enemy to disengage from.`);
+  const grid = game.gridSize ?? GRID_SIZE;
+  const capacity = engineCapacity(actor, grid, powerEffect(game, actor, 'engines'));
+  const span = distance(actor, threat) || 1;
+  const x = Math.max(0, Math.min(grid, Math.round(actor.x + ((actor.x - threat.x) / span) * capacity)));
+  const y = Math.max(0, Math.min(grid, Math.round(actor.y + ((actor.y - threat.y) / span) * capacity)));
+  const movedActor = { ...actor, x, y };
+  const collision = resolveCollision(replaceShip(game, movedActor), movedActor);
+  const strike = resolveAsteroidStrike(collision.game, movedActor);
+  return result(completeTurn(strike.game), [
+    `${actor.name} disengages from ${threat.name}, running to ${x},${y}.`,
+    ...collision.messages,
+    ...strike.messages,
+  ], { events: [...collision.events, ...strike.events] });
+};
+
 export const applyPlayerAction = (game, action = {}) => {
   if (!game || !action.type) return invalid(game, 'Choose a command.');
   if (game.outcome || game.phase === 'ended') return invalid(game, 'The war has already ended.');
@@ -1126,6 +1184,7 @@ export const applyPlayerAction = (game, action = {}) => {
       return result(completeTurn(replaceShip(game, flushed.ship)), `Engines flushed for ${flushed.gained} units of shield power.`);
     }
     case 'move': return moveAction(game, action, actor);
+    case 'disengage': return disengageAction(game, actor);
     case 'phasers': return weaponAction(game, action, actor, 'phasers');
     case 'photons': return weaponAction(game, action, actor, 'photons');
     case 'tractor': return tractorAction(game, action, actor);
@@ -1163,6 +1222,7 @@ export const applyPlayerAction = (game, action = {}) => {
     case 'orders': return setOrder(game, action, actor);
     case 'refit': return setRefit(game, action, actor);
     case 'power': return setPower(game, action, actor);
+    case 'stance': return setStance(game, action, actor);
     case 'autopilot': return result(completeTurn(game), `${actor.name} autopilot holds course.`);
     case 'resign': {
       if (game.resigned) return invalid(game, 'You have already resigned command; the autopilot has the conn.');

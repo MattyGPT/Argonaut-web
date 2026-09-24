@@ -106,6 +106,28 @@ test('D launches the carrier bay (round 20)', () => {
   assert.deepEqual(dispatched, [{ type: 'launch' }, { type: 'launch' }]);
 });
 
+test('X disengages (round 21)', () => {
+  openDialog = null;
+  const dispatched = bind();
+  press('x');
+  press('X');
+  assert.deepEqual(dispatched, [{ type: 'disengage' }, { type: 'disengage' }]);
+});
+
+test('a console stance button sets the command ship stance', () => {
+  openDialog = null;
+  const dispatched = bind();
+  click('[data-stance]', { stance: 'evasive' });
+  assert.deepEqual(dispatched, [{ type: 'stance', stance: 'evasive' }]);
+});
+
+test('a ship-menu stance button carries the hull it was pressed for', () => {
+  openDialog = null;
+  const dispatched = bind();
+  click('[data-ship-stance]', { shipStance: 'firing', stanceShip: 'fed-cruiser-1' });
+  assert.deepEqual(dispatched, [{ type: 'stance', stance: 'firing', shipId: 'fed-cruiser-1' }]);
+});
+
 test('an order button carries the ship it was pressed for', () => {
   openDialog = null;
   const dispatched = bind();

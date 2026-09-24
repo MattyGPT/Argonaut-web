@@ -177,12 +177,15 @@ Design notes for when it is picked up:
 
 ### Phase 4 — Combat depth *(#3, #4, #1, + directed tractor)*
 
-| Round | Chunk | Builds | Tested by |
-| --- | --- | --- | --- |
-| 21 | Evasive/firing stances | Per-turn accuracy-vs-evasion trade | Modifier applies; disengage tool works |
-| 22 | Weapon variety | Ion/EMP (disable, no crew), spread torpedoes, mines | Each damage model distinct |
-| 22b | **Directed tractor beam** | Aim the tow at a coordinate or a hull to slam into | Tow vector follows the named point; collision resolves; pull budget unchanged |
-| 23 | Directional shields | Fore/aft/port/starboard arcs + facing | Arc damage; AI faces threat; largest single chunk |
+Detailed design (stances, disengage, and the seams for 22/23):
+`docs/superpowers/specs/2026-09-21-phase-4-combat-depth.md`.
+
+| Round | Chunk | Builds | Tested by | Status |
+| --- | --- | --- | --- | --- |
+| 21 | Evasive/firing stances | Per-turn accuracy-vs-evasion trade | Modifier applies; disengage tool works | ✅ PR #54 |
+| 22 | Weapon variety | Ion/EMP (disable, no crew), spread torpedoes, mines | Each damage model distinct | — |
+| 22b | **Directed tractor beam** | Aim the tow at a coordinate or a hull to slam into | Tow vector follows the named point; collision resolves; pull budget unchanged | ✅ PR #25 |
+| 23 | Directional shields | Fore/aft/port/starboard arcs + facing | Arc damage; AI faces threat; largest single chunk | — |
 
 **22b — Directed tractor beam** (Matt's addition). ✅ **Shipped (PR #25).** Today `5`
 locks a target and
