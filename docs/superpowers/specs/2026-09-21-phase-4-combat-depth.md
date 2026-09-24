@@ -353,7 +353,7 @@ render/UI — each its own branch → PR.
   classic/extended digit-for-digit unchanged. The ~35%-shorter war vs the
   pre-arcs baseline (median 62 → 40) is flagged for Matt with its levers in
   CALIBRATION, not silently tuned.
-- **23d — render/UI** *(shipped this PR)*: a heading needle on every hull of the
+- **23d — render/UI** *(shipped, PR #60)*: a heading needle on every hull of the
   line (a rotated spoke carrying `--heading` in field degrees; drones and
   classic hulls wear none); Heading + Shield-arcs console status rows; the
   console **Helm** control (↺/↻ 45° — `setFacing` gained `deltaDegrees` for it)

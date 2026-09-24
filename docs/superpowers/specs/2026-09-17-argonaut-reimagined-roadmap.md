@@ -175,7 +175,7 @@ Design notes for when it is picked up:
 - The **battle report, statistics, roll call, and AI doctrines** all iterate the
   roster as-is and should need no changes beyond empty-alliance edge cases.
 
-### Phase 4 — Combat depth *(#3, #4, #1, + directed tractor)*
+### Phase 4 — Combat depth *(#3, #4, #1, + directed tractor)* — ✅ complete (mines deferred)
 
 Detailed design (stances, disengage, and the seams for 22/23):
 `docs/superpowers/specs/2026-09-21-phase-4-combat-depth.md`.
@@ -190,7 +190,7 @@ Detailed design (stances, disengage, and the seams for 22/23):
 | 23a | Directional shields: data + facing | Weighted 4-arc breakdown of the one `shields` total; `facing` on every displacement; free `setFacing` helm order | Arcs sum to the pool; moves imply the heading; parity off; old saves tolerate the fields | ✅ PR #57 |
 | 23b | Directional shields: arc damage | Aimed volleys strike the arc they bear on; positional damage hits the total; focused/weakest-first recovery | Arc damage; the lottery still governs internals; parity off | ✅ PR #58 |
 | 23c | Directional shields: AI facing | Captains turn the strong fore arc toward the threat | AI faces threat; retreats run on the weak aft | ✅ PR #59 |
-| 23d | Directional shields: render/UI | Heading glyph, per-arc shield display, helm + focus controls, intel, legend, reports | Renders; manual play-test pass | — |
+| 23d | Directional shields: render/UI | Heading glyph, per-arc shield display, helm + focus controls, intel, legend, reports | Renders; manual play-test pass | ✅ PR #60 |
 
 **22b — Directed tractor beam** (Matt's addition). ✅ **Shipped (PR #25).** Today `5`
 locks a target and
