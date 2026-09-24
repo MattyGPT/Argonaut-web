@@ -5096,3 +5096,111 @@ test('arc damage never touches a classic or extended war, and old saves keep pla
   assert.ok(out.turn >= old.turn, 'the war plays on');
   assert.ok(out.ships.every((ship) => !ship.arcs || arcSum(ship) === ship.shields), 'any hull still standing keeps the invariant');
 });
+
+// --- Argonaut Reimagined, round 23c: AI threat-facing ---
+
+/**
+ * A stripped Reimagined exchange: one Axis hull and one idle Federation hull (the
+ * player's, so the computer phase never moves it), nothing else in the field.
+ */
+const facingWar = (seed, stage) => {
+  const full = withShips(createGame({ seed, reimagined: true, loadout: defaultLoadout() }), stage);
+  return {
+    ...full,
+    terrain: [],
+    vendettaShipId: 'nobody',
+    ships: full.ships.filter((ship) => ['axis-flagship', 'fed-cruiser-1'].includes(ship.id)),
+    playerShipId: 'fed-cruiser-1',
+  };
+};
+
+test('an AI captain turns its reinforced bow onto the threat it engages', () => {
+  // The Axis flagship starts facing east; the only enemy sits due west, inside
+  // phaser range — it snaps about and fires bow-on.
+  const game = facingWar('ai-facing-bow', (ship) => {
+    if (ship.id === 'axis-flagship') return { ...ship, x: 100, y: 100, facing: 0 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 90, y: 100 };
+    return parked(ship);
+  });
+  const out = resolveComputerTurns({ ...game, phase: 'computer' });
+  const axis = getShip(out, 'axis-flagship');
+  assert.equal(axis.facing, 180, 'the bow snaps onto the engaged target');
+  assert.equal(struckArc(out, getShip(out, 'fed-cruiser-1'), axis), 'fore',
+    'the enemy now shoots at the reinforced fore arc');
+  // Deterministic: the same staged state resolves identically.
+  assert.deepEqual(resolveComputerTurns({ ...game, phase: 'computer' }).ships, out.ships);
+});
+
+test('a hull that cannot maneuver still watches bow-on', () => {
+  // Engines dead, the enemy past gun reach: the action is a pass, but the facing
+  // still snaps onto the nearest threat (free — no burn needed to turn).
+  const game = facingWar('ai-facing-pass', (ship) => {
+    if (ship.id === 'axis-flagship') return { ...ship, x: 100, y: 100, facing: 90, systems: { ...ship.systems, engines: 0 } };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 150, y: 100 };
+    return parked(ship);
+  });
+  const out = resolveComputerTurns({ ...game, phase: 'computer' });
+  const axis = getShip(out, 'axis-flagship');
+  assert.equal(getShip(game, 'axis-flagship').x, 100, 'the hull never moved');
+  assert.equal(axis.facing, 0, 'a passing hull faces its nearest threat');
+});
+
+test('an AI burn keeps the escape heading — a runner shows its weak aft', () => {
+  // The Axis hull is far outside gun reach with its back to the enemy: the pursuit
+  // burn (a move) derives its heading from the displacement, per 23a, so the chase
+  // runs bow-first and anything it runs from shoots its aft.
+  const game = facingWar('ai-facing-run', (ship) => {
+    if (ship.id === 'axis-flagship') return { ...ship, x: 100, y: 100, facing: 0 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 180, y: 100 };
+    return parked(ship);
+  });
+  const out = resolveComputerTurns({ ...game, phase: 'computer' });
+  const axis = getShip(out, 'axis-flagship');
+  assert.ok(axis.x > 100, 'the hull burned east after its target');
+  assert.ok(axis.facing < 30 || axis.facing > 330, 'the pursuit burn heads roughly east, seeded drift included');
+  // Mirrored: a hull fleeing west (its move away) ends up facing away, and a
+  // pursuer to the east strikes the weak aft arc.
+  const fleeing = facingWar('ai-facing-flee', (ship) => {
+    if (ship.id === 'axis-flagship') return { ...ship, x: 100, y: 100, facing: 0 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 92, y: 100 };
+    return parked(ship);
+  });
+  const runner = getShip(fleeing, 'axis-flagship');
+  const headed = applyHeading(fleeing, runner, runner.x - 20, runner.y);
+  assert.equal(struckArc(fleeing, getShip(fleeing, 'fed-cruiser-1'), { ...headed, x: 80 }), 'aft',
+    'whatever the escape burn is, the pursuer meets the aft arc');
+});
+
+test('AI facing never touches drones, and never fires outside a Reimagined war', () => {
+  // Drones act in the computer phase but carry no facing.
+  const flown = launchDrones(arcWar('ai-facing-drones'), getShip(arcWar('ai-facing-drones'), 'fed-carrier')).game;
+  const out = resolveComputerTurns({ ...flown, phase: 'computer' });
+  assert.ok(out.ships.filter(isDrone).every((drone) => !('facing' in drone) && !('arcs' in drone)),
+    'a drone keeps its single pool and no heading');
+  // A classic or extended computer phase stamps no facing anywhere.
+  for (const opts of [{}, { extended: true }]) {
+    const off = withShips(createGame({ seed: 'ai-facing-parity', ...opts }), (ship) => {
+      if (ship.id === 'axis-flagship') return { ...ship, x: 20, y: 20 };
+      if (ship.id === 'fed-flagship') return { ...ship, x: 26, y: 20 };
+      return ship;
+    });
+    const resolved = resolveComputerTurns({ ...off, phase: 'computer' });
+    assert.ok(resolved.ships.every((ship) => !('facing' in ship) && !('arcs' in ship)),
+      'no directional fields in a classic or extended war');
+  }
+  assert.deepEqual(createGame({ seed: 'ai-facing-parity' }), createGame({ seed: 'ai-facing-parity', reimagined: false }),
+    'the standing parity scaffold still holds');
+});
+
+test('the autopilot conn faces the threat too', () => {
+  // resolveAutopilotTurn runs the player's hull through the same decision path: a
+  // resigned Federation captain holds the gun line bow-on.
+  const game = facingWar('ai-facing-autopilot', (ship) => {
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 100, y: 100, facing: 90 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 110, y: 100 };
+    return parked(ship);
+  });
+  const out = resolveAutopilotTurn({ ...game, playerShipId: 'fed-cruiser-1' });
+  const cruiser = getShip(out.game, 'fed-cruiser-1');
+  assert.equal(cruiser.facing, 0, 'the autopilot snaps the bow onto the target it engages');
+});

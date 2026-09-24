@@ -339,11 +339,20 @@ render/UI — each its own branch → PR.
   10 → 16.8 — the single-arc absorb reaches internals far sooner, and this
   measures the model BEFORE the AI faces its threat. Classic/extended
   digit-for-digit identical. Full row + levers in CALIBRATION.
-- **23c — AI threat-facing**: captains orient the strong fore arc toward the
-  hull they are engaging (free, deterministic, resolved in the AI decision);
-  retreating AI keeps its escape heading (the movement paths already set it), so
-  a broken hull runs on its weak aft — doctrine standoff and stance bias
-  unchanged. "AI faces threat" test criterion lands here.
+- **23c — AI threat-facing** *(shipped this PR)*: `faceThreat` in `turns.js` —
+  before an AI action resolves, a hull that is not moving snaps its facing onto
+  the action's target (or the nearest active enemy when holding, flushing,
+  launching, or boarding), free and deterministic, through the same
+  `resolveAiAction` the autopilot conn uses; burns keep implying their heading,
+  so a broken hull still runs on its weak aft — doctrine standoff and stance
+  bias unchanged. The "AI faces threat" test criterion landed. Measured
+  (250 seeds): median held at **40** (mutual bow-facing lengthens nothing —
+  both strong arcs come up together), volleys/kill 11.3, prizes 9.2/war,
+  winners **Federation 35.6** / Bloc 22.8 / Cabal 14.4 / Axis 8 (the
+  stand-and-fight doctrine gains most), hopeless draws 14%, timeouts 6%;
+  classic/extended digit-for-digit unchanged. The ~35%-shorter war vs the
+  pre-arcs baseline (median 62 → 40) is flagged for Matt with its levers in
+  CALIBRATION, not silently tuned.
 - **23d — render/UI**: heading glyph on every hull, per-arc shield visualization
   (console + ship menu), the helm control (turn without moving), the arc-focus
   selector, enemy-facing intel in scan/menu, legend chips, fleet-report lines.
