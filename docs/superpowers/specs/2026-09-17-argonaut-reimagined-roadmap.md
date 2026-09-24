@@ -224,7 +224,7 @@ and the round-25 seams):
 
 | Round | Chunk | Builds | Tested by | Status |
 | --- | --- | --- | --- | --- |
-| 24 | Random encounters | Seeded derelicts/distress/neutrals at stardate boundaries; the distress rescue window; neutral merchants excluded from the war math and seized as prizes | Deterministic draws; replay-safe; parity off | ✅ shipped (PR below) |
+| 24 | Random encounters | Seeded derelicts/distress/neutrals at stardate boundaries; the distress rescue window; neutral merchants excluded from the war math and seized as prizes | Deterministic draws; replay-safe; parity off | ✅ shipped (main `cb03d4c` — pushed straight to main, no PR) |
 | 25 | Officers & morale | Named officers grant passives; morale affects surrender; the merchant-reputation price | Passive applies; morale→surrender threshold | — |
 
 ### Phase 6 — The sector campaign *(capstone; #12)*
