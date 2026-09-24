@@ -339,7 +339,7 @@ render/UI — each its own branch → PR.
   10 → 16.8 — the single-arc absorb reaches internals far sooner, and this
   measures the model BEFORE the AI faces its threat. Classic/extended
   digit-for-digit identical. Full row + levers in CALIBRATION.
-- **23c — AI threat-facing** *(shipped this PR)*: `faceThreat` in `turns.js` —
+- **23c — AI threat-facing** *(shipped, PR #59)*: `faceThreat` in `turns.js` —
   before an AI action resolves, a hull that is not moving snaps its facing onto
   the action's target (or the nearest active enemy when holding, flushing,
   launching, or boarding), free and deterministic, through the same
