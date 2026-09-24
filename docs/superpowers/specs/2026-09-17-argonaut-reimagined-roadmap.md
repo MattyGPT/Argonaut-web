@@ -191,6 +191,7 @@ Detailed design (stances, disengage, and the seams for 22/23):
 | 23b | Directional shields: arc damage | Aimed volleys strike the arc they bear on; positional damage hits the total; focused/weakest-first recovery | Arc damage; the lottery still governs internals; parity off | ✅ PR #58 |
 | 23c | Directional shields: AI facing | Captains turn the strong fore arc toward the threat | AI faces threat; retreats run on the weak aft | ✅ PR #59 |
 | 23d | Directional shields: render/UI | Heading glyph, per-arc shield display, helm + focus controls, intel, legend, reports | Renders; manual play-test pass | ✅ PR #60 |
+| 23e | Directional shields: durability retune | `ARC.spillFraction` 0.5 (half the overflow bleeds into the other arcs before internals) + `REIMAGINED_SELF_DESTRUCT_SCALE` 0.45 | Median 60 recovered; 4+-hull blasts 5.2%; hopeless draws 14% watched; parity off | ✅ PR #61 |
 
 **22b — Directed tractor beam** (Matt's addition). ✅ **Shipped (PR #25).** Today `5`
 locks a target and

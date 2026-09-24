@@ -369,7 +369,7 @@ render/UI — each its own branch → PR.
   flagged for the manual play-test pass** — needle legibility at both zooms and
   on the minimap, the helm/focus bars' console fit, and how reading arcs
   mid-fight *feels*.
-- **23e — durability retune** *(shipped this PR; Matt's call, 2026-09-24: "40 is
+- **23e — durability retune** *(shipped, PR #61; Matt's call, 2026-09-24: "40 is
   too short", and significant self-destruct blasts too frequent)*: two measured
   levers. **(1)** the arc-spill rule of decision 4 — `ARC.spillFraction` 0.5 in
   `damageShip`'s arc branch (spill-only measurement: median 40 → 54, but last
