@@ -5,6 +5,7 @@ import { createRng } from './rng.js';
 import { scenarioOutcome } from './scenarios.js';
 import {
   appendLog,
+  applyHeading,
   crewCapacity,
   describeOrder,
   distance,
@@ -171,7 +172,8 @@ const resolveAiAction = (game, shipId) => {
       return { game, messages: [`${actor.name} holds position.`], type: 'pass' };
     }
     const { pull, position } = tractorLock(actor, target, game.gridSize ?? GRID_SIZE, null, powerEffect(game, actor, 'tractor'));
-    const pulled = { ...target, tractorBy: actor.id, x: position.x, y: position.y };
+    // Round 23: a towed hull heads the way it was dragged (Reimagined only).
+    const pulled = { ...applyHeading(game, target, position.x, position.y), tractorBy: actor.id };
     const collision = resolveCollision(replaceShip(game, pulled), pulled);
     // A tow that ends inside an asteroid field exposes the victim to a rock strike
     // (15c) — the Cabal's tractor-ram can now dump a hull into the rocks as well.
@@ -220,7 +222,8 @@ const resolveAiAction = (game, shipId) => {
     const grid = game.gridSize ?? GRID_SIZE;
     const x = Math.max(0, Math.min(grid, actor.x + action.dx));
     const y = Math.max(0, Math.min(grid, actor.y + action.dy));
-    return { game: replaceShip(game, { ...actor, x, y }), messages: [`${actor.name} moves to ${x},${y}.`], type: action.type };
+    // Round 23: an AI burn implies its heading, exactly like the player's move.
+    return { game: replaceShip(game, applyHeading(game, actor, x, y)), messages: [`${actor.name} moves to ${x},${y}.`], type: action.type };
   }
   return { game, messages: [], type: action.type };
 };

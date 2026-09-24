@@ -1,6 +1,8 @@
 import {
   ACE_KILLS,
   ALERT_THRESHOLDS,
+  ARC,
+  ARCS,
   CAPTAIN_NAMES,
   DOCKING,
   ENGINE_MOVE_PER_UNIT,
@@ -196,6 +198,11 @@ const createShip = ({ id, name, faction, kind, x, y, reimagined }) => {
       ...(spreadUnits > 0 ? { spread: spreadUnits } : {}),
     }
     : { ...template.systems };
+  // Directional shields (round 23): a Reimagined ship of the line carries the
+  // weighted arc breakdown of its pool — drones are too small for arcs and keep
+  // the single pool. A classic or extended hull never gains the fields, so its
+  // serialized shape and every reader of `shields` stay byte-identical.
+  const arcs = reimagined && kind !== 'drone' ? arcSplit(template.shields) : null;
 
   return {
     id,
@@ -213,6 +220,7 @@ const createShip = ({ id, name, faction, kind, x, y, reimagined }) => {
     shotsFired: 0,
     shotsTaken: 0,
     collisions: 0,
+    ...(arcs ? { arcs, facing: 0 } : {}),
   };
 };
 
@@ -427,6 +435,17 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     : null;
   const enemyFlagships = fleets.filter((ship) => ship.id.endsWith('-flagship') && ship.faction !== FACTIONS.FEDERATION);
   const roster = xanadu ? [...fleets, xanadu] : fleets;
+  // Directional shields (round 23): every Reimagined hull opens facing its nearest
+  // foe at placement — deterministic off the seeded positions, no RNG draw. A
+  // classic or extended roster is left exactly as created.
+  const oriented = isReimagined
+    ? roster.map((ship) => {
+      const foe = roster
+        .filter((other) => other.faction !== ship.faction && isActive(other))
+        .sort((a, b) => distance(ship, a) - distance(ship, b) || a.id.localeCompare(b.id))[0];
+      return foe ? { ...ship, facing: Math.round(bearingDeg(ship, foe)) } : ship;
+    })
+    : roster;
   const captains = assignCaptains(normalizedSeed, roster.length);
   const vendettaShipId = rng.pick(enemyFlagships).id;
 
@@ -454,7 +473,7 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     // vendettaShipId and the war would otherwise forget what it was about.
     objectiveShipId: scenarioId === 'hunt-the-vendetta' ? vendettaShipId : null,
     randomStep: 0,
-    ships: roster.map((ship, index) => ({ ...ship, captain: captains[index] })),
+    ships: oriented.map((ship, index) => ({ ...ship, captain: captains[index] })),
     // Standing fleet orders, and orders still travelling because the radio could
     // not reach the ship that received them. Both are empty in a classic war.
     orders: {},
@@ -470,6 +489,10 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     // by default; a hull with no stored stance runs its doctrine default (AI) or
     // neutral (the player's command ship), and old saves tolerate its absence.
     stances: {},
+    // Per-hull shield-arc focus (shipId -> arc name), Reimagined only (round 23).
+    // Empty by default; a hull with no stored focus recovers its weakest arc first,
+    // and old saves tolerate the field's absence.
+    arcFocus: {},
     // The living battlefield: seeded terrain features ({ id, type, x, y, radius, v? }),
     // Reimagined only. A classic or extended war carries an empty list, and old saves
     // may lack the field entirely, so every reader defaults to [].
@@ -918,6 +941,99 @@ export const volleyMissChance = (game, shooter, target) => {
     + (STANCE.selfMiss[stanceOf(game, shooter)] ?? 0)
     + (STANCE.incomingMiss[stanceOf(game, target)] ?? 0);
   return Math.max(STANCE.missFloor, Math.min(STANCE.missCeil, total));
+};
+
+// --- Directional shields (round 23) -------------------------------------------------
+
+/** An angle normalized to [0, 360) degrees. */
+export const normalizeDegrees = (degrees) => ((degrees % 360) + 360) % 360;
+
+/**
+ * The field bearing from one point to another, in degrees: 0 toward +x and
+ * clockwise, because the tactical field's y axis runs downward. Pure trig on
+ * stored state — deterministic, no RNG.
+ */
+export const bearingDeg = (from, to) => normalizeDegrees((Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI);
+
+/**
+ * Splits a shield total into the four weighted integer arcs, largest-remainder
+ * rounded so the breakdown invariant `sum(arcs) === total` holds exactly for any
+ * pool. Ties break by `ARCS` order, so the split is deterministic — no RNG.
+ */
+export const arcSplit = (total) => {
+  const pool = Math.max(0, Math.floor(Number(total) || 0));
+  const weightSum = ARCS.reduce((sum, arc) => sum + ARC.weights[arc], 0);
+  const exact = ARCS.map((arc) => (pool * ARC.weights[arc]) / weightSum);
+  const arcs = {};
+  let spent = 0;
+  exact.forEach((value, index) => {
+    arcs[ARCS[index]] = Math.floor(value);
+    spent += Math.floor(value);
+  });
+  const byRemainder = ARCS
+    .map((arc, index) => ({ arc, frac: exact[index] - Math.floor(exact[index]) }))
+    .sort((a, b) => b.frac - a.frac || ARCS.indexOf(a.arc) - ARCS.indexOf(b.arc));
+  for (let i = 0; i < pool - spent; i += 1) arcs[byRemainder[i].arc] += 1;
+  return arcs;
+};
+
+/**
+ * Whether a hull fights with arcs at all: Reimagined ships of the line only.
+ * Drones are too small for directional shielding (they keep the single pool), and
+ * a classic or extended hull never carries the breakdown, so every damage path
+ * there keeps its single-pool behavior byte-identically.
+ */
+export const hasArcs = (game, ship) => Boolean(game?.reimagined) && Boolean(ship) && !isDrone(ship);
+
+/**
+ * A hull's arc breakdown, old saves tolerated: one serialized before round 23 has
+ * no `arcs`, so its current total is re-split on the weighted shares. Null for a
+ * hull that does not fight with arcs.
+ */
+export const arcsOf = (game, ship) => (hasArcs(game, ship) ? (ship.arcs ?? arcSplit(ship.shields ?? 0)) : null);
+
+/**
+ * A hull's facing in degrees, old saves tolerated: one serialized before round 23
+ * has no `facing`, so it faces the nearest active enemy (ties by id), else 0.
+ * Null for a hull that does not fight with arcs.
+ */
+export const facingOf = (game, ship) => {
+  if (!hasArcs(game, ship)) return null;
+  if (Number.isFinite(ship.facing)) return normalizeDegrees(ship.facing);
+  const foe = game.ships
+    .filter((other) => isActive(other) && other.faction !== ship.faction)
+    .sort((a, b) => distance(ship, a) - distance(ship, b) || a.id.localeCompare(b.id))[0];
+  return foe ? bearingDeg(ship, foe) : 0;
+};
+
+/**
+ * Which arc of `target` a volley from `shooter` strikes: the shooter's bearing
+ * relative to the target's facing, quantized into the four quadrants. Null when
+ * the target does not fight with arcs, so the damage paths fall back to the total.
+ */
+export const struckArc = (game, shooter, target) => {
+  const facing = facingOf(game, target);
+  if (facing === null || !shooter) return null;
+  const relative = normalizeDegrees(bearingDeg(target, shooter) - facing);
+  const half = ARC.halfWidth;
+  if (relative < half || relative >= 360 - half) return 'fore';
+  if (relative < 90 + half) return 'starboard';
+  if (relative < 180 + half) return 'aft';
+  return 'port';
+};
+
+/**
+ * Implicit facing from displacement: any move — maneuver, disengage, a tractor
+ * tow — points the bow along the direction of travel and returns the moved hull.
+ * A zero-displacement move never overwrites the facing (a hull that goes nowhere
+ * keeps its last heading), drones are exempt, and outside a Reimagined war the
+ * hull is moved exactly as before, so a classic or extended move stays
+ * byte-identical.
+ */
+export const applyHeading = (game, ship, x, y) => {
+  const moved = { ...ship, x, y };
+  if (!hasArcs(game, ship) || (ship.x === x && ship.y === y)) return moved;
+  return { ...moved, facing: Math.round(bearingDeg(ship, moved)) };
 };
 
 /**
