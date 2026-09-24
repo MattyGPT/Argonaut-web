@@ -130,27 +130,27 @@ parity tests hold.
 | Fleet loadouts (round 19): AI alliances field seeded doctrine-flavored fleets within their budgets (default 24, player-adjustable per faction; the Federation default stays the 21-point round-18 roster), so fleet *shapes* now vary per seed | median 53 stardates (mean 93.9); volleys per kill 19; prizes 8.3/war with 3.7 held at the end; winners **Federation 31.6%** / Bloc 28.4% / Axis 17.2% / Cabal 10%; last stands 0.47/war, worst blast 12, 4+-hull blasts 42.4% (cluster geometry varies with composition — watch, was 33.2% at fixed fleets); hopeless draws 9%, timeouts 4% |
 | Drones / fighters (round 20): every carrier looses a one-time complement of three uncrewed fighter hulls when the enemy closes; they ride the ships array, escort-then-hunt on their own AI branch, run their alliance's doctrine power profile, and never count toward surrender, command, objectives, or a faction's survival | median 55 stardates (mean 98.4, p90 190, max 600); volleys per kill **15.9** (from 19 — the extra gunboats concentrate fire); prizes 8.4/war with 3.7 held; winners **Bloc 38%** / Federation 26% / Axis 15.2% / Cabal 8.4%; last stands 0.56/war, worst blast 15, 4+-hull blasts 47.6%; hopeless draws 8%, timeouts 5%; fleets now run to ~52 hulls on the array as bays fly |
 | Combat stances (round 21): every Reimagined hull holds standard / firing / evasive, a miss-chance term on the ONE shared `volleyMissChance` roll (firing −0.05 own miss but −0.05 incoming, evasive +0.08 own but +0.15 incoming, clamped to [0.05, 0.95]); the player sets it free like power, AI captains hold a doctrine bias (Axis/Bloc firing, Cabal evasive) and any hull beaten below its `retreatBelow` sheds to evasive; plus a player **Disengage** command (full burn from the nearest threat) | median **62** stardates (mean 113.1, p90 233, max 600); volleys per kill **17.2** (from 15.9 — evasive hulls, and wounded hulls weaving as they break off, are harder to finish, so wars lengthen); prizes 8.4/war with 3.9 held; winners **Bloc 34.8%** / Federation 25.2% / Axis 16.4% / Cabal 8.4%; last stands 0.56/war, worst blast 15, 4+-hull blasts 48%; hopeless draws 9%, timeouts 6% |
+| Ion/EMP (round 22a): artillery (2 units) and interceptors (1) carry a Reimagined-only ion emitter — a long-range (35, outranges phasers) suppression beam whose charge is absorbed by shields first, the overflow stripping subsystem units with **no crew casualties**; it rides the shared accuracy roll + weapons sink, and a hull gutted of engines+guns now **strikes its colors** in a Reimagined war (disabled-surrender extended past precision), becoming a boardable derelict — so suppression feeds the prize race instead of stalling the war | median **63** stardates (mean 111.4 — essentially unchanged from 62; ion is a finisher/capture tool on wounded hulls, not primary damage, since fresh shields absorb it whole); volleys per kill **19.3** (from 17.2 — non-lethal ion volleys count as shots but never as kills); prizes **8.5/war**; hopeless draws **5%** (from 9% — ion-gutted hulls are boarded or finished, not left inert); timeouts 7% (from 6%); winners **Bloc 35.6%** / Federation 28.8% / Axis 12.8% / Cabal 10.8% (Cabal recovers — evasive doctrine plus ion-capture suits its trickster game); 4+-hull blasts 44.4% |
 
 Open findings for the rest of the balance pass:
 
-- **Stances lengthened the Reimagined war** (median 55 → 62, mean 98 → 113,
-  volleys/kill 15.9 → 17.2) and nudged timeouts to 6% / hopeless draws to 9%.
-  The driver is evasion: a +0.15 incoming-miss term on every Cabal hull and on
-  *any* hull beaten below its `retreatBelow` (which flips it to evasive as it
-  breaks off) makes wounded prey harder to finish, stretching the endgame. This
-  is the direction the play-test wanted (battles were "too short"), but the long
-  tail bears watching. Levers, all measured not guessed: the `STANCE.incomingMiss`
-  / `selfMiss` magnitudes, or dropping the wounded → evasive flip so a gutted hull
-  stays in its doctrine stance and can be run down.
-- **Bloc eased from 38% to 34.8%** but still leads. Its firing doctrine out-guns
-  the field, though the margin narrowed now that targets weave when hurt. Still
-  the round-20 watch item: Bloc's artillery archetype runs the hardest power
-  profile (1.5× guns) and rides it on drones too. Levers unchanged (drone/phaser
-  dials, or a flat default profile for all wings).
-- **Cabal is still last** at 8.4%. Its evasive doctrine now makes it the hardest
-  alliance to hit, which lengthens its wars but does not convert to wins — the
-  tractor-ram payoff on a wide field is still the missing piece, plus the weakest
-  drone guns. A Cabal doctrine pass remains its own candidate chunk.
+- **Ion is a capture tool, not a war-lengthener.** The feared stall (disable a hull,
+  it repairs, repeat) was real in a 60-seed diagnostic — timeouts hit 12% — until
+  the disabled-surrender rule was extended to Reimagined: an ion-gutted hull strikes
+  its colors and becomes a boardable derelict. At 250 seeds the median barely moved
+  (62 → 63), hopeless draws *fell* (9% → 5%, since gutted hulls resolve into prizes
+  or wrecks rather than lingering), and prizes ticked up. **Timeouts edged to 7%**
+  (from 6%) — the long tail is the standing watch item; levers are the `WEAPONS.ion`
+  band, `ION.carry`, or the `STANCE`/regen dials, all measured not guessed.
+- **Cabal recovered to 10.8%** (from 8.4%) — its evasive doctrine makes it hard to
+  hit, and ion-capture rewards the mobile trickster game. Still last, but the gap
+  narrowed; a Cabal doctrine pass (the tractor-ram payoff) remains a candidate chunk.
+- **Bloc still leads at 35.6%** — its firing doctrine and hardest power profile
+  (1.5× guns, riding drones too) out-gun the field. Levers unchanged (drone/phaser
+  dials, or a flat default power profile for all wings).
+- **Volleys per kill rose to 19.3** (from 17.2) because ion volleys are counted as
+  shots but never score kills — a reporting artifact of the disable-not-destroy
+  model, not a sign wars got more attritional (the median is flat).
 
 Future calibration should record a DOS input sequence and visible output beside
 the same web seed/action pair, then tune only the values needed to preserve the

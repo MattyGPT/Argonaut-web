@@ -18,6 +18,8 @@ const keys = Object.freeze({
   Escape: 'resign',
   d: 'launch',
   D: 'launch',
+  i: 'ion',
+  I: 'ion',
   x: 'disengage',
   X: 'disengage',
   p: 'pass',

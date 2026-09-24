@@ -156,7 +156,14 @@ captains hold a stance by doctrine (Axis and Bloc fire, Cabal weaves), and any h
 beaten near destruction weaves as it breaks off; the stance shows as a colored
 halo on the map and in the fleet report. And **Disengage** (`X`) is the pilot's
 escape lever — a full engine burn straight away from the nearest threat, as the
-turn's maneuver, pairing with evasive to break off under fire. Axis last stands are scaled for the wide field as well — the
+turn's maneuver, pairing with evasive to break off under fire. Some hulls —
+artillery and interceptors — also carry an **ion/EMP emitter** (`I`), a long-range
+suppression beam that outranges the phasers and **disables rather than destroys**:
+shields soak the charge first, and whatever punches through burns out subsystem
+units **without killing a single crewman**. Gut a hull's engines and guns and it
+**strikes its colors**, left a vacant derelict for anyone to board — so ion is a
+hunter's tool that feeds the prize race instead of sending hulls to wreckage, and
+the dockyard rebuilds what it burns out. Axis last stands are scaled for the wide field as well — the
 self-destruct blast is smaller there, and the trigger needs a captain at 2%
 shields with five enemies stacked close, so one spiteful death no longer
 deletes a fleet cluster. Volleys are measured too: every Reimagined salvo

@@ -7,6 +7,7 @@ import {
   FACTIONS,
   FACTION_IDS,
   GRID_SIZE,
+  ION,
   LOADOUT,
   LOG_LIMIT,
   MISS_CHANCE,
@@ -179,9 +180,13 @@ const resolveLoadout = (seed, loadout, factions) => {
 const createShip = ({ id, name, faction, kind, x, y, reimagined }) => {
   const template = SHIP_TEMPLATES[kind];
   // A Reimagined hull carries a reactor subsystem; a classic or extended one does
-  // not, so their damage lottery — and every calibrated figure — is untouched.
+  // not, so their damage lottery — and every calibrated figure — is untouched. The
+  // ion/EMP weapon (round 22a) is Reimagined-only too, and only the classes in
+  // `ION.carry` field it — a hull that carries none never gets the key at all, so
+  // its console readout and damage lottery stay clean.
+  const ionUnits = reimagined ? (ION.carry[template.className] ?? 0) : 0;
   const systems = reimagined
-    ? { ...template.systems, reactor: POWER.reactor[template.className] ?? 0 }
+    ? { ...template.systems, reactor: POWER.reactor[template.className] ?? 0, ...(ionUnits > 0 ? { ion: ionUnits } : {}) }
     : { ...template.systems };
 
   return {
@@ -704,6 +709,9 @@ export const templateSystems = (ship) => {
   // and a refit cap would see it; a classic or extended hull has none, so its
   // complement is exactly the template's and its calibration is untouched.
   if (ship?.systems && 'reactor' in ship.systems) base.reactor = POWER.reactor[ship.className] ?? 0;
+  // Ion/EMP is Reimagined-only the same way (round 22a): the dockyard rebuilds an
+  // ion-stripped hull back to its class complement.
+  if (ship?.systems && 'ion' in ship.systems) base.ion = ION.carry[ship.className] ?? 0;
   return base;
 };
 
