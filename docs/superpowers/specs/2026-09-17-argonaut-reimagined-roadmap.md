@@ -185,7 +185,7 @@ Detailed design (stances, disengage, and the seams for 22/23):
 | 21 | Evasive/firing stances | Per-turn accuracy-vs-evasion trade | Modifier applies; disengage tool works | ✅ PR #54 |
 | 22a | Ion/EMP | Suppression beam: shields absorb, then strip systems, no crew killed; a gutted hull strikes its colors | Ion disables without killing; feeds the prize race; parity off | ✅ PR #55 |
 | 22b | **Directed tractor beam** | Aim the tow at a coordinate or a hull to slam into | Tow vector follows the named point; collision resolves; pull budget unchanged | ✅ PR #25 |
-| 22c | Spread torpedoes | Splash-around-impact volley (designed; not yet built) | Distinct damage model; rides the shared accuracy roll; parity off | — |
+| 22c | Spread torpedoes | Short-range area salvo: full on the target, falloff splash on every hull near the impact | Distinct damage model; rides the shared accuracy roll; parity off | ✅ PR #56 |
 | — | ~~Mines~~ | *Deferred (Matt, 2026-09-21)* | — | deferred |
 | 23 | Directional shields | Fore/aft/port/starboard arcs + facing | Arc damage; AI faces threat; largest single chunk | — |
 
