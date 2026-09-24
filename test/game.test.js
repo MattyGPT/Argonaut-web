@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACE_KILLS, ARC, ARCS, CAPTAIN_NAMES, CRIPPLE, DOCKING, DRONE, GRID_SIZE, ION, LOADOUT, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, REIMAGINED_WEAPON_DAMAGE_SCALE, SCENARIOS, SHIP_TEMPLATES, SPREAD, STALEMATE_ROUNDS, STANCE, STANCES, TERRAIN, VENDETTA } from '../game/constants.js';
+import { ACE_KILLS, ARC, ARCS, CAPTAIN_NAMES, CRIPPLE, DOCKING, DRONE, ENCOUNTERS, GRID_SIZE, ION, LOADOUT, LOG_LIMIT, MISS_CHANCE, NEUTRAL_FACTION, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, REIMAGINED_WEAPON_DAMAGE_SCALE, SCENARIOS, SHIP_TEMPLATES, SPREAD, STALEMATE_ROUNDS, STANCE, STANCES, TERRAIN, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioOutcome, scenarioProgress } from '../game/scenarios.js';
-import { abbreviateNarrative, alertLevel, appendLog, applyHeading, arcFocusOf, arcSplit, arcsOf, bearingDeg, blastRadius, clampPowerAllocation, createGame, crewCapacity, deductArcsProportionally, defaultLoadout, distance, dockedAt, engineCapacity, facingOf, fleetCost, fleetHulls, getShip, grownArcs, hasArcs, inRadioContact, insideFeature, ionStormZone, isAce, isDrone, nebulaHides, nebulaRevealRange, normalizeDegrees, normalizeFleetSpec, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, stanceOf, struckArc, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
+import { abbreviateNarrative, alertLevel, appendLog, applyHeading, arcFocusOf, arcSplit, arcsOf, bearingDeg, blastRadius, clampPowerAllocation, createGame, crewCapacity, deductArcsProportionally, defaultLoadout, distance, dockedAt, engineCapacity, facingOf, fleetCost, fleetHulls, getShip, grownArcs, hasArcs, inRadioContact, insideFeature, ionStormZone, isAce, isDrone, isNeutral, nebulaHides, nebulaRevealRange, normalizeDegrees, normalizeFleetSpec, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, spawnEncounter, stanceOf, struckArc, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
 import { applyPlayerAction, canLaunchDrones, captureHull, damageShip, defaultTargetFor, eligibleTargets, ionDamage, killLines, launchDrones, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, spreadSplash, tractorLock, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
-import { applySurrender, darkenOrphanDrones, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolveObjectives, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
+import { applySurrender, darkenOrphanDrones, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolveEncounters, resolveObjectives, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
 
 const withShips = (game, update) => ({ ...game, ships: game.ships.map(update) });
@@ -5246,4 +5246,276 @@ test('the helm buttons turn by delta as well as by absolute degrees', () => {
   const right = applyPlayerAction(left.game, { type: 'facing', deltaDegrees: 90 });
   assert.equal(getShip(right.game, 'fed-flagship').facing, 45);
   assert.match(applyPlayerAction(game, { type: 'facing' }).messages.join(' '), /heading in degrees/);
+});
+
+// --- Argonaut Reimagined, Phase 5 round 24: random encounters ---
+
+/** A quiet Reimagined war for encounter tests: everyone parked, terrain cleared, vendetta off. */
+const quietWar = (seed, turn = 1) => ({
+  ...withShips(createGame({ seed, reimagined: true, loadout: defaultLoadout() }), (ship) => (parked(ship))),
+  terrain: [],
+  vendettaShipId: 'nobody',
+  turn,
+});
+
+/** One encounter hull of a type, staged at a point, appended to a war. */
+const withEncounter = (game, type, x, y, rngSeed = 'enc') => {
+  const hull = spawnEncounter(game, type, x, y, createRng(rngSeed));
+  return { game: { ...game, ships: [...game.ships, hull] }, hull };
+};
+
+test('spawnEncounter builds the three arrivals exactly as designed', () => {
+  const game = quietWar('enc-shapes');
+  // Derelict: a dark ghost of some alliance, degraded and boardable.
+  const derelict = spawnEncounter(game, 'derelict', 50, 60, createRng('enc-derelict'));
+  assert.equal(derelict.status, 'vacant');
+  assert.equal(derelict.crew, 0, 'nobody aboard');
+  assert.ok(['Federation', 'Axis', 'Bloc', 'Cabal'].includes(derelict.faction), 'a ghost of one of the four alliances');
+  assert.ok(derelict.shields <= Math.round(shieldCapacity(derelict) * ENCOUNTERS.derelictShields[1]), 'worn shields');
+  assert.ok(['Scout', 'Cruiser', 'Interceptor', 'Artillery', 'Battle cruiser'].includes(derelict.className),
+    'a ship-of-the-line class, never a carrier or starbase');
+  const complement = templateSystems(derelict);
+  for (const [name, units] of Object.entries(derelict.systems)) {
+    if (complement[name] === undefined) continue;
+    assert.ok(units <= Math.floor(complement[name] * ENCOUNTERS.derelictSystems), `${name} halved or worse`);
+  }
+  assert.equal(ARCS.reduce((sum, arc) => sum + derelict.arcs[arc], 0), derelict.shields, 'the arc invariant holds on a degraded hull');
+  assert.deepEqual(derelict.encounter, { type: 'derelict', turn: game.turn });
+  // Distress: a stranded Federation hull, engines gone, crew aboard.
+  const distress = spawnEncounter(game, 'distress', 70, 80, createRng('enc-distress'));
+  assert.equal(distress.faction, 'Federation');
+  assert.equal(distress.status, 'active');
+  assert.equal(distress.systems.engines, 0, 'the burn that stranded it');
+  assert.ok(distress.crew >= 1, 'survivors aboard');
+  assert.ok(typeof distress.captain === 'string' && distress.captain.length > 0, 'a named captain answers the call');
+  assert.equal(ARCS.reduce((sum, arc) => sum + distress.arcs[arc], 0), distress.shields);
+  assert.deepEqual(distress.encounter, { type: 'distress', turn: game.turn });
+  // Neutral merchant: an unarmed civilian under the Neutral banner.
+  const merchant = spawnEncounter(game, 'neutral', 90, 100, createRng('enc-merchant'));
+  assert.equal(merchant.faction, NEUTRAL_FACTION);
+  assert.equal(merchant.className, 'Merchant');
+  assert.equal(merchant.neutral, true, 'the neutral stamp, not the faction string, is the mark');
+  assert.equal(isNeutral(merchant), true);
+  assert.equal(merchant.systems.phasers, 0, 'unarmed');
+  assert.equal(merchant.systems.photons, 0);
+  assert.ok(merchant.crew > 0 && typeof merchant.captain === 'string');
+  assert.deepEqual(merchant.encounter, { type: 'neutral', turn: game.turn });
+  // Deterministic: the same sub-stream builds the same hull.
+  assert.deepEqual(spawnEncounter(game, 'derelict', 50, 60, createRng('enc-derelict')), derelict);
+});
+
+test('encounters arrive on the seeded sub-stream, off-field, and never touch the main stream', () => {
+  // Sweep turns until one arrives (10% per boundary, so within ~60 tries).
+  let arrived = null;
+  for (let turn = 1; turn <= 60 && !arrived; turn += 1) {
+    const game = quietWar('enc-arrival', turn);
+    const out = resolveEncounters(game);
+    if (out.game.ships.length > game.ships.length) arrived = { game, out };
+  }
+  assert.ok(arrived, 'an encounter arrived within the turn sweep');
+  const hull = arrived.out.game.ships[arrived.out.game.ships.length - 1];
+  assert.ok(hull.encounter, 'the arrival carries its encounter record');
+  assert.equal(arrived.out.game.randomStep, arrived.game.randomStep, 'the main war stream never shifts');
+  for (const ship of arrived.game.ships) {
+    assert.ok(distance(hull, ship) >= ENCOUNTERS.minDistance, 'it arrives from outside the battlefield');
+  }
+  assert.ok(arrived.out.messages.length === 1 && /at \d+, \d+/.test(arrived.out.messages[0]), 'the arrival is narrated with its position');
+  // Deterministic and replay-safe: the same state rolls the same arrival.
+  assert.deepEqual(resolveEncounters(arrived.game).game.ships, arrived.out.game.ships);
+  // A quiet stardate stays quiet.
+  const quietTurn = [...Array(60).keys()].map((t) => t + 1)
+    .find((turn) => resolveEncounters(quietWar('enc-arrival', turn)).game.ships.length === quietWar('enc-arrival', turn).ships.length);
+  assert.ok(quietTurn, 'most stardates are quiet');
+});
+
+test('encounters are Reimagined-only, capped, and skip a crowded field', () => {
+  // A classic or extended war never rolls the boundary draw.
+  for (const opts of [{}, { extended: true }]) {
+    const off = createGame({ seed: 'enc-parity', ...opts });
+    assert.deepEqual(resolveEncounters(off).game.ships, off.ships, 'no encounter outside Reimagined');
+  }
+  assert.deepEqual(createGame({ seed: 'enc-parity' }), createGame({ seed: 'enc-parity', reimagined: false }),
+    'the standing parity scaffold still holds');
+  // At the alive cap, even a hitting roll adds nothing.
+  let full = quietWar('enc-cap');
+  for (const [i, type] of ['derelict', 'distress', 'neutral'].entries()) {
+    full = withEncounter(full, type, 30 + i * 70, 30, `enc-cap-${i}`).game;
+  }
+  for (let turn = 1; turn <= 15; turn += 1) {
+    assert.equal(resolveEncounters({ ...full, turn }).game.ships.length, full.ships.length, `the cap holds at turn ${turn}`);
+  }
+  // A boarded derelict and a rescued distress hull free their slots: the count
+  // reads what is still an encounter, not what was ever spawned.
+  const freed = withShips(full, (ship) => {
+    if (ship.encounter?.type === 'derelict') return { ...ship, status: 'active', faction: 'Federation', crew: 12 };
+    if (ship.encounter?.type === 'distress') return { ...ship, systems: { ...ship.systems, engines: 2 } };
+    return ship;
+  });
+  const stillStanding = freed.ships.filter((ship) => ship.encounter?.type === 'neutral' && isNeutral(ship));
+  assert.equal(stillStanding.length, 1, 'only the visiting merchant still counts');
+});
+
+test('a neutral merchant flees warships, sits in a lock, and jumps out on schedule', () => {
+  const base = quietWar('enc-merchant-ai');
+  const staged = (over = {}) => {
+    const { game, hull } = withEncounter(base, 'neutral', 120, 120, 'enc-merchant-ai');
+    return { game: withShips({ ...game, ...over }, (ship) => (ship.id === hull.id ? hull : ship)), hull };
+  };
+  // A warship inside the flee range: it burns away.
+  const menaced = staged();
+  const pair = (g) => ({ ...g, ships: g.ships.filter((ship) => ['fed-flagship', menaced.hull.id].includes(ship.id)) });
+  const menaceGame = pair(withShips(menaced.game, (ship) => (ship.id === 'fed-flagship' ? { ...ship, x: 130, y: 120 } : ship)));
+  const flee = chooseAiAction(menaceGame, menaced.hull.id);
+  assert.equal(flee.type, 'move', 'the merchant runs');
+  assert.ok(flee.dx < 0, 'straight away from the warship bearing on it');
+  // Alone in a quiet field: it drifts.
+  const alone = withShips(menaced.game, (ship) => (ship.id === 'fed-flagship' ? { ...ship, x: 10, y: 10 } : ship));
+  assert.deepEqual(chooseAiAction(pair(alone), menaced.hull.id), { type: 'pass' });
+  // Caught in a tractor lock: it goes nowhere.
+  const locked = pair(withShips(menaceGame, (ship) => (ship.id === menaced.hull.id ? { ...ship, tractorBy: 'fed-flagship' } : ship)));
+  assert.equal(chooseAiAction(locked, menaced.hull.id).type, 'pass', 'a locked merchant cannot run');
+  // Its visit is bounded: after the lifetime it departs, and the departure
+  // removes it from the field entirely.
+  const old = withShips(menaced.game, (ship) => (ship.id === menaced.hull.id
+    ? { ...ship, encounter: { type: 'neutral', turn: menaced.game.turn - ENCOUNTERS.neutralLifetime } }
+    : ship));
+  assert.deepEqual(chooseAiAction(old, menaced.hull.id), { type: 'depart' });
+  const resolved = resolveComputerTurns({ ...old, phase: 'computer' });
+  assert.ok(!resolved.ships.some((ship) => ship.id === menaced.hull.id), 'the merchant is gone from the field');
+  assert.ok(resolved.log.some((line) => /jumps to hyperspace and is gone/.test(line)), 'and its departure is narrated');
+});
+
+test('no captain targets a neutral merchant, and the war math never sees one', () => {
+  const base = quietWar('enc-neutral-excluded');
+  const { game, hull } = withEncounter(base, 'neutral', 120, 120, 'enc-neutral');
+  const staged = withShips(game, (ship) => (ship.id === 'axis-flagship' ? { ...ship, x: 126, y: 120 } : ship));
+  // The only hull in reach is the merchant: the Axis captain has no target.
+  const action = chooseAiAction({ ...staged, ships: staged.ships.filter((ship) => ['axis-flagship', hull.id].includes(ship.id)) }, 'axis-flagship');
+  assert.ok(!['phasers', 'photons', 'ion', 'spread', 'tractor'].includes(action.type) || action.targetId !== hull.id,
+    'civilian traffic is not a target of war');
+  // Victory: a field of Federation + one merchant is a Federation win.
+  const endgame = { ...staged, ships: staged.ships.filter((ship) => ship.faction === 'Federation' || isNeutral(ship)) };
+  assert.equal(evaluateOutcome(endgame).kind, 'federation-win', 'a merchant never holds a faction in the war');
+  // A relay node cannot be held or contested by one.
+  const relayGame = { ...staged, terrain: [{ id: 'relay-1', type: 'relay', x: hull.x, y: hull.y, radius: 10 }], held: {} };
+  const relayed = withShips(relayGame, (ship) => (ship.id === hull.id ? { ...ship, x: 120, y: 120 } : ship));
+  const objectives = resolveObjectives({ ...relayed, ships: relayed.ships.filter((ship) => isNeutral(ship) || ship.id === hull.id) });
+  assert.equal(objectives.game.held['relay-1'], undefined, 'a neutral holds no objective');
+  // A gutted merchant never strikes its colors — it is seized whole or jumps out.
+  const gutted = withShips(staged, (ship) => (ship.id === hull.id ? { ...ship, systems: { ...ship.systems, engines: 0 } } : ship));
+  const colors = resolveDisabledSurrender(gutted);
+  assert.equal(getShip(colors.game, hull.id).status, 'active', 'no derelict of "Neutral" lingers in the field');
+  // The statistics report gives it no alliance block; the roll call still lists it.
+  const stats = reportFor(staged, 'statistics').lines.join(' ');
+  assert.ok(!/Neutral:/.test(stats), 'no Neutral alliance block');
+  assert.ok(reportFor(staged, 'rollcall').lines.some((line) => line.includes(hull.name)), 'the roll call lists every hull');
+  // A scan reads what it is.
+  const near = withShips(staged, (ship) => (ship.id === 'fed-flagship' ? { ...ship, x: hull.x - 5, y: hull.y } : ship));
+  const scan = applyPlayerAction({ ...near, playerShipId: 'fed-flagship' }, { type: 'scan', targetId: hull.id });
+  assert.ok(scan.report.lines.some((line) => /unarmed neutral merchant/.test(line)), 'the scan names the civilian');
+});
+
+test('a transporter party seizes an active merchant as a prize of war', () => {
+  const base = quietWar('enc-seize');
+  const { game, hull } = withEncounter(base, 'neutral', 104, 100, 'enc-seize');
+  const staged = withShips(game, (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
+    return ship;
+  });
+  const out = applyPlayerAction({ ...staged, playerShipId: 'fed-flagship' }, { type: 'transport', targetId: hull.id, amount: 10 });
+  assert.match(out.messages.join(' '), /is seized by 10 of Argo's crew/);
+  const seized = getShip(out.game, hull.id);
+  assert.equal(seized.faction, 'Federation');
+  assert.equal(seized.neutral, false, 'the stamp is shed');
+  assert.equal(isNeutral(seized), false);
+  assert.equal(seized.status, 'active');
+  assert.equal(seized.crew, 10);
+  assert.equal(seized.prize?.from, NEUTRAL_FACTION, 'a prize of war from the Neutral banner');
+  assert.equal(out.game.prizesTaken?.Federation, 1, 'the ledger counts it');
+  assert.equal(out.game.prizeDraws, 1, 'and the prize-captain stream advanced');
+  assert.equal(typeof seized.captain, 'string', 'a prize captain took command');
+  assert.equal(out.game.phase, 'computer', 'the seizure spends the stardate');
+  // Seizing is offered in the menu as its own command, and a seized merchant
+  // counts in the war like any hull.
+  const commands = shipCommands({ ...staged, playerShipId: 'fed-flagship' }, hull.id);
+  assert.ok(commands.some(({ type, label }) => type === 'transport' && label === 'Seize merchant'));
+  const winCheck = { ...out.game, ships: out.game.ships.filter((ship) => ship.faction === 'Federation' || isNeutral(ship)) };
+  assert.equal(evaluateOutcome(winCheck).kind, 'federation-win');
+});
+
+test('a derelict is boardable by anyone, and a distressed hull answers to a tow', () => {
+  const base = quietWar('enc-derelict-board');
+  const { game, hull } = withEncounter(base, 'derelict', 104, 100, 'enc-derelict-board');
+  const staged = withShips(game, (ship) => (ship.id === 'fed-flagship' ? { ...ship, x: 100, y: 100 } : ship));
+  const boarded = applyPlayerAction({ ...staged, playerShipId: 'fed-flagship' }, { type: 'transport', targetId: hull.id, amount: 10 });
+  const taken = getShip(boarded.game, hull.id);
+  assert.equal(taken.status, 'active', 'the ghost ship lives again');
+  assert.equal(taken.faction, taken.faction === 'Federation' ? 'Federation' : taken.faction);
+  assert.equal(taken.crew, 10);
+  // An AI captain with transporters boards it too, through the round-17 machinery.
+  const aiBase = quietWar('enc-derelict-ai');
+  const ai = withEncounter(aiBase, 'derelict', 104, 100, 'enc-derelict-ai');
+  const aiStaged = withShips(ai.game, (ship) => {
+    if (ship.id === 'axis-flagship') return { ...ship, x: 100, y: 100 };
+    if (ship.id === ai.hull.id) return ai.hull;
+    return ship;
+  });
+  const aiAction = chooseAiAction({ ...aiStaged, ships: aiStaged.ships.filter((ship) => ['axis-flagship', ai.hull.id].includes(ship.id)) }, 'axis-flagship');
+  assert.deepEqual(aiAction, { type: 'board', targetId: ai.hull.id }, 'a captain with nothing to shoot grabs the derelict');
+  // The distress hull: engines gone, and a tractor tow is the rescue.
+  const distBase = quietWar('enc-distress-tow');
+  const dist = withEncounter(distBase, 'distress', 130, 130, 'enc-distress');
+  const distStaged = withShips(dist.game, (ship) => (ship.id === 'fed-flagship' ? { ...ship, x: 120, y: 130 } : ship));
+  const tow = applyPlayerAction({ ...distStaged, playerShipId: 'fed-flagship' }, { type: 'tractor', targetId: dist.hull.id });
+  const stranded = getShip(tow.game, dist.hull.id);
+  assert.ok(distance(stranded, getShip(tow.game, 'fed-flagship')) < 10, 'the beam hauls the stranger home');
+  assert.equal(stranded.encounter.type, 'distress');
+  const scan = applyPlayerAction({ ...distStaged, playerShipId: 'fed-flagship', phase: 'player' }, { type: 'scan', targetId: dist.hull.id });
+  assert.ok(scan.report.lines.some((line) => /broadcasting distress/.test(line)), 'the scan hears the call');
+});
+
+test('a distressed hull nobody answers is abandoned when the rescue window closes', () => {
+  const base = quietWar('enc-patience');
+  const { game, hull } = withEncounter(base, 'distress', 200, 200, 'enc-patience');
+  // Inside the window, the call still stands.
+  const waiting = { ...game, turn: game.turn + ENCOUNTERS.distressPatience - 1 };
+  const inside = resolveEncounters(waiting);
+  assert.equal(getShip(inside.game, hull.id).status, 'active', 'the crew keeps waiting inside the window');
+  // Once it closes, the crew takes to the pods and the hull goes dark — vacant
+  // salvage that no longer holds its alliance in the war.
+  const expired = { ...game, turn: game.turn + ENCOUNTERS.distressPatience };
+  const out = resolveEncounters(expired);
+  const abandoned = getShip(out.game, hull.id);
+  assert.equal(abandoned.status, 'vacant', 'the window closed');
+  assert.equal(abandoned.crew, 0, 'the crew is away in the pods');
+  assert.ok(out.messages.some((line) => /Nobody came for the/.test(line)), 'and the loss is narrated');
+  // A hull under repair — engines back — is no longer waiting and never abandoned.
+  const repaired = withShips(expired, (ship) => (ship.id === hull.id ? { ...ship, systems: { ...ship.systems, engines: 1 } } : ship));
+  assert.equal(getShip(resolveEncounters(repaired).game, hull.id).status, 'active', 'a rescued hull lives');
+});
+
+test('encounters ride a whole war: arrivals, departures, and the parity of the untouched modes', () => {
+  // Play a Reimagined war through the harness loop and watch the traffic.
+  let game = createGame({ seed: 'enc-whole-war', reimagined: true });
+  const seen = new Set();
+  while (!game.outcome && game.turn < 200) {
+    const auto = resolveAutopilotTurn(game);
+    game = resolveComputerTurns(auto.game);
+    for (const ship of game.ships) {
+      if (ship.encounter) seen.add(ship.id);
+    }
+  }
+  assert.ok(game.outcome || game.turn >= 200, 'the war survived every boundary roll');
+  // The same seed replays the same war, encounters and all.
+  let twin = createGame({ seed: 'enc-whole-war', reimagined: true });
+  while (!twin.outcome && twin.turn < 200) {
+    twin = resolveComputerTurns(resolveAutopilotTurn(twin).game);
+  }
+  assert.deepEqual(twin.ships, game.ships, 'deterministic: the same seed replays the same arrivals');
+  // A classic war plays with zero encounters, byte-identical to itself.
+  let classic = createGame({ seed: 'enc-classic-war' });
+  while (!classic.outcome && classic.turn < 200) {
+    classic = resolveComputerTurns(resolveAutopilotTurn(classic).game);
+  }
+  assert.ok(classic.ships.every((ship) => !ship.encounter), 'a classic war meets nobody');
 });
