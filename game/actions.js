@@ -32,6 +32,7 @@ import {
 import { createRng } from './rng.js';
 import {
   alertLevel,
+  applyHeading,
   blastRadius,
   captainOf,
   clampPowerAllocation,
@@ -55,6 +56,7 @@ import {
   isSpectator,
   isTractorHeld,
   nebulaHides,
+  normalizeDegrees,
   powerAllocation,
   powerEffect,
   radioReaches,
@@ -812,7 +814,9 @@ const moveAction = (game, action, actor) => {
   const x = actor.x + dx;
   const y = actor.y + dy;
   if (x < 0 || x > grid || y < 0 || y > grid) return invalid(game, 'Movement would leave the tactical map.');
-  const movedActor = { ...actor, x, y };
+  // Round 23: the move implies the heading — a Reimagined hull ends the burn
+  // facing the direction it traveled (inert elsewhere, so parity holds).
+  const movedActor = applyHeading(game, actor, x, y);
   const collision = resolveCollision(replaceShip(game, movedActor), movedActor);
   // Ending the move inside an asteroid field risks a rock strike (15c).
   const strike = resolveAsteroidStrike(collision.game, movedActor);
@@ -878,7 +882,8 @@ const tractorAction = (game, action, actor) => {
   // and pulls toward the caster exactly as calibrated.
   const destination = game.reimagined ? towDestination(game, action, grid) : null;
   const { pull, position } = tractorLock(actor, found.target, grid, destination, powerEffect(game, actor, 'tractor'));
-  const pulled = { ...found.target, tractorBy: actor.id, x: position.x, y: position.y };
+  // Round 23: a towed hull heads the way it was dragged (Reimagined only).
+  const pulled = { ...applyHeading(game, found.target, position.x, position.y), tractorBy: actor.id };
   // A beam can drag a hull straight into another one, and that is a collision like
   // any other — which makes towing an enemy into a friend a real tactic.
   const collision = resolveCollision(completeTurn(replaceShip(game, pulled)), pulled);
@@ -1119,6 +1124,7 @@ const hyperspaceAction = (game, action, actor) => {
     return invalid(game, 'Hyperspace destination must be valid map coordinates.');
   }
   const shieldDamage = Math.max(HYPERSPACE_MIN_SHIELD_LOSS, Math.ceil(shieldCapacity(actor) * HYPERSPACE_SHIELD_LOSS));
+  // Round 23: a jump has no meaningful heading — the hull keeps its prior facing.
   const relocated = { ...actor, x, y, shields: Math.max(0, actor.shields - shieldDamage), tractorBy: null };
   // Materializing inside another hull is a collision like any other, which makes a
   // jump onto an enemy a suicide ram.
@@ -1279,6 +1285,29 @@ const setStance = (game, action, actor) => {
   );
 };
 
+/**
+ * Turns a hull to a new heading (round 23). Like stance and power it costs no
+ * turn — a helm order, not a maneuver — and persists until the next move or turn.
+ * Reimagined only, and only Federation hulls take your helm orders (the AI
+ * captains face their threats by doctrine). Movement implies a heading anyway;
+ * this is how a hull holding a gun line presents its strong fore arc without
+ * burning the stardate.
+ */
+const setFacing = (game, action, actor) => {
+  if (!game.reimagined) return invalid(game, 'Directional shields are only available in a Reimagined war.');
+  const ship = getShip(game, action.shipId ?? game.playerShipId);
+  if (!ship || !isActive(ship)) return invalid(game, 'No such hull to turn.');
+  if (ship.faction !== actor.faction) return invalid(game, 'Only Federation hulls take your helm orders.');
+  if (isDrone(ship)) return invalid(game, `${ship.name} has no heading to set.`);
+  const degrees = Number(action.degrees);
+  if (!Number.isFinite(degrees)) return invalid(game, 'Turning requires a heading in degrees.');
+  const facing = Math.round(normalizeDegrees(degrees));
+  return result(
+    replaceShip(game, { ...ship, facing }),
+    `${ship.name} comes about, facing ${facing} degrees.`,
+  );
+};
+
 /** The nearest active enemy hull to `actor`, ties by id, or null in a field with none. */
 const nearestThreat = (game, actor) => game.ships
   .filter((ship) => isActive(ship) && ship.faction !== actor.faction)
@@ -1306,7 +1335,9 @@ const disengageAction = (game, actor) => {
   const span = distance(actor, threat) || 1;
   const x = Math.max(0, Math.min(grid, Math.round(actor.x + ((actor.x - threat.x) / span) * capacity)));
   const y = Math.max(0, Math.min(grid, Math.round(actor.y + ((actor.y - threat.y) / span) * capacity)));
-  const movedActor = { ...actor, x, y };
+  // Round 23: the escape burn sets the heading — the runner presents its weak aft
+  // arc to whatever is chasing (Reimagined only; inert elsewhere).
+  const movedActor = applyHeading(game, actor, x, y);
   const collision = resolveCollision(replaceShip(game, movedActor), movedActor);
   const strike = resolveAsteroidStrike(collision.game, movedActor);
   return result(completeTurn(strike.game), [
@@ -1376,6 +1407,7 @@ export const applyPlayerAction = (game, action = {}) => {
     case 'refit': return setRefit(game, action, actor);
     case 'power': return setPower(game, action, actor);
     case 'stance': return setStance(game, action, actor);
+    case 'facing': return setFacing(game, action, actor);
     case 'autopilot': return result(completeTurn(game), `${actor.name} autopilot holds course.`);
     case 'resign': {
       if (game.resigned) return invalid(game, 'You have already resigned command; the autopilot has the conn.');

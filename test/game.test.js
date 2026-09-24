@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, DRONE, GRID_SIZE, ION, LOADOUT, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, REIMAGINED_WEAPON_DAMAGE_SCALE, SCENARIOS, SHIP_TEMPLATES, SPREAD, STALEMATE_ROUNDS, STANCE, STANCES, TERRAIN, VENDETTA } from '../game/constants.js';
+import { ACE_KILLS, ARC, ARCS, CAPTAIN_NAMES, CRIPPLE, DOCKING, DRONE, GRID_SIZE, ION, LOADOUT, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, REIMAGINED_WEAPON_DAMAGE_SCALE, SCENARIOS, SHIP_TEMPLATES, SPREAD, STALEMATE_ROUNDS, STANCE, STANCES, TERRAIN, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioOutcome, scenarioProgress } from '../game/scenarios.js';
-import { abbreviateNarrative, alertLevel, appendLog, blastRadius, clampPowerAllocation, createGame, crewCapacity, defaultLoadout, distance, dockedAt, engineCapacity, fleetCost, fleetHulls, getShip, inRadioContact, insideFeature, ionStormZone, isAce, isDrone, nebulaHides, nebulaRevealRange, normalizeFleetSpec, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, stanceOf, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
+import { abbreviateNarrative, alertLevel, appendLog, applyHeading, arcSplit, arcsOf, bearingDeg, blastRadius, clampPowerAllocation, createGame, crewCapacity, defaultLoadout, distance, dockedAt, engineCapacity, facingOf, fleetCost, fleetHulls, getShip, hasArcs, inRadioContact, insideFeature, ionStormZone, isAce, isDrone, nebulaHides, nebulaRevealRange, normalizeDegrees, normalizeFleetSpec, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, stanceOf, struckArc, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
 import { applyPlayerAction, canLaunchDrones, captureHull, damageShip, defaultTargetFor, eligibleTargets, ionDamage, killLines, launchDrones, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, spreadSplash, tractorLock, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, darkenOrphanDrones, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolveObjectives, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
@@ -4624,4 +4624,200 @@ test('the dockyard rebuilds spread tubes back to the class complement', () => {
   assert.equal(templateSystems(getShip(stripped, 'fed-flagship')).spread, SPREAD.carry['Battle cruiser']);
   const out = resolveDocking(stripped);
   assert.ok(systemUnits(getShip(out.game, 'fed-flagship'), 'spread') >= 1, 'the tubes are rebuilt one unit per stardate');
+});
+
+// --- Argonaut Reimagined, round 23a: directional shields — data model + facing ---
+
+/**
+ * A Reimagined war staged for facing tests: the command ship and an Axis flagship
+ * at phaser range mid-field, everyone else parked (the round-17 pattern), terrain
+ * cleared. Pass an update to pin extra state.
+ */
+const arcWar = (seed, update = (ship) => ship) => {
+  const game = withShips(createGame({ seed, reimagined: true, loadout: defaultLoadout() }), (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100, facing: 0 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 120, y: 100 };
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 12, y: 16 };
+    return parked(ship);
+  });
+  return withShips({ ...game, terrain: [] }, update);
+};
+
+test('a Reimagined hull of the line opens with weighted arcs summing to its pool, facing its nearest foe', () => {
+  const game = createGame({ seed: 'arcs-create', reimagined: true, loadout: defaultLoadout() });
+  const flagship = getShip(game, 'fed-flagship');
+  assert.deepEqual(flagship.arcs, arcSplit(SHIP_TEMPLATES['battle-cruiser'].shields));
+  assert.deepEqual(flagship.arcs, { fore: 60, starboard: 50, aft: 40, port: 50 }, 'the weighted split of a 200 pool');
+  for (const ship of game.ships) {
+    const sum = ARCS.reduce((total, arc) => total + ship.arcs[arc], 0);
+    assert.equal(sum, ship.shields, `${ship.name}'s arcs sum to its pool`);
+    assert.ok(Number.isFinite(ship.facing) && ship.facing >= 0 && ship.facing < 360, `${ship.name} opens with a facing`);
+  }
+  // The fleets open facing each other: the Federation flagship's bow points at the
+  // nearest enemy at placement, and the same seed orients identically every time.
+  assert.deepEqual(createGame({ seed: 'arcs-create', reimagined: true, loadout: defaultLoadout() }).ships, game.ships);
+  const foe = game.ships
+    .filter((other) => other.faction !== 'Federation' && other.status === 'active')
+    .sort((a, b) => distance(flagship, a) - distance(flagship, b) || a.id.localeCompare(b.id))[0];
+  assert.equal(flagship.facing, Math.round(bearingDeg(flagship, foe)), 'the bow points at the nearest foe');
+});
+
+test('arcSplit keeps the breakdown invariant for any pool, deterministically', () => {
+  for (const total of [0, 1, 7, 90, 140, 200, 320, 999]) {
+    const arcs = arcSplit(total);
+    assert.equal(ARCS.reduce((sum, arc) => sum + arcs[arc], 0), total, `sum(arcs) === ${total}`);
+    assert.deepEqual(arcSplit(total), arcs, 'the split is deterministic');
+    for (const arc of ARCS) assert.ok(arcs[arc] >= 0);
+  }
+  // The weighted shares hold on the big pools: fore strongest, aft weakest.
+  const split = arcSplit(200);
+  assert.ok(split.fore > split.starboard && split.starboard === split.port && split.port > split.aft);
+  assert.deepEqual(arcSplit(-5), arcSplit(0), 'a negative pool splits as empty');
+});
+
+test('classic and extended hulls never carry arcs or facing, and the parity scaffold holds', () => {
+  for (const opts of [{}, { extended: true }]) {
+    const game = createGame({ seed: 'arc-parity', ...opts });
+    assert.ok(game.ships.every((ship) => !('arcs' in ship) && !('facing' in ship)), 'no directional fields');
+    assert.equal(hasArcs(game, getShip(game, 'fed-flagship')), false);
+    assert.equal(arcsOf(game, getShip(game, 'fed-flagship')), null);
+    assert.equal(facingOf(game, getShip(game, 'fed-flagship')), null);
+    // A classic move leaves the hull byte-identical to before the round.
+    const moved = applyPlayerAction(game, { type: 'move', dx: 5, dy: 0 });
+    assert.ok(!('facing' in getShip(moved.game, 'fed-flagship')), 'a classic move stamps no heading');
+  }
+  assert.deepEqual(createGame({ seed: 'arc-parity' }), createGame({ seed: 'arc-parity', reimagined: false }),
+    'the standing parity scaffold still holds');
+});
+
+test('drones keep the single pool — no arcs, no facing', () => {
+  const game = launchDrones(arcWar('arc-drones'), getShip(arcWar('arc-drones'), 'fed-carrier')).game;
+  const drone = getShip(game, 'fed-carrier-drone-1');
+  assert.ok(!('arcs' in drone) && !('facing' in drone), 'a drone carries no directional fields');
+  assert.equal(hasArcs(game, drone), false);
+  assert.equal(arcsOf(game, drone), null);
+  assert.equal(struckArc(game, getShip(game, 'axis-flagship'), drone), null, 'a volley on a drone resolves against the total');
+});
+
+test('a move points the bow along the displacement; a zero-displacement move never corrupts the facing', () => {
+  const game = arcWar('arc-move', (ship) => (ship.id === 'fed-flagship' ? { ...ship, facing: 137 } : ship));
+  // (+5, +5) on a y-down field is a 45-degree heading.
+  const out = applyPlayerAction(game, { type: 'move', dx: 5, dy: 5 });
+  assert.equal(getShip(out.game, 'fed-flagship').facing, 45, 'the move implies the heading');
+  // South is 90 degrees on the field.
+  const south = applyPlayerAction(game, { type: 'move', dx: 0, dy: 5 });
+  assert.equal(getShip(south.game, 'fed-flagship').facing, 90);
+  // A hull that goes nowhere keeps its last heading.
+  const still = applyPlayerAction(game, { type: 'move', dx: 0, dy: 0 });
+  assert.equal(getShip(still.game, 'fed-flagship').facing, 137, 'zero displacement never overwrites the facing');
+});
+
+test('disengage sets the escape heading — the runner shows its weak aft to the pursuer', () => {
+  const game = arcWar('arc-disengage');
+  const out = applyPlayerAction(game, { type: 'disengage' });
+  const runner = getShip(out.game, 'fed-flagship');
+  assert.equal(runner.facing, 180, 'the burn away from the east-pointing threat heads west');
+  assert.equal(struckArc(out.game, getShip(out.game, 'axis-flagship'), runner), 'aft',
+    'a pursuer shooting down the escape vector strikes the weak aft arc');
+});
+
+test('a tractor tow heads the victim along the tow; a hyperspace jump keeps the prior facing', () => {
+  const staged = arcWar('arc-tow', (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 50, y: 50 };
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 80, y: 50, facing: 0 };
+    return ship;
+  });
+  const towed = applyPlayerAction(staged, { type: 'tractor', targetId: 'axis-cruiser-1' });
+  const victim = getShip(towed.game, 'axis-cruiser-1');
+  assert.ok(victim.x < 80, 'the beam hauled the victim west');
+  assert.equal(victim.facing, 180, 'the towed hull heads the way it was dragged');
+  // A jump has no meaningful heading: find a seed whose 10% burn-up roll spares the
+  // ship, then assert the facing survived the relocation untouched.
+  for (let i = 0; i < 30; i += 1) {
+    const game = arcWar(`arc-jump-${i}`, (ship) => (ship.id === 'fed-flagship' ? { ...ship, facing: 42 } : ship));
+    const out = applyPlayerAction(game, { type: 'hyperspace', x: 30, y: 30 });
+    const jumped = getShip(out.game, 'fed-flagship');
+    if (jumped.status === 'active' && jumped.x === 30 && jumped.y === 30) {
+      assert.equal(jumped.facing, 42, 'the jump keeps the prior facing');
+      break;
+    }
+    assert.ok(i < 29, 'a successful jump was staged within the seed loop');
+  }
+});
+
+test('setFacing is free, persistent, Federation-only, Reimagined-only, and validates degrees', () => {
+  const game = arcWar('arc-setfacing');
+  const out = applyPlayerAction(game, { type: 'facing', degrees: 90 });
+  assert.equal(out.game.phase, 'player', 'a turn costs no stardate');
+  assert.equal(getShip(out.game, 'fed-flagship').facing, 90);
+  assert.match(out.messages.join(' '), /comes about, facing 90 degrees/);
+  // Headings normalize into [0, 360) and round to whole degrees.
+  assert.equal(getShip(applyPlayerAction(game, { type: 'facing', degrees: 370 }).game, 'fed-flagship').facing, 10);
+  assert.equal(getShip(applyPlayerAction(game, { type: 'facing', degrees: -90 }).game, 'fed-flagship').facing, 270);
+  assert.equal(getShip(applyPlayerAction(game, { type: 'facing', degrees: 44.6 }).game, 'fed-flagship').facing, 45);
+  // Any Federation hull takes the helm order by id; enemies do not; garbage is refused.
+  assert.equal(getShip(applyPlayerAction(game, { type: 'facing', degrees: 15, shipId: 'fed-cruiser-1' }).game, 'fed-cruiser-1').facing, 15);
+  assert.match(applyPlayerAction(game, { type: 'facing', degrees: 15, shipId: 'axis-flagship' }).messages.join(' '), /Only Federation hulls/);
+  assert.match(applyPlayerAction(game, { type: 'facing', degrees: 'north' }).messages.join(' '), /heading in degrees/);
+  // A drone has no heading to set.
+  const flown = launchDrones(game, getShip(game, 'fed-carrier')).game;
+  const droneTurn = applyPlayerAction({ ...flown, phase: 'player' }, { type: 'facing', degrees: 90, shipId: 'fed-carrier-drone-1' });
+  assert.match(droneTurn.messages.join(' '), /no heading to set/);
+  // Outside a Reimagined war the command is refused.
+  for (const opts of [{}, { extended: true }]) {
+    const off = applyPlayerAction(createGame({ seed: 'arc-setfacing-off', ...opts }), { type: 'facing', degrees: 90 });
+    assert.match(off.messages.join(' '), /only available in a Reimagined war/);
+    assert.equal(off.game.phase, 'player');
+  }
+});
+
+test('struckArc quantizes the attacker bearing against the target facing', () => {
+  const game = arcWar('arc-quadrants');
+  const target = { ...getShip(game, 'fed-flagship'), x: 100, y: 100, facing: 0 };
+  const at = (x, y) => struckArc(game, { ...getShip(game, 'axis-flagship'), x, y }, target);
+  assert.equal(at(110, 100), 'fore', 'dead ahead');
+  assert.equal(at(90, 100), 'aft', 'dead astern');
+  assert.equal(at(100, 110), 'starboard', 'y runs down the screen, so south is the starboard beam facing east');
+  assert.equal(at(100, 90), 'port');
+  assert.equal(at(107, 107), 'starboard', 'the 45-degree boundary belongs to the next arc clockwise');
+  assert.equal(at(107, 93), 'fore', 'the 315-degree boundary belongs to the fore arc');
+  // Turning rotates the quadrants with the hull.
+  const facingSouth = { ...target, facing: 90 };
+  assert.equal(struckArc(game, { ...getShip(game, 'axis-flagship'), x: 100, y: 110 }, facingSouth), 'fore');
+  assert.equal(struckArc(game, { ...getShip(game, 'axis-flagship'), x: 110, y: 100 }, facingSouth), 'port');
+  assert.equal(normalizeDegrees(-45), 315);
+  assert.equal(normalizeDegrees(360), 0);
+});
+
+test('old saves tolerate the absent arc and facing fields', () => {
+  const game = arcWar('arc-old-save');
+  // A Reimagined save from before round 23: no arcs or facing on any hull, no
+  // arcFocus on the game.
+  const old = withShips({ ...game, arcFocus: undefined }, (ship) => {
+    const { arcs, facing, ...rest } = ship;
+    return rest;
+  });
+  const flagship = getShip(old, 'fed-flagship');
+  assert.deepEqual(arcsOf(old, flagship), arcSplit(flagship.shields), 'a stripped hull re-splits its current total');
+  assert.ok(Number.isFinite(facingOf(old, flagship)), 'and defaults to a real facing');
+  assert.equal(facingOf(old, flagship), bearingDeg(flagship, getShip(old, 'axis-flagship')), 'the nearest foe, when no heading was saved');
+  assert.equal(struckArc(old, getShip(old, 'axis-flagship'), flagship), 'fore', 'the default faces the threat it was staged against');
+  // The whole computer phase runs on the stripped save without throwing.
+  const out = resolveComputerTurns({ ...old, phase: 'computer' });
+  assert.ok(out.turn >= old.turn, 'the war plays on');
+  // A damaged hull's default split still sums to what it has left.
+  const hurt = withShips(old, (ship) => (ship.id === 'fed-flagship' ? { ...ship, shields: 37 } : ship));
+  assert.equal(ARCS.reduce((sum, arc) => sum + arcsOf(hurt, getShip(hurt, 'fed-flagship'))[arc], 0), 37);
+});
+
+test('applyHeading is inert outside a Reimagined war and on drones', () => {
+  const classic = createGame({ seed: 'arc-heading-classic' });
+  const ship = getShip(classic, 'fed-flagship');
+  assert.deepEqual(applyHeading(classic, ship, ship.x + 5, ship.y), { ...ship, x: ship.x + 5, y: ship.y },
+    'a classic move is exactly the old shape');
+  const game = arcWar('arc-heading-drone');
+  const flown = launchDrones(game, getShip(game, 'fed-carrier')).game;
+  const drone = getShip(flown, 'fed-carrier-drone-1');
+  assert.deepEqual(applyHeading(flown, drone, drone.x + 3, drone.y + 4), { ...drone, x: drone.x + 3, y: drone.y + 4 });
+  assert.ok(ARC.weights.fore > ARC.weights.aft, 'the bow is the strong arc, the stern the weak one');
 });

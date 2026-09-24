@@ -727,6 +727,38 @@ export const STANCE = Object.freeze({
   missCeil: 0.95,
 });
 
+/** The four shield arcs a Reimagined hull presents (round 23), clockwise from the bow. */
+export const ARCS = Object.freeze(['fore', 'starboard', 'aft', 'port']);
+
+/**
+ * Directional shields (Argonaut Reimagined, round 23). A hull of the line carries
+ * a `facing` (degrees, 0 = +x on the tactical field, clockwise because the field's
+ * y axis runs downward) and its single `shields` pool breaks down across four
+ * weighted arcs — the total stays authoritative, the arcs are a breakdown of it
+ * (`sum(arcs) === shields`), so every reader of `ship.shields` — alert level,
+ * regen, dockyard, surrender strength, reports — is untouched.
+ *
+ * An aimed volley (phasers, photons, the spread salvo's primary hit) strikes the
+ * arc the shooter bears on relative to the target's facing: that arc's own pool
+ * absorbs first and the overflow goes straight to the internals through the
+ * normal `damageShip` lottery — no spill to neighboring arcs, so presenting the
+ * wrong arc to the enemy genuinely hurts. Everything positional (splash on
+ * secondary hulls, self-destruct, collision, rock strikes, hyperspace loss, ion)
+ * hits the total and is deducted proportionally across the arcs.
+ *
+ * The weights are the balance dial: the bow is reinforced for fighting head-on
+ * and the aft is the weakest arc, which is what makes Disengage — and any
+ * retreat — expose a runner's thin skin to pursuers. Drones are too small for
+ * arcs: they keep the single calibrated pool. Every figure is a harness dial,
+ * not a calibrated value; a classic or extended war reads none of it.
+ */
+export const ARC = Object.freeze({
+  /** Weighted share of the shield pool each arc holds; the shares sum to 4. */
+  weights: Object.freeze({ fore: 1.2, starboard: 1, aft: 0.8, port: 1 }),
+  /** Half-width of an arc, in degrees: four quadrants centered on the facing. */
+  halfWidth: 45,
+});
+
 /**
  * How each alliance's captains fight, in an extended war. The original ran every
  * autopilot on one doctrine — pursue the fleet's target, fire, and never mind your

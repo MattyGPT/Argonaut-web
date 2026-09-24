@@ -1,8 +1,9 @@
 # Argonaut Reimagined — Phase 4: Combat depth
 
-Status: round 21 designed in full and shipped; rounds 22/23 recorded as seams,
-to be designed when picked up. Format follows the Phase 2 (living battlefield)
-and Phase 3 (force & prizes) specs.
+Status: rounds 21, 22a, and 22c designed in full and shipped; mines deferred;
+round 23 (directional shields) designed in full 2026-09-24 and shipping as
+23a–23d. Format follows the Phase 2 (living battlefield) and Phase 3 (force &
+prizes) specs.
 
 ## Purpose
 
@@ -236,17 +237,116 @@ trigger path) is recorded here for when it is picked back up. Ship-laid mines
 
 ### 23 — Directional shields (fore/aft/port/starboard arcs + facing)
 
-- The largest single damage-model touch: hulls gain a `facing` and per-arc
-  shield pools; a volley's damage applies to the arc it strikes. AI must face
-  its threat; movement and disengage imply a heading.
-- **Seam with 21**: evasive/firing stances may bias arc coverage or facing
-  discipline; Disengage sets a facing (running exposes the aft arc). **Seam
-  with 20**: drones are small — decide whether they have arcs or a single pool.
-  **Seam with 22a**: ion strips systems regardless of arc (it is not a kinetic
-  hit), so it sidesteps facing — decide whether that stays true. **Seam with the
-  render layer**: ships need a heading glyph. This is the round the whole damage
-  path (`damageShip`, `weaponAction`, `resolveAiAction`) most changes, so it is
-  sequenced last in the phase.
+The largest single damage-model touch, designed in full and settled with Matt
+2026-09-24. Split into four sub-chunks like rounds 18 and 22: **23a** data model
++ facing, **23b** arc damage resolution, **23c** AI threat-facing, **23d**
+render/UI — each its own branch → PR.
+
+#### Decisions (settled with Matt, 2026-09-24)
+
+1. **Arc model — 4 quadrants, weighted.** Fore / starboard / aft / port, each a
+   90-degree quadrant centered on the hull's facing. The shares are weighted —
+   fore 1.2×, flanks 1.0×, aft 0.8× of an even quarter (`ARC.weights`, the
+   balance dial): the bow is reinforced for fighting head-on and the stern is
+   thin, which is what makes Disengage — and every retreat — expose a runner's
+   weak aft to pursuers (the seam with 21 resolves itself: no special-casing, the
+   escape burn simply sets the heading).
+2. **Pool — the total stays authoritative; arcs are a breakdown.** `ship.shields`
+   remains the ONE number every existing reader reads (alert level, capacity,
+   regen, dockyard, surrender strength, war signature, reports, render) — none of
+   them change. `ship.arcs` mirrors it under the invariant `sum(arcs) ===
+   shields`; only damage application and recovery distribution touch arcs. This
+   was the crux of the round: the breakdown keeps the ~20 existing readers and
+   the whole parity surface untouched.
+3. **Facing — both implicit and explicit.** `ship.facing` is an angle in degrees
+   (0 = +x, clockwise on the y-down field). Every displacement — player move, AI
+   move, disengage, a tractor tow (the victim heads the way it was dragged) —
+   sets the heading from the travel vector; a zero-displacement turn never
+   overwrites it; a hyperspace jump keeps the prior facing (a random landing has
+   no meaningful heading). On top of that, `setFacing` is a FREE, persistent helm
+   order (the sibling of stance/power; Reimagined + Federation hulls only), so a
+   hull holding a gun line can present its strong fore arc without burning the
+   stardate. Hulls open the war facing their nearest foe at placement
+   (deterministic off the seeded positions, no RNG).
+4. **Damage — aimed volleys are arc-resolved; everything positional hits the
+   total.** Phasers, photons, and the spread salvo's PRIMARY hit compute the
+   struck arc (attacker bearing relative to the target's facing, quantized by
+   `struckArc`): that arc's own pool absorbs first and the overflow goes straight
+   to the internals through the existing `damageShip` lottery — **no spill to
+   adjacent arcs**, so presenting the wrong arc genuinely hurts. Everything
+   positional — spread splash on secondary hulls, self-destruct blast/shrapnel,
+   collision, asteroid rock strikes, hyperspace shield loss, and **ion** (the
+   seam's question: it strips systems, it is not a kinetic hit, so it keeps
+   sidestepping facing) — deducts from the total, spread proportionally across
+   the arcs so the invariant holds.
+5. **Recovery — player-focusable arc reinforcement** (Matt's pick over the
+   weakest-arc-first recommendation). A free per-ship `arcFocus` setting
+   (`game.arcFocus`, the fourth free persistent per-ship setting after orders,
+   power, stance): shield gains — the reactor regen sink, the dockyard top-up,
+   the engine flush — fill the focused arc first (to its weighted capacity), the
+   remainder going weakest-arc-first. With no focus stored, weakest-arc-first is
+   the default. No per-arc reactor allocation; the shield sink stays one dial.
+   The AI never sets a focus (the default covers it) — a doctrine dial if the
+   harness ever asks for one.
+6. **Drones — single pool, no arcs, no facing** (the seam with 20): too small and
+   too disposable for directional shielding; every damage call on a drone routes
+   to the total exactly as before.
+7. **Weapons stay omnidirectional** — confirmed for this round: guns, torpedoes,
+   ion, and tractor keep 360° coverage. Firing arcs would double the round and
+   re-touch every fire path; parked as a future candidate.
+8. **Stance coupling — none this round** (the seam with 21): evasive already buys
+   miss chance; rotating or boosting arc coverage on top is scope creep. Recorded
+   as a possible future dial.
+9. **Determinism — no new RNG anywhere.** Facing and arc math is pure trig and
+   integer splits on stored state (`bearingDeg`, `arcSplit` largest-remainder,
+   `struckArc` quadrant walk); the damage lottery keeps its exact existing draws,
+   and a classic or extended war consumes no stream differently.
+
+#### Data
+
+- `ARCS = ['fore', 'starboard', 'aft', 'port']`; `ARC.weights` (1.2 / 1 / 0.8 / 1)
+  and `ARC.halfWidth` (45°) in `constants.js`.
+- `ship.arcs` (integer breakdown of `ship.shields`) and `ship.facing` (degrees) —
+  seeded in `createShip` for Reimagined ships of the line only (like the reactor:
+  never on a classic/extended hull, never on a drone), so the serialized shape of
+  a classic hull is untouched.
+- `game.arcFocus` (shipId → arc name), `{}` by default, Reimagined-only in
+  effect. Old saves tolerate the absence of all three fields: `arcsOf` re-splits
+  the current total, `facingOf` defaults to the bearing of the nearest active foe
+  (else 0), `arcFocus` reads `?? {}`.
+- Helpers in `state.js`: `normalizeDegrees`, `bearingDeg`, `arcSplit`, `hasArcs`,
+  `arcsOf`, `facingOf`, `struckArc`, `applyHeading`.
+
+#### Chunk plan
+
+- **23a — data model + facing** *(shipped this PR)*: constants, `createShip` /
+  `createGame` seeding (including the opening face-the-nearest-foe pass),
+  `applyHeading` on every displacement path (`moveAction`, `disengageAction`,
+  both tractor-tow sites, the AI move branch in `turns.js`; hyperspace
+  deliberately keeps the prior facing), the free `setFacing` action, and the
+  old-save tolerance. Nothing reads arcs in combat yet, so war outcomes — and
+  the harness figures in all three modes — cannot move.
+- **23b — arc damage resolution**: `damageShip` gains an optional arc in its
+  `options` (inert without one, so classic/extended calls stay byte-identical);
+  both fire paths and the spread primary pass `struckArc`; positional paths
+  deduct proportionally; regen/dockyard/flush distribute focused → weakest-first;
+  `setArcFocus` free action; harness re-measure.
+- **23c — AI threat-facing**: captains orient the strong fore arc toward the
+  hull they are engaging (free, deterministic, resolved in the AI decision);
+  retreating AI keeps its escape heading (the movement paths already set it), so
+  a broken hull runs on its weak aft — doctrine standoff and stance bias
+  unchanged. "AI faces threat" test criterion lands here.
+- **23d — render/UI**: heading glyph on every hull, per-arc shield visualization
+  (console + ship menu), the helm control (turn without moving), the arc-focus
+  selector, enemy-facing intel in scan/menu, legend chips, fleet-report lines.
+  All visual work flagged for the manual play-test pass — the assistant cannot
+  verify browser rendering.
+
+#### Seam notes from the original sketch (all resolved above)
+
+Stances bias nothing arc-wise (decision 8); drones keep the single pool
+(decision 6); ion keeps sidestepping facing (decision 4); the render layer's
+heading glyph is 23d.
 
 ## Chunk breakdown
 
@@ -257,7 +357,10 @@ trigger path) is recorded here for when it is picked back up. Ship-laid mines
 | 22c | Spread torpedoes | Splash-around-impact volley (designed, not built) | Each damage model distinct; rides the shared accuracy roll; parity off |
 | 22b | Directed tractor beam | *(shipped early, PR #25)* | *(shipped)* |
 | — | Mines | *Deferred (Matt, 2026-09-21)* | — |
-| 23 | Directional shields | Fore/aft/port/starboard arcs + facing | Arc damage; AI faces threat; largest single chunk; parity off |
+| 23a | Directional shields: data + facing | Weighted 4-arc breakdown of the one `shields` total, `facing` on every displacement path, the free `setFacing` helm order, old-save tolerance | Arcs sum to the pool; moves imply the heading; zero displacement never corrupts it; classic/extended hulls carry no fields; parity off |
+| 23b | Directional shields: arc damage | Aimed volleys strike the arc they bear on; positional damage hits the total; focused/weakest-first recovery; `setArcFocus` | A struck arc absorbs before internals; the lottery still governs crew/system loss; parity off |
+| 23c | Directional shields: AI facing | Captains turn their strong fore arc toward the threat | AI faces threat; retreats run on the weak aft; parity off |
+| 23d | Directional shields: render/UI | Heading glyph, per-arc shield display, helm + arc-focus controls, intel, legend, reports | Console/menu/map render; manual play-test pass |
 
 ## Parity & determinism guardrails
 
