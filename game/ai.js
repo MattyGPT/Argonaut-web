@@ -1,4 +1,4 @@
-import { AI_PURSUIT, DRONE, ENCOUNTERS, FLEET_ORDER_TUNING, GRID_SIZE, PERSONALITIES, RANGES, SPREAD } from './constants.js';
+import { AI_PURSUIT, DRONE, FLEET_ORDER_TUNING, GRID_SIZE, PERSONALITIES, RANGES, SPREAD } from './constants.js';
 import { canLaunchDrones, flushShields, tractorLock } from './actions.js';
 import { createRng } from './rng.js';
 import {
@@ -9,7 +9,6 @@ import {
   ionStormZone,
   isDrone,
   isImmovable,
-  isNeutral,
   isTractorHeld,
   orderFor,
   powerEffect,
@@ -22,10 +21,7 @@ const isActive = (ship) => ship?.status === 'active';
 
 const isVendetta = (game, actor) => Boolean(game.vendettaShipId) && actor.id === game.vendettaShipId;
 
-// Round 24: a neutral merchant is not a target of war — no captain shoots at,
-// tows, or chases civilian traffic in this round (Cabal predation on merchants
-// is a round-25 reputation candidate). The player may still interdict one.
-const enemiesOf = (game, actor) => game.ships.filter((ship) => isActive(ship) && ship.faction !== actor.faction && !isNeutral(ship));
+const enemiesOf = (game, actor) => game.ships.filter((ship) => isActive(ship) && ship.faction !== actor.faction);
 
 /** The closest of `ships` to `from`, with its range, or null when there are none. */
 const nearestTo = (from, ships) => ships
@@ -415,32 +411,9 @@ const droneAction = (game, actor) => {
   return shootOrChase(game, actor, target.ship, DRONE.standoff);
 };
 
-/**
- * How a neutral merchant behaves (round 24): it is a civilian passing through a
- * war zone, not a combatant — no orders, no doctrine, no last stand. It runs
- * from the nearest warship inside `ENCOUNTERS.fleeRange`, drifts when the field
- * is quiet, sits still in a tractor lock (caught), and jumps out of the war
- * entirely once its visit passes `ENCOUNTERS.neutralLifetime` stardates — the
- * bounded visit is what keeps a fleeing merchant from resetting the stalemate
- * net forever. Deterministic: nearest warship, ties by id, no RNG draws.
- */
-const merchantAction = (game, actor) => {
-  const born = actor.encounter?.turn ?? game.turn;
-  if (game.turn - born >= ENCOUNTERS.neutralLifetime) return { type: 'depart' };
-  if (isTractorHeld(game, actor)) return { type: 'pass' };
-  if (!canNavigate(game, actor)) return { type: 'pass' };
-  const menace = nearestTo(actor, game.ships.filter((ship) => isActive(ship) && ship.id !== actor.id && !isNeutral(ship)));
-  if (menace && menace.range <= ENCOUNTERS.fleeRange) return stepAway(actor, menace.ship, game);
-  return { type: 'pass' };
-};
-
 export const chooseAiAction = (game, shipId) => {
   const actor = getShip(game, shipId);
   if (!isActive(actor)) return { type: 'pass' };
-
-  // A neutral merchant answers to nobody (round 24): it flees, drifts, or jumps
-  // out, and takes neither orders nor doctrine.
-  if (isNeutral(actor)) return merchantAction(game, actor);
 
   // Standing orders only exist in an extended war; a classic war never sees one,
   // so the pursuit below stays exactly the original autopilot.

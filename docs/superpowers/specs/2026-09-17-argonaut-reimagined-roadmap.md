@@ -216,16 +216,12 @@ generalizing what the Cabal's `tractorFirst` doctrine already does for the AI.
 - Self-contained — it can be pulled forward ahead of stances or weapon variety if
   Matt wants it sooner.
 
-### Phase 5 — Narrative & variety *(#11, #13)* — 🔨 under way
+### Phase 5 — Narrative & variety *(#11, #13)*
 
-Detailed design (round 24 decisions, the rescue window, the exclusion battery,
-and the round-25 seams):
-`docs/superpowers/specs/2026-09-24-phase-5-narrative-and-variety.md`.
-
-| Round | Chunk | Builds | Tested by | Status |
-| --- | --- | --- | --- | --- |
-| 24 | Random encounters | Seeded derelicts/distress/neutrals at stardate boundaries; the distress rescue window; neutral merchants excluded from the war math and seized as prizes | Deterministic draws; replay-safe; parity off | ✅ shipped (PR below) |
-| 25 | Officers & morale | Named officers grant passives; morale affects surrender; the merchant-reputation price | Passive applies; morale→surrender threshold | — |
+| Round | Chunk | Builds | Tested by |
+| --- | --- | --- | --- |
+| 24 | Random encounters | Seeded derelicts/distress/neutrals at stardate boundaries | Deterministic draws; replay-safe |
+| 25 | Officers & morale | Named officers grant passives; morale affects surrender | Passive applies; morale→surrender threshold |
 
 ### Phase 6 — The sector campaign *(capstone; #12)*
 

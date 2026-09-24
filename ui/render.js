@@ -20,7 +20,6 @@ import {
   isAce,
   isActive,
   isDrone,
-  isNeutral,
   isSpectator,
   nebulaHides,
   orderFor,
@@ -31,7 +30,6 @@ import {
   reactorOutput,
   sensorRange,
   stanceOf,
-  systemUnits,
 } from '../game/state.js';
 
 const commands = [
@@ -159,17 +157,9 @@ const shipMenu = (game, actor, ship) => {
     ...(isDrone(ship) ? [`Unmanned fighter drone of the ${getShip(game, ship.droneOf)?.name ?? 'fleet'} · no crew, never boarded`] : []),
     // An enemy's combat stance is readable intel in a Reimagined war (round 21) —
     // it tells you how hard it is to hit and how sharp its own guns are. Your own
-    // hulls show their stance as the selector below instead. A neutral merchant
-    // (round 24) holds no stance — it is a civilian, not a combatant.
-    ...(game.reimagined && isActive(ship) && ship.faction !== actor?.faction && !isNeutral(ship)
+    // hulls show their stance as the selector below instead.
+    ...(game.reimagined && isActive(ship) && ship.faction !== actor?.faction
       ? [`Combat stance: ${stanceOf(game, ship)}.`]
-      : []),
-    // Round 24: encounter hulls tell you what they are in plain words.
-    ...(isNeutral(ship)
-      ? ['An unarmed neutral merchant — it will run from warships, and a transporter party can seize it whole.']
-      : []),
-    ...(ship.encounter?.type === 'distress' && isActive(ship) && systemUnits(ship, 'engines') === 0
-      ? ['Broadcasting distress: engines gone — tow it home to Xanadu and the dockyard will return it to the fight.']
       : []),
     // Directional shields (round 23): the arc breakdown and heading are readable
     // combat intel on any hull — which arc you would hit, and which way its bow
@@ -448,8 +438,6 @@ const renderMapLegend = (game) => {
       legendEntry('stance-firing', 'firing stance'),
       legendEntry('stance-evasive', 'evasive stance'),
       legendEntry('heading-glyph', 'heading (bow)', '▲'),
-      legendEntry('neutral-glyph', 'neutral merchant', 'M'),
-      legendEntry('pip-distress', 'distress call'),
     ] : []),
   ].join('');
   legend.innerHTML = factions + entries + '<span class="legend-note" id="legend-note"></span>';
@@ -563,12 +551,7 @@ export const renderGame = (game, view = {}) => {
     const heading = game.reimagined && isActive(ship) && hasArcs(game, ship) ? Math.round(facingOf(game, ship)) : null;
     const headingHtml = heading === null ? '' : `<span class="heading-glyph" style="--heading:${heading}deg" aria-hidden="true"></span>`;
     const headingNote = heading === null ? '' : ` — heading ${heading}°`;
-    // A hull broadcasting distress (round 24) wears a marker: the call is public,
-    // and the rescue is the point.
-    const distress = ship.encounter?.type === 'distress' && isActive(ship) && systemUnits(ship, 'engines') === 0;
-    const distressClass = distress ? ' distress' : '';
-    const distressNote = distress ? ' — broadcasting distress' : '';
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}<span class="glyph">${glyph}</span>${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}</button>`;
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}<span class="glyph">${glyph}</span>${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}</button>`;
   }).join('');
   map.innerHTML = terrainHtml + ringHtml + shipHtml;
   // Slide and scale the world layer so the camera window fills the viewport. The
@@ -702,9 +685,7 @@ export const reportFor = (game, type) => {
     };
   }
   if (type === 'statistics') {
-    // A neutral merchant is not a belligerent (round 24): it gets no alliance
-    // block and no "chances of victory" — seized hulls count for their captor.
-    const rows = Object.groupBy(game.ships.filter((ship) => !isNeutral(ship)), (ship) => ship.faction);
+    const rows = Object.groupBy(game.ships, (ship) => ship.faction);
     const totalStrength = Object.values(rows).reduce((total, ships) => total + strength(ships), 0) || 1;
     return {
       title: 'Alliance statistics',

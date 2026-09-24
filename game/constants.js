@@ -31,14 +31,6 @@ export const FACTION_IDS = Object.freeze({
 });
 
 /**
- * The round-24 neutral merchant's affiliation — deliberately NOT a member of
- * `FACTIONS`: a neutral never holds a faction in the war (the outcome,
- * surrender, relay, and AI-targeting reads all skip it, the drone-exclusion
- * pattern), and anything iterating the four alliances simply does not see it.
- */
-export const NEUTRAL_FACTION = 'Neutral';
-
-/**
  * Hull complements. Shields and crew are double what the weapon table was tuned
  * against, so a volley takes half as big a bite and a battle runs roughly twice
  * as long. The gunnery itself is untouched and still matches the manual's damage
@@ -204,31 +196,6 @@ export const SHIP_TEMPLATES = Object.freeze({
       radio: 4,
     }),
   }),
-  /**
-   * Round 24 (Argonaut Reimagined): the neutral merchant — the civilian traffic
-   * the war's back half attracts. Unarmed (no guns, no tractor), slow on three
-   * engines, thin-shielded, and never part of any roster: merchants arrive as
-   * random encounters, run from warships, and jump out again after a bounded
-   * visit. A hull that catches one with a transporter party takes it as a prize
-   * (round 17's capture, crew and all); a faction called `Neutral` never holds a
-   * place in the war — the outcome, surrender, and objective math all skip it,
-   * exactly like drones. Reimagined only; every figure is a balance dial.
-   */
-  merchant: Object.freeze({
-    className: 'Merchant',
-    shields: 80,
-    crew: 40,
-    systems: Object.freeze({
-      engines: 3,
-      phasers: 0,
-      photons: 0,
-      tractor: 0,
-      scanner: 1,
-      mapper: 2,
-      transporter: 1,
-      radio: 2,
-    }),
-  }),
 });
 
 /**
@@ -310,7 +277,7 @@ export const POWER = Object.freeze({
   /** A sink may be driven this far past its need (1.5 = +50%) before it saturates. */
   overcharge: 1.5,
   /** Reactor units per hull class, keyed by className. */
-  reactor: Object.freeze({ 'Battle cruiser': 5, Cruiser: 4, Scout: 4, Interceptor: 4, Artillery: 5, Carrier: 6, Drone: 4, Starbase: 8, Merchant: 4 }),
+  reactor: Object.freeze({ 'Battle cruiser': 5, Cruiser: 4, Scout: 4, Interceptor: 4, Artillery: 5, Carrier: 6, Drone: 4, Starbase: 8 }),
   /** Points each sink needs for 1.0x; the default profile spends exactly these. */
   need: Object.freeze({ shields: 4, weapons: 6, engines: 4, sensors: 4, tractor: 2 }),
   /** Shield power restored per stardate, as a fraction of capacity at 1.0x shields power. */
@@ -439,84 +406,6 @@ export const DRONE = Object.freeze({
    * on it.
    */
   spawnOffsets: Object.freeze([[2, 0], [0, 2], [-2, 0], [0, -2], [3, 0], [0, 3], [-3, 0], [0, -3]]),
-});
-
-/**
- * Random encounters (Argonaut Reimagined, round 24 — Phase 5 opens). The war's
- * back half stops being an empty field: at each stardate boundary a Reimagined
- * war rolls one seeded draw on the `${seed}:encounters:<turn>` sub-stream (the
- * prize-captains pattern — the main war stream never shifts, and a given seed
- * replays the same arrivals), and on a hit one encounter enters the field:
- *
- * **Derelict** — a ghost ship of a random alliance (extinct ones included):
- * `vacant`, degraded, boardable by anyone through the round-17 capture rules,
- * so AI captains contest it with their existing opportunistic boarding.
- * **Distress** — a stranded Federation hull, engines burnt, broadcasting for a
- * tow: rescue it (haul it home to the dockyard, or transfer crew) and it
- * returns to the fight; ignore it and it lingers a toothless battery. Always
- * Federation in round 24 — a rescue the player can actually complete (an
- * alliance with no base could never be towed anywhere); a doctrine that sends
- * AI allies to answer calls is a future candidate, as is the round-25 morale
- * hook for answering one.
- * **Neutral merchant** — an unarmed civilian hull (`faction: 'Neutral'`, the
- * `neutral` stamp) that runs from any warship inside `fleeRange` and jumps out
- * after `neutralLifetime` stardates, so it can never hold a stalemate hostage
- * or a faction in the war: outcome, surrender, relay, AI targeting, and the
- * threat reads all skip it exactly like drones (round 20's exclusion pattern).
- * Catch it — tractor-lock it and transport a party across — and it strikes its
- * colors as a round-17 prize, cargo hold and crew included. Attacking one
- * instead works, and costs nothing yet: the reputation/morale price lands with
- * round 25.
- *
- * Arrivals spawn at least `minDistance` from every hull (they come from outside
- * the battlefield, not out of a firefight), at most `maxAlive` encounter hulls
- * stand at once, and an arrival never acts on the stardate it arrives (the
- * computer phase orders its actors before the boundary roll). Settled with Matt,
- * 2026-09-24; every number is a balance dial, not a calibrated value.
- */
-export const ENCOUNTERS = Object.freeze({
-  /** The per-stardate-boundary chance one encounter arrives. */
-  chance: 0.10,
-  /** Encounter hulls on the field at once (derelicts count until boarded or broken up). */
-  maxAlive: 3,
-  /** An arrival spawns at least this far from every hull, inside the field. */
-  minDistance: 40,
-  /** Placement tries before a stardate's draw is skipped (the field is too full). */
-  placementTries: 40,
-  /** Relative weights of the three encounter types. */
-  weights: Object.freeze({ derelict: 5, distress: 2, neutral: 3 }),
-  /** A derelict's shields as a fraction of its class pool. */
-  derelictShields: Object.freeze([0.1, 0.4]),
-  /** A derelict's surviving fraction per subsystem unit roll (halved hardware). */
-  derelictSystems: 0.5,
-  /** Hull classes a derelict can be (no carriers — a derelict bay is a story for another round; no starbases). */
-  derelictClasses: Object.freeze(['scout', 'cruiser', 'interceptor', 'artillery', 'battle-cruiser']),
-  /** A distress hull's shields as a fraction of its class pool. */
-  distressShields: Object.freeze([0.25, 0.5]),
-  /** A distress hull's surviving crew fraction. */
-  distressCrew: Object.freeze([0.4, 0.7]),
-  /** Classes a distress call comes from. */
-  distressClasses: Object.freeze(['cruiser', 'scout']),
-  /**
-   * Stardates the crew of a distress hull waits before taking to the pods — the
-   * rescue window. Tow it home or get it under repair before the clock runs out
-   * and the hull goes dark: `vacant` salvage, boardable by anyone, that no
-   * longer holds its alliance in the war. Without a window a stranded hull out
-   * in the deep field keeps its faction alive forever in the victory math and
-   * freezes unwinnable wars into stalemate draws (measured: draws jumped
-   * 14% → 22% before this dial existed).
-   */
-  distressPatience: 20,
-  /** A merchant runs from any warship this close. */
-  fleeRange: 25,
-  /** Stardates a merchant stays in the field before it jumps out. */
-  neutralLifetime: 12,
-  /** Encounter hull names — this remake's own expression, like the captains. */
-  names: Object.freeze({
-    derelict: Object.freeze(['Wayfarer', 'Kestrel', 'Ironwood', 'Caldera', 'Mistral', 'Ravenel', 'Sable', 'Verdant', 'Harrow', 'Peregrine']),
-    distress: Object.freeze(['Redoubt', 'Sentinel', 'Hale', 'Bradbury', 'Constant', 'Fairwind']),
-    neutral: Object.freeze(['Alder', 'Beacon Hill', 'Corsair\'s Luck', 'Dovetail', 'Ember Lane', 'Fair Merchant', 'Gildway', 'Halfmoon']),
-  }),
 });
 
 /**
