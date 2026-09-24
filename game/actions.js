@@ -271,6 +271,44 @@ export const damageShip = (ship, amount, rng = createRng('damage'), options = {}
 };
 
 /**
+ * Ion/EMP damage (round 22a, Reimagined): shields absorb the burst first, and the
+ * overflow strips subsystem units one at a time — and never touches the crew. This
+ * is the disable-not-destroy identity: a hull burned to zero systems is left an
+ * intact, still-`active` hulk with its crew alive (never `vacant`, never
+ * `destroyed`), which the dockyard rebuilds, a precision war strikes its colors, or
+ * an enemy finishes off or boards. Leftover burst past the last system unit is
+ * wasted. The system lottery matches `damageShip` (one slot per live unit, same walk
+ * order), so ion degrades a hull exactly the way lethal fire would, minus the killing.
+ */
+export const ionDamage = (ship, amount, rng = createRng('ion')) => {
+  if (!isActive(ship) || !Number.isFinite(amount) || amount <= 0) return ship;
+  let remaining = Math.floor(amount);
+  const shields = Math.max(0, ship.shields - remaining);
+  remaining = Math.max(0, remaining - ship.shields);
+  const systems = { ...ship.systems };
+  while (remaining > 0) {
+    const live = Object.keys(systems).filter((name) => systems[name] > 0);
+    const units = live.reduce((total, name) => total + systems[name], 0);
+    if (units === 0) break; // fully disabled — the rest of the charge bleeds into space
+    let offset = rng.next() * units;
+    let hit = live[live.length - 1];
+    for (const name of live) {
+      if (offset < systems[name]) { hit = name; break; }
+      offset -= systems[name];
+    }
+    systems[hit] -= 1;
+    remaining -= 1;
+  }
+  // A crewed hull gutted of systems is left an inert hulk to strike its colors or
+  // be finished. A crew-0 hull (a round-20 drone) has nobody to surrender it, so
+  // stripping its last system breaks it up, exactly as lethal fire would.
+  if (ship.crew <= 0 && Object.values(systems).every((units) => units <= 0)) {
+    return { ...ship, shields, systems, status: 'destroyed', tractorBy: null };
+  }
+  return { ...ship, shields, systems };
+};
+
+/**
  * Ships a fleet order may name: enemies for an intercept, friendlies for escort
  * and screen. Only active hulls can be given as a target.
  */
@@ -321,7 +359,7 @@ export const eligibleTargets = (game, actionType) => {
   const actor = getShip(game, game.playerShipId);
   if (!actor) return [];
   const ships = getLivingShips(game).filter((ship) => ship.id !== actor.id);
-  if (['phasers', 'photons', 'tractor'].includes(actionType)) {
+  if (['phasers', 'photons', 'tractor', 'ion'].includes(actionType)) {
     return ships.filter((ship) => isActive(ship) && ship.faction !== actor.faction);
   }
   // A drone is never a transporter subject (round 20): no crew to reinforce, and
@@ -349,7 +387,7 @@ export const defaultTargetFor = (game, actionType) => {
   }
   const enemies = targets.filter((ship) => isActive(ship) && ship.faction !== actor.faction);
   const sorted = [...(enemies.length ? enemies : targets)].sort(byDistance);
-  const range = { phasers: RANGES.phasers, photons: RANGES.photons, tractor: RANGES.tractor }[actionType];
+  const range = { phasers: RANGES.phasers, photons: RANGES.photons, tractor: RANGES.tractor, ion: RANGES.ion }[actionType];
   if (range) return sorted.find((ship) => distance(actor, ship) <= range)?.id ?? sorted[0].id;
   return sorted[0].id;
 };
@@ -378,6 +416,9 @@ export const shipCommands = (game, targetId) => {
   if (hostile && isActive(target)) {
     offer('phasers', 'Fire phasers', !jammed && systemUnits(actor, 'phasers') > 0, RANGES.phasers);
     offer('photons', 'Fire photons', !jammed && systemUnits(actor, 'photons') > 0, RANGES.photons);
+    // Ion/EMP (round 22a): only a hull that carries the emitter is offered it, so
+    // this is Reimagined-gated by construction (no classic hull has ion units).
+    offer('ion', 'Fire ion', !jammed && systemUnits(actor, 'ion') > 0, RANGES.ion);
     offer('tractor', 'Tractor beam', systemUnits(actor, 'tractor') > 0 && !isImmovable(target), RANGES.tractor);
     // A directed tow is a Reimagined option: aim the pull at a point or a hull to
     // slam the target into, rather than reeling it straight toward you.
@@ -560,6 +601,49 @@ const weaponAction = (game, action, actor, type) => {
     ...(focus && calledUnits === 0 ? [`${found.target.name} has no ${focus} left to burn.`] : []),
     ...(kill ? killLines(game, actor, victim) : []),
   ], { events });
+};
+
+/**
+ * Fires the ion/EMP emitter (round 22a, Reimagined): a suppression volley that
+ * rides the shared accuracy roll and the weapons power sink like the lethal guns,
+ * but disables rather than destroys — shields absorb it and the overflow strips
+ * subsystems with no crew casualties, so it never scores a kill or a wreck. The
+ * player's command; the autopilots' mirror lives in turns.js.
+ */
+const ionAction = (game, action, actor) => {
+  const disabled = requiresSystem(game, actor, 'ion');
+  if (disabled) return disabled;
+  // The ion storm's core jams every emitter, this one included (15d).
+  if (ionStormZone(game, actor) === 'core') return invalid(game, `${actor.name}'s ion emitter is offline in the ion storm.`);
+  const found = hostileTarget(game, action, actor);
+  if (found.error) return invalid(game, found.error, found.requiresTarget);
+  if (distance(actor, found.target) > RANGES.ion) return invalid(game, `${found.target.name} is out of range for the ion emitter.`);
+  const rng = seededRng(game);
+  if (rng.next() < volleyMissChance(game, actor, found.target)) {
+    const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
+    return result(completeTurn(advanceRandom(replaceShip(game, shooter))),
+      `${actor.name} fires an ion burst at ${found.target.name}. Missed!`,
+      { events: [fireEvent('ion', actor, found.target, false)] });
+  }
+  const grudge = vendettaGrudge(game, actor, found.target);
+  const amount = weaponDamage('ion', actor, rng, grudge, powerEffect(game, actor, 'weapons'), game.reimagined ? REIMAGINED_WEAPON_DAMAGE_SCALE : 1);
+  const before = found.target;
+  const hit = ionDamage(before, amount, rng);
+  const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
+  const victim = { ...hit, shotsTaken: hit.shotsTaken + 1 };
+  const updated = completeTurn(advanceRandom({
+    ...game,
+    ships: game.ships.map((ship) => (ship.id === shooter.id ? shooter : ship.id === victim.id ? victim : ship)),
+  }));
+  const stripped = Object.values(before.systems).reduce((total, units) => total + units, 0)
+    - Object.values(hit.systems).reduce((total, units) => total + units, 0);
+  const burned = Object.keys(hit.systems).filter((name) => before.systems[name] > 0 && hit.systems[name] === 0);
+  return result(updated, [
+    stripped > 0
+      ? `${actor.name}'s ion burst tears through ${found.target.name}'s shields, burning out ${unitName(stripped, 'subsystem unit')}.`
+      : `${actor.name} fires an ion burst at ${found.target.name}; its shields absorb the charge.`,
+    ...(burned.length ? [`${found.target.name}'s ${burned.join(', ')} ${burned.length === 1 ? 'is' : 'are'} disabled.`] : []),
+  ], { events: [fireEvent('ion', actor, found.target, true)] });
 };
 
 /** Counts a collision on both hulls; the battle report names the clumsiest captain. */
@@ -1187,6 +1271,7 @@ export const applyPlayerAction = (game, action = {}) => {
     case 'disengage': return disengageAction(game, actor);
     case 'phasers': return weaponAction(game, action, actor, 'phasers');
     case 'photons': return weaponAction(game, action, actor, 'photons');
+    case 'ion': return ionAction(game, action, actor);
     case 'tractor': return tractorAction(game, action, actor);
     case 'hyperspace': return hyperspaceAction(game, action, actor);
     case 'self-destruct': return selfDestructAction(game, actor);

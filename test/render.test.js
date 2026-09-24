@@ -695,3 +695,38 @@ test('the fleet report reads the stance of each hull in a Reimagined war', () =>
   assert.match(lines.find((line) => line.startsWith('Bonhomme')), /evasive stance/, 'an ordered hull reads its stance');
   assert.match(lines.find((line) => line.startsWith('Argo')), /standard stance/, 'the command ship defaults to standard');
 });
+
+// --- Round 22a: the ion/EMP emitter on the console and in the ship menu ---
+
+test('the console carries the Ion command only for a hull that fields the emitter', () => {
+  const game = createGame({ seed: 'render-ion-console', reimagined: true });
+  elements.clear();
+  renderGame({ ...game, playerShipId: 'fed-artillery' });
+  assert.match(read('#console').innerHTML, /data-command="ion"/, 'the artillery carries an emitter');
+
+  elements.clear();
+  renderGame({ ...game, playerShipId: 'fed-flagship' });
+  assert.ok(!/data-command="ion"/.test(read('#console').innerHTML), 'the flagship fields none');
+
+  elements.clear();
+  renderGame(createGame({ seed: 'render-ion-classic' }));
+  assert.ok(!/data-command="ion"/.test(read('#console').innerHTML), 'no ion outside a Reimagined war');
+});
+
+test('the ship menu offers Fire ion only from a hull that carries the emitter', () => {
+  const base = createGame({ seed: 'render-ion-menu', reimagined: true });
+  const staged = { ...base, ships: base.ships.map((ship) => {
+    if (ship.id === 'fed-artillery') return { ...ship, x: 100, y: 100 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 100, y: 104 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 115, y: 100 };
+    return ship;
+  }), terrain: [] };
+
+  elements.clear();
+  renderGame({ ...staged, playerShipId: 'fed-artillery' }, { contextShipId: 'axis-flagship' });
+  assert.match(read('#ship-menu').innerHTML, /data-ship-command="ion"/, 'the artillery can fire ion at the enemy');
+
+  elements.clear();
+  renderGame({ ...staged, playerShipId: 'fed-cruiser-1' }, { contextShipId: 'axis-flagship' });
+  assert.ok(!/data-ship-command="ion"/.test(read('#ship-menu').innerHTML), 'a cruiser without the emitter is not offered it');
+});

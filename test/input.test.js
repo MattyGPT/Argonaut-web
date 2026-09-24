@@ -114,6 +114,14 @@ test('X disengages (round 21)', () => {
   assert.deepEqual(dispatched, [{ type: 'disengage' }, { type: 'disengage' }]);
 });
 
+test('I fires the ion emitter (round 22a)', () => {
+  openDialog = null;
+  const dispatched = bind();
+  press('i');
+  press('I');
+  assert.deepEqual(dispatched, [{ type: 'ion' }, { type: 'ion' }]);
+});
+
 test('a console stance button sets the command ship stance', () => {
   openDialog = null;
   const dispatched = bind();

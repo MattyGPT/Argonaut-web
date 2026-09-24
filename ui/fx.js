@@ -38,7 +38,9 @@ const drawBeam = (svg, e) => {
   line.setAttribute('y1', e.y1);
   line.setAttribute('x2', to.x);
   line.setAttribute('y2', to.y);
-  line.setAttribute('class', `fx-phaser${e.focus ? ' focused' : ''}${e.hit ? '' : ' miss'}`);
+  // Ion/EMP (round 22a) draws as its own arc-colored beam; phasers keep theirs.
+  const beam = e.kind === 'ion' ? 'fx-ion' : 'fx-phaser';
+  line.setAttribute('class', `${beam}${e.focus ? ' focused' : ''}${e.hit ? '' : ' miss'}`);
   line.setAttribute('vector-effect', 'non-scaling-stroke');
   svg.appendChild(line);
   setTimeout(() => line.remove(), 420);
@@ -110,7 +112,7 @@ const drawTerminal = (svg, event) => {
 };
 
 const draw = (svg, e) => {
-  if (e.kind === 'phasers') drawBeam(svg, e);
+  if (e.kind === 'phasers' || e.kind === 'ion') drawBeam(svg, e);
   else if (e.kind === 'photons') drawTorpedo(svg, e);
   else if (e.kind === 'explosion') drawExplosion(svg, e);
   else if (isTerminalEvent(e)) drawTerminal(svg, e);

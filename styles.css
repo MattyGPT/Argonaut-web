@@ -743,6 +743,21 @@ body.classic .legend-swatch.stance-evasive { background: #40e0ff; box-shadow: no
   opacity: .6;
 }
 
+/* The ion/EMP beam (round 22a): an electric, dashed arc, so a suppression burst
+   reads distinctly from a coherent phaser lance or a photon dot. */
+.fx-ion {
+  stroke: var(--cyan);
+  stroke-width: 2.4;
+  stroke-dasharray: 3 2;
+  opacity: .95;
+  animation: fx-fade .42s ease-out forwards;
+}
+
+.fx-ion.miss {
+  stroke: #93a9ba;
+  opacity: .6;
+}
+
 .fx-photon {
   fill: var(--bloc);
 }
@@ -1440,6 +1455,7 @@ body.classic .ship .prize-pip {
   .fx-boom,
   .fx-move,
   .fx-phaser,
+  .fx-ion,
   .fx-terminal-destruction,
   .fx-terminal-surrender,
   .terminal-event {

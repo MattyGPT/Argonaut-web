@@ -138,21 +138,69 @@ finishing blows harder. Bloc eases 38% → **34.8%** but still leads; Federation
 flip) in CALIBRATION's "Reimagined balance" table — measured, not silently
 tuned.
 
-## The rest of Phase 4 — seams, not designs
+## Round 22 — Weapon variety (split into chunks)
 
-### 22 — Weapon variety (ion/EMP, spread torpedoes, mines)
+Round 22 was three distinct damage models. Settled with Matt, 2026-09-21: **split
+into chunks** (like round 18's a/b/c), **ion/EMP first**, and — a change of mind —
+**mines deferred** ("let's not move forward with mines at this time"). So this row
+is now 22a (ion/EMP, shipped), 22c (spread torpedoes, designed below), and mines
+parked as a future candidate. (22b remains the directed tractor beam, shipped
+early as PR #25.)
 
-- New damage models beyond the kinetic/shield lottery: **ion/EMP** disables
-  subsystems without killing crew (a natural partner to the prize layer — an
-  ion hit leaves a hull `vacant`-adjacent but crewed, or degrades systems the
-  dockyard must rebuild); **spread torpedoes** hit several hulls in a cone;
-  **mines** are seeded terrain-like hazards that detonate on approach.
-- **Seam with 21**: a weapon's accuracy should ride the same `volleyMissChance`
-  (a spread torpedo may skip the miss roll but pay in damage/area); stances
-  already modify any volley through that one function. **Seam with 15**: mines
-  are a terrain-adjacent layer — reuse the `game.terrain` feature model or a
-  sibling `game.mines` list on its own seeded sub-stream. **Seam with 17**: an
-  ion hit that disables rather than destroys feeds the prize race directly.
+### 22a — Ion/EMP (shipped)
+
+**Decisions (settled with Matt, 2026-09-21):**
+
+1. **Model — shields absorb, then strip systems, no crew killed.** An ion burst's
+   charge is absorbed by the target's shields first; whatever punches through
+   strips subsystem units one at a time and *never* touches the crew. This is the
+   disable-not-destroy identity, distinct from precision fire's single called
+   system: ion degrades the whole hull and leaves it intact.
+2. **A gutted hull strikes its colors.** The stall this creates — disable a hull,
+   it repairs at the dockyard, repeat — is resolved by extending the existing
+   `resolveDisabledSurrender` past precision into every Reimagined war: a hull
+   left with crew but no engines and no guns takes to the pods and becomes a
+   `vacant` derelict anyone can board. Ion therefore **feeds the prize race**
+   instead of stretching the war (measured: hopeless draws fell 9% → 5%).
+3. **Delivery — a new Reimagined-only subsystem + weapon type.** `ion` is added
+   to carrying hulls in `createShip` exactly like the reactor (never to
+   `SHIP_TEMPLATES.systems`, so the classic/extended damage lottery is untouched),
+   fired as weapon type `ion` through the normal fire path. `RANGES.ion` 35
+   (outranges phasers, a standoff niche); `WEAPONS.ion` a low band (it only
+   strips systems); `ION.carry` = Artillery 2, Interceptor 1.
+4. **Rides the shared machinery.** Ion uses the one `volleyMissChance` roll (so
+   stances and terrain apply), scales with the weapons power sink and the
+   Reimagined durability scale, is jammed in an ion storm's core, and consumes
+   one `randomStep` like any volley — no new RNG stream. A crew-0 hull (a drone)
+   stripped of its last system breaks up (nobody aboard to surrender it).
+
+UI: `I` / a console Ion button (only when the command ship carries the emitter),
+"Fire ion" in the ship menu, its own dashed cyan `fx-ion` beam + sound. AI: `engage`
+offers ion between the lethal guns and the tractor, so a carrier suppresses over
+the 31–35 standoff its phasers cannot reach or when its guns are burnt out.
+
+Measured (250 seeds): median 63 (flat vs 62), prizes 8.5/war, hopeless draws 5%,
+timeouts 7%, Bloc 35.6 / Fed 28.8 / Axis 12.8 / Cabal 10.8 (Cabal recovers). Full
+row in CALIBRATION's "Reimagined balance" table.
+
+### 22c — Spread torpedoes (designed, not yet built)
+
+**Settled with Matt, 2026-09-21: splash around impact.** Fire at a target/point;
+the primary takes full damage and every hull within a splash radius takes falloff
+damage. Rides the shared `volleyMissChance` (a miss splashes nothing). Rewards
+catching tight formations — a tactical counter to clustering, in natural tension
+with the last-stand-blast concern. Seam: a new weapon type + a `spreadAction`
+that damages all hulls in radius (the detonate blast is the closest precedent, but
+non-terminal and falloff-scaled); decide carrier classes, splash radius, and the
+falloff curve when built, and whether it is a photon upgrade or its own subsystem.
+
+### Mines — deferred (Matt, 2026-09-21)
+
+Parked, not dropped. The original seam (a seeded `game.mines` battlefield hazard
+on a `${seed}:mines` sub-stream, detonating once when a hull ends a move/tow
+inside its radius, reusing the terrain-feature model and the `resolveAsteroidStrike`
+trigger path) is recorded here for when it is picked back up. Ship-laid mines
+(a minelayer command + hidden-mine fog) remain the richer alternative.
 
 ### 23 — Directional shields (fore/aft/port/starboard arcs + facing)
 
@@ -162,17 +210,21 @@ tuned.
 - **Seam with 21**: evasive/firing stances may bias arc coverage or facing
   discipline; Disengage sets a facing (running exposes the aft arc). **Seam
   with 20**: drones are small — decide whether they have arcs or a single pool.
-  **Seam with the render layer**: ships need a heading glyph. This is the round
-  the whole damage path (`damageShip`, `weaponAction`, `resolveAiAction`) most
-  changes, so it is sequenced last in the phase.
+  **Seam with 22a**: ion strips systems regardless of arc (it is not a kinetic
+  hit), so it sidesteps facing — decide whether that stays true. **Seam with the
+  render layer**: ships need a heading glyph. This is the round the whole damage
+  path (`damageShip`, `weaponAction`, `resolveAiAction`) most changes, so it is
+  sequenced last in the phase.
 
 ## Chunk breakdown
 
 | Round | Chunk | Ships | Tested by |
 | --- | --- | --- | --- |
 | 21 | Evasive/firing stances | Three-way stance on the shared miss roll; free per-ship `setStance`; doctrine bias + wounded→evasive; player Disengage command; console/menu/map/legend/report UI | Modifier applies at both ends and clamps; disengage burns from the nearest threat and spends the turn; parity off; old saves tolerate the absent field |
-| 22 | Weapon variety | Ion/EMP (disable, no crew), spread torpedoes, mines | Each damage model distinct; rides the shared accuracy roll; parity off |
+| 22a | Ion/EMP | Reimagined-only `ion` subsystem (Artillery 2, Interceptor 1) + weapon type; shields-absorb-then-strip-systems, no crew killed; disabled-surrender extended to Reimagined so a gutted hull strikes its colors; console/menu/beam/sound UI; AI fires it over the phaser standoff | Ion strips systems and spares crew; a gutted hull goes vacant; dockyard rebuilds ion; AI picks ion at 31–35; parity off; old saves tolerate the absent system |
+| 22c | Spread torpedoes | Splash-around-impact volley (designed, not built) | Each damage model distinct; rides the shared accuracy roll; parity off |
 | 22b | Directed tractor beam | *(shipped early, PR #25)* | *(shipped)* |
+| — | Mines | *Deferred (Matt, 2026-09-21)* | — |
 | 23 | Directional shields | Fore/aft/port/starboard arcs + facing | Arc damage; AI faces threat; largest single chunk; parity off |
 
 ## Parity & determinism guardrails

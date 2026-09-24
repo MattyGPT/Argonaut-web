@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, DRONE, GRID_SIZE, LOADOUT, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, REIMAGINED_WEAPON_DAMAGE_SCALE, SCENARIOS, SHIP_TEMPLATES, STALEMATE_ROUNDS, STANCE, STANCES, TERRAIN, VENDETTA } from '../game/constants.js';
+import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, DRONE, GRID_SIZE, ION, LOADOUT, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, REIMAGINED_WEAPON_DAMAGE_SCALE, SCENARIOS, SHIP_TEMPLATES, STALEMATE_ROUNDS, STANCE, STANCES, TERRAIN, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioOutcome, scenarioProgress } from '../game/scenarios.js';
 import { abbreviateNarrative, alertLevel, appendLog, blastRadius, clampPowerAllocation, createGame, crewCapacity, defaultLoadout, distance, dockedAt, engineCapacity, fleetCost, fleetHulls, getShip, inRadioContact, insideFeature, ionStormZone, isAce, isDrone, nebulaHides, nebulaRevealRange, normalizeFleetSpec, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, stanceOf, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
-import { applyPlayerAction, canLaunchDrones, captureHull, damageShip, defaultTargetFor, eligibleTargets, killLines, launchDrones, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, tractorLock, weaponDamage } from '../game/actions.js';
+import { applyPlayerAction, canLaunchDrones, captureHull, damageShip, defaultTargetFor, eligibleTargets, ionDamage, killLines, launchDrones, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, tractorLock, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, darkenOrphanDrones, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolveObjectives, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
@@ -4277,4 +4277,191 @@ test('an old save without the stances field resolves every hull to its default',
   assert.equal(stanceOf(old, getShip(old, 'axis-flagship')), 'firing', 'doctrine still resolves without the field');
   const out = applyPlayerAction(old, { type: 'stance', stance: 'evasive' });
   assert.equal(out.game.stances['fed-flagship'], 'evasive', 'setting a stance creates the field');
+});
+
+// --- Argonaut Reimagined, round 22a: ion / EMP ---
+
+/**
+ * A Reimagined war staged for ion tests: a Federation artillery (an ion carrier)
+ * and an Axis cruiser mid-field, everyone else parked in the corners. Terrain is
+ * cleared by the callers that need the accuracy roll isolated.
+ */
+const ionWar = (seed) => withShips(createGame({ seed, reimagined: true, loadout: defaultLoadout() }), (ship) => {
+  if (ship.id === 'fed-artillery') return { ...ship, x: 100, y: 100 };
+  if (ship.id === 'axis-cruiser-1') return { ...ship, x: 120, y: 100 };
+  if (ship.id === 'axis-artillery') return { ...ship, x: 12, y: 16 };
+  return parked(ship);
+});
+
+test('ion is a Reimagined subsystem the artillery and interceptor carry, and nothing else does', () => {
+  const game = createGame({ seed: 'ion-carry', reimagined: true, loadout: defaultLoadout() });
+  assert.deepEqual(ION.carry, { Artillery: 2, Interceptor: 1 }, 'the carry table');
+  assert.equal(systemUnits(getShip(game, 'fed-artillery'), 'ion'), 2);
+  assert.equal(systemUnits(getShip(game, 'fed-interceptor'), 'ion'), 1);
+  for (const id of ['fed-flagship', 'fed-cruiser-1', 'fed-scout', 'fed-carrier', 'xanadu']) {
+    assert.equal(systemUnits(getShip(game, id), 'ion'), 0, `${id} fields no ion`);
+    assert.ok(!('ion' in getShip(game, id).systems), `${id} carries no ion key at all`);
+  }
+  assert.equal(RANGES.ion, 35, 'ion outranges the phasers');
+  assert.ok(RANGES.ion > RANGES.phasers);
+  // A classic or extended hull never carries the system, so its damage lottery is untouched.
+  for (const opts of [{}, { extended: true }]) {
+    const off = createGame({ seed: 'ion-carry', ...opts });
+    assert.ok(off.ships.every((ship) => !('ion' in ship.systems)), 'no ion outside a Reimagined war');
+  }
+});
+
+test('ion damage strips subsystems and spares the crew, shields first', () => {
+  const ship = getShip(ionWar('ion-damage'), 'axis-cruiser-1');
+  // A charge smaller than the shields only dents them.
+  const scratched = ionDamage(ship, 10, createRng('ion-a'));
+  assert.equal(scratched.shields, ship.shields - 10);
+  assert.equal(scratched.crew, ship.crew, 'the crew is untouched');
+  assert.deepEqual(scratched.systems, ship.systems, 'no system burns behind the shields');
+  assert.equal(scratched.status, 'active');
+  // A charge through the shields burns system units one-for-one, still sparing the crew.
+  const gutted = ionDamage({ ...ship, shields: 0 }, 8, createRng('ion-b'));
+  const units = (s) => Object.values(s.systems).reduce((a, b) => a + b, 0);
+  assert.equal(units(ship) - units(gutted), 8, 'eight points strip eight subsystem units');
+  assert.equal(gutted.crew, ship.crew, 'ion never kills');
+  assert.equal(gutted.status, 'active', 'a gutted crewed hull is an inert hulk, not a wreck or a derelict');
+  // Leftover charge past the last system is wasted, not turned into a kill.
+  const stripped = ionDamage({ ...ship, shields: 0 }, 5000, createRng('ion-c'));
+  assert.equal(units(stripped), 0);
+  assert.equal(stripped.crew, ship.crew, 'even a colossal burst kills nobody');
+  assert.equal(stripped.status, 'active');
+});
+
+test('ion burns a crew-0 drone to wreckage once its last system goes', () => {
+  const base = ionWar('ion-drone');
+  const flown = launchDrones(base, getShip(base, 'fed-carrier')).game;
+  const drone = getShip(flown, 'fed-carrier-drone-1');
+  assert.equal(drone.crew, 0);
+  const units = Object.values(drone.systems).reduce((a, b) => a + b, 0);
+  const gutted = ionDamage({ ...drone, shields: 0 }, units + 5, createRng('ion-drone'));
+  assert.equal(gutted.status, 'destroyed', 'nobody aboard to leave an inert hulk');
+  const partial = ionDamage({ ...drone, shields: 0 }, 2, createRng('ion-drone-2'));
+  assert.equal(partial.status, 'active', 'a partial strip leaves it flying');
+});
+
+test('the player fires ion from a hull that carries it, disabling without killing', () => {
+  const staged = { ...withShips(ionWar('ion-fire'), (ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, shields: 3 } : ship)), terrain: [] };
+  const game = { ...staged, playerShipId: 'fed-artillery' };
+  const target0 = getShip(game, 'axis-cruiser-1');
+  const crew0 = target0.crew;
+  const units0 = Object.values(target0.systems).reduce((a, b) => a + b, 0);
+  let hits = 0;
+  for (let step = 0; step < 200; step += 1) {
+    const out = applyPlayerAction({ ...game, randomStep: step }, { type: 'ion', targetId: 'axis-cruiser-1' });
+    assert.equal(out.game.phase, 'computer', 'ion spends the stardate');
+    const target = getShip(out.game, 'axis-cruiser-1');
+    assert.equal(target.crew, crew0, 'ion never kills crew');
+    assert.equal(target.status, 'active', 'and never wrecks or boards outright');
+    if (!/Missed!/.test(out.messages.join(' '))) {
+      hits += 1;
+      assert.ok(/ion burst/.test(out.messages.join(' ')));
+      assert.ok(Object.values(target.systems).reduce((a, b) => a + b, 0) < units0, 'a hit burns out subsystem units');
+    }
+  }
+  assert.ok(hits > 50 && hits < 200, `ion hits often at close range but still misses sometimes (${hits}/200)`);
+});
+
+test('ion refuses without the emitter, out of range, jammed, or outside a Reimagined war', () => {
+  const game = { ...ionWar('ion-refuse'), playerShipId: 'fed-artillery', terrain: [] };
+  // The command ship has no ion emitter.
+  const noIon = applyPlayerAction({ ...ionWar('ion-refuse'), playerShipId: 'fed-flagship' }, { type: 'ion', targetId: 'axis-cruiser-1' });
+  assert.match(noIon.messages.join(' '), /Ion are disabled/);
+  // Out of range (past 35).
+  const far = withShips(game, (ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, x: 100, y: 140 } : ship));
+  assert.match(applyPlayerAction(far, { type: 'ion', targetId: 'axis-cruiser-1' }).messages.join(' '), /out of range for the ion emitter/);
+  // Jammed in an ion storm's core.
+  const jammed = { ...game, terrain: [{ id: 'ion-storm-1', type: 'ion-storm', x: 100, y: 100, radius: 20 }] };
+  assert.match(applyPlayerAction(jammed, { type: 'ion', targetId: 'axis-cruiser-1' }).messages.join(' '), /offline in the ion storm/);
+  // A classic or extended war has no emitter at all.
+  for (const opts of [{}, { extended: true }]) {
+    const off = applyPlayerAction(createGame({ seed: 'ion-refuse', ...opts }), { type: 'ion', targetId: 'axis-cruiser-1' });
+    assert.match(off.messages.join(' '), /Ion are disabled/);
+    assert.equal(off.game.phase, 'player');
+  }
+});
+
+test('a hull ion-gutted of engines and guns strikes its colors in a Reimagined war', () => {
+  const game = ionWar('ion-surrender');
+  const gutted = withShips(game, (ship) => (ship.id === 'axis-cruiser-1'
+    ? { ...ship, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0 } }
+    : ship));
+  const out = resolveDisabledSurrender(gutted);
+  const cruiser = getShip(out.game, 'axis-cruiser-1');
+  assert.equal(cruiser.status, 'vacant', 'it becomes a boardable derelict, feeding the prize race');
+  assert.equal(cruiser.crew, 0, 'the crew takes to the pods');
+  assert.ok(out.messages.some((line) => /Grendel is disabled and strikes its colors/.test(line)));
+  // A classic or extended (non-precision) war leaves the same hulk fighting on.
+  for (const opts of [{}, { extended: true }]) {
+    const off = withShips(createGame({ seed: 'ion-surrender-off', ...opts }), (ship) => (ship.id === 'axis-cruiser-1'
+      ? { ...ship, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0 } }
+      : ship));
+    const resolved = resolveDisabledSurrender(off);
+    assert.equal(getShip(resolved.game, 'axis-cruiser-1').status, 'active', 'no disabled surrender outside precision/Reimagined');
+  }
+});
+
+test('an AI ion hull suppresses over the standoff its phasers cannot reach', () => {
+  // Axis artillery at (40,40); the nearest enemy sits 33 out — past phasers (30),
+  // inside ion (35). Staged clear of Xanadu and the parked corners.
+  const game = { ...withShips(ionWar('ion-ai'), (ship) => {
+    if (ship.id === 'axis-artillery') return { ...ship, x: 40, y: 40 };
+    if (ship.id === 'fed-scout') return { ...ship, x: 73, y: 40 };
+    return ship;
+  }), terrain: [] };
+  assert.deepEqual(chooseAiAction(game, 'axis-artillery'), { type: 'ion', targetId: 'fed-scout' },
+    'at 33 out the phasers cannot reach but the ion emitter can');
+  const close = withShips(game, (ship) => (ship.id === 'fed-scout' ? { ...ship, x: 65, y: 40 } : ship));
+  assert.equal(chooseAiAction(close, 'axis-artillery').type, 'phasers', 'inside 30 the lethal gun outranks ion');
+});
+
+test('the computer phase resolves an AI ion volley', () => {
+  // Isolated exchange: an Axis artillery (AI) and the player's flagship at ion-only
+  // range (33 — past phasers, inside ion), plus Xanadu, and nothing else. No other
+  // hull can close and steal the artillery's target mid-phase, so its ion burst —
+  // which the computer phase resolves through the same shared roll and ionDamage as
+  // the player's — lands and is narrated.
+  const staged = withShips(ionWar('ion-computer'), (ship) => {
+    if (ship.id === 'axis-artillery') return { ...ship, x: 40, y: 40 };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 73, y: 40 };
+    return ship;
+  });
+  const game = { ...staged, terrain: [], ships: staged.ships.filter((ship) => ['axis-artillery', 'fed-flagship', 'xanadu'].includes(ship.id)) };
+  const out = resolveComputerTurns({ ...game, phase: 'computer' });
+  assert.ok(out.log.some((line) => /ion burst/.test(line)), 'the artillery fires its ion emitter');
+  assert.equal(getShip(out, 'fed-flagship').crew, getShip(game, 'fed-flagship').crew, 'ion killed nobody');
+});
+
+test('the dockyard rebuilds an ion-stripped hull back to its class complement', () => {
+  const game = ionWar('ion-dockyard');
+  const stripped = withShips(game, (ship) => {
+    if (ship.id !== 'fed-artillery') return ship;
+    return { ...ship, x: 120, y: 120, systems: { ...ship.systems, ion: 0 } };
+  });
+  assert.equal(templateSystems(getShip(stripped, 'fed-artillery')).ion, ION.carry.Artillery,
+    'the ion complement is part of the class, so the dockyard sees it');
+  const out = resolveDocking(stripped);
+  assert.equal(systemUnits(getShip(out.game, 'fed-artillery'), 'ion'), 1, 'one unit per stardate, starting from the most-damaged');
+});
+
+test('ion never touches a classic or extended war, and old saves tolerate its absence', () => {
+  for (const opts of [{}, { extended: true }]) {
+    const game = createGame({ seed: 'ion-parity', ...opts });
+    assert.ok(game.ships.every((ship) => !('ion' in ship.systems)));
+  }
+  assert.deepEqual(createGame({ seed: 'ion-parity' }), createGame({ seed: 'ion-parity', reimagined: false }),
+    'the standing parity scaffold still holds');
+  // A Reimagined save from before round 22a: no ion key on any hull. systemUnits
+  // reads 0, the emitter refuses, and nothing crashes.
+  const old = withShips(createGame({ seed: 'ion-old-save', reimagined: true, loadout: defaultLoadout() }), (ship) => {
+    const { ion, ...systems } = ship.systems;
+    return { ...ship, systems };
+  });
+  assert.equal(systemUnits(getShip(old, 'fed-artillery'), 'ion'), 0);
+  const refused = applyPlayerAction({ ...old, playerShipId: 'fed-artillery' }, { type: 'ion', targetId: 'axis-flagship' });
+  assert.match(refused.messages.join(' '), /Ion are disabled/);
 });

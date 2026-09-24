@@ -1,5 +1,5 @@
 import { DOCKING, FACTIONS, GRID_SIZE, POWER, PRIZE, RANGES, REIMAGINED_WEAPON_DAMAGE_SCALE, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
-import { captureHull, canLaunchDrones, damageShip, detonate, fireEvent, flushShields, killLines, launchDrones, resolveAsteroidStrike, resolveCollision, terminalEvent, tractorLock, weaponDamage } from './actions.js';
+import { captureHull, canLaunchDrones, damageShip, detonate, fireEvent, flushShields, ionDamage, killLines, launchDrones, resolveAsteroidStrike, resolveCollision, terminalEvent, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { createRng } from './rng.js';
 import { scenarioOutcome } from './scenarios.js';
@@ -94,6 +94,49 @@ const resolveAiAction = (game, shipId) => {
       ],
       type: action.type,
       events,
+    };
+  }
+  if (action.type === 'ion') {
+    // Ion/EMP (round 22a): the suppression volley. Same shared accuracy roll and
+    // weapons power sink as the guns, but it disables rather than destroys — no
+    // kill is credited and no wreck is drawn, so a gutted hull stays an active hulk.
+    const target = getShip(game, action.targetId);
+    const rng = rngFor(game);
+    if (rng.next() < volleyMissChance(game, actor, target)) {
+      const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
+      return {
+        game: advanceRandom(replaceShip(game, shooter)),
+        messages: [`${actor.name} fires an ion burst at ${target.name}. Missed!`],
+        type: action.type,
+        events: [fireEvent('ion', actor, target, false)],
+      };
+    }
+    const grudge = vendettaGrudge(game, actor, target);
+    const amount = weaponDamage('ion', actor, rng, grudge, powerEffect(game, actor, 'weapons'), game.reimagined ? REIMAGINED_WEAPON_DAMAGE_SCALE : 1);
+    const hit = ionDamage(target, amount, rng);
+    const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
+    const victim = { ...hit, shotsTaken: hit.shotsTaken + 1 };
+    const updated = advanceRandom({
+      ...game,
+      ships: game.ships.map((ship) => {
+        if (ship.id === shooter.id) return shooter;
+        if (ship.id === victim.id) return victim;
+        return ship;
+      }),
+    });
+    const stripped = Object.values(target.systems).reduce((total, units) => total + units, 0)
+      - Object.values(hit.systems).reduce((total, units) => total + units, 0);
+    const burned = Object.keys(hit.systems).filter((name) => target.systems[name] > 0 && hit.systems[name] === 0);
+    return {
+      game: updated,
+      messages: [
+        stripped > 0
+          ? `${actor.name}'s ion burst tears through ${target.name}'s shields, burning out ${stripped} subsystem unit${stripped === 1 ? '' : 's'}.`
+          : `${actor.name} fires an ion burst at ${target.name}; its shields absorb the charge.`,
+        ...(burned.length ? [`${target.name}'s ${burned.join(', ')} ${burned.length === 1 ? 'is' : 'are'} disabled.`] : []),
+      ],
+      type: action.type,
+      events: [fireEvent('ion', actor, target, true)],
     };
   }
   if (action.type === 'tractor') {
@@ -286,17 +329,23 @@ export const applySurrender = (game) => {
 };
 
 /**
- * Precision fire makes disabling a hull achievable on purpose, so a hull left
- * with crew aboard but no engines and no guns — unable to fight, flee, or flush
- * shields — strikes its colors at stardate end instead of fighting on as a
+ * A hull left with crew aboard but no engines and no guns — unable to fight, flee,
+ * or flush shields — strikes its colors at stardate end instead of fighting on as a
  * hulk: the crew takes to escape pods and the hull is left vacant to board.
- * Only a precision war sees this; a classic war's hulks behave exactly as
- * calibrated. A starbase is exempt — it never had engines, so burnt-out guns
- * leave it a fortress, not a derelict — and your command ship never surrenders
- * while you have the conn.
+ *
+ * Precision fire makes this achievable on purpose with called shots, so a precision
+ * war has always had it. A Reimagined war gets it too (round 22a): the ion/EMP
+ * emitter strips subsystems without killing crew, so without this an ion-gutted hull
+ * would linger helpless — repaired at the dockyard, back out, gutted again — and the
+ * war would stall. Striking its colors turns the ion kill-shot into a derelict anyone
+ * can board, so suppression feeds the prize race instead of stretching the war. A
+ * classic or extended (non-precision) war sees neither and its hulks behave exactly
+ * as calibrated. A starbase is exempt — it never had engines, so burnt-out guns leave
+ * it a fortress, not a derelict — and your command ship never surrenders while you
+ * have the conn.
  */
 export const resolveDisabledSurrender = (game) => {
-  if (!game.precision || game.outcome) return { game, messages: [], events: [] };
+  if ((!game.precision && !game.reimagined) || game.outcome) return { game, messages: [], events: [] };
   const messages = [];
   const events = [];
   const ships = game.ships.map((ship) => {

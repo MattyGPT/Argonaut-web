@@ -224,6 +224,9 @@ export const RANGES = Object.freeze({
   phasers: 30,
   photons: 10,
   tractor: 35,
+  // Ion/EMP (round 22a, Reimagined): a long-range suppression beam that outranges
+  // the phasers, so an ion hull can work over a standoff the lethal guns cannot.
+  ion: 35,
   hyperspace: GRID_SIZE,
   selfDestruct: 20,
 });
@@ -466,6 +469,31 @@ export const MISS_CHANCE = 0.12;
 export const WEAPONS = Object.freeze({
   phasers: Object.freeze({ base: 12, perUnit: 4, spread: 0.25 }),
   photons: Object.freeze({ base: 24, perUnit: 9, spread: 0.267 }),
+  // Ion/EMP (round 22a): the roll is a suppression budget, not lethal damage — it
+  // is absorbed by shields first and the overflow strips subsystem units with no
+  // crew casualties, so its figures are lower than the lethal guns'. A balance dial.
+  ion: Object.freeze({ base: 6, perUnit: 2, spread: 0.25 }),
+});
+
+/**
+ * Ion/EMP (Argonaut Reimagined, round 22a — Phase 4). A suppression weapon that
+ * disables rather than destroys: an ion burst is absorbed by shields first, and
+ * whatever punches through strips subsystem units one at a time and NEVER kills
+ * crew — so a gutted hull is left an inert, intact hulk the dockyard can rebuild
+ * or an enemy can board, feeding the prize race instead of ending the hull. It
+ * rides the ONE shared `volleyMissChance` roll (so stances and terrain apply) and
+ * the weapons power sink, exactly like the lethal guns. Settled with Matt,
+ * 2026-09-21: shields absorb then strip systems, permanent until repaired. Every
+ * figure is a balance dial for the Reimagined harness, not a calibrated value.
+ */
+export const ION = Object.freeze({
+  /**
+   * Ion subsystem units per hull class, keyed by className — added to Reimagined
+   * hulls in `createShip` the same way the reactor is, so a classic or extended
+   * war never carries the system and its damage lottery is untouched. A class not
+   * listed fields no ion. Balance dial: which hulls carry suppression, and how much.
+   */
+  carry: Object.freeze({ Artillery: 2, Interceptor: 1 }),
 });
 
 /**

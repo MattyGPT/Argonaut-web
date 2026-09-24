@@ -36,11 +36,16 @@ const nearestTo = (from, ships) => ships
  * only the tractor — engines, sensors, and tractor work throughout the storm — and
  * every doctrine falls through to its movement branches, so a caught captain tries
  * to fight its way out rather than sulk.
+ *
+ * Ion/EMP (round 22a) sits between the lethal guns and the tractor: a hull that
+ * carries the emitter fires it when the phasers cannot reach (ion outranges them at
+ * 35) or are burnt out, so it suppresses over a standoff rather than trading kills.
  */
 const engage = (game, actor, target, range, noTractor = false) => {
   const jammed = ionStormZone(game, actor) === 'core';
   if (!jammed && systemUnits(actor, 'photons') > 0 && range <= RANGES.photons) return { type: 'photons', targetId: target.id };
   if (!jammed && systemUnits(actor, 'phasers') > 0 && range <= RANGES.phasers) return { type: 'phasers', targetId: target.id };
+  if (!jammed && systemUnits(actor, 'ion') > 0 && range <= RANGES.ion) return { type: 'ion', targetId: target.id };
   if (!noTractor && systemUnits(actor, 'tractor') > 0 && range <= RANGES.tractor && !isImmovable(target)) return { type: 'tractor', targetId: target.id };
   return null;
 };

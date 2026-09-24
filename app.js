@@ -73,7 +73,7 @@ const currentWindow = () => cameraWindow(field(), view.camera);
  */
 let precisionSettings = { power: 100, focus: null };
 
-const targetActions = new Set(['phasers', 'photons', 'tractor', 'scan', 'transport']);
+const targetActions = new Set(['phasers', 'photons', 'ion', 'tractor', 'scan', 'transport']);
 
 /**
  * Commands that ask first, because none of them can be taken back. Each yields the
@@ -259,10 +259,10 @@ const dispatch = async (action) => {
     return;
   }
 
-  // The bay command (round 20) and disengage (round 21) are Reimagined-only, and
-  // both are bound to a key. Their keys do nothing in a classic or extended war, so
-  // a stray keystroke never draws a refusal there.
-  if ((action.type === 'launch' || action.type === 'disengage') && !game.reimagined) return;
+  // The bay command (round 20), disengage (round 21), and the ion emitter (round
+  // 22a) are Reimagined-only, and all are bound to a key. Their keys do nothing in a
+  // classic or extended war, so a stray keystroke never draws a refusal there.
+  if ((action.type === 'launch' || action.type === 'disengage' || action.type === 'ion') && !game.reimagined) return;
 
   // Transport needs a crew count even when the ship menu has already named the
   // hull, so the prompt opens with the clicked ship preselected. In a precision
