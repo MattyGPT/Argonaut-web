@@ -353,11 +353,17 @@ render/UI — each its own branch → PR.
   classic/extended digit-for-digit unchanged. The ~35%-shorter war vs the
   pre-arcs baseline (median 62 → 40) is flagged for Matt with its levers in
   CALIBRATION, not silently tuned.
-- **23d — render/UI**: heading glyph on every hull, per-arc shield visualization
-  (console + ship menu), the helm control (turn without moving), the arc-focus
-  selector, enemy-facing intel in scan/menu, legend chips, fleet-report lines.
-  All visual work flagged for the manual play-test pass — the assistant cannot
-  verify browser rendering.
+- **23d — render/UI** *(shipped, PR #60)*: a heading needle on every hull of the
+  line (a rotated spoke carrying `--heading` in field degrees; drones and
+  classic hulls wear none); Heading + Shield-arcs console status rows; the
+  console **Helm** control (↺/↻ 45° — `setFacing` gained `deltaDegrees` for it)
+  and **Shield focus** selector (Auto + the four arcs); helm/focus selectors in
+  every Federation hull's menu; the arc breakdown + heading as readable intel on
+  enemy menus, in the scan report, and per hull in the fleet report; a legend
+  chip and a guide paragraph. All of it Reimagined-gated. **Every pixel is
+  flagged for the manual play-test pass** — needle legibility at both zooms and
+  on the minimap, the helm/focus bars' console fit, and how reading arcs
+  mid-fight *feels*.
 
 #### Seam notes from the original sketch (all resolved above)
 

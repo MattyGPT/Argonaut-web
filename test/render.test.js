@@ -511,7 +511,7 @@ test('a prize of war wears a pip on the map and tells its story in the menu', ()
   const field = read('#map-field').innerHTML;
   assert.match(field, /class="ship Federation active prize"/, 'the hull is marked as a prize');
   assert.match(field, /prize-pip/, 'and wears its pip');
-  assert.match(field, /title="Bonhomme: active — prize of war"/);
+  assert.match(field, /title="Bonhomme: active — prize of war( — heading \d+°)?"/);
   const menu = read('#ship-menu').innerHTML;
   assert.match(menu, /Prize of war — taken from the Axis at stardate 3; prize crew 10\/140 — under-manned, engines and guns degraded/);
 });
@@ -764,4 +764,92 @@ test('the ship menu offers Fire spread only from a hull with the tubes', () => {
   elements.clear();
   renderGame({ ...staged, playerShipId: 'fed-cruiser-1' }, { contextShipId: 'axis-flagship' });
   assert.ok(!/data-ship-command="spread"/.test(read('#ship-menu').innerHTML), 'a cruiser without tubes is not offered it');
+});
+
+// --- Round 23: directional shields on the console, map, menus, legend, and reports ---
+
+test('the Reimagined console carries the helm, the shield focus, and the arc readout; a classic one does not', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'render-helm-console', reimagined: true }));
+  const console = read('#console').innerHTML;
+  assert.match(console, /Helm/);
+  assert.match(console, /data-facing-turn="-45"/);
+  assert.match(console, /data-facing-turn="45"/);
+  assert.match(console, /heading \d+°/);
+  assert.match(console, /Shield focus/);
+  assert.match(console, /data-arc-focus="fore"/);
+  assert.match(console, /data-arc-focus="" aria-pressed="true">Auto/, 'the auto (weakest-first) choice is offered, lit while nothing is focused');
+  assert.match(console, /Shield arcs<\/span><b class="arc-readout">F 60 · S 50 · A 40 · P 50<\/b>/,
+    'the command ship reads its full weighted breakdown');
+
+  elements.clear();
+  renderGame(createGame({ seed: 'render-helm-classic' }));
+  const classic = read('#console').innerHTML;
+  assert.ok(!/data-facing-turn/.test(classic), 'no helm outside Reimagined');
+  assert.ok(!/data-arc-focus/.test(classic), 'no shield focus outside Reimagined');
+  assert.ok(!/Shield arcs/.test(classic), 'no arc readout outside Reimagined');
+});
+
+test('a hull of the line wears its heading needle; a drone and a classic hull do not', () => {
+  const game = { ...withPair(createGame({ seed: 'render-heading-map', reimagined: true }),
+    'fed-flagship', { x: 100, y: 100, facing: 270 }, 'axis-flagship', { x: 140, y: 100 }), terrain: [] };
+  elements.clear();
+  renderGame(game);
+  assert.match(read('#map-field').innerHTML, /heading-glyph" style="--heading:270deg"/,
+    'the needle carries the hull’s heading');
+
+  elements.clear();
+  renderGame(createGame({ seed: 'render-heading-classic' }));
+  assert.ok(!/heading-glyph/.test(read('#map-field').innerHTML), 'a classic map draws no needles');
+
+  const base = withPair(createGame({ seed: 'render-heading-drone', reimagined: true }),
+    'fed-flagship', { x: 100, y: 100 }, 'fed-carrier', { x: 100, y: 104 });
+  const flown = launchDrones({ ...base, terrain: [] }, getShip(base, 'fed-carrier')).game;
+  elements.clear();
+  renderGame(flown);
+  const html = read('#map-field').innerHTML;
+  assert.match(html, /heading-glyph/, 'the ships of the line wear needles');
+  assert.match(html, /data-ship-id="fed-carrier-drone-1"[^>]*><span class="glyph">D<\/span>/,
+    'a drone button carries no needle');
+});
+
+test('a Federation menu offers helm and shield focus; an enemy menu reads arcs as intel', () => {
+  const own = withPair(createGame({ seed: 'render-helm-menu', reimagined: true }),
+    'fed-flagship', { x: 100, y: 100 }, 'fed-cruiser-1', { x: 104, y: 100, facing: 90 });
+  elements.clear();
+  renderGame(own, { contextShipId: 'fed-cruiser-1' });
+  const menu = read('#ship-menu').innerHTML;
+  assert.match(menu, /Helm — heading 90°/);
+  assert.match(menu, /data-ship-facing="-45" data-facing-ship="fed-cruiser-1"/);
+  assert.match(menu, /data-ship-facing="45" data-facing-ship="fed-cruiser-1"/);
+  assert.match(menu, /Shield focus/);
+  assert.match(menu, /data-ship-arc-focus="fore" data-arc-focus-ship="fed-cruiser-1"/);
+  assert.match(menu, /Shield arcs: F 42 · S 35 · A 28 · P 35 · heading 90°/,
+    'the cruiser’s 140 pool reads its weighted breakdown');
+
+  const enemy = withPair(createGame({ seed: 'render-helm-enemy', reimagined: true }),
+    'fed-flagship', { x: 100, y: 100 }, 'axis-flagship', { x: 104, y: 100, facing: 0 });
+  elements.clear();
+  renderGame(enemy, { contextShipId: 'axis-flagship' });
+  const enemyMenu = read('#ship-menu').innerHTML;
+  assert.match(enemyMenu, /Shield arcs: F 60 · S 50 · A 40 · P 50 · heading 0°/, 'arc intel is readable');
+  assert.ok(!/data-ship-facing/.test(enemyMenu), 'you cannot turn an enemy hull');
+  assert.ok(!/data-ship-arc-focus/.test(enemyMenu), 'you cannot focus an enemy hull');
+});
+
+test('a Reimagined legend keys the heading needle; a classic legend does not', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'render-legend-heading', reimagined: true }));
+  assert.match(read('#map-legend').innerHTML, /legend-swatch heading-glyph/);
+  elements.clear();
+  renderGame(createGame({ seed: 'render-legend-classic' }));
+  assert.ok(!/heading-glyph/.test(read('#map-legend').innerHTML));
+});
+
+test('the fleet report reads each hull’s heading and arcs in a Reimagined war', () => {
+  const game = withFlagship(createGame({ seed: 'render-arc-report', reimagined: true }), { facing: 123 });
+  const argo = reportFor(game, 'fleet').lines.find((line) => line.startsWith('Argo'));
+  assert.match(argo, /bow 123°, arcs F 60 · S 50 · A 40 · P 50/);
+  const classic = reportFor(createGame({ seed: 'render-arc-report-classic' }), 'fleet').lines;
+  assert.ok(classic.every((line) => !/arcs|bow \d/.test(line)), 'a classic report never reads arcs');
 });
