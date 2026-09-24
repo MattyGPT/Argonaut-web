@@ -314,23 +314,31 @@ render/UI — each its own branch → PR.
   effect. Old saves tolerate the absence of all three fields: `arcsOf` re-splits
   the current total, `facingOf` defaults to the bearing of the nearest active foe
   (else 0), `arcFocus` reads `?? {}`.
-- Helpers in `state.js`: `normalizeDegrees`, `bearingDeg`, `arcSplit`, `hasArcs`,
-  `arcsOf`, `facingOf`, `struckArc`, `applyHeading`.
+- Helpers in `state.js`: `normalizeDegrees`, `bearingDeg`, `arcSplit`,
+  `deductArcsProportionally`, `arcCapacities`, `arcFocusOf`, `grownArcs`,
+  `hasArcs`, `arcsOf`, `facingOf`, `struckArc`, `applyHeading`.
 
 #### Chunk plan
 
-- **23a — data model + facing** *(shipped this PR)*: constants, `createShip` /
+- **23a — data model + facing** *(shipped, PR #57)*: constants, `createShip` /
   `createGame` seeding (including the opening face-the-nearest-foe pass),
   `applyHeading` on every displacement path (`moveAction`, `disengageAction`,
   both tractor-tow sites, the AI move branch in `turns.js`; hyperspace
   deliberately keeps the prior facing), the free `setFacing` action, and the
   old-save tolerance. Nothing reads arcs in combat yet, so war outcomes — and
   the harness figures in all three modes — cannot move.
-- **23b — arc damage resolution**: `damageShip` gains an optional arc in its
-  `options` (inert without one, so classic/extended calls stay byte-identical);
-  both fire paths and the spread primary pass `struckArc`; positional paths
-  deduct proportionally; regen/dockyard/flush distribute focused → weakest-first;
-  `setArcFocus` free action; harness re-measure.
+- **23b — arc damage resolution** *(shipped this PR)*: `damageShip` gained the
+  optional `options.arc` (inert on a hull without arcs, so classic/extended
+  calls stay byte-identical); both fire paths and the spread primary pass
+  `struckArc`; ion, splash, rock strikes, hyperspace loss, and wrecks deduct
+  proportionally (`deductArcsProportionally`); regen/dockyard/flush distribute
+  through `grownArcs` (focused arc first, then weakest-first); `setArcFocus`
+  free action; the player's fire narrative names the struck arc. Measured
+  (250 seeds): the Reimagined war shortened hard — median 62 → **40**,
+  volleys/kill 18.6 → **11**, hopeless draws 8% → 15%, Axis 15.6 → 7.6, Cabal
+  10 → 16.8 — the single-arc absorb reaches internals far sooner, and this
+  measures the model BEFORE the AI faces its threat. Classic/extended
+  digit-for-digit identical. Full row + levers in CALIBRATION.
 - **23c — AI threat-facing**: captains orient the strong fore arc toward the
   hull they are engaging (free, deterministic, resolved in the AI decision);
   retreating AI keeps its escape heading (the movement paths already set it), so
