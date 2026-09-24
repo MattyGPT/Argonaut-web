@@ -327,7 +327,7 @@ render/UI — each its own branch → PR.
   deliberately keeps the prior facing), the free `setFacing` action, and the
   old-save tolerance. Nothing reads arcs in combat yet, so war outcomes — and
   the harness figures in all three modes — cannot move.
-- **23b — arc damage resolution** *(shipped this PR)*: `damageShip` gained the
+- **23b — arc damage resolution** *(shipped, PR #58)*: `damageShip` gained the
   optional `options.arc` (inert on a hull without arcs, so classic/extended
   calls stay byte-identical); both fire paths and the spread primary pass
   `struckArc`; ion, splash, rock strikes, hyperspace loss, and wrecks deduct
