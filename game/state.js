@@ -978,6 +978,80 @@ export const arcSplit = (total) => {
 };
 
 /**
+ * Deducts a shield loss from a breakdown proportionally to what each arc still
+ * holds — the round-23 rule for every positional hit (splash, blast, collision,
+ * rock strike, ion, hyperspace loss), which burns the total pool and never
+ * respects facing. Largest-remainder rounded, clamped to each arc's own pool and
+ * exactly summing to `loss`, so the breakdown invariant survives any hit. Pure
+ * integer math, no RNG.
+ */
+export const deductArcsProportionally = (arcs, loss) => {
+  const next = { ...arcs };
+  const total = ARCS.reduce((sum, arc) => sum + Math.max(0, next[arc]), 0);
+  const left = Math.min(Math.max(0, Math.floor(loss)), total);
+  if (left <= 0) return next;
+  const exact = ARCS.map((arc) => (Math.max(0, next[arc]) * left) / total);
+  const take = exact.map(Math.floor);
+  let rem = left - take.reduce((sum, value) => sum + value, 0);
+  const order = ARCS
+    .map((arc, index) => ({ arc, index, frac: exact[index] - take[index] }))
+    .sort((a, b) => b.frac - a.frac || a.index - b.index);
+  for (let i = 0; rem > 0; i = (i + 1) % order.length) {
+    const idx = order[i].index;
+    if (take[idx] < Math.max(0, next[ARCS[idx]])) {
+      take[idx] += 1;
+      rem -= 1;
+    }
+  }
+  ARCS.forEach((arc, index) => { next[arc] = Math.max(0, next[arc] - take[index]); });
+  return next;
+};
+
+/** The per-arc capacity ceiling of a hull: the weighted split of its class pool. */
+export const arcCapacities = (ship) => arcSplit(shieldCapacity(ship));
+
+/**
+ * The arc a hull's shield recovery is focused on (round 23): the player's stored
+ * choice when it names a real arc, else null (recovery runs weakest-arc-first).
+ * The AI never stores a focus; old saves tolerate the map's absence.
+ */
+export const arcFocusOf = (game, ship) => {
+  const focus = game?.arcFocus?.[ship?.id];
+  return ARCS.includes(focus) ? focus : null;
+};
+
+/**
+ * The breakdown after a hull's pool GROWS to `newShields` (reactor regen, the
+ * dockyard top-up, an engine flush): the focused arc fills first up to its
+ * weighted capacity, then the weakest arcs — the biggest deficit against capacity,
+ * ties in `ARCS` order — until the gain is spent. Callers cap `newShields` at the
+ * class pool, whose split sums to exactly that, so the gain always fits and the
+ * invariant holds. Pure integer math, no RNG. Undefined for a hull without arcs.
+ */
+export const grownArcs = (game, ship, newShields) => {
+  if (!ship?.arcs) return undefined;
+  const next = { ...ship.arcs };
+  const caps = arcCapacities(ship);
+  let left = Math.max(0, Math.floor(newShields) - ARCS.reduce((sum, arc) => sum + next[arc], 0));
+  const focus = arcFocusOf(game, ship);
+  if (focus && left > 0) {
+    const give = Math.min(Math.max(0, caps[focus] - next[focus]), left);
+    next[focus] += give;
+    left -= give;
+  }
+  while (left > 0) {
+    const weakest = ARCS
+      .map((arc) => ({ arc, deficit: caps[arc] - next[arc] }))
+      .sort((a, b) => b.deficit - a.deficit || ARCS.indexOf(a.arc) - ARCS.indexOf(b.arc))[0];
+    if (weakest.deficit <= 0) break;
+    const give = Math.min(weakest.deficit, left);
+    next[weakest.arc] += give;
+    left -= give;
+  }
+  return next;
+};
+
+/**
  * Whether a hull fights with arcs at all: Reimagined ships of the line only.
  * Drones are too small for directional shielding (they keep the single pool), and
  * a classic or extended hull never carries the breakdown, so every damage path

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { ACE_KILLS, ARC, ARCS, CAPTAIN_NAMES, CRIPPLE, DOCKING, DRONE, GRID_SIZE, ION, LOADOUT, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, REIMAGINED_WEAPON_DAMAGE_SCALE, SCENARIOS, SHIP_TEMPLATES, SPREAD, STALEMATE_ROUNDS, STANCE, STANCES, TERRAIN, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioOutcome, scenarioProgress } from '../game/scenarios.js';
-import { abbreviateNarrative, alertLevel, appendLog, applyHeading, arcSplit, arcsOf, bearingDeg, blastRadius, clampPowerAllocation, createGame, crewCapacity, defaultLoadout, distance, dockedAt, engineCapacity, facingOf, fleetCost, fleetHulls, getShip, hasArcs, inRadioContact, insideFeature, ionStormZone, isAce, isDrone, nebulaHides, nebulaRevealRange, normalizeDegrees, normalizeFleetSpec, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, stanceOf, struckArc, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
+import { abbreviateNarrative, alertLevel, appendLog, applyHeading, arcFocusOf, arcSplit, arcsOf, bearingDeg, blastRadius, clampPowerAllocation, createGame, crewCapacity, deductArcsProportionally, defaultLoadout, distance, dockedAt, engineCapacity, facingOf, fleetCost, fleetHulls, getShip, grownArcs, hasArcs, inRadioContact, insideFeature, ionStormZone, isAce, isDrone, nebulaHides, nebulaRevealRange, normalizeDegrees, normalizeFleetSpec, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, stanceOf, struckArc, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
 import { applyPlayerAction, canLaunchDrones, captureHull, damageShip, defaultTargetFor, eligibleTargets, ionDamage, killLines, launchDrones, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, spreadSplash, tractorLock, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, darkenOrphanDrones, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolveObjectives, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
@@ -4820,4 +4820,279 @@ test('applyHeading is inert outside a Reimagined war and on drones', () => {
   const drone = getShip(flown, 'fed-carrier-drone-1');
   assert.deepEqual(applyHeading(flown, drone, drone.x + 3, drone.y + 4), { ...drone, x: drone.x + 3, y: drone.y + 4 });
   assert.ok(ARC.weights.fore > ARC.weights.aft, 'the bow is the strong arc, the stern the weak one');
+});
+
+// --- Argonaut Reimagined, round 23b: arc damage resolution ---
+
+/** A Reimagined battle cruiser staged with the full weighted breakdown of its 200 pool. */
+const arcShip = (over = {}) => ({
+  id: 'arc-victim',
+  name: 'Victim',
+  faction: 'Axis',
+  className: 'Battle cruiser',
+  x: 100,
+  y: 100,
+  status: 'active',
+  shields: 200,
+  crew: 200,
+  systems: { engines: 5, phasers: 5, photons: 3, tractor: 3, scanner: 4, mapper: 3, transporter: 3, radio: 2 },
+  tractorBy: null,
+  kills: 0,
+  shotsFired: 0,
+  shotsTaken: 0,
+  collisions: 0,
+  arcs: { fore: 60, starboard: 50, aft: 40, port: 50 },
+  facing: 0,
+  ...over,
+});
+
+const arcSum = (ship) => ARCS.reduce((total, arc) => total + ship.arcs[arc], 0);
+
+test('a struck arc absorbs first and the overflow goes straight to the internals', () => {
+  const rng = createRng('arc-absorb');
+  const ship = arcShip();
+  // 30 into the 40-point aft arc: all shield, no internals touched.
+  const soaked = damageShip(ship, 30, rng, { arc: 'aft' });
+  assert.deepEqual(soaked.arcs, { fore: 60, starboard: 50, aft: 10, port: 50 }, 'only the struck arc burns');
+  assert.equal(soaked.shields, 170);
+  assert.equal(soaked.crew, 200, 'the arc pool held the whole hit');
+  assert.deepEqual(soaked.systems, ship.systems);
+  assert.equal(arcSum(soaked), soaked.shields, 'the breakdown invariant holds');
+  // 60 into the 40-point aft arc: the arc dies and 20 points reach the lottery.
+  const through = damageShip(ship, 60, createRng('arc-absorb'), { arc: 'aft' });
+  assert.equal(through.arcs.aft, 0, 'the struck arc is burnt out');
+  assert.equal(through.shields, 160, 'the total only lost the 40 the arc absorbed');
+  const internals = 200 - through.crew + Object.keys(ship.systems).reduce((lost, name) => lost + (ship.systems[name] - through.systems[name]), 0);
+  assert.equal(internals, 20, 'the overflow ran the crew/system lottery');
+  assert.equal(arcSum(through), through.shields);
+  // No spill: the burnt-out aft never drains its neighbors.
+  assert.equal(through.arcs.fore, 60);
+  assert.equal(through.arcs.port, 50);
+  // A killing blow through a weak arc still ends the hull the same way.
+  const gutted = damageShip(arcShip({ shields: 40, crew: 3, arcs: { fore: 0, starboard: 0, aft: 40, port: 0 } }), 200, createRng('arc-kill'), { arc: 'aft' });
+  assert.ok(['vacant', 'destroyed'].includes(gutted.status), 'the lottery governs the kill, not the arc');
+  if (gutted.arcs) assert.equal(arcSum(gutted), gutted.shields);
+});
+
+test('positional damage on an arced hull burns the breakdown proportionally', () => {
+  const ship = arcShip();
+  const hit = damageShip(ship, 40, createRng('arc-positional'));
+  assert.equal(hit.shields, 160);
+  assert.deepEqual(hit.arcs, { fore: 48, starboard: 40, aft: 32, port: 40 }, 'every arc burns in proportion');
+  assert.equal(arcSum(hit), hit.shields);
+  // A depleted arc can never be drained below zero, and the rest make up the loss.
+  const lopsided = arcShip({ shields: 50, arcs: { fore: 0, starboard: 0, aft: 0, port: 50 } });
+  const drained = damageShip(lopsided, 10, createRng('arc-clamp'));
+  assert.deepEqual(drained.arcs, { fore: 0, starboard: 0, aft: 0, port: 40 });
+  assert.equal(arcSum(drained), drained.shields);
+  // deductArcsProportionally is exact and deterministic for awkward losses.
+  for (const loss of [0, 1, 7, 33, 199, 200, 500]) {
+    const next = deductArcsProportionally(ship.arcs, loss);
+    const taken = 200 - ARCS.reduce((total, arc) => total + next[arc], 0);
+    assert.equal(taken, Math.min(loss, 200), `loss ${loss} deducts exactly`);
+    assert.deepEqual(deductArcsProportionally(ship.arcs, loss), next);
+  }
+});
+
+test('the arc option is inert on a hull without arcs — the classic path is byte-identical', () => {
+  const classic = arcShip();
+  delete classic.arcs;
+  delete classic.facing;
+  const plain = damageShip(classic, 45, createRng('arc-inert'));
+  const arced = damageShip(classic, 45, createRng('arc-inert'), { arc: 'aft' });
+  assert.deepEqual(arced, plain, 'the same roll, the same hull, the same lottery');
+  assert.ok(!('arcs' in arced), 'no breakdown is stamped onto a classic hull');
+  assert.equal(arced.shields, Math.max(0, 200 - 45));
+});
+
+test('an aimed volley through the fire path strikes the arc the shooter bears on', () => {
+  // The Axis flagship faces east (away); the player shoots it from the west, so
+  // every hit lands on the weak aft arc. Loop seeds until a volley lands.
+  let landed = null;
+  for (let i = 0; i < 40 && !landed; i += 1) {
+    const game = arcWar(`arc-fire-${i}`, (ship) => (ship.id === 'axis-flagship' ? { ...ship, facing: 0 } : ship));
+    const out = applyPlayerAction(game, { type: 'phasers', targetId: 'axis-flagship' });
+    const victim = getShip(out.game, 'axis-flagship');
+    if (!out.messages.join(' ').includes('Missed')) landed = { before: getShip(game, 'axis-flagship'), after: victim, messages: out.messages.join(' ') };
+  }
+  assert.ok(landed, 'a hit was staged within the seed loop');
+  assert.match(landed.messages, /lands on .*'s aft arc/, 'the narrative names the struck arc');
+  assert.ok(landed.after.arcs.aft < landed.before.arcs.aft || landed.after.arcs.aft === 0, 'the aft arc burned');
+  assert.equal(landed.after.arcs.fore, landed.before.arcs.fore, 'the untouched arcs stand');
+  assert.equal(landed.after.arcs.starboard, landed.before.arcs.starboard);
+  assert.equal(landed.after.arcs.port, landed.before.arcs.port);
+  assert.equal(arcSum(landed.after), landed.after.shields);
+});
+
+test('spread splash: the primary is arc-resolved, the caught hulls are not', () => {
+  const game = arcWar('arc-splash', (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 110, y: 100, facing: 0 };
+    if (ship.id === 'axis-cruiser-1') return { ...ship, x: 116, y: 100 };
+    return parked(ship);
+  });
+  const shooter = getShip(game, 'fed-flagship');
+  const primary = getShip(game, 'axis-flagship');
+  const caught = getShip(game, 'axis-cruiser-1');
+  const out = spreadSplash(game, shooter, primary, 40, createRng('arc-splash'));
+  const afterPrimary = getShip(out.game, 'axis-flagship');
+  const afterCaught = getShip(out.game, 'axis-cruiser-1');
+  // The primary takes the aimed hit on its aft arc (the shooter bears west of it).
+  assert.ok(afterPrimary.arcs.aft < primary.arcs.aft, 'the primary takes it on the struck arc');
+  assert.equal(afterPrimary.arcs.fore, primary.arcs.fore, 'the primary’s other arcs stand');
+  // The caught hull's loss is positional: every arc burns in proportion.
+  const caughtLoss = caught.shields - afterCaught.shields;
+  assert.ok(caughtLoss > 0, 'the nearby hull is caught');
+  assert.deepEqual(afterCaught.arcs, deductArcsProportionally(caught.arcs, caughtLoss), 'the splash burns proportionally');
+  assert.equal(arcSum(afterPrimary), afterPrimary.shields);
+  assert.equal(arcSum(afterCaught), afterCaught.shields);
+});
+
+test('ion, rock strikes, hyperspace loss, and wrecks all keep the breakdown consistent', () => {
+  // Ion sidesteps facing: the burst soaks against the total, arcs burn proportionally.
+  const ship = arcShip();
+  const zapped = ionDamage(ship, 40, createRng('arc-ion'));
+  assert.equal(zapped.shields, 160);
+  assert.deepEqual(zapped.arcs, deductArcsProportionally(ship.arcs, 40));
+  const lopsided = arcShip({ shields: 50, arcs: { fore: 0, starboard: 0, aft: 0, port: 50 } });
+  assert.equal(ionDamage(lopsided, 30, createRng('arc-ion-2')).arcs.aft, 0, 'a dead arc stays dead');
+  // A wreck holds no arcs.
+  const wreck = damageShip(ship, 5000, createRng('arc-wreck'));
+  assert.equal(wreck.status, 'destroyed');
+  assert.equal(arcSum(wreck), wreck.shields, 'the wreck’s breakdown is consistent');
+  assert.deepEqual(wreck.arcs, { fore: 0, starboard: 0, aft: 0, port: 0 });
+  // Hyperspace loss is positional.
+  for (let i = 0; i < 30; i += 1) {
+    const game = arcWar(`arc-jump-loss-${i}`);
+    const out = applyPlayerAction(game, { type: 'hyperspace', x: 30, y: 30 });
+    const jumped = getShip(out.game, 'fed-flagship');
+    if (jumped.status === 'active' && jumped.x === 30) {
+      assert.equal(arcSum(jumped), jumped.shields, 'the jump loss burns the arcs proportionally');
+      const before = getShip(game, 'fed-flagship');
+      assert.deepEqual(jumped.arcs, deductArcsProportionally(before.arcs, before.shields - jumped.shields));
+      break;
+    }
+    assert.ok(i < 29, 'a successful jump was staged within the seed loop');
+  }
+  // A rock strike rakes the whole hull.
+  const rocks = withShips(arcWar('arc-rocks'), (ship) => (ship.id === 'fed-flagship' ? { ...ship, x: 100, y: 100 } : ship));
+  const field = { ...rocks, terrain: [{ id: 'asteroids-1', type: 'asteroids', x: 100, y: 100, radius: 20 }] };
+  for (let step = 0; step < 60; step += 1) {
+    const game = { ...field, randomStep: step };
+    const out = resolveAsteroidStrike(game, getShip(game, 'fed-flagship'));
+    const struckShip = getShip(out.game, 'fed-flagship');
+    if (struckShip.shields < 200) {
+      assert.equal(arcSum(struckShip), struckShip.shields, 'the strike keeps the invariant');
+      assert.deepEqual(struckShip.arcs, deductArcsProportionally(getShip(game, 'fed-flagship').arcs, 200 - struckShip.shields));
+      break;
+    }
+    assert.ok(step < 59, 'a strike was staged within the step loop');
+  }
+});
+
+test('shield recovery fills the focused arc first, then the weakest', () => {
+  const base = arcWar('arc-recovery');
+  const staged = (arcFocus) => ({
+    ...base,
+    arcFocus,
+    ships: base.ships.map((ship) => (ship.id === 'fed-flagship'
+      ? { ...ship, shields: 150, arcs: { fore: 30, starboard: 50, aft: 20, port: 50 } }
+      : ship)),
+  });
+  // The battle cruiser flushes 5 engine units x 5 = 25 shield power.
+  const focused = applyPlayerAction(staged({ 'fed-flagship': 'aft' }), { type: 'shields' });
+  const afterFocus = getShip(focused.game, 'fed-flagship');
+  assert.deepEqual(afterFocus.arcs, { fore: 35, starboard: 50, aft: 40, port: 50 },
+    'the focused aft fills to its 40 cap, the remainder goes to the weakest');
+  assert.equal(afterFocus.shields, 175);
+  assert.equal(arcSum(afterFocus), afterFocus.shields);
+  const unfocused = applyPlayerAction(staged({}), { type: 'shields' });
+  const afterDefault = getShip(unfocused.game, 'fed-flagship');
+  assert.deepEqual(afterDefault.arcs, { fore: 55, starboard: 50, aft: 20, port: 50 },
+    'with no focus the biggest deficit (fore) fills first');
+  assert.equal(arcSum(afterDefault), afterDefault.shields);
+  // The dockyard top-up obeys the same rule.
+  const yard = arcWar('arc-dockyard');
+  const xanadu = getShip(yard, 'xanadu');
+  const docked = {
+    ...yard,
+    arcFocus: { 'fed-cruiser-1': 'fore' },
+    ships: yard.ships.map((ship) => (ship.id === 'fed-cruiser-1'
+      ? { ...ship, x: xanadu.x + 2, y: xanadu.y, shields: 50, arcs: { fore: 10, starboard: 15, aft: 10, port: 15 } }
+      : ship)),
+  };
+  const out = resolveDocking(docked);
+  const repaired = getShip(out.game, 'fed-cruiser-1');
+  assert.ok(repaired.shields > 50, 'the yard tops the pool up');
+  assert.equal(repaired.arcs.fore, 10 + (repaired.shields - 50), 'the focused fore arc takes the whole top-up');
+  assert.equal(repaired.arcs.starboard, 15, 'the others wait');
+  assert.equal(arcSum(repaired), repaired.shields);
+  // grownArcs is inert on a hull without arcs.
+  assert.equal(grownArcs(base, { ...getShip(base, 'fed-flagship'), arcs: undefined }, 150), undefined);
+});
+
+test('the reactor regen refills the focused arc', () => {
+  const game = arcWar('arc-regen');
+  const hurt = withShips({ ...game, arcFocus: { 'fed-flagship': 'aft' } }, (ship) => (ship.id === 'fed-flagship'
+    ? { ...ship, shields: 100, arcs: { fore: 30, starboard: 25, aft: 20, port: 25 } }
+    : ship));
+  const out = resolvePowerRegen(hurt);
+  const after = getShip(out.game, 'fed-flagship');
+  const before = getShip(hurt, 'fed-flagship');
+  assert.ok(after.shields >= before.shields, 'regen never lowers the pool');
+  if (after.shields > before.shields) {
+    assert.equal(after.arcs.aft, before.arcs.aft + (after.shields - before.shields), 'the trickle refills the focused aft first');
+    assert.equal(after.arcs.fore, before.arcs.fore);
+    assert.equal(arcSum(after), after.shields);
+  }
+});
+
+test('setArcFocus is free, persistent, Federation-only, Reimagined-only, and validates the arc', () => {
+  const game = arcWar('arc-focus-set');
+  const out = applyPlayerAction(game, { type: 'arcFocus', arc: 'port' });
+  assert.equal(out.game.phase, 'player', 'focusing costs no stardate');
+  assert.equal(out.game.arcFocus['fed-flagship'], 'port');
+  assert.match(out.messages.join(' '), /routes shield recovery to its port arc/);
+  const other = applyPlayerAction(game, { type: 'arcFocus', arc: 'fore', shipId: 'fed-cruiser-1' });
+  assert.equal(other.game.arcFocus['fed-cruiser-1'], 'fore');
+  // Clearing the focus returns the hull to weakest-arc-first.
+  const cleared = applyPlayerAction(out.game, { type: 'arcFocus', arc: null });
+  assert.ok(!('fed-flagship' in cleared.game.arcFocus));
+  assert.match(cleared.messages.join(' '), /balances its shield recovery/);
+  // Validation mirrors the other free settings.
+  assert.match(applyPlayerAction(game, { type: 'arcFocus', arc: 'dorsal' }).messages.join(' '), /Unknown shield arc/);
+  assert.match(applyPlayerAction(game, { type: 'arcFocus', arc: 'fore', shipId: 'axis-flagship' }).messages.join(' '), /Only Federation hulls/);
+  const flown = launchDrones(game, getShip(game, 'fed-carrier')).game;
+  assert.match(applyPlayerAction({ ...flown, phase: 'player' }, { type: 'arcFocus', arc: 'fore', shipId: 'fed-carrier-drone-1' }).messages.join(' '), /no shield arcs to focus/);
+  for (const opts of [{}, { extended: true }]) {
+    const off = applyPlayerAction(createGame({ seed: 'arc-focus-off', ...opts }), { type: 'arcFocus', arc: 'fore' });
+    assert.match(off.messages.join(' '), /only available in a Reimagined war/);
+    assert.equal(off.game.phase, 'player');
+  }
+  // arcFocusOf reads only real arcs and tolerates the absent map.
+  assert.equal(arcFocusOf(out.game, getShip(out.game, 'fed-flagship')), 'port');
+  assert.equal(arcFocusOf({ ...out.game, arcFocus: undefined }, getShip(out.game, 'fed-flagship')), null);
+  assert.equal(arcFocusOf(out.game, getShip(out.game, 'axis-flagship')), null);
+});
+
+test('arc damage never touches a classic or extended war, and old saves keep playing', () => {
+  for (const opts of [{}, { extended: true }]) {
+    const off = createGame({ seed: 'arc-damage-parity', ...opts });
+    assert.ok(off.ships.every((ship) => !('arcs' in ship)), 'no hull carries a breakdown');
+  }
+  assert.deepEqual(createGame({ seed: 'arc-damage-parity' }), createGame({ seed: 'arc-damage-parity', reimagined: false }),
+    'the standing parity scaffold still holds');
+  // A stripped mid-war save: an aimed volley on a hull with no arcs falls back to
+  // the total pool, stamps nothing, and the computer phase runs on.
+  const old = withShips({ ...arcWar('arc-damage-old-save'), arcFocus: undefined }, (ship) => {
+    const { arcs, facing, ...rest } = ship;
+    return rest;
+  });
+  const victim = getShip(old, 'axis-flagship');
+  const hit = damageShip(victim, 20, createRng('arc-damage-old'), { arc: struckArc(old, getShip(old, 'fed-flagship'), victim) });
+  assert.ok(!('arcs' in hit), 'no breakdown is stamped onto a stripped hull');
+  assert.equal(hit.shields, victim.shields - 20, 'the single pool absorbs as always');
+  const out = resolveComputerTurns({ ...old, phase: 'computer' });
+  assert.ok(out.turn >= old.turn, 'the war plays on');
+  assert.ok(out.ships.every((ship) => !ship.arcs || arcSum(ship) === ship.shields), 'any hull still standing keeps the invariant');
 });

@@ -11,6 +11,7 @@ import {
   distance,
   dockedAt,
   getShip,
+  grownArcs,
   isActive,
   isDrone,
   isImmovable,
@@ -20,6 +21,7 @@ import {
   segmentCrossesFeature,
   sensorRange,
   shieldCapacity,
+  struckArc,
   strongestFederation,
   systemUnits,
   templateSystems,
@@ -37,7 +39,7 @@ const resolveAiAction = (game, shipId) => {
   const action = chooseAiAction(game, shipId);
   if (action.type === 'pass') return { game, messages: [`${actor.name} holds position.`], type: action.type };
   if (action.type === 'shields') {
-    const flushed = flushShields(actor);
+    const flushed = flushShields(actor, game);
     if (!flushed) return { game, messages: [`${actor.name} holds position.`], type: 'pass' };
     return {
       game: replaceShip(game, flushed.ship),
@@ -68,7 +70,11 @@ const resolveAiAction = (game, shipId) => {
     const grudge = vendettaGrudge(game, actor, target);
     const amount = weaponDamage(action.type, actor, rng, grudge, powerEffect(game, actor, 'weapons'), game.reimagined ? REIMAGINED_WEAPON_DAMAGE_SCALE : 1);
     const before = target.status;
-    const hit = damageShip(target, amount, rng);
+    // Round 23: an aimed volley strikes the target's arc the shooter bears on —
+    // null outside a Reimagined war or against a drone, so a classic or extended
+    // hit keeps its single-pool math byte-identically.
+    const arc = struckArc(game, actor, target);
+    const hit = damageShip(target, amount, rng, arc ? { arc } : {});
     const kill = before === 'active' && hit.status !== 'active' ? 1 : 0;
     const shooter = { ...actor, shotsFired: actor.shotsFired + 1, kills: actor.kills + kill };
     const victim = { ...hit, shotsTaken: hit.shotsTaken + 1 };
@@ -467,7 +473,10 @@ export const resolveDocking = (game) => {
       repaired ? `${repaired} +1` : null,
     ].filter(Boolean);
     messages.push(`${ship.name} docks at ${base.name}: ${gains.join(', ')}.`);
-    return { ...ship, shields, crew, systems };
+    // Round 23: the yard's shield top-up pours into the breakdown — focused arc
+    // first, then the weakest (inert without arcs, so parity holds).
+    const arcs = grownArcs(game, ship, shields);
+    return { ...ship, shields, crew, systems, ...(arcs ? { arcs } : {}) };
   });
   return { game: { ...game, ships }, messages };
 };
@@ -488,7 +497,9 @@ export const resolvePowerRegen = (game) => {
     const gained = Math.min(capacity - ship.shields, Math.floor(capacity * POWER.shieldRegenRate * powerEffect(game, ship, 'shields')));
     if (gained <= 0) return ship;
     messages.push(`${ship.name}'s reactor restores ${gained} shield power.`);
-    return { ...ship, shields: ship.shields + gained };
+    // Round 23: the trickle refills the focused arc first, then the weakest.
+    const arcs = grownArcs(game, ship, ship.shields + gained);
+    return { ...ship, shields: ship.shields + gained, ...(arcs ? { arcs } : {}) };
   });
   return { game: { ...game, ships }, messages };
 };

@@ -1,5 +1,6 @@
 import {
   ACE_KILLS,
+  ARCS,
   CAPTAIN_NAMES,
   CREW_DAMAGE_WEIGHT,
   CRIPPLE,
@@ -37,6 +38,7 @@ import {
   captainOf,
   clampPowerAllocation,
   crewCapacity,
+  deductArcsProportionally,
   describeOrder,
   describePower,
   distance,
@@ -45,6 +47,7 @@ import {
   engineCapacity,
   getLivingShips,
   getShip,
+  grownArcs,
   hasLaunchedDrones,
   inRadioContact,
   insideFeature,
@@ -65,6 +68,7 @@ import {
   sensorRange,
   shieldCapacity,
   spawnDrone,
+  struckArc,
   strongestFederation,
   systemUnits,
   templateSystems,
@@ -209,8 +213,29 @@ export const damageShip = (ship, amount, rng = createRng('damage'), options = {}
   if (!isActive(ship) || !Number.isFinite(amount) || amount <= 0) return ship;
 
   let remaining = Math.floor(amount);
-  const shields = Math.max(0, ship.shields - remaining);
-  remaining = Math.max(0, remaining - ship.shields);
+  // Directional shields (round 23): an aimed volley carries the arc it struck —
+  // that arc's OWN pool absorbs the hit and the overflow goes straight to the
+  // internals, with no spill to neighboring arcs, so presenting a gutted arc to
+  // the enemy genuinely hurts. Any other hit on a hull with arcs is positional:
+  // the total absorbs as always and the arcs burn down proportionally. A hull
+  // without arcs (classic, extended, a drone, an old save) keeps the single-pool
+  // math byte-identically, which is how parity holds.
+  const arc = options.arc && ship.arcs ? options.arc : null;
+  let arcs = ship.arcs;
+  let shields;
+  if (arc) {
+    const pool = Math.max(0, ship.arcs[arc] ?? 0);
+    const absorbed = Math.min(pool, remaining);
+    arcs = { ...ship.arcs, [arc]: pool - absorbed };
+    shields = ship.shields - absorbed;
+    remaining -= absorbed;
+  } else {
+    const absorbed = Math.min(ship.shields, remaining);
+    shields = ship.shields - absorbed;
+    remaining -= absorbed;
+    if (ship.arcs) arcs = deductArcsProportionally(ship.arcs, absorbed);
+  }
+  const withArcs = (update) => ({ ...update, ...(arcs ? { arcs } : {}) });
   let crew = ship.crew;
   let systems = { ...ship.systems };
 
@@ -220,7 +245,7 @@ export const damageShip = (ship, amount, rng = createRng('damage'), options = {}
   if (options.focus) {
     const burn = Math.min(remaining, systems[options.focus] ?? 0);
     if (burn > 0) systems = { ...systems, [options.focus]: systems[options.focus] - burn };
-    return { ...ship, shields, crew, systems };
+    return withArcs({ ...ship, shields, crew, systems });
   }
 
   while (remaining > 0) {
@@ -233,7 +258,7 @@ export const damageShip = (ship, amount, rng = createRng('damage'), options = {}
     const crewSlots = crew > 0 ? crew * CREW_DAMAGE_WEIGHT : 0;
     const slots = crewSlots + systemUnits;
     if (slots === 0) {
-      return { ...ship, shields, crew: 0, systems, status: 'destroyed', tractorBy: null };
+      return withArcs({ ...ship, shields, crew: 0, systems, status: 'destroyed', tractorBy: null });
     }
     const roll = rng.next() * slots;
     if (roll < crewSlots) {
@@ -246,7 +271,7 @@ export const damageShip = (ship, amount, rng = createRng('damage'), options = {}
       if (crew === 0) {
         const overkill = remaining - 1;
         const shattered = systemUnits === 0 || overkill >= OVERKILL_DESTROY_MARGIN * systemUnits;
-        return { ...ship, shields, crew: 0, systems, status: shattered ? 'destroyed' : 'vacant', tractorBy: null };
+        return withArcs({ ...ship, shields, crew: 0, systems, status: shattered ? 'destroyed' : 'vacant', tractorBy: null });
       }
     } else {
       let offset = roll - crewSlots;
@@ -260,7 +285,7 @@ export const damageShip = (ship, amount, rng = createRng('damage'), options = {}
     remaining -= 1;
   }
 
-  return {
+  return withArcs({
     ...ship,
     shields,
     crew,
@@ -270,7 +295,7 @@ export const damageShip = (ship, amount, rng = createRng('damage'), options = {}
     // and boardable, so a scratch that only burns its shields leaves it active,
     // and stripping its systems destroys it outright via the empty-lottery path.
     ...(crew <= 0 && ship.crew > 0 ? { status: 'vacant', tractorBy: null } : {}),
-  };
+  });
 };
 
 /**
@@ -286,8 +311,12 @@ export const damageShip = (ship, amount, rng = createRng('damage'), options = {}
 export const ionDamage = (ship, amount, rng = createRng('ion')) => {
   if (!isActive(ship) || !Number.isFinite(amount) || amount <= 0) return ship;
   let remaining = Math.floor(amount);
-  const shields = Math.max(0, ship.shields - remaining);
-  remaining = Math.max(0, remaining - ship.shields);
+  // Round 23: an ion burst is not a kinetic hit — it sidesteps facing entirely,
+  // soaking against the total pool and burning the arcs down proportionally.
+  const soaked = Math.min(ship.shields, remaining);
+  const shields = ship.shields - soaked;
+  remaining -= soaked;
+  const arcs = ship.arcs ? deductArcsProportionally(ship.arcs, soaked) : undefined;
   const systems = { ...ship.systems };
   while (remaining > 0) {
     const live = Object.keys(systems).filter((name) => systems[name] > 0);
@@ -306,9 +335,9 @@ export const ionDamage = (ship, amount, rng = createRng('ion')) => {
   // be finished. A crew-0 hull (a round-20 drone) has nobody to surrender it, so
   // stripping its last system breaks it up, exactly as lethal fire would.
   if (ship.crew <= 0 && Object.values(systems).every((units) => units <= 0)) {
-    return { ...ship, shields, systems, status: 'destroyed', tractorBy: null };
+    return { ...ship, shields, systems, ...(arcs ? { arcs } : {}), status: 'destroyed', tractorBy: null };
   }
-  return { ...ship, shields, systems };
+  return { ...ship, shields, systems, ...(arcs ? { arcs } : {}) };
 };
 
 /**
@@ -576,7 +605,11 @@ const weaponAction = (game, action, actor, type) => {
     : Math.round(roll * (power / 100));
   const calledUnits = focus ? found.target.systems[focus] : 0;
   const before = found.target.status;
-  const hit = damageShip(found.target, damage, rng, focus ? { focus } : {});
+  // Round 23: an aimed volley strikes the target's arc the shooter bears on —
+  // null outside a Reimagined war or against a drone, so the hit resolves
+  // against the single pool exactly as before.
+  const arc = struckArc(game, actor, found.target);
+  const hit = damageShip(found.target, damage, rng, { ...(focus ? { focus } : {}), ...(arc ? { arc } : {}) });
   const kill = before === 'active' && hit.status !== 'active' ? 1 : 0;
   const shooter = { ...actor, shotsFired: actor.shotsFired + 1, kills: actor.kills + kill };
   const victim = { ...hit, shotsTaken: hit.shotsTaken + 1 };
@@ -600,6 +633,7 @@ const weaponAction = (game, action, actor, type) => {
     focus
       ? `${actor.name} fires a focused phaser beam${powerNote} at ${found.target.name}'s ${focus} for ${damage} damage.`
       : `${actor.name} fires ${type} at ${found.target.name}${powerNote} for ${damage} damage.`,
+    ...(arc && hit.arcs ? [`The hit lands on ${found.target.name}'s ${arc} arc.`] : []),
     ...(focus && calledUnits > 0 && hit.systems[focus] === 0
       ? [`${found.target.name}'s ${focus} are disabled.`]
       : []),
@@ -674,7 +708,10 @@ export const spreadSplash = (game, actor, target, full, rng) => {
     const factor = Math.max(0, 1 - dist / radius);
     const amount = Math.max(1, Math.round(full * factor));
     const before = ship.status;
-    const hit = damageShip(ship, amount, rng);
+    // Round 23: only the salvo's primary hit is aimed — it lands on the target's
+    // arc the launcher bears on. The splash on secondary hulls is positional:
+    // it hits the total pool and burns the arcs proportionally.
+    const hit = damageShip(ship, amount, rng, ship.id === target.id ? { arc: struckArc(game, actor, target) } : {});
     if (before === 'active' && hit.status !== 'active') {
       if (ship.faction !== actor.faction) kills += 1;
       events.push({ kind: 'explosion', fromId: actor.id, toId: ship.id, x1: ship.x, y1: ship.y, x2: ship.x, y2: ship.y, hit: true });
@@ -792,7 +829,12 @@ export const resolveAsteroidStrike = (game, ship) => {
   const amount = rng.integer(TERRAIN.asteroidStrike.min, TERRAIN.asteroidStrike.max);
   const struck = Math.min(current.shields, amount);
   if (struck <= 0) return { game: rolled, messages: [], events: [] };
-  const updated = replaceShip(rolled, { ...current, shields: current.shields - struck });
+  // Round 23: a rock strike is positional — it rakes the whole hull, burning the
+  // arcs proportionally rather than the one facing the impact.
+  const raked = { ...current, shields: current.shields - struck };
+  const updated = replaceShip(rolled, current.arcs
+    ? { ...raked, arcs: deductArcsProportionally(current.arcs, struck) }
+    : raked);
   return {
     game: updated,
     messages: [`Asteroid strike: rocks rake ${current.name} for ${struck} shield damage.`],
@@ -1052,7 +1094,15 @@ const transportAction = (game, action, actor) => {
   ]);
 };
 
-const destroyedShip = (ship) => ({ ...ship, status: 'destroyed', crew: 0, shields: 0, tractorBy: null });
+const destroyedShip = (ship) => ({
+  ...ship,
+  status: 'destroyed',
+  crew: 0,
+  shields: 0,
+  tractorBy: null,
+  // Round 23: a wreck holds no arcs — keep the breakdown consistent with the pool.
+  ...(ship.arcs ? { arcs: Object.fromEntries(ARCS.map((arc) => [arc, 0])) } : {}),
+});
 
 /**
  * The blast itself, without ending a turn: everything inside the radius dies and a
@@ -1124,8 +1174,12 @@ const hyperspaceAction = (game, action, actor) => {
     return invalid(game, 'Hyperspace destination must be valid map coordinates.');
   }
   const shieldDamage = Math.max(HYPERSPACE_MIN_SHIELD_LOSS, Math.ceil(shieldCapacity(actor) * HYPERSPACE_SHIELD_LOSS));
-  // Round 23: a jump has no meaningful heading — the hull keeps its prior facing.
-  const relocated = { ...actor, x, y, shields: Math.max(0, actor.shields - shieldDamage), tractorBy: null };
+  // Round 23: a jump has no meaningful heading — the hull keeps its prior facing —
+  // and its shield loss is positional, burning the arcs proportionally.
+  const emerged = { ...actor, x, y, shields: Math.max(0, actor.shields - shieldDamage), tractorBy: null };
+  const relocated = actor.arcs
+    ? { ...emerged, arcs: deductArcsProportionally(actor.arcs, actor.shields - emerged.shields) }
+    : emerged;
   // Materializing inside another hull is a collision like any other, which makes a
   // jump onto an enemy a suicide ram.
   const collision = resolveCollision(completeTurn(advanceRandom(replaceShip(game, relocated))), relocated);
@@ -1141,11 +1195,14 @@ const hyperspaceAction = (game, action, actor) => {
  * autopilots', so an enemy captain reinforces its shields exactly as you do. Null
  * when there are no engines to flush or the shields are already full.
  */
-export const flushShields = (actor) => {
+export const flushShields = (actor, game = null) => {
   if (systemUnits(actor, 'engines') <= 0) return null;
   const shields = Math.min(shieldCapacity(actor), actor.shields + systemUnits(actor, 'engines') * SHIELD_PER_ENGINE);
   if (shields === actor.shields) return null;
-  return { ship: { ...actor, shields }, gained: shields - actor.shields };
+  // Round 23: the flushed gain pours into the breakdown — the focused arc first,
+  // then the weakest — exactly like the reactor regen and the dockyard top-up.
+  const arcs = grownArcs(game, actor, shields);
+  return { ship: { ...actor, shields, ...(arcs ? { arcs } : {}) }, gained: shields - actor.shields };
 };
 
 /**
@@ -1308,6 +1365,31 @@ const setFacing = (game, action, actor) => {
   );
 };
 
+/**
+ * Focuses a hull's shield recovery on one arc (round 23). Like stance, power, and
+ * the helm order it costs no turn and persists. Shield gains — the reactor regen,
+ * the dockyard top-up, an engine flush — fill the focused arc first up to its
+ * weighted capacity, the remainder going weakest-arc-first; with no focus stored,
+ * weakest-arc-first is the whole rule. Reimagined only, Federation hulls only; the
+ * AI captains never focus (the default covers them).
+ */
+const setArcFocus = (game, action, actor) => {
+  if (!game.reimagined) return invalid(game, 'Directional shields are only available in a Reimagined war.');
+  const ship = getShip(game, action.shipId ?? game.playerShipId);
+  if (!ship || !isActive(ship)) return invalid(game, 'No such hull to focus shields for.');
+  if (ship.faction !== actor.faction) return invalid(game, 'Only Federation hulls take your shield orders.');
+  if (isDrone(ship)) return invalid(game, `${ship.name} has no shield arcs to focus.`);
+  const arc = action.arc === undefined ? null : action.arc;
+  if (arc !== null && !ARCS.includes(arc)) return invalid(game, `Unknown shield arc: ${arc}.`);
+  const arcFocus = { ...(game.arcFocus ?? {}) };
+  if (arc === null) delete arcFocus[ship.id];
+  else arcFocus[ship.id] = arc;
+  return result(
+    { ...game, arcFocus },
+    arc ? `${ship.name} routes shield recovery to its ${arc} arc.` : `${ship.name} balances its shield recovery.`,
+  );
+};
+
 /** The nearest active enemy hull to `actor`, ties by id, or null in a field with none. */
 const nearestThreat = (game, actor) => game.ships
   .filter((ship) => isActive(ship) && ship.faction !== actor.faction)
@@ -1357,7 +1439,7 @@ export const applyPlayerAction = (game, action = {}) => {
 
   switch (action.type) {
     case 'shields': {
-      const flushed = flushShields(actor);
+      const flushed = flushShields(actor, game);
       if (!flushed) {
         return invalid(game, systemUnits(actor, 'engines') <= 0
           ? `${actor.name} cannot flush engines for shield power.`
@@ -1408,6 +1490,7 @@ export const applyPlayerAction = (game, action = {}) => {
     case 'power': return setPower(game, action, actor);
     case 'stance': return setStance(game, action, actor);
     case 'facing': return setFacing(game, action, actor);
+    case 'arcFocus': return setArcFocus(game, action, actor);
     case 'autopilot': return result(completeTurn(game), `${actor.name} autopilot holds course.`);
     case 'resign': {
       if (game.resigned) return invalid(game, 'You have already resigned command; the autopilot has the conn.');
