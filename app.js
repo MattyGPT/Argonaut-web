@@ -347,9 +347,10 @@ const dispatch = async (action) => {
     ...view,
     entries: acted || outcome.report ? [] : outcome.messages,
     ...(outcome.report ? { report: outcome.report } : {}),
-    // Orders, refits, and stances are free actions issued from the ship menu, so it
-    // stays open to issue another; anything that spends the stardate puts it away.
-    ...(['orders', 'refit', 'stance'].includes(action.type) ? {} : { contextShipId: null }),
+    // Orders, refits, stances, helm turns, and shield focus are free actions
+    // issued from the ship menu, so it stays open to issue another; anything that
+    // spends the stardate puts it away.
+    ...(['orders', 'refit', 'stance', 'facing', 'arcFocus'].includes(action.type) ? {} : { contextShipId: null }),
   };
   if (!['phasers', 'photons'].includes(action.type)) playEffect('command', game.sound);
   showEvents(outcome.events);

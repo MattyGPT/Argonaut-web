@@ -144,6 +144,30 @@ test('a ship-menu stance button carries the hull it was pressed for', () => {
   assert.deepEqual(dispatched, [{ type: 'stance', stance: 'firing', shipId: 'fed-cruiser-1' }]);
 });
 
+test('console helm and shield-focus buttons steer the command ship (round 23)', () => {
+  openDialog = null;
+  const dispatched = bind();
+  click('[data-facing-turn]', { facingTurn: '-45' });
+  click('[data-arc-focus]', { arcFocus: 'aft' });
+  click('[data-arc-focus]', { arcFocus: '' });
+  assert.deepEqual(dispatched, [
+    { type: 'facing', deltaDegrees: -45 },
+    { type: 'arcFocus', arc: 'aft' },
+    { type: 'arcFocus', arc: null },
+  ], 'the empty focus value dispatches as the auto (null) choice');
+});
+
+test('ship-menu helm and focus buttons carry the hull they were pressed for (round 23)', () => {
+  openDialog = null;
+  const dispatched = bind();
+  click('[data-ship-facing]', { shipFacing: '45', facingShip: 'fed-cruiser-1' });
+  click('[data-ship-arc-focus]', { shipArcFocus: 'fore', arcFocusShip: 'fed-cruiser-1' });
+  assert.deepEqual(dispatched, [
+    { type: 'facing', deltaDegrees: 45, shipId: 'fed-cruiser-1' },
+    { type: 'arcFocus', arc: 'fore', shipId: 'fed-cruiser-1' },
+  ]);
+});
+
 test('an order button carries the ship it was pressed for', () => {
   openDialog = null;
   const dispatched = bind();

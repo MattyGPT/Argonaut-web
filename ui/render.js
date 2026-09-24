@@ -1,4 +1,4 @@
-import { DOCKING, FACTIONS, GRID_SIZE, POWER_SINKS, PRIZE, RANGES, REFITS, STANCES, TERRAIN } from '../game/constants.js';
+import { ARCS, DOCKING, FACTIONS, GRID_SIZE, POWER_SINKS, PRIZE, RANGES, REFITS, STANCES, TERRAIN } from '../game/constants.js';
 import { canLaunchDrones, shipCommands } from '../game/actions.js';
 import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
 import { cameraWindow, fieldTransform, viewportFromWorld } from './camera.js';
@@ -6,12 +6,16 @@ import { drawMove } from './fx.js';
 import {
   abbreviateNarrative,
   alertLevel,
+  arcFocusOf,
+  arcsOf,
   crewCapacity,
   describeOrder,
   distance,
   dockedAt,
   engineCapacity,
+  facingOf,
   getShip,
+  hasArcs,
   inRadioContact,
   isAce,
   isActive,
@@ -120,6 +124,20 @@ const prizeNote = (ship) => {
   return ` — prize of war from the ${ship.prize.from}, stardate ${ship.prize.turn}, prize crew ${ship.crew}/${crewCapacity(ship)}${manning}`;
 };
 
+/** Short labels for the four shield arcs (round 23), used across console/menu/reports. */
+const ARC_LABELS = { fore: 'Fore', starboard: 'Stbd', aft: 'Aft', port: 'Port' };
+
+/**
+ * The one-line arc breakdown the console, menus, and reports read (round 23):
+ * "F 60 · S 50 · A 40 · P 50". Null for a hull that does not fight with arcs, so
+ * a classic or extended display never grows the line.
+ */
+const arcReadout = (game, ship) => {
+  const arcs = arcsOf(game, ship);
+  if (!arcs) return null;
+  return ARCS.map((arc) => `${arc[0].toUpperCase()} ${arcs[arc]}`).join(' · ');
+};
+
 /**
  * The context menu that grows out of a clicked hull: what your command ship can
  * actually do to it, plus — in an extended war — the standing orders and dockyard
@@ -142,6 +160,12 @@ const shipMenu = (game, actor, ship) => {
     // hulls show their stance as the selector below instead.
     ...(game.reimagined && isActive(ship) && ship.faction !== actor?.faction
       ? [`Combat stance: ${stanceOf(game, ship)}.`]
+      : []),
+    // Directional shields (round 23): the arc breakdown and heading are readable
+    // combat intel on any hull — which arc you would hit, and which way its bow
+    // points. Empty line for a drone or outside a Reimagined war.
+    ...(game.reimagined && isActive(ship) && arcReadout(game, ship)
+      ? [`Shield arcs: ${arcReadout(game, ship)} · heading ${Math.round(facingOf(game, ship))}°.`]
       : []),
     // A prize of your alliance tells its story in the menu (round 17); the record
     // only exists in a Reimagined war, so no mode check is needed here.
@@ -187,10 +211,26 @@ const shipMenu = (game, actor, ship) => {
       .join('');
     stanceBlock = `<p class="menu-sub">Combat stance — firing is accurate but exposed; evasive is hard to hit but wild:</p><div class="order-grid stance-grid">${stanceButtons}</div>`;
   }
+  // Directional shields (round 23, Reimagined): the helm turn and the shield-focus
+  // selector are free, persistent per-hull settings exactly like the stance — only
+  // your Federation hulls take them, and a drone has neither arcs nor a heading.
+  let helmBlock = '';
+  if (canStance && hasArcs(game, ship)) {
+    const heading = Math.round(facingOf(game, ship));
+    const focus = arcFocusOf(game, ship);
+    const turnButtons = [['-45', '↺ 45°'], ['45', '↻ 45°']]
+      .map(([delta, label]) => `<button data-ship-facing="${delta}" data-facing-ship="${ship.id}"${disabled}>${label}</button>`)
+      .join('');
+    const focusButtons = [[null, 'Auto'], ...ARCS.map((arc) => [arc, ARC_LABELS[arc]])]
+      .map(([arc, label]) => `<button data-ship-arc-focus="${arc ?? ''}" data-arc-focus-ship="${ship.id}"${focus === arc ? ' class="current"' : ''}${disabled}>${label}</button>`)
+      .join('');
+    helmBlock = `<p class="menu-sub">Helm — heading ${heading}°; turning is free, and any burn sets the heading anyway:</p><div class="order-grid stance-grid">${turnButtons}</div>`
+      + `<p class="menu-sub">Shield focus — recovery refills this arc first:</p><div class="order-grid stance-grid">${focusButtons}</div>`;
+  }
   const note = commands || orders
     ? ''
     : `<p class="menu-sub">${own ? 'Your command ship — open another hull to act on it.' : 'Nothing can reach this hull.'}</p>`;
-  return `<h3>${ship.name}</h3><ul class="menu-info">${lines.map((line) => `<li>${line}</li>`).join('')}</ul>${commands ? `<div class="menu-grid">${commands}</div>` : ''}${orders}${stanceBlock}${note}`;
+  return `<h3>${ship.name}</h3><ul class="menu-info">${lines.map((line) => `<li>${line}</li>`).join('')}</ul>${commands ? `<div class="menu-grid">${commands}</div>` : ''}${orders}${stanceBlock}${helmBlock}${note}`;
 };
 
 /**
@@ -335,6 +375,32 @@ const stanceBar = (game, actor, view) => {
     + `</div>`;
 };
 
+/**
+ * The helm control, Reimagined only (round 23): turn the command ship 45° to
+ * port or starboard without spending the stardate — how a hull holding a gun
+ * line keeps its reinforced fore arc on the fight. The heading readout doubles
+ * as the arc key: F/S/A/P around the bow. Inert on a drone's conn (no heading)
+ * and outside a Reimagined war.
+ */
+const helmBar = (game, actor, view) => {
+  if (!game.reimagined || !actor || game.outcome || isSpectator(game) || !hasArcs(game, actor)) return '';
+  const locked = game.phase !== 'player' || view.battlePaused ? ' disabled' : '';
+  const heading = Math.round(facingOf(game, actor));
+  const focus = arcFocusOf(game, actor);
+  const turnButtons = [['-45', '↺ 45°'], ['45', '↻ 45°']]
+    .map(([delta, label]) => `<button class="stance-btn" data-facing-turn="${delta}"${locked}>${label}</button>`)
+    .join('');
+  const focusButtons = [[null, 'Auto'], ...ARCS.map((arc) => [arc, ARC_LABELS[arc]])]
+    .map(([arc, label]) => `<button class="stance-btn arc-btn" data-arc-focus="${arc ?? ''}"${focus === arc ? ' aria-pressed="true"' : ''}${locked}>${label}</button>`)
+    .join('');
+  return `<div class="stance-bar helm-bar">`
+    + `<div class="power-head"><span>Helm</span><span class="heading-now">heading ${heading}°</span></div>`
+    + `<div class="stance-grid helm-grid">${turnButtons}</div>`
+    + `<div class="power-head"><span>Shield focus</span><span class="heading-now">${focus ? ARC_LABELS[focus] : 'auto (weakest)'}</span></div>`
+    + `<div class="stance-grid arc-grid">${focusButtons}</div>`
+    + `</div>`;
+};
+
 /** One legend entry: a color chip (optionally carrying a glyph) and its label. */
 const legendEntry = (swatch, label, content = '') => `<span class="legend-entry"><span class="legend-swatch ${swatch}" aria-hidden="true">${content}</span>${label}</span>`;
 
@@ -371,6 +437,7 @@ const renderMapLegend = (game) => {
       legendEntry('drone-glyph', 'fighter drone', 'D'),
       legendEntry('stance-firing', 'firing stance'),
       legendEntry('stance-evasive', 'evasive stance'),
+      legendEntry('heading-glyph', 'heading (bow)', '▲'),
     ] : []),
   ].join('');
   legend.innerHTML = factions + entries + '<span class="legend-note" id="legend-note"></span>';
@@ -478,7 +545,13 @@ export const renderGame = (game, view = {}) => {
     const stance = game.reimagined && isActive(ship) ? stanceOf(game, ship) : 'standard';
     const stanceClass = stance === 'standard' ? '' : ` stance-${stance}`;
     const stanceNote = stance === 'standard' ? '' : ` — ${stance} stance`;
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}"${view.battlePaused ? ' disabled' : ''}><span class="glyph">${glyph}</span>${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}</button>`;
+    // Directional shields (round 23): a hull that fights with arcs wears a heading
+    // needle pointing where its bow faces, so which arc an exchange would strike
+    // is readable off the map. Public combat intel, like the threat outline.
+    const heading = game.reimagined && isActive(ship) && hasArcs(game, ship) ? Math.round(facingOf(game, ship)) : null;
+    const headingHtml = heading === null ? '' : `<span class="heading-glyph" style="--heading:${heading}deg" aria-hidden="true"></span>`;
+    const headingNote = heading === null ? '' : ` — heading ${heading}°`;
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}<span class="glyph">${glyph}</span>${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}</button>`;
   }).join('');
   map.innerHTML = terrainHtml + ringHtml + shipHtml;
   // Slide and scale the world layer so the camera window fills the viewport. The
@@ -517,10 +590,13 @@ export const renderGame = (game, view = {}) => {
       <div class="status-row"><span>Crew</span><b>${actor.crew}</b></div>
       <div class="status-row"><span>Status</span><b>${actor.status}</b></div>
       ${game.reimagined ? `<div class="status-row"><span>Stance</span><b class="stance-now ${stanceOf(game, actor)}">${stanceOf(game, actor)}</b></div>` : ''}
+      ${game.reimagined && hasArcs(game, actor) ? `<div class="status-row"><span>Heading</span><b>${Math.round(facingOf(game, actor))}°</b></div>` : ''}
+      ${arcReadout(game, actor) ? `<div class="status-row"><span>Shield arcs</span><b class="arc-readout">${arcReadout(game, actor)}</b></div>` : ''}
     </div>
     <div class="system-grid">${Object.entries(actor.systems).map(([name, amount]) => `<span>${cap(name)} <b>${amount}</b></span>`).join('')}</div>
     ${powerBar(game, actor, view)}
     ${stanceBar(game, actor, view)}
+    ${helmBar(game, actor, view)}
     <div class="command-grid">${commandList(game, actor).map(([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || isSpectator(game) || view.battlePaused ? 'disabled' : ''}>${label}<kbd>${key}</kbd></button>`).join('')}</div>
     ${game.commandLost
       ? '<p class="console-note">Federation command is lost. The remaining alliances fight on, and you watch the war from here.</p>'
@@ -651,7 +727,12 @@ export const reportFor = (game, type) => {
         // The fleet report reads each hull's combat stance in a Reimagined war
         // (round 21), so you can see your dispositions at a glance.
         const stanceNote = game.reimagined && isActive(ship) ? `, ${stanceOf(game, ship)} stance` : '';
-        return `${ship.name}${prizeNote(ship)} — ${describeOrder(game, standing)}${stanceNote}${mark}; condition ${alertLevel(ship)} at ${ship.x},${ship.y}.`;
+        // Round 23: the report also reads each hull's heading and arc breakdown,
+        // so a worn flank is visible fleet-wide without opening every menu.
+        const arcNote = game.reimagined && isActive(ship) && hasArcs(game, ship)
+          ? `, bow ${Math.round(facingOf(game, ship))}°, arcs ${arcReadout(game, ship)}`
+          : '';
+        return `${ship.name}${prizeNote(ship)} — ${describeOrder(game, standing)}${stanceNote}${arcNote}${mark}; condition ${alertLevel(ship)} at ${ship.x},${ship.y}.`;
       });
     return {
       title: `Fleet orders, Stardate ${game.turn}`,

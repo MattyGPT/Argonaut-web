@@ -34,6 +34,7 @@ import { createRng } from './rng.js';
 import {
   alertLevel,
   applyHeading,
+  arcsOf,
   blastRadius,
   captainOf,
   clampPowerAllocation,
@@ -45,6 +46,7 @@ import {
   dockedAt,
   dronesOf,
   engineCapacity,
+  facingOf,
   getLivingShips,
   getShip,
   grownArcs,
@@ -505,6 +507,18 @@ const computerReport = (game, actor) => {
   };
 };
 
+/**
+ * The directional-shield intel a scan earns (round 23): the arc breakdown and
+ * the heading of a hull that fights with arcs. Empty in a classic or extended
+ * war, for a drone, and for an old save — `arcsOf` returns null there, so the
+ * line reads exactly as it always did.
+ */
+const arcScanNote = (game, target) => {
+  const arcs = arcsOf(game, target);
+  if (!arcs) return '';
+  return ` (arcs F${arcs.fore} S${arcs.starboard} A${arcs.aft} P${arcs.port}), heading ${Math.round(facingOf(game, target))}°`;
+};
+
 const scanReport = (game, target) => ({
   title: `Scan: ${target.name}`,
   lines: [
@@ -519,7 +533,7 @@ const scanReport = (game, target) => ({
         : [`Captain: ${target.captain}${isAce(target) ? ` — an ace, ${target.kills} kills` : ''}`])
       : []),
     `Status: ${target.status}`,
-    `Shields: ${target.shields}`,
+    `Shields: ${target.shields}${arcScanNote(game, target)}`,
     `Crew: ${target.crew}`,
     ...Object.entries(target.systems).map(([name, units]) => `${name}: ${units}`),
   ],
@@ -1356,9 +1370,15 @@ const setFacing = (game, action, actor) => {
   if (!ship || !isActive(ship)) return invalid(game, 'No such hull to turn.');
   if (ship.faction !== actor.faction) return invalid(game, 'Only Federation hulls take your helm orders.');
   if (isDrone(ship)) return invalid(game, `${ship.name} has no heading to set.`);
-  const degrees = Number(action.degrees);
-  if (!Number.isFinite(degrees)) return invalid(game, 'Turning requires a heading in degrees.');
-  const facing = Math.round(normalizeDegrees(degrees));
+  // An absolute heading, or a relative turn (the console/menu helm buttons nudge
+  // by ±45°): both normalize into [0, 360) whole degrees.
+  let facing = null;
+  if (action.degrees !== undefined && Number.isFinite(Number(action.degrees))) {
+    facing = Math.round(normalizeDegrees(Number(action.degrees)));
+  } else if (action.deltaDegrees !== undefined && Number.isFinite(Number(action.deltaDegrees))) {
+    facing = Math.round(normalizeDegrees(facingOf(game, ship) + Number(action.deltaDegrees)));
+  }
+  if (facing === null) return invalid(game, 'Turning requires a heading in degrees.');
   return result(
     replaceShip(game, { ...ship, facing }),
     `${ship.name} comes about, facing ${facing} degrees.`,

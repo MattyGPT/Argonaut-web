@@ -646,6 +646,13 @@ body.classic #ship-menu .menu-sub {
 .legend-swatch.stance-firing { background: #ff9d5c; box-shadow: 0 0 6px #ff9d5c; }
 .legend-swatch.stance-evasive { background: #69e4ff; box-shadow: 0 0 6px #69e4ff; }
 
+.legend-swatch.heading-glyph {
+  background: transparent;
+  color: #e8f4ff;
+  font-size: .6rem;
+  text-shadow: 0 0 5px #9fd4ff;
+}
+
 body.classic .legend-swatch.pip-order,
 body.classic .legend-swatch.pip-prize {
   background: #38ff38;
@@ -1025,6 +1032,41 @@ body.classic .legend-swatch.stance-evasive { background: #40e0ff; box-shadow: no
 .stance-now { text-transform: capitalize; }
 .stance-now.firing { color: #ff9d5c; }
 .stance-now.evasive { color: #69e4ff; }
+
+/* Directional shields (round 23): the heading needle — a short spoke from the
+   hull's rim pointing where the bow faces. --heading is the field bearing
+   (0 = +x, clockwise on the y-down field), so CSS adds 90° to rotate from
+   north. A child element of its own, so it never collides with the orders pip,
+   the ace star, the prize pip, or the stance halo. Flagged for the manual
+   play-test pass at both zoom levels and on the minimap. */
+.ship .heading-glyph {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  transform: rotate(calc(var(--heading, 0deg) + 90deg));
+  pointer-events: none;
+}
+
+.ship .heading-glyph::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  bottom: 7px;
+  width: 2px;
+  height: 11px;
+  background: #e8f4ff;
+  box-shadow: 0 0 4px #9fd4ff;
+}
+
+/* The helm + shield-focus controls (round 23) reuse the stance-bar chrome:
+   free, persistent, greyed while a round resolves or the war is spectated. */
+.helm-grid { grid-template-columns: repeat(2, 1fr); }
+.arc-grid { grid-template-columns: repeat(5, 1fr); }
+.heading-now { color: var(--cyan); font-size: .72rem; }
+.arc-btn[aria-pressed="true"] { border-color: #7dffb0; background: #7dffb0; }
+.arc-readout { letter-spacing: .04em; }
 
 .report {
   grid-area: report;

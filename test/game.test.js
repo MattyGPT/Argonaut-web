@@ -5204,3 +5204,29 @@ test('the autopilot conn faces the threat too', () => {
   const cruiser = getShip(out.game, 'fed-cruiser-1');
   assert.equal(cruiser.facing, 0, 'the autopilot snaps the bow onto the target it engages');
 });
+
+// --- Argonaut Reimagined, round 23d: directional shields in the reports ---
+
+test('the scan report reads an arced hull’s breakdown and heading', () => {
+  const game = arcWar('arc-scan-intel', (ship) => (ship.id === 'axis-flagship' ? { ...ship, facing: 90 } : ship));
+  const out = applyPlayerAction(game, { type: 'scan', targetId: 'axis-flagship' });
+  const shieldsLine = out.report.lines.find((line) => line.startsWith('Shields:'));
+  assert.equal(shieldsLine, 'Shields: 200 (arcs F60 S50 A40 P50), heading 90°',
+    'the scan names the breakdown and the bow');
+  // A classic scan line is untouched — no breakdown, no heading.
+  const classic = placedGame('arc-scan-classic');
+  const classicOut = applyPlayerAction(classic, { type: 'scan', targetId: 'axis-flagship' });
+  if (classicOut.report) {
+    assert.equal(classicOut.report.lines.find((line) => line.startsWith('Shields:')), `Shields: ${getShip(classic, 'axis-flagship').shields}`);
+  }
+});
+
+test('the helm buttons turn by delta as well as by absolute degrees', () => {
+  const game = arcWar('arc-helm-delta', (ship) => (ship.id === 'fed-flagship' ? { ...ship, facing: 0 } : ship));
+  const left = applyPlayerAction(game, { type: 'facing', deltaDegrees: -45 });
+  assert.equal(getShip(left.game, 'fed-flagship').facing, 315, 'a port turn wraps through north');
+  assert.equal(left.game.phase, 'player', 'and stays free');
+  const right = applyPlayerAction(left.game, { type: 'facing', deltaDegrees: 90 });
+  assert.equal(getShip(right.game, 'fed-flagship').facing, 45);
+  assert.match(applyPlayerAction(game, { type: 'facing' }).messages.join(' '), /heading in degrees/);
+});

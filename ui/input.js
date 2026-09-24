@@ -61,6 +61,20 @@ export const bindInput = (root, dispatch, getCamera = () => ({ minX: 0, minY: 0,
       dispatch({ type: 'stance', stance: shipStanceButton.dataset.shipStance, shipId: shipStanceButton.dataset.stanceShip });
       return;
     }
+    // Helm turns live in the ship menu (round 23) and carry the hull they are for.
+    // Turning is a free action, like stance and power, so this never spends the turn.
+    const shipFacingButton = event.target.closest('[data-ship-facing]');
+    if (shipFacingButton) {
+      dispatch({ type: 'facing', deltaDegrees: Number(shipFacingButton.dataset.shipFacing), shipId: shipFacingButton.dataset.facingShip });
+      return;
+    }
+    // Shield-focus buttons live in the ship menu (round 23); the empty value is
+    // the "Auto" (weakest-arc-first) choice, dispatched as null to clear the focus.
+    const shipArcButton = event.target.closest('[data-ship-arc-focus]');
+    if (shipArcButton) {
+      dispatch({ type: 'arcFocus', arc: shipArcButton.dataset.shipArcFocus || null, shipId: shipArcButton.dataset.arcFocusShip });
+      return;
+    }
     // Ship-menu commands carry the hull they were opened for, so they skip the
     // target prompt the console buttons need.
     const menuCommand = event.target.closest('[data-ship-command]');
@@ -80,6 +94,18 @@ export const bindInput = (root, dispatch, getCamera = () => ({ minX: 0, minY: 0,
     const stanceButton = event.target.closest('[data-stance]');
     if (stanceButton) {
       dispatch({ type: 'stance', stance: stanceButton.dataset.stance });
+      return;
+    }
+    // The helm and shield-focus controls live in the console (round 23) and steer
+    // the command ship — free actions, like the stance buttons above.
+    const facingButton = event.target.closest('[data-facing-turn]');
+    if (facingButton) {
+      dispatch({ type: 'facing', deltaDegrees: Number(facingButton.dataset.facingTurn) });
+      return;
+    }
+    const arcFocusButton = event.target.closest('[data-arc-focus]');
+    if (arcFocusButton) {
+      dispatch({ type: 'arcFocus', arc: arcFocusButton.dataset.arcFocus || null });
       return;
     }
     // The menu body is not empty space: clicking it may never become a maneuver.
