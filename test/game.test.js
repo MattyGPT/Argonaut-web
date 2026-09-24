@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, DRONE, GRID_SIZE, ION, LOADOUT, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, REIMAGINED_WEAPON_DAMAGE_SCALE, SCENARIOS, SHIP_TEMPLATES, STALEMATE_ROUNDS, STANCE, STANCES, TERRAIN, VENDETTA } from '../game/constants.js';
+import { ACE_KILLS, CAPTAIN_NAMES, CRIPPLE, DOCKING, DRONE, GRID_SIZE, ION, LOADOUT, LOG_LIMIT, MISS_CHANCE, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, REIMAGINED_WEAPON_DAMAGE_SCALE, SCENARIOS, SHIP_TEMPLATES, SPREAD, STALEMATE_ROUNDS, STANCE, STANCES, TERRAIN, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioOutcome, scenarioProgress } from '../game/scenarios.js';
 import { abbreviateNarrative, alertLevel, appendLog, blastRadius, clampPowerAllocation, createGame, crewCapacity, defaultLoadout, distance, dockedAt, engineCapacity, fleetCost, fleetHulls, getShip, inRadioContact, insideFeature, ionStormZone, isAce, isDrone, nebulaHides, nebulaRevealRange, normalizeFleetSpec, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, stanceOf, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
-import { applyPlayerAction, canLaunchDrones, captureHull, damageShip, defaultTargetFor, eligibleTargets, ionDamage, killLines, launchDrones, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, tractorLock, weaponDamage } from '../game/actions.js';
+import { applyPlayerAction, canLaunchDrones, captureHull, damageShip, defaultTargetFor, eligibleTargets, ionDamage, killLines, launchDrones, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, spreadSplash, tractorLock, weaponDamage } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { applySurrender, darkenOrphanDrones, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolveObjectives, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
@@ -4464,4 +4464,164 @@ test('ion never touches a classic or extended war, and old saves tolerate its ab
   assert.equal(systemUnits(getShip(old, 'fed-artillery'), 'ion'), 0);
   const refused = applyPlayerAction({ ...old, playerShipId: 'fed-artillery' }, { type: 'ion', targetId: 'axis-flagship' });
   assert.match(refused.messages.join(' '), /Ion are disabled/);
+});
+
+// --- Argonaut Reimagined, round 22c: spread torpedoes ---
+
+/**
+ * A Reimagined war staged for spread tests: the Federation flagship (a spread
+ * carrier) mid-field with an Axis cluster to shoot into, everyone else parked in
+ * the corners. Terrain cleared so the accuracy roll isolates cleanly.
+ */
+const spreadWar = (seed) => withShips(createGame({ seed, reimagined: true, loadout: defaultLoadout() }), (ship) => {
+  if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
+  if (ship.id === 'axis-cruiser-1') return { ...ship, x: 112, y: 100 };
+  if (ship.id === 'axis-cruiser-2') return { ...ship, x: 118, y: 100 };
+  return parked(ship);
+});
+
+test('spread is a Reimagined subsystem the battle cruiser and carrier carry', () => {
+  const game = createGame({ seed: 'spread-carry', reimagined: true, loadout: defaultLoadout() });
+  assert.deepEqual(SPREAD.carry, { 'Battle cruiser': 2, Carrier: 1 }, 'the carry table');
+  assert.equal(systemUnits(getShip(game, 'fed-flagship'), 'spread'), 2);
+  assert.equal(systemUnits(getShip(game, 'fed-carrier'), 'spread'), 1);
+  for (const id of ['fed-cruiser-1', 'fed-scout', 'fed-interceptor', 'fed-artillery', 'xanadu']) {
+    assert.equal(systemUnits(getShip(game, id), 'spread'), 0, `${id} fields no spread`);
+    assert.ok(!('spread' in getShip(game, id).systems), `${id} carries no spread key at all`);
+  }
+  assert.ok(RANGES.spread < RANGES.phasers, 'the salvo is short-ranged');
+  for (const opts of [{}, { extended: true }]) {
+    const off = createGame({ seed: 'spread-carry', ...opts });
+    assert.ok(off.ships.every((ship) => !('spread' in ship.systems)), 'no spread outside a Reimagined war');
+  }
+});
+
+test('spread splash hits every hull near the impact with distance falloff, sparing the shooter', () => {
+  // A fixed charge keeps the assertion deterministic: shields absorb it whole, so
+  // each hull loses exactly its falloff share.
+  const staged = { ...withShips(spreadWar('spread-splash'), (ship) => {
+    if (ship.id === 'axis-cruiser-2') return { ...ship, x: 118, y: 100 }; // 6 from impact: half
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 106, y: 100 };  // 6 from impact, FRIENDLY
+    if (ship.id === 'axis-cruiser-3') return { ...ship, x: 140, y: 100 }; // 28 from impact: clear
+    return ship;
+  }), terrain: [] };
+  const actor = getShip(staged, 'fed-flagship');
+  const target = getShip(staged, 'axis-cruiser-1'); // impact at (112,100)
+  const full = 40;
+  const out = spreadSplash(staged, actor, target, full, createRng('spread-fixed'));
+  const shields = (id) => getShip(out.game, id).shields;
+  const cap = (id) => shieldCapacity(getShip(staged, id));
+  assert.equal(shields('axis-cruiser-1'), cap('axis-cruiser-1') - full, 'the primary takes the full charge');
+  assert.equal(shields('axis-cruiser-2'), cap('axis-cruiser-2') - 20, 'six out takes half (linear falloff)');
+  assert.equal(shields('fed-cruiser-1'), cap('fed-cruiser-1') - 20, 'a friendly wingman in the splash is caught too');
+  assert.equal(shields('axis-cruiser-3'), cap('axis-cruiser-3'), 'a hull outside the radius is untouched');
+  assert.equal(shields('fed-flagship'), cap('fed-flagship'), 'the shooter spares its own hull');
+  assert.equal(getShip(out.game, 'fed-flagship').shotsFired, actor.shotsFired + 1, 'the salvo is counted');
+  assert.equal(out.kills, 0, 'nobody died — the charge only dented shields');
+});
+
+test('a spread splash can gut and finish hulls, crediting the shooter with each enemy kill', () => {
+  // Two paper-thin enemies inside the splash: a full charge destroys them and the
+  // shooter is credited; a thin friendly is gutted but survives (no friendly kill).
+  const staged = { ...withShips(spreadWar('spread-kills'), (ship) => {
+    if (ship.id === 'axis-cruiser-1') return { ...ship, shields: 1, crew: 1 };
+    if (ship.id === 'axis-cruiser-2') return { ...ship, x: 116, y: 100, shields: 1, crew: 1 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 108, y: 100, shields: 2 };
+    return ship;
+  }), terrain: [] };
+  const out = spreadSplash(staged, getShip(staged, 'fed-flagship'), getShip(staged, 'axis-cruiser-1'), 60, createRng('spread-kill'));
+  assert.equal(out.kills, 2, 'both thin enemies are finished and credited');
+  assert.notEqual(getShip(out.game, 'axis-cruiser-1').status, 'active');
+  assert.notEqual(getShip(out.game, 'axis-cruiser-2').status, 'active');
+  assert.equal(getShip(out.game, 'fed-flagship').kills, getShip(staged, 'fed-flagship').kills + 2, 'kills fold into the shooter record');
+  assert.ok(out.events.some((event) => event.kind === 'destruction' && event.cause === 'spread'), 'the splash draws destruction events');
+});
+
+test('the player fires a spread salvo, and it spends the stardate', () => {
+  const staged = { ...withShips(spreadWar('spread-fire'), (ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, shields: 4 } : ship)), terrain: [], playerShipId: 'fed-flagship' };
+  let hits = 0;
+  for (let step = 0; step < 200; step += 1) {
+    const out = applyPlayerAction({ ...staged, randomStep: step }, { type: 'spread', targetId: 'axis-cruiser-1' });
+    assert.equal(out.game.phase, 'computer', 'the salvo spends the stardate');
+    const text = out.messages.join(' ');
+    assert.ok(/spread of torpedoes/.test(text));
+    if (!/Missed/.test(text)) {
+      hits += 1;
+      assert.ok(/takes the full spread/.test(text), 'a hit lands on the primary');
+    }
+  }
+  assert.ok(hits > 50 && hits < 200, `spread hits and misses across the samples (${hits}/200)`);
+});
+
+test('spread refuses without the tubes, out of range, jammed, or outside a Reimagined war', () => {
+  const staged = { ...spreadWar('spread-refuse'), playerShipId: 'fed-flagship', terrain: [] };
+  const noTubes = applyPlayerAction({ ...spreadWar('spread-refuse'), playerShipId: 'fed-artillery' }, { type: 'spread', targetId: 'axis-cruiser-1' });
+  assert.match(noTubes.messages.join(' '), /Spread are disabled/);
+  const far = withShips(staged, (ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, x: 100, y: 120 } : ship));
+  assert.match(applyPlayerAction(far, { type: 'spread', targetId: 'axis-cruiser-1' }).messages.join(' '), /out of range for the spread/);
+  const jammed = { ...staged, terrain: [{ id: 'ion-storm-1', type: 'ion-storm', x: 100, y: 100, radius: 20 }] };
+  assert.match(applyPlayerAction(jammed, { type: 'spread', targetId: 'axis-cruiser-1' }).messages.join(' '), /torpedo tubes are offline/);
+  for (const opts of [{}, { extended: true }]) {
+    const off = applyPlayerAction(createGame({ seed: 'spread-refuse', ...opts }), { type: 'spread', targetId: 'axis-cruiser-1' });
+    assert.match(off.messages.join(' '), /Spread are disabled/);
+    assert.equal(off.game.phase, 'player');
+  }
+});
+
+test('an AI captain looses spread only into a clean, clustered splash', () => {
+  // Two Federation hulls clustered inside the splash of an Axis flagship's target,
+  // no Axis hull near: it fires the salvo.
+  const clustered = { ...withShips(createGame({ seed: 'spread-ai', reimagined: true, loadout: defaultLoadout() }), (ship) => {
+    if (ship.id === 'axis-flagship') return { ...ship, x: 100, y: 100 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 112, y: 100 };
+    if (ship.id === 'fed-cruiser-2') return { ...ship, x: 116, y: 100 };
+    return parked(ship);
+  }), terrain: [] };
+  assert.deepEqual(chooseAiAction(clustered, 'axis-flagship'), { type: 'spread', targetId: 'fed-cruiser-1' },
+    'a clean cluster of two draws the salvo');
+  // A friendly inside the splash: never (it falls back to the phasers).
+  const friendlyInTheWay = withShips(clustered, (ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, x: 114, y: 100 } : ship));
+  assert.notEqual(chooseAiAction(friendlyInTheWay, 'axis-flagship').type, 'spread', 'the AI never splashes its own wing');
+  // A lone target: not worth the area salvo.
+  const lone = withShips(clustered, (ship) => (ship.id === 'fed-cruiser-2' ? { ...ship, x: 200, y: 200 } : ship));
+  assert.notEqual(chooseAiAction(lone, 'axis-flagship').type, 'spread', 'a single hull gets a gun, not a salvo');
+});
+
+test('the computer phase resolves an AI spread salvo', () => {
+  // Isolated exchange: an Axis flagship and two clustered Federation hulls (one the
+  // player's, skipped in the phase), plus Xanadu, so the salvo resolves cleanly.
+  const full = withShips(createGame({ seed: 'spread-computer', reimagined: true, loadout: defaultLoadout() }), (ship) => {
+    if (ship.id === 'axis-flagship') return { ...ship, x: 100, y: 100 };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 112, y: 100 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 116, y: 100 };
+    return parked(ship);
+  });
+  const game = { ...full, terrain: [], ships: full.ships.filter((ship) => ['axis-flagship', 'fed-flagship', 'fed-cruiser-1', 'xanadu'].includes(ship.id)) };
+  const out = resolveComputerTurns({ ...game, phase: 'computer' });
+  assert.ok(out.log.some((line) => /spread of torpedoes/.test(line)), 'the flagship looses the salvo');
+});
+
+test('spread never touches a classic or extended war, and old saves tolerate its absence', () => {
+  for (const opts of [{}, { extended: true }]) {
+    assert.ok(createGame({ seed: 'spread-parity', ...opts }).ships.every((ship) => !('spread' in ship.systems)));
+  }
+  assert.deepEqual(createGame({ seed: 'spread-parity' }), createGame({ seed: 'spread-parity', reimagined: false }),
+    'the standing parity scaffold still holds');
+  const old = withShips(createGame({ seed: 'spread-old-save', reimagined: true, loadout: defaultLoadout() }), (ship) => {
+    const { spread, ...systems } = ship.systems;
+    return { ...ship, systems };
+  });
+  assert.equal(systemUnits(getShip(old, 'fed-flagship'), 'spread'), 0);
+  const refused = applyPlayerAction({ ...old, playerShipId: 'fed-flagship' }, { type: 'spread', targetId: 'axis-flagship' });
+  assert.match(refused.messages.join(' '), /Spread are disabled/);
+});
+
+test('the dockyard rebuilds spread tubes back to the class complement', () => {
+  const game = spreadWar('spread-dockyard');
+  const stripped = withShips(game, (ship) => (ship.id === 'fed-flagship'
+    ? { ...ship, x: 120, y: 120, systems: { ...ship.systems, spread: 0 } }
+    : ship));
+  assert.equal(templateSystems(getShip(stripped, 'fed-flagship')).spread, SPREAD.carry['Battle cruiser']);
+  const out = resolveDocking(stripped);
+  assert.ok(systemUnits(getShip(out.game, 'fed-flagship'), 'spread') >= 1, 'the tubes are rebuilt one unit per stardate');
 });

@@ -131,26 +131,31 @@ parity tests hold.
 | Drones / fighters (round 20): every carrier looses a one-time complement of three uncrewed fighter hulls when the enemy closes; they ride the ships array, escort-then-hunt on their own AI branch, run their alliance's doctrine power profile, and never count toward surrender, command, objectives, or a faction's survival | median 55 stardates (mean 98.4, p90 190, max 600); volleys per kill **15.9** (from 19 — the extra gunboats concentrate fire); prizes 8.4/war with 3.7 held; winners **Bloc 38%** / Federation 26% / Axis 15.2% / Cabal 8.4%; last stands 0.56/war, worst blast 15, 4+-hull blasts 47.6%; hopeless draws 8%, timeouts 5%; fleets now run to ~52 hulls on the array as bays fly |
 | Combat stances (round 21): every Reimagined hull holds standard / firing / evasive, a miss-chance term on the ONE shared `volleyMissChance` roll (firing −0.05 own miss but −0.05 incoming, evasive +0.08 own but +0.15 incoming, clamped to [0.05, 0.95]); the player sets it free like power, AI captains hold a doctrine bias (Axis/Bloc firing, Cabal evasive) and any hull beaten below its `retreatBelow` sheds to evasive; plus a player **Disengage** command (full burn from the nearest threat) | median **62** stardates (mean 113.1, p90 233, max 600); volleys per kill **17.2** (from 15.9 — evasive hulls, and wounded hulls weaving as they break off, are harder to finish, so wars lengthen); prizes 8.4/war with 3.9 held; winners **Bloc 34.8%** / Federation 25.2% / Axis 16.4% / Cabal 8.4%; last stands 0.56/war, worst blast 15, 4+-hull blasts 48%; hopeless draws 9%, timeouts 6% |
 | Ion/EMP (round 22a): artillery (2 units) and interceptors (1) carry a Reimagined-only ion emitter — a long-range (35, outranges phasers) suppression beam whose charge is absorbed by shields first, the overflow stripping subsystem units with **no crew casualties**; it rides the shared accuracy roll + weapons sink, and a hull gutted of engines+guns now **strikes its colors** in a Reimagined war (disabled-surrender extended past precision), becoming a boardable derelict — so suppression feeds the prize race instead of stalling the war | median **63** stardates (mean 111.4 — essentially unchanged from 62; ion is a finisher/capture tool on wounded hulls, not primary damage, since fresh shields absorb it whole); volleys per kill **19.3** (from 17.2 — non-lethal ion volleys count as shots but never as kills); prizes **8.5/war**; hopeless draws **5%** (from 9% — ion-gutted hulls are boarded or finished, not left inert); timeouts 7% (from 6%); winners **Bloc 35.6%** / Federation 28.8% / Axis 12.8% / Cabal 10.8% (Cabal recovers — evasive doctrine plus ion-capture suits its trickster game); 4+-hull blasts 44.4% |
+| Spread torpedoes (round 22c): battle cruisers (2 tubes) and carriers (1) carry a short-range (15) area salvo — the named target takes the full roll and every hull within `SPREAD.splashRadius` (12) takes a linear distance-falloff share, friendlies included (the shooter spares itself); it rides the shared accuracy roll (a miss splashes nothing), and AI captains loose it only into a clean cluster (≥2 enemies, no friendly inside the radius) | median **62** stardates (mean 98.3 — flat median, shorter tail: the anti-cluster salvo resolves stalemates); volleys per kill **18.6**; prizes **8.6/war**; timeouts **5%** (from 7% — spread breaks logjam clusters); hopeless draws 8%; winners **Bloc 34.4%** / Federation 27.2% / Axis 15.6% / Cabal 10% (Axis recovers — its aggressive close doctrine uses the short-range salvo well); **4+-hull blasts unchanged at 44.4%** — spread *wounds* a cluster (falloff damage through the survivable `damageShip` lottery), it does not delete one the way a last-stand blast does |
 
 Open findings for the rest of the balance pass:
 
-- **Ion is a capture tool, not a war-lengthener.** The feared stall (disable a hull,
-  it repairs, repeat) was real in a 60-seed diagnostic — timeouts hit 12% — until
-  the disabled-surrender rule was extended to Reimagined: an ion-gutted hull strikes
-  its colors and becomes a boardable derelict. At 250 seeds the median barely moved
-  (62 → 63), hopeless draws *fell* (9% → 5%, since gutted hulls resolve into prizes
-  or wrecks rather than lingering), and prizes ticked up. **Timeouts edged to 7%**
-  (from 6%) — the long tail is the standing watch item; levers are the `WEAPONS.ion`
-  band, `ION.carry`, or the `STANCE`/regen dials, all measured not guessed.
-- **Cabal recovered to 10.8%** (from 8.4%) — its evasive doctrine makes it hard to
-  hit, and ion-capture rewards the mobile trickster game. Still last, but the gap
-  narrowed; a Cabal doctrine pass (the tractor-ram payoff) remains a candidate chunk.
-- **Bloc still leads at 35.6%** — its firing doctrine and hardest power profile
-  (1.5× guns, riding drones too) out-gun the field. Levers unchanged (drone/phaser
-  dials, or a flat default power profile for all wings).
-- **Volleys per kill rose to 19.3** (from 17.2) because ion volleys are counted as
-  shots but never score kills — a reporting artifact of the disable-not-destroy
-  model, not a sign wars got more attritional (the median is flat).
+- **The Phase-4 weapons are net-neutral on war length and healthy on the tail.**
+  Ion (22a) lengthened nothing (median 62→63) once disabled-surrender was extended
+  to Reimagined; spread (22c) held the median at 62 and *cut* timeouts (7%→5%) and
+  the mean (111→98) by breaking cluster logjams. Prizes crept up (8.4→8.6) as ion
+  feeds boarding. **Timeouts are back to 5%** — the long-tail watch item from
+  rounds 19–21 has eased. Levers if it drifts: `WEAPONS.ion`/`WEAPONS.spread`
+  bands, `ION.carry`/`SPREAD.carry`, `SPREAD.splashRadius`, or the `STANCE`/regen
+  dials — all measured, not guessed.
+- **Spread does not worsen the cluster-wipe concern.** The 4+-hull-blast rate is
+  unchanged (44.4%): a spread salvo damages every hull in the splash through the
+  normal survivable lottery, so it softens a cluster rather than deleting it the
+  way a self-destruct blast does. Anti-cluster tactics now exist on both sides
+  (spread to wound a pack, last stand to take one down) without either being a
+  fleet-eraser.
+- **Bloc still leads (~34–36%)** across the Phase-4 weapons — firing doctrine plus
+  the hardest power profile (1.5× guns, riding drones too). **Axis recovered to
+  15.6%** (spread suits its close swarm); **Cabal steadied ~10%** (evasive +
+  ion-capture). Levers unchanged: drone/phaser dials or a flat power profile.
+- **Volleys per kill sits ~18.6** — ion volleys count as shots but never kill (a
+  reporting artifact of disable-not-destroy), spread counts one shot for a
+  multi-hull splash; neither means the war got more attritional (median is flat).
 
 Future calibration should record a DOS input sequence and visible output beside
 the same web seed/action pair, then tune only the values needed to preserve the

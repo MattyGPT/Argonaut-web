@@ -227,6 +227,9 @@ export const RANGES = Object.freeze({
   // Ion/EMP (round 22a, Reimagined): a long-range suppression beam that outranges
   // the phasers, so an ion hull can work over a standoff the lethal guns cannot.
   ion: 35,
+  // Spread torpedoes (round 22c, Reimagined): a short-range area salvo — shorter
+  // than the phasers, since it pays in hitting everything near the impact.
+  spread: 15,
   hyperspace: GRID_SIZE,
   selfDestruct: 20,
 });
@@ -473,6 +476,10 @@ export const WEAPONS = Object.freeze({
   // is absorbed by shields first and the overflow strips subsystem units with no
   // crew casualties, so its figures are lower than the lethal guns'. A balance dial.
   ion: Object.freeze({ base: 6, perUnit: 2, spread: 0.25 }),
+  // Spread torpedoes (round 22c): the roll is the FULL damage at the impact point;
+  // every other hull inside the splash takes a distance-falloff share. Lower per-hit
+  // than a single photon because one salvo can land on several hulls. A balance dial.
+  spread: Object.freeze({ base: 16, perUnit: 6, spread: 0.267 }),
 });
 
 /**
@@ -494,6 +501,29 @@ export const ION = Object.freeze({
    * listed fields no ion. Balance dial: which hulls carry suppression, and how much.
    */
   carry: Object.freeze({ Artillery: 2, Interceptor: 1 }),
+});
+
+/**
+ * Spread torpedoes (Argonaut Reimagined, round 22c — Phase 4). An area salvo: the
+ * player (or a captain) fires at a hostile hull, and on a hit — it rides the ONE
+ * shared `volleyMissChance` roll, so a miss splashes nothing — the primary takes the
+ * full roll and every other hull within `splashRadius` of the impact takes a linear
+ * distance-falloff share. Settled with Matt, 2026-09-21: **splash around impact**.
+ * The blast is indiscriminate: any friendly hull inside the radius is caught too
+ * (the shooter spares its own hull), which makes it a deliberate counter to tight
+ * formations (the same cluster geometry the last-stand blast punishes) rather than a
+ * free win. AI captains only loose it into a clean splash (no friendly inside the
+ * radius). Every figure is a balance dial for the Reimagined harness.
+ */
+export const SPREAD = Object.freeze({
+  /** Damage falls off linearly from full at the impact to zero at this radius. */
+  splashRadius: 12,
+  /**
+   * Spread subsystem units per hull class, keyed by className — added to Reimagined
+   * hulls in `createShip` like the reactor and ion, so a classic or extended war
+   * never carries the tubes. The heavy hulls field the salvo. Balance dial.
+   */
+  carry: Object.freeze({ 'Battle cruiser': 2, Carrier: 1 }),
 });
 
 /**

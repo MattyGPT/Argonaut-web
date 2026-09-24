@@ -1,4 +1,4 @@
-import { AI_PURSUIT, DRONE, FLEET_ORDER_TUNING, GRID_SIZE, PERSONALITIES, RANGES } from './constants.js';
+import { AI_PURSUIT, DRONE, FLEET_ORDER_TUNING, GRID_SIZE, PERSONALITIES, RANGES, SPREAD } from './constants.js';
 import { canLaunchDrones, flushShields, tractorLock } from './actions.js';
 import { createRng } from './rng.js';
 import {
@@ -29,6 +29,25 @@ const nearestTo = (from, ships) => ships
   .sort((a, b) => a.range - b.range || a.ship.id.localeCompare(b.ship.id))[0] ?? null;
 
 /**
+ * Whether a spread-torpedo salvo is worth loosing (round 22c): the AI fires it only
+ * into a CLEAN, CLUSTERED splash — no friendly hull inside the radius (it never
+ * friendly-fires, unlike a player who can choose to), and at least two enemies
+ * caught (the target plus one more), so the area salvo beats a single gun. This is
+ * the tactical counter to tight formations; against a lone hull the AI keeps its
+ * phasers/photons. Deterministic, no RNG.
+ */
+const spreadWorthIt = (game, actor, target) => {
+  let enemies = 0;
+  for (const ship of game.ships) {
+    if (!isActive(ship) || ship.id === actor.id) continue;
+    if (distance(target, ship) > SPREAD.splashRadius) continue;
+    if (ship.faction === actor.faction) return false; // a friendly in the splash: never
+    enemies += 1;
+  }
+  return enemies >= 2;
+};
+
+/**
  * The best shot available on a target, in the original's order of preference:
  * photons inside 10, phasers inside 30, otherwise a tractor lock inside 35. Null
  * when the target is past every reach or the hardware is gone. An ion storm's core
@@ -40,10 +59,18 @@ const nearestTo = (from, ships) => ships
  * Ion/EMP (round 22a) sits between the lethal guns and the tractor: a hull that
  * carries the emitter fires it when the phasers cannot reach (ion outranges them at
  * 35) or are burnt out, so it suppresses over a standoff rather than trading kills.
+ * Spread torpedoes (round 22c) sit just under the photons: a short-range area salvo
+ * the AI looses only into a clean cluster (see `spreadWorthIt`), so it never
+ * splashes its own wing the way a player can choose to.
  */
 const engage = (game, actor, target, range, noTractor = false) => {
   const jammed = ionStormZone(game, actor) === 'core';
   if (!jammed && systemUnits(actor, 'photons') > 0 && range <= RANGES.photons) return { type: 'photons', targetId: target.id };
+  // Spread torpedoes (round 22c): a short-range area salvo, loosed only into a
+  // clean cluster (see spreadWorthIt) so the AI never splashes its own wing.
+  if (!jammed && systemUnits(actor, 'spread') > 0 && range <= RANGES.spread && spreadWorthIt(game, actor, target)) {
+    return { type: 'spread', targetId: target.id };
+  }
   if (!jammed && systemUnits(actor, 'phasers') > 0 && range <= RANGES.phasers) return { type: 'phasers', targetId: target.id };
   if (!jammed && systemUnits(actor, 'ion') > 0 && range <= RANGES.ion) return { type: 'ion', targetId: target.id };
   if (!noTractor && systemUnits(actor, 'tractor') > 0 && range <= RANGES.tractor && !isImmovable(target)) return { type: 'tractor', targetId: target.id };

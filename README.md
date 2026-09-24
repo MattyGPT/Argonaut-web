@@ -163,7 +163,13 @@ shields soak the charge first, and whatever punches through burns out subsystem
 units **without killing a single crewman**. Gut a hull's engines and guns and it
 **strikes its colors**, left a vacant derelict for anyone to board — so ion is a
 hunter's tool that feeds the prize race instead of sending hulls to wreckage, and
-the dockyard rebuilds what it burns out. Axis last stands are scaled for the wide field as well — the
+the dockyard rebuilds what it burns out. The heaviest hulls — battle cruisers and
+carriers — also carry **spread torpedo tubes** (`T`), a short-range area salvo: the
+target you name takes the full blast and every hull near the impact takes a share
+that falls off with distance. The splash is indiscriminate, so **your own wingmen
+can be caught** if they are near the impact (the shooter spares only itself) — a
+deliberate counter to tight formations, and a risk in a melee. A salvo that misses
+splashes nothing, and enemy captains loose it only into a clean, clustered splash. Axis last stands are scaled for the wide field as well — the
 self-destruct blast is smaller there, and the trigger needs a captain at 2%
 shields with five enemies stacked close, so one spiteful death no longer
 deletes a fleet cluster. Volleys are measured too: every Reimagined salvo

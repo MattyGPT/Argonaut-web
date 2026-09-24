@@ -1,4 +1,4 @@
-import { GRID_SIZE } from '../game/constants.js';
+import { GRID_SIZE, SPREAD } from '../game/constants.js';
 import { isTerminalEvent } from './battle-events.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -87,6 +87,47 @@ const drawExplosion = (svg, e, small = false) => {
   setTimeout(() => boom.remove(), 560);
 };
 
+/** The splash ring a spread salvo draws at its impact, sized to the real radius. */
+const drawSplash = (svg, at) => {
+  const ring = document.createElementNS(SVG_NS, 'circle');
+  ring.setAttribute('cx', at.x);
+  ring.setAttribute('cy', at.y);
+  ring.setAttribute('r', SPREAD.splashRadius);
+  ring.setAttribute('class', 'fx-splash');
+  ring.setAttribute('vector-effect', 'non-scaling-stroke');
+  svg.appendChild(ring);
+  setTimeout(() => ring.remove(), 500);
+};
+
+/**
+ * Spread torpedoes (round 22c): a torpedo run to the impact, then — on a hit — an
+ * expanding splash ring showing the area the salvo caught (the primary plus every
+ * hull inside `SPREAD.splashRadius`).
+ */
+const drawSpread = (svg, e) => {
+  const to = endpoint(e);
+  const dot = document.createElementNS(SVG_NS, 'circle');
+  dot.setAttribute('r', 0.9);
+  dot.setAttribute('class', 'fx-spread');
+  svg.appendChild(dot);
+  const start = performance.now();
+  const duration = 300;
+  const tick = (now) => {
+    const t = Math.min(1, (now - start) / duration);
+    dot.setAttribute('cx', e.x1 + (to.x - e.x1) * t);
+    dot.setAttribute('cy', e.y1 + (to.y - e.y1) * t);
+    if (t < 1) requestAnimationFrame(tick);
+    else {
+      dot.remove();
+      if (e.hit) {
+        drawSplash(svg, to);
+        drawExplosion(svg, { ...e, x2: to.x, y2: to.y }, true);
+      }
+    }
+  };
+  requestAnimationFrame(tick);
+};
+
 const drawTerminal = (svg, event) => {
   const marker = document.createElementNS(SVG_NS, event.kind === 'destruction' ? 'circle' : 'g');
   marker.setAttribute('class', `fx-terminal-${event.kind}${event.faction ? ` ${event.faction}` : ''}`);
@@ -114,6 +155,7 @@ const drawTerminal = (svg, event) => {
 const draw = (svg, e) => {
   if (e.kind === 'phasers' || e.kind === 'ion') drawBeam(svg, e);
   else if (e.kind === 'photons') drawTorpedo(svg, e);
+  else if (e.kind === 'spread') drawSpread(svg, e);
   else if (e.kind === 'explosion') drawExplosion(svg, e);
   else if (isTerminalEvent(e)) drawTerminal(svg, e);
 };

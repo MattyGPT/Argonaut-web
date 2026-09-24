@@ -730,3 +730,38 @@ test('the ship menu offers Fire ion only from a hull that carries the emitter', 
   renderGame({ ...staged, playerShipId: 'fed-cruiser-1' }, { contextShipId: 'axis-flagship' });
   assert.ok(!/data-ship-command="ion"/.test(read('#ship-menu').innerHTML), 'a cruiser without the emitter is not offered it');
 });
+
+// --- Round 22c: the spread torpedo tubes on the console and in the ship menu ---
+
+test('the console carries the Spread command only for a hull with the tubes', () => {
+  const game = createGame({ seed: 'render-spread-console', reimagined: true });
+  elements.clear();
+  renderGame({ ...game, playerShipId: 'fed-flagship' });
+  assert.match(read('#console').innerHTML, /data-command="spread"/, 'the battle cruiser carries the tubes');
+
+  elements.clear();
+  renderGame({ ...game, playerShipId: 'fed-cruiser-1' });
+  assert.ok(!/data-command="spread"/.test(read('#console').innerHTML), 'a cruiser has no tubes');
+
+  elements.clear();
+  renderGame(createGame({ seed: 'render-spread-classic' }));
+  assert.ok(!/data-command="spread"/.test(read('#console').innerHTML), 'no spread outside a Reimagined war');
+});
+
+test('the ship menu offers Fire spread only from a hull with the tubes', () => {
+  const base = createGame({ seed: 'render-spread-menu', reimagined: true });
+  const staged = { ...base, ships: base.ships.map((ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 100, y: 104 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 110, y: 100 };
+    return ship;
+  }), terrain: [] };
+
+  elements.clear();
+  renderGame({ ...staged, playerShipId: 'fed-flagship' }, { contextShipId: 'axis-flagship' });
+  assert.match(read('#ship-menu').innerHTML, /data-ship-command="spread"/, 'the flagship can loose the salvo');
+
+  elements.clear();
+  renderGame({ ...staged, playerShipId: 'fed-cruiser-1' }, { contextShipId: 'axis-flagship' });
+  assert.ok(!/data-ship-command="spread"/.test(read('#ship-menu').innerHTML), 'a cruiser without tubes is not offered it');
+});
