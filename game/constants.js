@@ -586,17 +586,21 @@ export const SHRAPNEL_DAMAGE = Object.freeze({ base: 20, min: 10, max: 50 });
 export const STARBASE_BLAST_RADIUS = 40;
 
 /**
- * Reimagined self-destruct scale (play-test balance pass, 2026-09-19). The
- * manual's blast (20, starbase 40) was tuned for 21 hulls on a 100-unit field;
- * on the 240 field with 33 hulls the fleets cluster big enough that one Axis
- * last stand measurably deleted wars — a 15-hull worst blast, and a 4+-hull
- * blast in two thirds of Reimagined wars *after* the trigger retune (2%
- * shields, five enemies; before it, 80%). Reimagined blasts scale by this
- * factor and the shrapnel ring rides the scaled blast; a classic or extended
- * war keeps the manual figure byte-identical, since the radius there is
- * recovered behavior, not a balance dial. Measured with `npm run sim`.
+ * Reimagined self-destruct scale (play-test balance pass, 2026-09-19; retuned
+ * 2026-09-24). The manual's blast (20, starbase 40) was tuned for 21 hulls on a
+ * 100-unit field; on the 240 field with 33 hulls the fleets cluster big enough
+ * that one Axis last stand measurably deleted wars — a 15-hull worst blast, and
+ * a 4+-hull blast in two thirds of Reimagined wars *after* the trigger retune
+ * (2% shields, five enemies; before it, 80%). At 0.6 the concern went dormant
+ * while arc damage (round 23) kept wars short; when the 23e spill dial lengthened
+ * them again, clusters survived to the last-stand trigger once more (0.39/war,
+ * 4+-hull blasts in 35.6%, worst 15 — Matt: "way too high"), so the scale drops
+ * to 0.45 (blast 9, starbase 18; the shrapnel ring rides the scaled blast). A
+ * classic or extended war keeps the manual figure byte-identical, since the
+ * radius there is recovered behavior, not a balance dial. Measured with
+ * `npm run sim`.
  */
-export const REIMAGINED_SELF_DESTRUCT_SCALE = 0.6;
+export const REIMAGINED_SELF_DESTRUCT_SCALE = 0.45;
 
 /**
  * Reimagined volley-damage scale (play-test balance pass, 2026-09-19). The
@@ -740,11 +744,14 @@ export const ARCS = Object.freeze(['fore', 'starboard', 'aft', 'port']);
  *
  * An aimed volley (phasers, photons, the spread salvo's primary hit) strikes the
  * arc the shooter bears on relative to the target's facing: that arc's own pool
- * absorbs first and the overflow goes straight to the internals through the
- * normal `damageShip` lottery — no spill to neighboring arcs, so presenting the
- * wrong arc to the enemy genuinely hurts. Everything positional (splash on
- * secondary hulls, self-destruct, collision, rock strikes, hyperspace loss, ion)
- * hits the total and is deducted proportionally across the arcs.
+ * absorbs first, then `spillFraction` of the overflow bleeds into the other arcs
+ * in proportion to what they still hold, and only the rest reaches the internals
+ * through the normal `damageShip` lottery. So a gutted arc still lets the enemy
+ * through sooner — the struck arc's own pool is gone and the spill has less to
+ * work with — but one worn flank does not expose the crew to the full weight of
+ * every volley. Everything positional (splash on secondary hulls, self-destruct,
+ * collision, rock strikes, hyperspace loss, ion) hits the total and is deducted
+ * proportionally across the arcs.
  *
  * The weights are the balance dial: the bow is reinforced for fighting head-on
  * and the aft is the weakest arc, which is what makes Disengage — and any
@@ -757,6 +764,16 @@ export const ARC = Object.freeze({
   weights: Object.freeze({ fore: 1.2, starboard: 1, aft: 0.8, port: 1 }),
   /** Half-width of an arc, in degrees: four quadrants centered on the facing. */
   halfWidth: 45,
+  /**
+   * The share of an aimed hit's overflow — damage past the struck arc's pool —
+   * that bleeds into the OTHER arcs before the internals lottery sees it. The
+   * round-23 durability lever, pulled after the no-spill model measured a 40-
+   * stardate median against the 62 baseline (Matt's call, 2026-09-24): at 0 the
+   * struck arc is the only shield between the gun and the crew (measured too
+   * lethal); at 1 arcs are cosmetic and the whole pool always absorbs (the
+   * pre-arcs durability). Deterministic integer rounding; no RNG.
+   */
+  spillFraction: 0.5,
 });
 
 /**

@@ -271,14 +271,19 @@ render/UI — each its own branch → PR.
 4. **Damage — aimed volleys are arc-resolved; everything positional hits the
    total.** Phasers, photons, and the spread salvo's PRIMARY hit compute the
    struck arc (attacker bearing relative to the target's facing, quantized by
-   `struckArc`): that arc's own pool absorbs first and the overflow goes straight
-   to the internals through the existing `damageShip` lottery — **no spill to
-   adjacent arcs**, so presenting the wrong arc genuinely hurts. Everything
-   positional — spread splash on secondary hulls, self-destruct blast/shrapnel,
-   collision, asteroid rock strikes, hyperspace shield loss, and **ion** (the
-   seam's question: it strips systems, it is not a kinetic hit, so it keeps
-   sidestepping facing) — deducts from the total, spread proportionally across
-   the arcs so the invariant holds.
+   `struckArc`): that arc's own pool absorbs first and the overflow reaches the
+   internals through the existing `damageShip` lottery. *(As shipped in 23b the
+   overflow went straight to internals with no spill; **revised at 23e, Matt's
+   call 2026-09-24** — the no-spill model measured a 40-stardate median against
+   the 62 baseline, so `ARC.spillFraction` (0.5) now bleeds half of any overflow
+   proportionally into the OTHER arcs before the lottery sees the rest. A gutted
+   arc stays genuinely more dangerous — less pool of its own, less to spill into —
+   so the directional identity survives; unit-tested.)* Everything positional —
+   spread splash on secondary hulls, self-destruct blast/shrapnel, collision,
+   asteroid rock strikes, hyperspace shield loss, and **ion** (the seam's
+   question: it strips systems, it is not a kinetic hit, so it keeps sidestepping
+   facing) — deducts from the total, spread proportionally across the arcs so
+   the invariant holds.
 5. **Recovery — player-focusable arc reinforcement** (Matt's pick over the
    weakest-arc-first recommendation). A free per-ship `arcFocus` setting
    (`game.arcFocus`, the fourth free persistent per-ship setting after orders,
@@ -364,6 +369,20 @@ render/UI — each its own branch → PR.
   flagged for the manual play-test pass** — needle legibility at both zooms and
   on the minimap, the helm/focus bars' console fit, and how reading arcs
   mid-fight *feels*.
+- **23e — durability retune** *(shipped this PR; Matt's call, 2026-09-24: "40 is
+  too short", and significant self-destruct blasts too frequent)*: two measured
+  levers. **(1)** the arc-spill rule of decision 4 — `ARC.spillFraction` 0.5 in
+  `damageShip`'s arc branch (spill-only measurement: median 40 → 54, but last
+  stands returned at 0.39/war and 4+-hull blasts 35.6%, worst 15). **(2)**
+  `REIMAGINED_SELF_DESTRUCT_SCALE` 0.6 → **0.45** (blast 9, starbase 18;
+  Reimagined-only — a classic or extended last stand keeps the manual/calibrated
+  radius). Settled measurement (250 seeds): median **60** (mean 105.4, p90 210 —
+  the pre-arcs 62 baseline recovered), volleys/kill 16.8, prizes 9.8/war, last
+  stands 0.05/war, worst blast 9, **4+-hull blasts 5.2%**, timeouts 6%, hopeless
+  draws **14%** (the new watch item — longer wars strand more hulls, and
+  `STALEMATE_ROUNDS` is shared with classic), winners Federation 30.4 / Bloc
+  20.8 / Cabal 15.2 / Axis 14.4; classic/extended digit-for-digit unchanged.
+  Full row in CALIBRATION.
 
 #### Seam notes from the original sketch (all resolved above)
 
