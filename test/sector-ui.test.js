@@ -130,6 +130,26 @@ test('the side panel shows the dockyard only on Federation-held ground', () => {
   assert.ok(!sectorSideHtml(atEnemy, atEnemy.currentNode).includes('Dockyard —'), 'no dockyard on enemy ground');
 });
 
+test('the side panel raises the threat banner, hides travel, and grades the run', () => {
+  const base = createCampaign({ seed: 'ui-threat' });
+  const threatened = {
+    ...base,
+    threat: { nodeId: 'home', attacker: base.sector.enemies[0] },
+    news: [{ turn: 1, text: `${base.sector.enemies[0]} strike at Xanadu — the fleet is recalled home to defend it.` }],
+  };
+  const html = sectorSideHtml(threatened, 'home');
+  assert.ok(html.includes('sector-banner threat'));
+  assert.ok(html.includes('resolve the defense before travelling'));
+  assert.ok(!html.includes('data-sector-action="travel"'), 'travel hides under threat');
+  assert.ok(html.includes('data-sector-action="engage"'), 'the defense is fightable');
+  assert.ok(html.includes('Campaign report'));
+  assert.ok(html.includes('Sector news'));
+  assert.ok(html.includes('strike at Xanadu'));
+  const calm = sectorSideHtml(base, 'home');
+  assert.ok(!calm.includes('sector-banner threat'));
+  assert.ok(calm.includes('Campaign report'), 'the report grades from turn zero');
+});
+
 test('renderSectorScreen paints the meta, chart, side panel, and log', () => {
   elements.clear();
   const campaign = campaignAtEnemy();

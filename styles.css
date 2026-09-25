@@ -1863,6 +1863,7 @@ body.classic .guide-body b {
 
 .sector-banner.victory { color: var(--fed); }
 .sector-banner.defeat { color: var(--axis); }
+.sector-banner.threat { color: var(--bloc); }
 
 #sector-results {
   margin: 0;

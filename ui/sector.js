@@ -10,7 +10,7 @@
  * All visual work here is flagged for the manual play-test pass.
  */
 import { ACE_KILLS, SECTOR } from '../game/constants.js';
-import { atDockyard, dockyardOffers, engageableHere, linksFrom, nodeById } from '../game/campaign.js';
+import { atDockyard, campaignReport, dockyardOffers, engageableHere, linksFrom, nodeById } from '../game/campaign.js';
 
 /** The star chart's drawing box, in SVG user units. */
 export const SECTOR_VIEW = Object.freeze({ width: 760, height: 420, marginX: 72, marginY: 30 });
@@ -112,8 +112,12 @@ export const sectorSideHtml = (campaign, selectedId = null) => {
   if (campaign.status !== 'active') {
     lines.push(`<p class="sector-banner ${campaign.status}">${campaign.status === 'victory' ? 'The sector is yours — the enemy home has fallen.' : 'The fleet is lost — the campaign is over.'}</p>`);
   }
+  if (campaign.threat) {
+    const target = nodeById(campaign.sector, campaign.threat.nodeId);
+    lines.push(`<p class="sector-banner threat">${campaign.threat.attacker} raid ${target?.name ?? campaign.threat.nodeId} — resolve the defense before travelling.</p>`);
+  }
   const buttons = [];
-  if (adjacent && active) buttons.push(`<button type="button" class="secondary tiny" data-sector-action="travel" data-node="${node.id}">Travel here</button>`);
+  if (adjacent && active && !campaign.threat) buttons.push(`<button type="button" class="secondary tiny" data-sector-action="travel" data-node="${node.id}">Travel here</button>`);
   if (here && active && engageableHere(campaign)) {
     buttons.push(`<button type="button" class="tiny" data-sector-action="engage" data-node="${node.id}">Engage</button>`);
     buttons.push(`<button type="button" class="secondary tiny" data-sector-action="auto" data-node="${node.id}">Auto-resolve</button>`);
@@ -133,7 +137,28 @@ export const sectorSideHtml = (campaign, selectedId = null) => {
   const wounded = campaign.fleet.length;
   lines.push(`<p class="menu-sub">Your fleet — ${wounded} hull${wounded === 1 ? '' : 's'}, ${campaign.credits} credits</p>`);
   lines.push(`<ul class="sector-fleet">${campaign.fleet.map(recordLine).join('')}</ul>`);
+  lines.push(sectorReportHtml(campaign));
   return lines.join('');
+};
+
+/**
+ * The campaign report (round 27b): the run graded live off the summaries the
+ * save keeps, with the strategic layer's latest news under it.
+ */
+export const sectorReportHtml = (campaign) => {
+  const report = campaignReport(campaign);
+  const lines = [
+    `Turn ${report.turns} · ${report.status}`,
+    `Battles ${report.battles}: ${report.captured} captured, ${report.held} held, ${report.lost} lost, ${report.retreated} retreated, ${report.abandoned} abandoned${report.defenses ? ` (${report.defenses} defenses)` : ''}`,
+    `Systems held ${report.nodesHeld} of ${report.nodesTotal}`,
+    `Credits ${report.credits} (earned ${report.earned}, spent ${report.spent}) · prizes ${report.prizes} · bounties ${report.bounties}`,
+    `Fleet ${report.hulls} hull${report.hulls === 1 ? '' : 's'}${report.aces.length ? ` · aces: ${report.aces.join(', ')}` : ''}`,
+  ];
+  const news = (campaign.news ?? []).slice(-6);
+  return `<p class="menu-sub">Campaign report</p><ul class="sector-fleet report">${lines.map((line) => `<li>${line}</li>`).join('')}</ul>`
+    + (news.length
+      ? `<p class="menu-sub">Sector news</p><ul class="sector-fleet news">${news.map((entry) => `<li>Turn ${entry.turn}: ${entry.text}</li>`).join('')}</ul>`
+      : '');
 };
 
 /** The campaign log: one line per resolved battle, oldest first (the save's summaries). */
