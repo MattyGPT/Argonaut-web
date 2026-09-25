@@ -1,21 +1,24 @@
 /**
- * The sector campaign (Argonaut Reimagined, Phase 6 — round 26a: the data
- * layer). A campaign is a container ABOVE the war game: a seeded branching
- * corridor of star systems, the player's carried fleet records, and a
- * per-node battle history. Nothing here mutates a war or is reachable from
- * one — a classic, extended, or ordinary Reimagined war never imports this
+ * The sector campaign (Argonaut Reimagined, Phase 6 — round 26a data layer,
+ * round 26b travel + node-battle resolution). A campaign is a container ABOVE
+ * the war game: a seeded branching corridor of star systems, the player's
+ * carried fleet records, and a per-node battle history. It composes whole wars
+ * (`createGame` + the headless autopilot loop) but changes none of their rules
+ * — a classic, extended, or ordinary Reimagined war never imports this
  * module's behavior, so the parity scaffolds and the harness stay untouched.
  *
- * Determinism: the sector graph draws on `${seed}:sector` and each node battle
- * will run on `${seed}:battle:<nodeId>` (the captains/terrain sub-stream
- * pattern), so the same campaign seed replays the same sector, the same
+ * Determinism: the sector graph draws on `${seed}:sector`, each node battle
+ * runs on `${seed}:battle:<nodeId>` (the captains/terrain sub-stream pattern),
+ * and an auto-resolved battle replays the harness loop exactly — so the same
+ * campaign seed with the same choices replays the same sector, the same
  * battles, and the same outcome, and no existing stream ever shifts.
  *
  * Design: `docs/superpowers/specs/2026-09-25-phase-6-sector-campaign.md`.
  */
 import { FACTIONS, SECTOR, SHIP_TEMPLATES } from './constants.js';
 import { createRng } from './rng.js';
-import { isActive, isDrone, isImmovable, isNeutral } from './state.js';
+import { createGame, defaultLoadout, isActive, isDrone, isImmovable, isNeutral } from './state.js';
+import { resolveAutopilotTurn, resolveComputerTurns } from './turns.js';
 
 /** The per-battle seed derivation (round 26 decision 5): one deliberate rule. */
 export const battleSeed = (seed, nodeId) => `${String(seed)}:battle:${nodeId}`;
@@ -168,3 +171,167 @@ export const fleetRecordsFrom = (game) => (game?.ships ?? [])
     ...(ship.prize ? { prize: { ...ship.prize } } : {}),
     ...(ship.dronesLaunched ? { dronesLaunched: true } : {}),
   }));
+
+/** The id namespace carried hulls live in, so they never collide with fresh garrison ids. */
+const VETERAN_PREFIX = 'vet-';
+const veteranId = (id) => (String(id).startsWith(VETERAN_PREFIX) ? String(id) : `${VETERAN_PREFIX}${id}`);
+
+/**
+ * The campaign carry-out extraction: `fleetRecordsFrom` plus stable id
+ * namespacing. Garrison hulls are generated with faction-prefixed ids
+ * (`bloc-cruiser-1`) that repeat across battles, so a prize captured in one
+ * battle would collide with the same garrison slot — or with its own earlier
+ * self, re-captured — in the next. Every carried id therefore lives under
+ * `vet-`, and a within-extraction collision takes a numeric suffix.
+ */
+export const carriedFleetFrom = (game) => {
+  const seen = new Set();
+  return fleetRecordsFrom(game).map((record) => {
+    const base = veteranId(record.id);
+    let id = base;
+    for (let suffix = 2; seen.has(id); suffix += 1) id = `${base}-${suffix}`;
+    seen.add(id);
+    return { ...record, id };
+  });
+};
+
+/**
+ * Starts a campaign: generates the sector and musters the starting fleet — a
+ * headless, full-health `createGame` on `${seed}:battle:muster` with the
+ * player's chosen loadout (default by default), carried straight back out as
+ * records. The container keeps everything the save needs and nothing a battle
+ * reads: per-battle logs stay in the battle (LOG_LIMIT caps them), the campaign
+ * keeps one summary per node.
+ */
+export const createCampaign = ({ seed = 'sector-1', loadout = null } = {}) => {
+  const campaignSeed = String(seed);
+  const sector = generateSector(campaignSeed);
+  const muster = createGame({
+    seed: battleSeed(campaignSeed, 'muster'),
+    reimagined: true,
+    loadout: loadout ?? defaultLoadout(),
+  });
+  return {
+    seed: campaignSeed,
+    sector,
+    fleet: carriedFleetFrom(muster),
+    turn: 0,
+    credits: 0,
+    currentNode: homeNodeOf(sector).id,
+    results: [],
+    battle: null,
+    status: 'active',
+  };
+};
+
+/** Whether the fleet may engage here: the node it stands on is enemy-held. */
+export const engageableHere = (campaign) => {
+  const node = nodeById(campaign?.sector, campaign?.currentNode);
+  return Boolean(node?.owner && node.owner !== FACTIONS.FEDERATION && !campaign.battle && campaign.status === 'active' && campaign.fleet.length > 0);
+};
+
+/**
+ * Travels to an adjacent node (strictly one column forward — the corridor
+ * never doubles back). Travel is free and spends no campaign turn; turns
+ * advance on resolved battles only. Refusals return the campaign unchanged.
+ */
+export const travelTo = (campaign, nodeId) => {
+  if (campaign.battle || campaign.status !== 'active') return campaign;
+  const current = nodeById(campaign.sector, campaign.currentNode);
+  if (!nodeById(campaign.sector, nodeId) || !current?.next.includes(nodeId)) return campaign;
+  return { ...campaign, currentNode: nodeId };
+};
+
+/**
+ * Opens the node battle at the fleet's current node: a FULL seeded Reimagined
+ * war on the 240 field — seed `${seed}:battle:<nodeId>`, two factions
+ * (the Federation and the node's owner), no Xanadu (the dockyard is a
+ * between-battles facility), the garrison drawn on the battle seed's
+ * `:loadouts` stream within the node's budget, and the Federation injected
+ * from the carried records. `player` only marks intent for the UI: an
+ * auto-resolved battle is the same game run headless.
+ */
+export const startNodeBattle = (campaign, nodeId, { player = true } = {}) => {
+  if (!engageableHere(campaign) || nodeId !== campaign.currentNode) return campaign;
+  const node = nodeById(campaign.sector, nodeId);
+  const game = createGame({
+    seed: battleSeed(campaign.seed, nodeId),
+    reimagined: true,
+    loadout: {
+      factions: [FACTIONS.FEDERATION, node.owner],
+      budgets: { [node.owner]: node.budget },
+      veterans: campaign.fleet,
+      xanadu: false,
+    },
+  });
+  return { ...campaign, battle: { nodeId, player, game } };
+};
+
+/**
+ * Maps a finished (or abandoned) battle onto the campaign (round 26 decisions
+ * 7–8): `federation-win` captures the node — ownership flips, credits are
+ * earned, and capturing the objective node WINS the campaign; anything else
+ * (loss, hopeless draw, annihilation, timeout, abandonment) leaves the node in
+ * enemy hands and the fleet carries out at its end-state. A fleet with no
+ * records left is a campaign defeat. The campaign turn advances by one, and
+ * the fleet stands at the node it just fought over.
+ */
+export const resolveNodeBattle = (campaign, { abandoned = false } = {}) => {
+  if (!campaign.battle) return campaign;
+  const { nodeId, game } = campaign.battle;
+  const node = nodeById(campaign.sector, nodeId);
+  const fleet = carriedFleetFrom(game);
+  const kind = abandoned ? 'abandoned' : (game.outcome?.kind ?? 'timeout');
+  const captured = kind === 'federation-win';
+  const result = {
+    nodeId,
+    name: node?.name ?? nodeId,
+    turn: campaign.turn + 1,
+    outcome: captured ? 'captured' : kind === 'alliance-win' || kind === 'draw' ? 'lost' : abandoned ? 'abandoned' : 'retreated',
+    kind,
+    stardates: game.turn,
+    hulls: fleet.length,
+    prizes: game.prizesTaken?.[FACTIONS.FEDERATION] ?? 0,
+  };
+  const sector = captured
+    ? { ...campaign.sector, nodes: campaign.sector.nodes.map((entry) => (entry.id === nodeId ? { ...entry, owner: FACTIONS.FEDERATION } : entry)) }
+    : campaign.sector;
+  const victory = captured && node?.column === SECTOR.columns - 1;
+  return {
+    ...campaign,
+    sector,
+    fleet,
+    credits: campaign.credits + (captured ? (SECTOR.captureCredits[node?.type] ?? 0) : 0),
+    turn: campaign.turn + 1,
+    currentNode: nodeId,
+    results: [...campaign.results, result],
+    battle: null,
+    status: fleet.length === 0 ? 'defeat' : victory ? 'victory' : 'active',
+  };
+};
+
+/**
+ * The player abandons the open battle: the node is ceded (it stays enemy-held)
+ * and the fleet carries out exactly as it stands — the campaign-level version
+ * of disengaging, and distinct from `resign`, which keeps its spectator meaning
+ * and lets the battle resolve headless before mapping normally.
+ */
+export const abandonEngagement = (campaign) => (campaign.battle ? resolveNodeBattle(campaign, { abandoned: true }) : campaign);
+
+/**
+ * Fights the current node to its outcome without the player: the harness loop
+ * (`resolveAutopilotTurn` + `resolveComputerTurns`, `scripts/sim-wars.mjs`'s
+ * `runWar` pattern — deliberately its own copy here so the harness and its
+ * smoke test stay untouched) played to `game.outcome` or the stardate cap,
+ * then mapped through `resolveNodeBattle`. Deterministic per campaign seed.
+ */
+export const autoResolveNode = (campaign, nodeId, { maxStardates = 600 } = {}) => {
+  const started = startNodeBattle(campaign, nodeId, { player: false });
+  if (!started.battle) return started;
+  let game = started.battle.game;
+  while (!game.outcome && game.turn < maxStardates) {
+    const auto = resolveAutopilotTurn(game);
+    game = resolveComputerTurns(auto.game);
+  }
+  return resolveNodeBattle({ ...started, battle: { ...started.battle, game } });
+};

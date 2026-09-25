@@ -1074,6 +1074,12 @@ export const SECTOR = Object.freeze({
     objectiveByColumn: Object.freeze([12, 16, 21]),
     enemyHome: 30,
   }),
+  /**
+   * Credits earned when a node is captured, by node type — the round-27a
+   * economy's seed, awarded from 26b so the ledger exists before the dockyard
+   * spends from it.
+   */
+  captureCredits: Object.freeze({ battle: 10, objective: 20, home: 50 }),
   /** Star-system names for the middle columns and the objective — this remake's own expression. */
   names: Object.freeze([
     'Meridian', 'Kaldra', 'Vesh', 'Orun', 'Sable', 'Perihelion',
