@@ -296,6 +296,35 @@ for the manual play-test pass.
    **27b** (win/lose, strategic layer, campaign report). STOP for Matt's
    go-ahead before either.
 
+### 27a decisions (designed and shipped with Matt's go-ahead, 2026-09-25 — PR #68)
+
+1. **Bounties pay once per hull.** `campaign.paidPrizes` records the hull ids
+   whose class value (`SECTOR.prizeValues`) has been paid, on the battle the
+   prize first carries out — retreats included. A prize lost later keeps the
+   credits already banked; a prize that goes dark and is re-boarded does not
+   pay twice (same carried id).
+2. **The dockyard is where the fleet stands on Federation ground** — home or a
+   captured node — and only between battles. With forward-only travel this
+   makes the rhythm *capture → refit → advance*; a fleet that retreats onto an
+   enemy or empty node must win its way to friendly ground to spend. Offers
+   (`dockyardOffers`) are re-derived from the fleet on every read and carry
+   stable ids; `buyDockyard` re-finds the offer by id, so the UI can never
+   spend a price it did not show, and unaffordable or obsolete clicks are
+   no-ops.
+3. **Rates** (`SECTOR.dockyard`, all campaign dials): shields 0.1 cr/point
+   (arcs re-split to the round-23 invariant), crew 0.25 cr/head, systems
+   overhaul 4 cr/unit (restores burns to complement; never sands a purchased
+   refit down — over-complement units are only lost by battle damage), refits
+   15 cr re-purchasable up to `REFIT_OVER_TEMPLATE`, drone-bay rebuild 25 cr.
+4. **Commissions**: new hulls at round-19 point cost × 8 credits, full-health,
+   captain-less (the next battle deals one off its captains stream), named off
+   `SECTOR.reserveNames` in purchase order — no RNG. Commissions ALONE count
+   against the round-19 point budget via `campaign.purchased`; carried prizes
+   stay unbudgeted (round 17's rule survives the campaign).
+5. **Old 26c saves tolerate the new container fields** (`paidPrizes`,
+   `purchased`, `purchases` all default in), so an in-flight campaign keeps
+   playing across the upgrade.
+
 ## Chunk breakdown
 
 | Round | Chunk | Ships | Tested by | Status |
@@ -303,7 +332,7 @@ for the manual play-test pass.
 | 26a | Campaign data layer | `SECTOR` constants; `game/campaign.js` — `generateSector` on `${seed}:sector`, `battleSeed`, `fleetRecordsFrom`, graph readers | Gen determinism + shape/link invariants; record extraction; no stream shift | ✅ PR #64 |
 | 26b | Travel + node battles | Campaign container; `loadout.veterans` injection; per-battle seeds; headless auto-resolve; outcome mapping; travel; abandon; campaign save | Whole-campaign determinism; injection parity; outcome mapping; old saves load; harness unmoved | ✅ PR #65 |
 | 26c | Sector UI | Star-map screen; New game option; battle transitions; report stub; save wiring | Render smokes; manual play-test pass | ✅ PR #66 |
-| 27a | Persistence/economy | Credits; dockyard between battles; repairs/refits/crew/hulls/drones | Fleet continuity; purchases; determinism | — |
+| 27a | Persistence/economy | Credits; dockyard between battles; repairs/refits/crew/hulls/drones | Fleet continuity; purchases; determinism | ✅ PR #68 |
 | 27b | Campaign win/lose | Enemy strategic layer; home-defense battle; victory/defeat; campaign report | Campaign win/lose both ways; report; determinism | — |
 
 ## Parity & determinism guardrails

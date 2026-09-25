@@ -1087,6 +1087,44 @@ export const SECTOR = Object.freeze({
    * spends from it.
    */
   captureCredits: Object.freeze({ battle: 10, objective: 20, home: 50 }),
+  /**
+   * Prize bounties by hull kind (round 27a): credits paid ONCE per hull
+   * captured and carried out of a battle, tracked on the campaign's
+   * `paidPrizes` so a prize that fights on through three battles pays its
+   * bounty the first time only. A captured hull is kept AND pays — seizing
+   * prizes is the campaign's income engine, and losing one later keeps the
+   * money already spent.
+   */
+  prizeValues: Object.freeze({
+    scout: 4,
+    cruiser: 8,
+    interceptor: 8,
+    artillery: 12,
+    carrier: 16,
+    'battle-cruiser': 20,
+  }),
+  /**
+   * The between-battles dockyard (round 27a), available at the Federation
+   * home and any captured node. Credit rates for putting a wounded record
+   * back in order; every figure is a campaign dial. Shield and crew rates
+   * round UP to whole credits, so the ledger stays integer. A new hull's
+   * price is its round-19 point cost times `hullCreditPerPoint`, and
+   * commissions alone count against the round-19 point budget — carried
+   * prizes never do (round 17's rule survives the campaign).
+   */
+  dockyard: Object.freeze({
+    shieldRate: 0.1,
+    crewRate: 0.25,
+    systemRate: 4,
+    refit: 15,
+    bay: 25,
+    hullCreditPerPoint: 8,
+  }),
+  /** Names for hulls commissioned mid-campaign (round 27a), drawn in purchase order — no RNG. */
+  reserveNames: Object.freeze([
+    'Intrepid', 'Resolute', 'Bulwark', 'Dauntless', 'Endeavour', 'Formidable',
+    'Guardian', 'Halcyon', 'Illustrious', 'Mercury', 'Nimble', 'Olympia',
+  ]),
   /** Star-system names for the middle columns and the objective — this remake's own expression. */
   names: Object.freeze([
     'Meridian', 'Kaldra', 'Vesh', 'Orun', 'Sable', 'Perihelion',

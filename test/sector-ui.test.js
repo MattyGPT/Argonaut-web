@@ -101,7 +101,7 @@ test('the campaign log reads empty, then one line per battle', () => {
   const withResults = {
     ...campaign,
     results: [
-      { nodeId: 'n-1-1', name: 'Kaldra', turn: 1, outcome: 'captured', kind: 'federation-win', stardates: 42, hulls: 7, prizes: 2 },
+      { nodeId: 'n-1-1', name: 'Kaldra', turn: 1, outcome: 'captured', kind: 'federation-win', stardates: 42, hulls: 7, prizes: 2, bounty: 16 },
       { nodeId: 'n-2-1', name: 'Vesh', turn: 2, outcome: 'retreated', kind: 'hopeless-draw', stardates: 300, hulls: 3, prizes: 0 },
     ],
   };
@@ -110,8 +110,24 @@ test('the campaign log reads empty, then one line per battle', () => {
   assert.ok(html.includes('Kaldra'));
   assert.ok(html.includes('42 stardates'));
   assert.ok(html.includes('2 prizes'));
+  assert.ok(html.includes('16 cr bounty'));
   assert.ok(html.includes('result-retreated'));
   assert.ok(html.includes('hopeless-draw'));
+});
+
+test('the side panel shows the dockyard only on Federation-held ground', () => {
+  const home = { ...createCampaign({ seed: 'dock-ui' }), credits: 60 };
+  const wounded = { ...home, fleet: home.fleet.map((record) => (record.id === 'vet-fed-flagship' ? { ...record, shields: 50 } : record)) };
+  const html = sectorSideHtml(wounded, 'home');
+  assert.ok(html.includes('Dockyard —'));
+  assert.ok(html.includes('data-sector-action="buy"'));
+  assert.ok(html.includes('data-offer="shields:vet-fed-flagship"'));
+  const poorHtml = sectorSideHtml({ ...wounded, credits: 1 }, 'home');
+  assert.ok(poorHtml.includes('disabled'), 'an unaffordable offer is disabled, not hidden');
+  const perfect = sectorSideHtml({ ...home, credits: 60 }, 'home');
+  assert.ok(perfect.includes('Commission'), 'commissions are offered even to a fleet in perfect order');
+  const atEnemy = campaignAtEnemy();
+  assert.ok(!sectorSideHtml(atEnemy, atEnemy.currentNode).includes('Dockyard —'), 'no dockyard on enemy ground');
 });
 
 test('renderSectorScreen paints the meta, chart, side panel, and log', () => {

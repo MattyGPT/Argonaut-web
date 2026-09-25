@@ -1,7 +1,7 @@
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets } from './game/actions.js';
 import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
 import { alertLevel, appendLog, createGame, defaultLoadout, fleetCost, fleetHulls, getShip, isSpectator, normalizeFleetSpec, systemUnits } from './game/state.js';
-import { abandonEngagement, autoResolveNode, createCampaign, nodeById, resolveNodeBattle, startNodeBattle, travelTo } from './game/campaign.js';
+import { abandonEngagement, autoResolveNode, buyDockyard, createCampaign, nodeById, resolveNodeBattle, startNodeBattle, travelTo } from './game/campaign.js';
 import { scenarioFor } from './game/scenarios.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './game/turns.js';
 import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget, promptForTowDestination } from './ui/input.js';
@@ -802,6 +802,10 @@ document.querySelector('#sector-root').addEventListener('click', (event) => {
     } else if (action === 'auto') {
       campaign = autoResolveNode(campaign, nodeId);
       sectorSelection = campaign.currentNode;
+    } else if (action === 'buy') {
+      // The dockyard re-prices from the campaign itself, so an unaffordable or
+      // obsolete offer id is a no-op rather than a bad spend.
+      campaign = buyDockyard(campaign, actionButton.dataset.offer);
     }
     refresh();
     return;

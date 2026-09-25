@@ -10,7 +10,7 @@
  * All visual work here is flagged for the manual play-test pass.
  */
 import { ACE_KILLS, SECTOR } from '../game/constants.js';
-import { engageableHere, linksFrom, nodeById } from '../game/campaign.js';
+import { atDockyard, dockyardOffers, engageableHere, linksFrom, nodeById } from '../game/campaign.js';
 
 /** The star chart's drawing box, in SVG user units. */
 export const SECTOR_VIEW = Object.freeze({ width: 760, height: 420, marginX: 72, marginY: 30 });
@@ -119,6 +119,17 @@ export const sectorSideHtml = (campaign, selectedId = null) => {
     buttons.push(`<button type="button" class="secondary tiny" data-sector-action="auto" data-node="${node.id}">Auto-resolve</button>`);
   }
   if (buttons.length) lines.push(`<div class="sector-actions">${buttons.join('')}</div>`);
+  // The between-battles dockyard (round 27a): only where the fleet stands on
+  // Federation-held ground. Offers are re-derived on every paint and each
+  // button carries its offer id — buyDockyard re-prices from the campaign, so
+  // a stale click can never spend credits the panel did not show.
+  if (atDockyard(campaign)) {
+    const offers = dockyardOffers(campaign);
+    lines.push(`<p class="menu-sub">Dockyard — ${campaign.credits} credits to spend</p>`);
+    lines.push(offers.length
+      ? `<div class="sector-actions dockyard">${offers.map((offer) => `<button type="button" class="secondary tiny" data-sector-action="buy" data-offer="${offer.id}"${offer.cost > campaign.credits ? ' disabled' : ''} title="${offer.cost} credits">${offer.label} · ${offer.cost} cr</button>`).join('')}</div>`
+      : '<p class="menu-sub">The fleet is in perfect order — nothing to buy.</p>');
+  }
   const wounded = campaign.fleet.length;
   lines.push(`<p class="menu-sub">Your fleet — ${wounded} hull${wounded === 1 ? '' : 's'}, ${campaign.credits} credits</p>`);
   lines.push(`<ul class="sector-fleet">${campaign.fleet.map(recordLine).join('')}</ul>`);
@@ -127,7 +138,7 @@ export const sectorSideHtml = (campaign, selectedId = null) => {
 
 /** The campaign log: one line per resolved battle, oldest first (the save's summaries). */
 export const sectorResultsHtml = (campaign) => (campaign.results.length
-  ? campaign.results.map((result) => `<li class="result-${result.outcome}"><b>${result.name}</b> — ${result.outcome} <i>(${result.kind}, ${result.stardates} stardate${result.stardates === 1 ? '' : 's'}, ${result.hulls} hulls carried out${result.prizes ? `, ${result.prizes} prizes` : ''})</i></li>`).join('')
+  ? campaign.results.map((result) => `<li class="result-${result.outcome}"><b>${result.name}</b> — ${result.outcome} <i>(${result.kind}, ${result.stardates} stardate${result.stardates === 1 ? '' : 's'}, ${result.hulls} hulls carried out${result.prizes ? `, ${result.prizes} prizes` : ''}${result.bounty ? `, ${result.bounty} cr bounty` : ''})</i></li>`).join('')
   : '<li class="menu-sub">No battles fought yet.</li>');
 
 /** Paints the sector screen. The only document-touching export, mirroring `renderGame`. */

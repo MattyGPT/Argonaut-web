@@ -15,9 +15,9 @@
  *
  * Design: `docs/superpowers/specs/2026-09-25-phase-6-sector-campaign.md`.
  */
-import { FACTIONS, SECTOR, SHIP_TEMPLATES } from './constants.js';
+import { FACTIONS, ION, LOADOUT, POWER, REFITS, REFIT_OVER_TEMPLATE, SECTOR, SHIP_TEMPLATES, SPREAD } from './constants.js';
 import { createRng } from './rng.js';
-import { createGame, defaultLoadout, isActive, isDrone, isImmovable, isNeutral } from './state.js';
+import { arcSplit, createGame, defaultLoadout, fleetCost, isActive, isDrone, isImmovable, isNeutral } from './state.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './turns.js';
 
 /** The per-battle seed derivation (round 26 decision 5): one deliberate rule. */
@@ -221,6 +221,13 @@ export const createCampaign = ({ seed = 'sector-1', loadout = null } = {}) => {
     results: [],
     battle: null,
     status: 'active',
+    // Round 27a economy: hull ids whose prize bounty has been paid (a prize
+    // pays once, the battle it first carries out), the commissioned-hull spec
+    // that alone counts against the round-19 point budget, and how many hulls
+    // have been commissioned (names draw off it in order, no RNG).
+    paidPrizes: [],
+    purchased: {},
+    purchases: 0,
   };
 };
 
@@ -283,6 +290,17 @@ export const resolveNodeBattle = (campaign, { abandoned = false } = {}) => {
   const fleet = carriedFleetFrom(game);
   const kind = abandoned ? 'abandoned' : (game.outcome?.kind ?? 'timeout');
   const captured = kind === 'federation-win';
+  // Prize bounties (round 27a): every hull carried out with a prize record pays
+  // its class value the FIRST time it carries out — `paidPrizes` remembers, so
+  // a prize that fights on through the campaign pays once, and one lost later
+  // keeps the credits already banked. Bounties pay on retreats too: the hull
+  // was still seized and carried home.
+  const paid = new Set(campaign.paidPrizes ?? []);
+  const newlyPaid = fleet.filter((record) => record.prize && !paid.has(record.id)).map((record) => record.id);
+  const bounty = newlyPaid.reduce((total, id) => {
+    const record = fleet.find((entry) => entry.id === id);
+    return total + (SECTOR.prizeValues[record.kind] ?? 0);
+  }, 0);
   const result = {
     nodeId,
     name: node?.name ?? nodeId,
@@ -292,6 +310,7 @@ export const resolveNodeBattle = (campaign, { abandoned = false } = {}) => {
     stardates: game.turn,
     hulls: fleet.length,
     prizes: game.prizesTaken?.[FACTIONS.FEDERATION] ?? 0,
+    bounty,
   };
   const sector = captured
     ? { ...campaign.sector, nodes: campaign.sector.nodes.map((entry) => (entry.id === nodeId ? { ...entry, owner: FACTIONS.FEDERATION } : entry)) }
@@ -301,7 +320,8 @@ export const resolveNodeBattle = (campaign, { abandoned = false } = {}) => {
     ...campaign,
     sector,
     fleet,
-    credits: campaign.credits + (captured ? (SECTOR.captureCredits[node?.type] ?? 0) : 0),
+    credits: campaign.credits + (captured ? (SECTOR.captureCredits[node?.type] ?? 0) : 0) + bounty,
+    paidPrizes: [...(campaign.paidPrizes ?? []), ...newlyPaid],
     turn: campaign.turn + 1,
     currentNode: nodeId,
     results: [...campaign.results, result],
@@ -334,4 +354,195 @@ export const autoResolveNode = (campaign, nodeId, { maxStardates = 600 } = {}) =
     game = resolveComputerTurns(auto.game);
   }
   return resolveNodeBattle({ ...started, battle: { ...started.battle, game } });
+};
+
+// --- Round 27a: the between-battles dockyard and the credit economy ---
+
+/**
+ * The undamaged complement of one subsystem on a hull kind: the template's
+ * systems plus the Reimagined carries (reactor always, ion/spread where the
+ * class fields them). Refit bonuses live ABOVE this line, which is what lets
+ * an overhaul restore burns without sanding a purchased refit back down.
+ */
+const baseUnits = (kind, system) => {
+  const template = SHIP_TEMPLATES[kind];
+  if (!template) return 0;
+  if (system === 'reactor') return POWER.reactor[template.className] ?? 0;
+  if (system === 'ion') return ION.carry[template.className] ?? 0;
+  if (system === 'spread') return SPREAD.carry[template.className] ?? 0;
+  return template.systems[system] ?? 0;
+};
+
+/** A full complement of subsystems for a kind, exactly as `createShip` builds it. */
+const fullSystems = (kind) => {
+  const template = SHIP_TEMPLATES[kind];
+  const systems = { ...template.systems, reactor: POWER.reactor[template.className] ?? 0 };
+  const ion = ION.carry[template.className] ?? 0;
+  if (ion > 0) systems.ion = ion;
+  const spread = SPREAD.carry[template.className] ?? 0;
+  if (spread > 0) systems.spread = spread;
+  return systems;
+};
+
+/** A commissioned hull's price: its round-19 point cost, in credits. */
+export const hullPrice = (kind) => (LOADOUT.costs[kind] ?? 0) * SECTOR.dockyard.hullCreditPerPoint;
+
+/**
+ * Whether the fleet can work dockyard: it stands on a Federation-held node —
+ * the home system or one it captured — and the campaign is still live. The
+ * dockyard is strictly between battles; inside a battle only Xanadu's ring
+ * repairs, exactly as before.
+ */
+export const atDockyard = (campaign) => {
+  const node = nodeById(campaign?.sector, campaign?.currentNode);
+  return Boolean(node && node.owner === FACTIONS.FEDERATION && !campaign.battle && campaign.status === 'active');
+};
+
+/**
+ * The dockyard's standing offers (round 27a), recomputed from the fleet on
+ * every read so the UI can never hold a stale price: per wounded hull, shield
+ * repair, recruing, and a whole-systems overhaul; per hull, every refit whose
+ * units would stay within `REFIT_OVER_TEMPLATE` of complement (refits are
+ * re-purchasable here, unlike the one-per-war battle rule); a spent drone bay
+ * rebuild; and commissions — new hulls at their point cost in credits, which
+ * ALONE count against the round-19 point budget (`campaign.purchased`), so
+ * carried prizes stay unbudgeted. Offers are plain data with stable ids;
+ * `buyDockyard` re-finds the offer by id, so a click can never spend a price
+ * the panel did not show.
+ */
+export const dockyardOffers = (campaign) => {
+  if (!atDockyard(campaign)) return [];
+  const offers = [];
+  for (const record of campaign.fleet) {
+    const template = SHIP_TEMPLATES[record.kind];
+    if (!template) continue;
+    const missingShields = Math.max(0, template.shields - (record.shields ?? 0));
+    if (missingShields > 0) {
+      offers.push({
+        id: `shields:${record.id}`,
+        kind: 'shields',
+        recordId: record.id,
+        label: `Repair ${record.name}'s shields (+${missingShields})`,
+        cost: Math.ceil(missingShields * SECTOR.dockyard.shieldRate),
+      });
+    }
+    const missingCrew = Math.max(0, template.crew - (record.crew ?? 0));
+    if (missingCrew > 0) {
+      offers.push({
+        id: `crew:${record.id}`,
+        kind: 'crew',
+        recordId: record.id,
+        label: `Recrew ${record.name} (+${missingCrew})`,
+        cost: Math.ceil(missingCrew * SECTOR.dockyard.crewRate),
+      });
+    }
+    const missingUnits = Object.keys(record.systems ?? {})
+      .reduce((total, system) => total + Math.max(0, baseUnits(record.kind, system) - (record.systems[system] ?? 0)), 0);
+    if (missingUnits > 0) {
+      offers.push({
+        id: `systems:${record.id}`,
+        kind: 'systems',
+        recordId: record.id,
+        label: `Overhaul ${record.name}'s systems (+${missingUnits} units)`,
+        cost: missingUnits * SECTOR.dockyard.systemRate,
+      });
+    }
+    for (const [refitId, refit] of Object.entries(REFITS)) {
+      const fits = Object.entries(refit.systems)
+        .every(([system, units]) => (record.systems?.[system] ?? 0) + units <= baseUnits(record.kind, system) + REFIT_OVER_TEMPLATE);
+      if (fits) {
+        offers.push({
+          id: `refit:${record.id}:${refitId}`,
+          kind: 'refit',
+          recordId: record.id,
+          refitId,
+          label: `${refit.label} — ${record.name}`,
+          cost: SECTOR.dockyard.refit,
+        });
+      }
+    }
+    if (record.dronesLaunched) {
+      offers.push({
+        id: `bay:${record.id}`,
+        kind: 'bay',
+        recordId: record.id,
+        label: `Rebuild ${record.name}'s drone bay`,
+        cost: SECTOR.dockyard.bay,
+      });
+    }
+  }
+  const purchased = campaign.purchased ?? {};
+  for (const kind of LOADOUT.classOrder) {
+    const next = { ...purchased, [kind]: (purchased[kind] ?? 0) + 1 };
+    if (fleetCost(next) <= LOADOUT.budget) {
+      offers.push({
+        id: `buy:${kind}`,
+        kind: 'buy',
+        classKind: kind,
+        label: `Commission ${SHIP_TEMPLATES[kind].className} (${LOADOUT.costs[kind]} pt${LOADOUT.costs[kind] === 1 ? '' : 's'})`,
+        cost: hullPrice(kind),
+      });
+    }
+  }
+  return offers;
+};
+
+/**
+ * Spends credits on one dockyard offer. The offer is re-derived from the
+ * current campaign (never trusted from the caller), so an unaffordable,
+ * obsolete, or out-of-place purchase returns the campaign untouched. Shield
+ * repair re-splits the arcs to the round-23 invariant; an overhaul restores
+ * every burnt unit to complement without touching refit bonuses; a
+ * commission joins the fleet as a full-health record with no captain — the
+ * next battle deals one off its captains stream, like any muster.
+ */
+export const buyDockyard = (campaign, offerId) => {
+  const offer = dockyardOffers(campaign).find((entry) => entry.id === offerId);
+  if (!offer || campaign.credits < offer.cost) return campaign;
+  let purchased = campaign.purchased ?? {};
+  let purchases = campaign.purchases ?? 0;
+  let fleet = campaign.fleet;
+  if (offer.kind === 'buy') {
+    const kind = offer.classKind;
+    const template = SHIP_TEMPLATES[kind];
+    purchased = { ...purchased, [kind]: (purchased[kind] ?? 0) + 1 };
+    const record = {
+      id: `vet-bought-${kind}-${purchases + 1}`,
+      name: SECTOR.reserveNames[purchases % SECTOR.reserveNames.length],
+      kind,
+      className: template.className,
+      captain: null,
+      kills: 0,
+      shotsFired: 0,
+      shields: template.shields,
+      crew: template.crew,
+      systems: fullSystems(kind),
+      arcs: arcSplit(template.shields),
+    };
+    fleet = [...fleet, record];
+    purchases += 1;
+  } else {
+    fleet = campaign.fleet.map((record) => {
+      if (record.id !== offer.recordId) return record;
+      const template = SHIP_TEMPLATES[record.kind];
+      if (offer.kind === 'shields') return { ...record, shields: template.shields, arcs: arcSplit(template.shields) };
+      if (offer.kind === 'crew') return { ...record, crew: template.crew };
+      if (offer.kind === 'systems') {
+        const systems = { ...record.systems };
+        for (const system of Object.keys(systems)) systems[system] = Math.max(systems[system], baseUnits(record.kind, system));
+        return { ...record, systems };
+      }
+      if (offer.kind === 'refit') {
+        const systems = { ...record.systems };
+        for (const [system, units] of Object.entries(REFITS[offer.refitId].systems)) systems[system] = (systems[system] ?? 0) + units;
+        return { ...record, systems };
+      }
+      if (offer.kind === 'bay') {
+        const { dronesLaunched, ...rest } = record;
+        return rest;
+      }
+      return record;
+    });
+  }
+  return { ...campaign, fleet, credits: campaign.credits - offer.cost, purchased, purchases };
 };
