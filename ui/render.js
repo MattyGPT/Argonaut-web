@@ -312,6 +312,52 @@ export const primeMoveMemory = (game) => {
 };
 
 /**
+ * Stack declutter (play-test retune 27c, widened in the readability pass):
+ * hulls standing within 2 units of each other — a wing riding over its
+ * carrier, a prize mid-withdraw, a converged melee — draw as one
+ * indistinguishable blob and only the topmost can be clicked. Entries cluster
+ * (union-find, deterministic) and fan onto a screen-space ring so each glyph
+ * is seen and clicked; presentation only — positions, beams, ranges, and
+ * every rule read the true coordinates. The real-time flight playback (Phase
+ * 8, round 30) runs the same ring per frame, so hulls crossing in flight stay
+ * legible instead of stacking into a blob mid-burn.
+ */
+export const fanOutOffsets = (entries) => {
+  const parent = new Map(entries.map((entry) => [entry.id, entry.id]));
+  const find = (id) => {
+    let root = id;
+    while (parent.get(root) !== root) root = parent.get(root);
+    for (let cursor = id; parent.get(cursor) !== root; cursor = parent.get(cursor)) parent.set(cursor, root);
+    return root;
+  };
+  for (let i = 0; i < entries.length; i += 1) {
+    for (let j = i + 1; j < entries.length; j += 1) {
+      if (distance(entries[i], entries[j]) < 2) parent.set(find(entries[i].id), find(entries[j].id));
+    }
+  }
+  const groups = new Map();
+  for (const entry of entries) {
+    const root = find(entry.id);
+    const group = groups.get(root);
+    if (group) group.push(entry.id);
+    else groups.set(root, [entry.id]);
+  }
+  const offsets = new Map();
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const radius = 9 + 3 * group.length;
+    [...group].sort().forEach((id, index) => {
+      const angle = (index * 2 * Math.PI) / group.length;
+      offsets.set(id, {
+        dx: Math.round(Math.cos(angle) * radius),
+        dy: Math.round(Math.sin(angle) * radius),
+      });
+    });
+  }
+  return offsets;
+};
+
+/**
  * The minimap: the whole war zone in miniature, with the hulls the mapper can see and
  * a rectangle for the camera's current window. Dragging it (wired in app.js) re-centers
  * the view; once the field is wider than the screen it is the only whole-war picture,
@@ -558,44 +604,11 @@ export const renderGame = (game, view = {}) => {
   // hulls ending a stardate on top of each other — a wing riding over its
   // carrier, a prize mid-withdraw, a converged melee standing 1 unit apart —
   // drew as one indistinguishable blob and only the topmost could be clicked.
-  // Hulls within 2 units cluster (union-find, deterministic) and fan onto a
-  // screen-space ring so each glyph is seen and clicked; presentation only —
-  // positions, beams, ranges, and every rule read the true coordinates.
-  const stackOffsets = (() => {
-    const visible = game.ships.filter(isVisible);
-    const parent = new Map(visible.map((ship) => [ship.id, ship.id]));
-    const find = (id) => {
-      let root = id;
-      while (parent.get(root) !== root) root = parent.get(root);
-      for (let cursor = id; parent.get(cursor) !== root; cursor = parent.get(cursor)) parent.set(cursor, root);
-      return root;
-    };
-    for (let i = 0; i < visible.length; i += 1) {
-      for (let j = i + 1; j < visible.length; j += 1) {
-        if (distance(visible[i], visible[j]) < 2) parent.set(find(visible[i].id), find(visible[j].id));
-      }
-    }
-    const groups = new Map();
-    for (const ship of visible) {
-      const root = find(ship.id);
-      const group = groups.get(root);
-      if (group) group.push(ship.id);
-      else groups.set(root, [ship.id]);
-    }
-    const offsets = new Map();
-    for (const group of groups.values()) {
-      if (group.length < 2) continue;
-      const radius = 9 + 3 * group.length;
-      [...group].sort().forEach((id, index) => {
-        const angle = (index * 2 * Math.PI) / group.length;
-        offsets.set(id, {
-          dx: Math.round(Math.cos(angle) * radius),
-          dy: Math.round(Math.sin(angle) * radius),
-        });
-      });
-    }
-    return offsets;
-  })();
+  // `fanOutOffsets` clusters hulls within 2 units (union-find, deterministic)
+  // and fans them onto a screen-space ring so each glyph is seen and clicked;
+  // presentation only — positions, beams, ranges, and every rule read the true
+  // coordinates. The real-time flight playback reuses it per frame.
+  const stackOffsets = fanOutOffsets(game.ships.filter(isVisible));
   const stackStyle = (ship) => {
     const offset = stackOffsets.get(ship.id);
     return offset ? `;--dx:${offset.dx}px;--dy:${offset.dy}px` : '';

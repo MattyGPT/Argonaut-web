@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createGame, getShip, isNeutral, spawnEncounter } from '../game/state.js';
 import { createRng } from '../game/rng.js';
 import { launchDrones } from '../game/actions.js';
-import { renderGame, reportFor, terminalNarrative } from '../ui/render.js';
+import { fanOutOffsets, renderGame, reportFor, terminalNarrative } from '../ui/render.js';
 
 // render.js only touches the document inside renderGame, so a bare element stub
 // is enough to exercise it under node --test, keeping the suite dependency-free.
@@ -958,4 +958,27 @@ test('stacked hulls fan apart on the map so each glyph is seeable and clickable'
   elements.clear();
   renderGame(createGame({ seed: 'stack' }));
   assert.ok(!read('#map-field').innerHTML.includes('--dx:'), 'a hull with no stackmate wears no offset');
+});
+
+test('fanOutOffsets clusters within 2 units, deterministically, and leaves the rest alone', () => {
+  const entries = [
+    { id: 'a', x: 10, y: 10 },
+    { id: 'b', x: 11, y: 10 },
+    { id: 'c', x: 10, y: 11.5 },
+    { id: 'far', x: 40, y: 40 },
+  ];
+  const offsets = fanOutOffsets(entries);
+  assert.equal(offsets.size, 3, 'only the clustered hulls wear offsets');
+  assert.equal(offsets.get('far'), undefined);
+  const ring = [...offsets.values()];
+  assert.equal(new Set(ring.map((offset) => `${offset.dx},${offset.dy}`)).size, 3, 'each cluster member fans to its own slot');
+  // Deterministic: the same entries fan the same way every frame.
+  assert.deepEqual(fanOutOffsets(entries), offsets);
+  // Chained hulls join one cluster through union-find, not pairwise only.
+  const chain = [
+    { id: 'p', x: 0, y: 0 },
+    { id: 'q', x: 1.5, y: 0 },
+    { id: 'r', x: 3, y: 0 },
+  ];
+  assert.equal(fanOutOffsets(chain).size, 3, 'a chain within 2-unit hops is one cluster');
 });

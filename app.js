@@ -15,7 +15,7 @@ import {
   whenPlaybackUnlocked,
   withPlaybackLock,
 } from './ui/battle-events.js';
-import { primeMoveMemory, renderGame, reportFor } from './ui/render.js';
+import { fanOutOffsets, primeMoveMemory, renderGame, reportFor } from './ui/render.js';
 import { playEffect, playEvent } from './ui/sound.js';
 import { playEffects, replayEffects } from './ui/fx.js';
 
@@ -239,7 +239,7 @@ const playTrajectory = () => new Promise((resolve) => {
     el.style.top = `${(point.y / grid) * 100}%`;
   };
   const flying = [...map.querySelectorAll('.ship[data-ship-id]')]
-    .map((el) => ({ el, points: trajectory[el.dataset.shipId] }))
+    .map((el) => ({ el, id: el.dataset.shipId, points: trajectory[el.dataset.shipId] }))
     .filter((entry) => Array.isArray(entry.points) && entry.points.length > 1);
   if (flying.length === 0) {
     primeMoveMemory(game);
@@ -253,7 +253,22 @@ const playTrajectory = () => new Promise((resolve) => {
   const started = performance.now();
   const frame = (now) => {
     const t = Math.min(1, (now - started) / REALTIME.msPerStardate);
-    flying.forEach(({ el, points }) => place(el, positionAt(points, t)));
+    const positions = flying.map(({ el, id, points }) => ({ el, id, at: positionAt(points, t) }));
+    // The stack declutter runs in flight too: hulls crossing within 2 units fan
+    // onto the same screen-space ring the boundary render uses, so a converging
+    // melee reads as separate glyphs instead of one blob mid-burn.
+    const offsets = fanOutOffsets(positions.map(({ id, at }) => ({ id, x: at.x, y: at.y })));
+    positions.forEach(({ el, id, at }) => {
+      place(el, at);
+      const offset = offsets.get(id);
+      if (offset) {
+        el.style.setProperty('--dx', `${offset.dx}px`);
+        el.style.setProperty('--dy', `${offset.dy}px`);
+      } else {
+        el.style.removeProperty('--dx');
+        el.style.removeProperty('--dy');
+      }
+    });
     if (t < 1) {
       requestAnimationFrame(frame);
       return;

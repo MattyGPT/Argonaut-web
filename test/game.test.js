@@ -802,10 +802,26 @@ test('radio integrity tracks the surviving radio units', () => {
 test('a damaged radio abbreviates the narrative but spares your own ship', () => {
   const traffic = ['Firebreather fires phasers at Bonhomme for 32 damage.'];
   assert.deepEqual(abbreviateNarrative(traffic, 1, 'Argo'), traffic);
-  assert.deepEqual(abbreviateNarrative(traffic, 0.5, 'Argo'), ['Firebreather fires phasers at …']);
   assert.deepEqual(abbreviateNarrative(traffic, 0, 'Argo'), ['Firebreather …']);
   const own = ['Argo moves to 12,14.'];
   assert.deepEqual(abbreviateNarrative(own, 0, 'Argo'), own);
+});
+
+test('a damaged radio loses traffic instead of shaving every line', () => {
+  const traffic = Array.from({ length: 60 }, (unused, i) => `Hull ${i} fires phasers at Hull ${i + 60} for ${i} damage.`);
+  const garbled = abbreviateNarrative(traffic, 0.5, 'Argo');
+  // Every line either survives whole or cuts off at the integrity fraction —
+  // never anything in between — and the same line garbles the same way twice.
+  for (let i = 0; i < traffic.length; i += 1) {
+    const words = traffic[i].split(/\s+/);
+    const cut = `${words.slice(0, Math.round(words.length * 0.5)).join(' ')} …`;
+    assert.ok(garbled[i] === traffic[i] || garbled[i] === cut, `line ${i} took a third shape`);
+  }
+  assert.deepEqual(garbled, abbreviateNarrative(traffic, 0.5, 'Argo'));
+  const whole = garbled.filter((line, i) => line === traffic[i]).length;
+  // At half integrity roughly half the traffic gets through — not none, not all.
+  assert.ok(whole > traffic.length * 0.25 && whole < traffic.length * 0.75,
+    `${whole} of ${traffic.length} lines survived at 50% integrity`);
 });
 
 test('alert level is proportional to shield capacity and named as the manual names it', () => {

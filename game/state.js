@@ -1336,12 +1336,27 @@ export const describeOrder = (game, order) => {
 /**
  * A damaged radio abbreviates the battle narrative, per the manual. Your own
  * ship's lines stay whole — those reach you over the intercom, not the radio.
+ * The damage LOSES traffic rather than shaving every line to the same stub:
+ * each line's stable noise draw under the integrity survives whole, and the
+ * rest cut off mid-sentence at the integrity fraction — degraded, but still a
+ * narrative you can follow. The draw hashes the line text, so a given line
+ * garbles the same way on every render and in every replay.
  */
+const lineNoise = (text) => {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash / 0x100000000;
+};
+
 export const abbreviateNarrative = (entries, integrity, ownName) => {
   if (integrity >= 1) return entries;
   return entries.map((entry) => {
     const text = String(entry);
     if (ownName && text.startsWith(ownName)) return text;
+    if (lineNoise(text) < integrity) return text;
     const words = text.split(/\s+/).filter(Boolean);
     const keep = Math.max(1, Math.round(words.length * integrity));
     return keep >= words.length ? text : `${words.slice(0, keep).join(' ')} …`;
