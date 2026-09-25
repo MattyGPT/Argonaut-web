@@ -68,7 +68,13 @@ because no battle math it measures is touched.
    node battle is a **two-faction war** (`factions: [Federation, owner]`). An
    abstracted enemy strategic layer (ownership flips per campaign turn, own
    sub-stream) is deferred to 27b — round 26 stays testable without a second
-   simulation.
+   simulation. **Retuned in play-test, 2026-09-25 (Matt's pick: mostly
+   mixed):** `SECTOR.enemyCounts` went from `[1, 1, 2]` (~2/3 single-enemy
+   sectors — his first campaign drew an all-Cabal monochrome map) to
+   `[1, 1, 2, 2, 2]`, ~60% two-alliance patchworks to ~40% focused wars.
+   Single-enemy sectors read monochrome and doctrinally monotone, and they
+   would starve 27b's strategic layer of a second faction to contest with; a
+   distribution test now pins the mix.
 3. **Campaign time.** The campaign has its own turn counter, advanced by one
    per RESOLVED BATTLE; travel between adjacent nodes is a free choice. Battle
    stardates live entirely inside the battle — no aliasing with the round-24

@@ -70,6 +70,17 @@ test('middle nodes are owned, unowned-when-empty, and budgeted by type and colum
   }
 });
 
+test('sectors mix focused and two-alliance wars, mostly mixed', () => {
+  let focused = 0;
+  let patchwork = 0;
+  for (let index = 0; index < 200; index += 1) {
+    if (generateSector(`mix-${index}`).enemies.length === 1) focused += 1;
+    else patchwork += 1;
+  }
+  assert.ok(focused > 0 && patchwork > 0, 'both sector shapes occur');
+  assert.ok(patchwork > focused, 'two-alliance sectors are the majority');
+});
+
 test('links run strictly one column forward, with no duplicates', () => {
   for (const seed of ['links-1', 'links-2', 'links-3', 'links-4', 'links-5']) {
     const sector = generateSector(seed);

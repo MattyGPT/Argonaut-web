@@ -1061,8 +1061,15 @@ export const SECTOR = Object.freeze({
   nodesPerColumn: Object.freeze([3, 4]),
   /** Relative weights of the middle-column node types. */
   typeWeights: Object.freeze({ battle: 6, objective: 2, empty: 2 }),
-  /** How many enemy alliances hold the sector: the primary, sometimes a second. */
-  enemyCounts: Object.freeze([1, 1, 2]),
+  /**
+   * How many enemy alliances hold the sector, as draw weights (the entries ARE
+   * the counts): a focused war against the primary alone, or a patchwork with a
+   * second alliance splitting the nodes. Retuned with Matt on 2026-09-25 after
+   * play-test: single-enemy sectors read monochrome and doctrinally monotone,
+   * and starve round 27b's strategic layer of a second faction to contest with —
+   * so mostly mixed now, ~60% two-alliance sectors to ~40% focused.
+   */
+  enemyCounts: Object.freeze([1, 1, 2, 2, 2]),
   /**
    * Garrison budget per node, spent on the round-19 loadout draw — the deeper
    * the column, the harder the fight. `empty` nodes field nothing; the enemy
