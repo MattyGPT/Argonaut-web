@@ -1,14 +1,13 @@
 # Argonaut Reimagined — Phase 6: The sector campaign
 
-Status: designed in full with Matt, 2026-09-25 (all twelve open questions
-answered — every recommendation accepted, plus Matt's two additions: the
-campaign is a **game-start option** even within Reimagined, and the sector map
-should be **a different screen** — sketched below for him to react to). Round 26
-ships in three chunks (26a data + sector gen, 26b travel + node resolution,
-26c sector UI), round 27 in two (27a persistence/economy, 27b win/lose +
-enemy strategic layer + reports); Matt gives the go-ahead before round 27.
-Format follows the Phase 2 (living battlefield), Phase 3 (force & prizes),
-Phase 4 (combat depth), and Phase 5 (narrative & variety) specs.
+Status: **PHASE 6 COMPLETE** — designed in full with Matt 2026-09-25 (all
+twelve open questions answered — every recommendation accepted, plus Matt's
+two additions: the campaign is a **game-start option** even within Reimagined,
+and the sector map is **a different screen**), and shipped the same day in
+five chunks: 26a PR #64, 26b PR #65, 26c PR #66, the sector-mix play-test
+retune PR #67, 27a PR #68, 27b PR #69. Format follows the Phase 2 (living
+battlefield), Phase 3 (force & prizes), Phase 4 (combat depth), and Phase 5
+(narrative & variety) specs.
 
 ## Purpose
 
@@ -325,6 +324,42 @@ for the manual play-test pass.
    `purchased`, `purchases` all default in), so an in-flight campaign keeps
    playing across the upgrade.
 
+### 27b decisions (designed and shipped with Matt's go-ahead, 2026-09-25 — PR #69)
+
+1. **One move per resolved turn, on `${seed}:sector-strategy:<turn>`** —
+   `SECTOR.strategy` dials: `chance` 0.7 (quiet turns), category weights
+   `contest 4 / empty 3 / raid 2 / home 1` filtered to what the map offers,
+   garrison budget 12, raid budget 14, home-raid budget 24. Categories:
+   **contest** (two-enemy sectors: one alliance takes a system from the other,
+   instantly — abstracted battles nobody plays), **empty** (occupied outright),
+   **raid** (a Federation-held system attacked), **home** (a strike at Xanadu).
+2. **A raid the fleet can stand to is playable; the rest are headless.** A
+   raid on the node the fleet holds — or on home, which **recalls the fleet**
+   — sets `campaign.threat`: a defensive battle (Engage or Auto-resolve) that
+   locks travel until resolved. A raid elsewhere is fought on the spot by the
+   node's garrison, headless, on its own raid seed
+   (`${seed}:battle:<nodeId>:raid:<turn>`, a `fleetCost`-trimmed default spec
+   within the garrison budget); nobody carries out of it, so only ownership
+   and the news line survive.
+3. **The home defense spawns Xanadu** — the one node battle with a dockyard
+   inside — and losing or abandoning it ends the campaign (the second defeat
+   condition). Losing a defended captured node cedes it to the raid's
+   attacker; a stalled raid (draw/timeout) withdraws and the node holds;
+   holding your own system pays no capture credits (outcome `held`, with
+   `defense: true` on the result for the report).
+4. **The strategic step runs after every resolved battle** (live campaigns, no
+   threat pending); `{ strategy: false }` suppresses it for tests and headless
+   callers, and `abandonEngagement` forwards options.
+5. **The campaign report** (`campaignReport`) grades the run off the summaries
+   the save keeps — battles by outcome including defenses, systems held, the
+   lifetime credit ledger (`earned`/`spent`), prizes, bounties, hulls, aces —
+   rendered in the side panel with the strategic layer's news (`campaign.news`,
+   last six lines) under it. A threat banner raises over the panel and hides
+   Travel while a raid is pending.
+6. **Old saves tolerate `threat` / `news` / `earned` / `spent`** (all default
+   in). Phase 6 is complete; Phase 7 (seed challenges + score export) is next
+   on the roadmap whenever Matt picks it up.
+
 ## Chunk breakdown
 
 | Round | Chunk | Ships | Tested by | Status |
@@ -333,7 +368,7 @@ for the manual play-test pass.
 | 26b | Travel + node battles | Campaign container; `loadout.veterans` injection; per-battle seeds; headless auto-resolve; outcome mapping; travel; abandon; campaign save | Whole-campaign determinism; injection parity; outcome mapping; old saves load; harness unmoved | ✅ PR #65 |
 | 26c | Sector UI | Star-map screen; New game option; battle transitions; report stub; save wiring | Render smokes; manual play-test pass | ✅ PR #66 |
 | 27a | Persistence/economy | Credits; dockyard between battles; repairs/refits/crew/hulls/drones | Fleet continuity; purchases; determinism | ✅ PR #68 |
-| 27b | Campaign win/lose | Enemy strategic layer; home-defense battle; victory/defeat; campaign report | Campaign win/lose both ways; report; determinism | — |
+| 27b | Campaign win/lose | Enemy strategic layer; home-defense battle; victory/defeat; campaign report | Campaign win/lose both ways; report; determinism | ✅ PR #69 |
 
 ## Parity & determinism guardrails
 

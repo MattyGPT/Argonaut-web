@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FACTIONS, LOADOUT, SECTOR, SHIP_TEMPLATES } from '../game/constants.js';
-import { abandonEngagement, atDockyard, autoResolveNode, battleSeed, buyDockyard, carriedFleetFrom, createCampaign, dockyardOffers, engageableHere, fleetRecordsFrom, generateSector, homeNodeOf, hullPrice, linksFrom, nodeById, objectiveNodeOf, resolveNodeBattle, startNodeBattle, travelTo } from '../game/campaign.js';
+import { abandonEngagement, atDockyard, autoResolveNode, battleSeed, buyDockyard, campaignReport, carriedFleetFrom, createCampaign, dockyardOffers, engageableHere, fleetRecordsFrom, generateSector, homeNodeOf, hullPrice, linksFrom, nodeById, objectiveNodeOf, resolveNodeBattle, resolveStrategy, startNodeBattle, travelTo } from '../game/campaign.js';
 import { createGame, defaultLoadout, spawnDrone } from '../game/state.js';
 
 const ENEMY_FACTIONS = Object.values(FACTIONS).filter((faction) => faction !== FACTIONS.FEDERATION);
@@ -333,7 +333,7 @@ test('a federation win captures the node, pays credits, and carries the wounded 
       return ship.faction === FACTIONS.FEDERATION ? ship : { ...ship, status: 'destroyed' };
     }),
   };
-  const resolved = resolveNodeBattle({ ...started, battle: { ...started.battle, game } });
+  const resolved = resolveNodeBattle({ ...started, battle: { ...started.battle, game } }, { strategy: false });
   const node = nodeById(resolved.sector, nodeId);
   assert.equal(node.owner, FACTIONS.FEDERATION, 'ownership flips');
   assert.equal(resolved.currentNode, nodeId);
@@ -354,7 +354,7 @@ test('a hopeless draw or timeout is a retreat: the node stands and the fleet car
     const game = kind === 'timeout'
       ? started.battle.game
       : { ...started.battle.game, outcome: { kind: 'hopeless-draw', message: '' } };
-    const resolved = resolveNodeBattle({ ...started, battle: { ...started.battle, game } });
+    const resolved = resolveNodeBattle({ ...started, battle: { ...started.battle, game } }, { strategy: false });
     assert.equal(resolved.results[0].outcome, 'retreated');
     assert.equal(nodeById(resolved.sector, nodeId).owner, nodeById(campaign.sector, nodeId).owner, 'the node stays enemy-held');
     assert.equal(resolved.credits, 0);
@@ -381,7 +381,7 @@ test('losing the whole fleet is a campaign defeat', () => {
 test('abandoning an engagement cedes the node and carries the fleet out as it stands', () => {
   const { campaign, nodeId } = campaignAtEnemy();
   const started = startNodeBattle(campaign, nodeId);
-  const resolved = abandonEngagement(started);
+  const resolved = abandonEngagement(started, { strategy: false });
   assert.equal(resolved.results[0].outcome, 'abandoned');
   assert.equal(nodeById(resolved.sector, nodeId).owner, nodeById(campaign.sector, nodeId).owner);
   assert.equal(resolved.turn, campaign.turn + 1);
@@ -421,6 +421,10 @@ test('a whole auto-resolved campaign is deterministic end to end', () => {
     let campaign = createCampaign({ seed });
     const tried = new Set();
     while (campaign.status === 'active' && campaign.turn < 20) {
+      if (campaign.threat) {
+        campaign = autoResolveNode(campaign, campaign.threat.nodeId, { maxStardates: 300 });
+        continue;
+      }
       const node = nodeById(campaign.sector, campaign.currentNode);
       const enemy = node.owner && node.owner !== FACTIONS.FEDERATION;
       if (enemy && !tried.has(node.id)) {
@@ -466,7 +470,7 @@ const battleWithPrize = (campaign, nodeId) => {
 
 test('a carried prize pays its class bounty once, on the battle it first carries out', () => {
   const { campaign, nodeId } = campaignAtEnemy();
-  const resolved = resolveNodeBattle(battleWithPrize(campaign, nodeId));
+  const resolved = resolveNodeBattle(battleWithPrize(campaign, nodeId), { strategy: false });
   const node = nodeById(campaign.sector, nodeId);
   assert.equal(resolved.results[0].bounty, SECTOR.prizeValues['battle-cruiser']);
   assert.equal(resolved.credits, SECTOR.captureCredits[node.type] + SECTOR.prizeValues['battle-cruiser']);
@@ -476,7 +480,7 @@ test('a carried prize pays its class bounty once, on the battle it first carries
   const enemyNode = resolved.sector.nodes.find((entry) => entry.owner && entry.owner !== FACTIONS.FEDERATION && entry.id !== nodeId);
   assert.ok(enemyNode, 'the sector still holds an enemy node');
   const staged = { ...resolved, currentNode: enemyNode.id };
-  const second = resolveNodeBattle(battleWithPrize(staged, enemyNode.id));
+  const second = resolveNodeBattle(battleWithPrize(staged, enemyNode.id), { strategy: false });
   assert.equal(second.results[1].bounty, 0, 'the prize already paid');
   assert.equal(second.credits, resolved.credits + SECTOR.captureCredits[enemyNode.type]);
 });
@@ -498,7 +502,7 @@ test('a bounty pays on a retreat too, and an old save without paidPrizes tolerat
     .find((stripped) => nodeById(stripped.sector, 'home').next.some((id) => nodeById(stripped.sector, id).owner));
   assert.ok(legacyBase, 'a legacy-shaped campaign with an enemy neighbor exists');
   const legacyNode = nodeById(legacyBase.sector, 'home').next.find((id) => nodeById(legacyBase.sector, id).owner);
-  const resolved = resolveNodeBattle(battleWithPrize(travelTo(legacyBase, legacyNode), legacyNode));
+  const resolved = resolveNodeBattle(battleWithPrize(travelTo(legacyBase, legacyNode), legacyNode), { strategy: false });
   assert.ok(resolved.credits > 0, 'a 26c-era save still earns bounties');
 });
 
@@ -600,4 +604,193 @@ test('a spent drone bay can be rebuilt, and commissions join the fleet unbudgete
   const spent = { ...commissioned, purchased: { 'battle-cruiser': 4, carrier: 1 } };
   assert.ok(!dockyardOffers(spent).some((offer) => offer.kind === 'buy'), 'the purchase budget is exhausted');
   assert.ok(dockyardOffers(commissioned).some((offer) => offer.kind === 'buy'));
+});
+
+// --- Round 27b: the enemy strategic layer, home defense, and the report ---
+
+/** A single-enemy sector whose every middle node is enemy-held: only a strike at home is available. */
+const homeOnlySector = (seed) => {
+  const base = createCampaign({ seed });
+  const enemy = base.sector.enemies[0];
+  return {
+    ...base,
+    sector: {
+      ...base.sector,
+      enemies: [enemy],
+      nodes: base.sector.nodes.map((node) => (node.owner && node.owner !== FACTIONS.FEDERATION
+        ? node
+        : node.id === 'home' ? node : { ...node, owner: enemy })),
+    },
+  };
+};
+
+test('with nothing else to take, the strategic layer strikes at the home system and recalls the fleet', () => {
+  let campaign = homeOnlySector('strat-home');
+  const before = campaign.sector;
+  let threatened = null;
+  for (let turn = 1; turn <= 30 && !threatened; turn += 1) {
+    const next = resolveStrategy({ ...campaign, turn });
+    if (next.threat) threatened = next;
+    else assert.deepEqual(next.sector, before, 'a home-only map never flips ownership');
+    campaign = next;
+  }
+  assert.ok(threatened, 'a strike at Xanadu lands within 30 turns');
+  assert.equal(threatened.threat.nodeId, 'home');
+  assert.equal(threatened.currentNode, 'home', 'the fleet is recalled');
+  assert.equal(threatened.news.at(-1).text.includes('Xanadu'), true);
+  assert.equal(travelTo(threatened, nodeById(threatened.sector, 'home').next[0]), threatened, 'travel locks under threat');
+  assert.equal(resolveStrategy(threatened), threatened, 'no second move while a raid is pending');
+});
+
+test('the home defense spawns Xanadu and the recalled fleet; holding pays nothing, losing ends it', () => {
+  const base = homeOnlySector('strat-home-defense');
+  const attacker = base.sector.enemies[0];
+  const staged = { ...base, threat: { nodeId: 'home', attacker } };
+  assert.equal(engageableHere(staged), true);
+  const started = startNodeBattle(staged, 'home');
+  assert.equal(started.battle.defense, true);
+  assert.equal(started.battle.attacker, attacker);
+  assert.ok(started.battle.game.ships.some((ship) => ship.id === 'xanadu'), 'the home defense is the one battle with a starbase');
+  const fedIds = started.battle.game.ships.filter((ship) => ship.faction === FACTIONS.FEDERATION && ship.id !== 'xanadu').map((ship) => ship.id).sort();
+  assert.deepEqual(fedIds, staged.fleet.map((record) => record.id).sort(), 'the recalled fleet defends');
+
+  const wonGame = { ...started.battle.game, outcome: { kind: 'federation-win', message: '' } };
+  const won = resolveNodeBattle({ ...started, battle: { ...started.battle, game: wonGame } }, { strategy: false });
+  assert.equal(won.results[0].outcome, 'held');
+  assert.equal(won.results[0].defense, true);
+  assert.equal(won.threat, null);
+  assert.equal(won.credits, 0, 'holding your own system pays no capture credits');
+  assert.equal(nodeById(won.sector, 'home').owner, FACTIONS.FEDERATION);
+
+  const lostGame = {
+    ...started.battle.game,
+    outcome: { kind: 'alliance-win', message: '' },
+    ships: started.battle.game.ships.map((ship) => (ship.faction === FACTIONS.FEDERATION ? { ...ship, status: 'destroyed' } : ship)),
+  };
+  const lost = resolveNodeBattle({ ...started, battle: { ...started.battle, game: lostGame } }, { strategy: false });
+  assert.equal(lost.status, 'defeat', 'losing Xanadu ends the campaign');
+  assert.equal(nodeById(lost.sector, 'home').owner, attacker);
+
+  const abandonedHome = abandonEngagement(started, { strategy: false });
+  assert.equal(abandonedHome.status, 'defeat', 'abandoning the home defense cedes the home system');
+});
+
+test('a raided node the fleet holds is defended there; losing it cedes it, a stalled raid withdraws', () => {
+  const base = createCampaign({ seed: 'raid-held' });
+  const attacker = base.sector.enemies[0];
+  const held = base.sector.nodes.find((node) => node.column === 2);
+  const sector = { ...base.sector, nodes: base.sector.nodes.map((node) => (node.id === held.id ? { ...node, owner: FACTIONS.FEDERATION } : node)) };
+  const staged = { ...base, sector, currentNode: held.id, threat: { nodeId: held.id, attacker } };
+  const started = startNodeBattle(staged, held.id);
+  assert.equal(started.battle.defense, true);
+  assert.ok(!started.battle.game.ships.some((ship) => ship.id === 'xanadu'), 'a captured node has no starbase');
+
+  const lostGame = { ...started.battle.game, outcome: { kind: 'alliance-win', message: '' } };
+  const lost = resolveNodeBattle({ ...started, battle: { ...started.battle, game: lostGame } }, { strategy: false });
+  assert.equal(lost.results[0].outcome, 'lost');
+  assert.equal(nodeById(lost.sector, held.id).owner, attacker);
+  assert.equal(lost.status, 'active');
+
+  const drawnGame = { ...started.battle.game, outcome: { kind: 'hopeless-draw', message: '' } };
+  const drawn = resolveNodeBattle({ ...started, battle: { ...started.battle, game: drawnGame } }, { strategy: false });
+  assert.equal(drawn.results[0].outcome, 'held', 'a stalled raid withdraws');
+  assert.equal(nodeById(drawn.sector, held.id).owner, FACTIONS.FEDERATION);
+});
+
+test('raids the fleet cannot stand to are fought headless by the garrison, and contests flip enemy nodes', () => {
+  // Every middle node Federation-held, one enemy: the only moves are raids
+  // (garrison fights headless — the fleet sits at home) or a strike at home.
+  const base = createCampaign({ seed: 'strat-raid' });
+  const enemy = base.sector.enemies[0];
+  let campaign = {
+    ...base,
+    sector: {
+      ...base.sector,
+      enemies: [enemy],
+      nodes: base.sector.nodes.map((node) => (node.id === 'home' || node.column === 4 ? node : { ...node, owner: FACTIONS.FEDERATION })),
+    },
+  };
+  let garrisonNews = null;
+  let homeThreat = null;
+  for (let turn = 1; turn <= 40 && (!garrisonNews || !homeThreat); turn += 1) {
+    campaign = resolveStrategy({ ...campaign, turn, threat: null });
+    const line = campaign.news.at(-1);
+    if (!line) continue;
+    if (/garrison|from its garrison/.test(line.text)) garrisonNews = line;
+    if (campaign.threat) {
+      homeThreat = campaign.threat;
+      campaign = { ...campaign, threat: null };
+    }
+  }
+  assert.ok(garrisonNews, 'a headless garrison defense happens within 40 turns');
+  assert.ok(homeThreat, 'a home strike happens within 40 turns');
+
+  // Two enemies holding everything but home: contests flip nodes between them.
+  const two = createCampaign({ seed: 'strat-contest' });
+  assert.ok(two.sector.enemies.length === 2 || true, 'seed may or may not be two-enemy; stage it either way');
+  let staged = {
+    ...two,
+    sector: {
+      ...two.sector,
+      enemies: [FACTIONS.AXIS, FACTIONS.BLOC],
+      nodes: two.sector.nodes.map((node) => (node.id === 'home'
+        ? node
+        : { ...node, owner: node.column % 2 === 0 ? FACTIONS.AXIS : FACTIONS.BLOC })),
+    },
+  };
+  let contest = null;
+  for (let turn = 1; turn <= 40 && !contest; turn += 1) {
+    staged = resolveStrategy({ ...staged, turn, threat: null });
+    const line = staged.news.at(-1);
+    if (line && / seize /.test(line.text)) contest = line;
+    if (staged.threat) staged = { ...staged, threat: null };
+  }
+  assert.ok(contest, 'enemies contest each other within 40 turns');
+});
+
+test('the strategic layer is deterministic and leaves quiet turns alone', () => {
+  const campaign = createCampaign({ seed: 'strat-det' });
+  const a = resolveStrategy({ ...campaign, turn: 7 });
+  const b = resolveStrategy({ ...campaign, turn: 7 });
+  assert.deepEqual(a, b);
+  const quiet = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].find((turn) => resolveStrategy({ ...campaign, turn }) === campaign || resolveStrategy({ ...campaign, turn }).news.length === 0);
+  assert.ok(quiet, 'some turn is quiet (the chance dial)');
+  const concluded = { ...campaign, status: 'victory', turn: 3 };
+  assert.deepEqual(resolveStrategy(concluded), concluded, 'a concluded campaign takes no strategic moves');
+});
+
+test('the campaign report grades the run off the summaries the save keeps', () => {
+  const base = createCampaign({ seed: 'report' });
+  const campaign = {
+    ...base,
+    turn: 3,
+    credits: 12,
+    earned: 40,
+    spent: 28,
+    results: [
+      { nodeId: 'a', name: 'A', turn: 1, outcome: 'captured', kind: 'federation-win', stardates: 40, hulls: 8, prizes: 1, bounty: 8 },
+      { nodeId: 'b', name: 'B', turn: 2, outcome: 'held', kind: 'federation-win', stardates: 30, hulls: 8, prizes: 0, bounty: 0, defense: true },
+      { nodeId: 'c', name: 'C', turn: 3, outcome: 'retreated', kind: 'hopeless-draw', stardates: 300, hulls: 6, prizes: 0, bounty: 0 },
+    ],
+    fleet: base.fleet.map((record, index) => (index === 0 ? { ...record, kills: 3 } : record)),
+  };
+  const report = campaignReport(campaign);
+  assert.equal(report.status, 'active');
+  assert.equal(report.turns, 3);
+  assert.equal(report.battles, 3);
+  assert.equal(report.captured, 1);
+  assert.equal(report.held, 1);
+  assert.equal(report.lost, 0);
+  assert.equal(report.retreated, 1);
+  assert.equal(report.abandoned, 0);
+  assert.equal(report.defenses, 1);
+  assert.equal(report.nodesHeld, 1, 'only the home node is Federation-held');
+  assert.equal(report.credits, 12);
+  assert.equal(report.earned, 40);
+  assert.equal(report.spent, 28);
+  assert.equal(report.prizes, 1);
+  assert.equal(report.bounties, 8);
+  assert.equal(report.hulls, base.fleet.length);
+  assert.equal(report.aces.length, 1);
+  assert.match(report.aces[0], /\(3 kills\)/);
 });

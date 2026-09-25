@@ -1120,6 +1120,29 @@ export const SECTOR = Object.freeze({
     bay: 25,
     hullCreditPerPoint: 8,
   }),
+  /**
+   * The enemy strategic layer (round 27b): once per resolved campaign turn a
+   * single abstracted move is drawn on `${seed}:sector-strategy:<turn>` —
+   * enemies contesting each other's systems, seizing empty ones, or raiding
+   * Federation-held ones. A raid on a node the fleet stands on (or on the
+   * home system, which recalls the fleet) becomes a playable defensive
+   * battle; a raid elsewhere is fought headless by the node's garrison. The
+   * home defense is the one node battle that spawns Xanadu, so its dockyard
+   * ring works inside the fight. Weights pick the move's CATEGORY among the
+   * ones actually available; every figure is a campaign dial.
+   */
+  strategy: Object.freeze({
+    /** Chance a turn produces a move at all; the rest are quiet. */
+    chance: 0.7,
+    /** Relative weights of the move categories, filtered to what exists. */
+    weights: Object.freeze({ contest: 4, empty: 3, raid: 2, home: 1 }),
+    /** Budget of the garrison that headlessly defends a raided captured node. */
+    garrisonBudget: 12,
+    /** Budget of the attacker raiding a captured node. */
+    raidBudget: 14,
+    /** Budget of the attacker raiding the home system (the fleet defends). */
+    homeRaidBudget: 24,
+  }),
   /** Names for hulls commissioned mid-campaign (round 27a), drawn in purchase order — no RNG. */
   reserveNames: Object.freeze([
     'Intrepid', 'Resolute', 'Bulwark', 'Dauntless', 'Endeavour', 'Formidable',

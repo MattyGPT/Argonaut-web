@@ -15,9 +15,9 @@
  *
  * Design: `docs/superpowers/specs/2026-09-25-phase-6-sector-campaign.md`.
  */
-import { FACTIONS, ION, LOADOUT, POWER, REFITS, REFIT_OVER_TEMPLATE, SECTOR, SHIP_TEMPLATES, SPREAD } from './constants.js';
+import { FACTIONS, ACE_KILLS, ION, LOADOUT, POWER, REFITS, REFIT_OVER_TEMPLATE, SECTOR, SHIP_TEMPLATES, SPREAD } from './constants.js';
 import { createRng } from './rng.js';
-import { arcSplit, createGame, defaultLoadout, fleetCost, isActive, isDrone, isImmovable, isNeutral } from './state.js';
+import { arcSplit, createGame, defaultLoadout, fleetCost, isActive, isDrone, isImmovable, isNeutral, normalizeFleetSpec } from './state.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './turns.js';
 
 /** The per-battle seed derivation (round 26 decision 5): one deliberate rule. */
@@ -228,22 +228,39 @@ export const createCampaign = ({ seed = 'sector-1', loadout = null } = {}) => {
     paidPrizes: [],
     purchased: {},
     purchases: 0,
+    // Round 27b: a pending enemy raid the fleet must resolve before travelling
+    // (null between threats), the strategic layer's narrated moves, and the
+    // lifetime credit ledger the campaign report grades.
+    threat: null,
+    news: [],
+    earned: 0,
+    spent: 0,
   };
 };
 
-/** Whether the fleet may engage here: the node it stands on is enemy-held. */
+/**
+ * Whether the fleet may fight where it stands: an enemy-held node it can
+ * attack, or (round 27b) the node a pending enemy raid targets — including
+ * the home system it was recalled to. One battle at a time, live campaigns
+ * with hulls left, as before.
+ */
 export const engageableHere = (campaign) => {
+  if (campaign?.battle || campaign?.status !== 'active' || !(campaign?.fleet.length > 0)) return false;
   const node = nodeById(campaign?.sector, campaign?.currentNode);
-  return Boolean(node?.owner && node.owner !== FACTIONS.FEDERATION && !campaign.battle && campaign.status === 'active' && campaign.fleet.length > 0);
+  if (!node) return false;
+  if (campaign.threat) return campaign.threat.nodeId === node.id;
+  return Boolean(node.owner && node.owner !== FACTIONS.FEDERATION);
 };
 
 /**
  * Travels to an adjacent node (strictly one column forward — the corridor
  * never doubles back). Travel is free and spends no campaign turn; turns
- * advance on resolved battles only. Refusals return the campaign unchanged.
+ * advance on resolved battles only. A pending raid holds the fleet in place
+ * until the defense is resolved (round 27b). Refusals return the campaign
+ * unchanged.
  */
 export const travelTo = (campaign, nodeId) => {
-  if (campaign.battle || campaign.status !== 'active') return campaign;
+  if (campaign.battle || campaign.threat || campaign.status !== 'active') return campaign;
   const current = nodeById(campaign.sector, campaign.currentNode);
   if (!nodeById(campaign.sector, nodeId) || !current?.next.includes(nodeId)) return campaign;
   return { ...campaign, currentNode: nodeId };
@@ -251,45 +268,73 @@ export const travelTo = (campaign, nodeId) => {
 
 /**
  * Opens the node battle at the fleet's current node: a FULL seeded Reimagined
- * war on the 240 field — seed `${seed}:battle:<nodeId>`, two factions
- * (the Federation and the node's owner), no Xanadu (the dockyard is a
- * between-battles facility), the garrison drawn on the battle seed's
- * `:loadouts` stream within the node's budget, and the Federation injected
- * from the carried records. `player` only marks intent for the UI: an
- * auto-resolved battle is the same game run headless.
+ * war on the 240 field — seed `${seed}:battle:<nodeId>`, two factions, the
+ * Federation injected from the carried records. An attack reads the node's
+ * owner and garrison budget and fields no Xanadu (the dockyard is a
+ * between-battles facility); a DEFENSE (round 27b) reads the pending raid's
+ * attacker instead, and the home system's defense is the one node battle that
+ * spawns Xanadu — so its dockyard ring works inside the fight. `player` only
+ * marks intent for the UI: an auto-resolved battle is the same game run
+ * headless.
  */
 export const startNodeBattle = (campaign, nodeId, { player = true } = {}) => {
   if (!engageableHere(campaign) || nodeId !== campaign.currentNode) return campaign;
   const node = nodeById(campaign.sector, nodeId);
+  const threat = campaign.threat && campaign.threat.nodeId === nodeId ? campaign.threat : null;
+  const isHome = node.id === homeNodeOf(campaign.sector)?.id;
   const game = createGame({
     seed: battleSeed(campaign.seed, nodeId),
     reimagined: true,
-    loadout: {
-      factions: [FACTIONS.FEDERATION, node.owner],
-      budgets: { [node.owner]: node.budget },
-      veterans: campaign.fleet,
-      xanadu: false,
-    },
+    loadout: threat
+      ? {
+        factions: [FACTIONS.FEDERATION, threat.attacker],
+        budgets: { [threat.attacker]: isHome ? SECTOR.strategy.homeRaidBudget : SECTOR.strategy.raidBudget },
+        veterans: campaign.fleet,
+        xanadu: isHome,
+      }
+      : {
+        factions: [FACTIONS.FEDERATION, node.owner],
+        budgets: { [node.owner]: node.budget },
+        veterans: campaign.fleet,
+        xanadu: false,
+      },
   });
-  return { ...campaign, battle: { nodeId, player, game } };
+  return {
+    ...campaign,
+    battle: { nodeId, player, game, ...(threat ? { defense: true, attacker: threat.attacker } : {}) },
+  };
 };
 
 /**
  * Maps a finished (or abandoned) battle onto the campaign (round 26 decisions
- * 7–8): `federation-win` captures the node — ownership flips, credits are
- * earned, and capturing the objective node WINS the campaign; anything else
- * (loss, hopeless draw, annihilation, timeout, abandonment) leaves the node in
- * enemy hands and the fleet carries out at its end-state. A fleet with no
- * records left is a campaign defeat. The campaign turn advances by one, and
- * the fleet stands at the node it just fought over.
+ * 7–8, plus the round-27b defense rules): `federation-win` at an enemy node
+ * captures it — ownership flips, credits are earned, and capturing the
+ * objective node WINS the campaign; at a Federation node it HOLDS it (no
+ * capture credits — it was already yours). Losing a defensive battle — or
+ * abandoning one — cedes the node to the raid's attacker, and losing the home
+ * system that way ends the campaign. Anything else at an enemy node (loss,
+ * hopeless draw, annihilation, timeout, abandonment) leaves the node in enemy
+ * hands and the fleet carries out at its end-state; a stalled raid withdraws
+ * and the node holds. A fleet with no records left is a campaign defeat. The
+ * campaign turn advances by one, the fleet stands at the node it just fought
+ * over, and — live campaigns only, no threat pending — the enemy strategic
+ * layer then takes its one move for the turn. `strategy: false` suppresses
+ * that step for callers (tests, headless tools) that want the bare mapping.
  */
-export const resolveNodeBattle = (campaign, { abandoned = false } = {}) => {
+export const resolveNodeBattle = (campaign, { abandoned = false, strategy = true } = {}) => {
   if (!campaign.battle) return campaign;
-  const { nodeId, game } = campaign.battle;
+  const { nodeId, game, defense = false, attacker = null } = campaign.battle;
   const node = nodeById(campaign.sector, nodeId);
   const fleet = carriedFleetFrom(game);
   const kind = abandoned ? 'abandoned' : (game.outcome?.kind ?? 'timeout');
-  const captured = kind === 'federation-win';
+  const won = kind === 'federation-win';
+  const wasFriendly = node?.owner === FACTIONS.FEDERATION;
+  const captured = won && !wasFriendly;
+  const held = won && wasFriendly;
+  // A lost or abandoned defense cedes the node to the raid's attacker; at the
+  // home system that is the second way a campaign ends (round 27b).
+  const nodeLost = Boolean(defense && wasFriendly && !won && (kind === 'alliance-win' || kind === 'abandoned'));
+  const homeLost = nodeLost && nodeId === homeNodeOf(campaign.sector)?.id;
   // Prize bounties (round 27a): every hull carried out with a prize record pays
   // its class value the FIRST time it carries out — `paidPrizes` remembers, so
   // a prize that fights on through the campaign pays once, and one lost later
@@ -301,42 +346,62 @@ export const resolveNodeBattle = (campaign, { abandoned = false } = {}) => {
     const record = fleet.find((entry) => entry.id === id);
     return total + (SECTOR.prizeValues[record.kind] ?? 0);
   }, 0);
+  const outcome = captured ? 'captured'
+    : held ? 'held'
+    : nodeLost ? 'lost'
+    : defense ? 'held'
+    : kind === 'alliance-win' || kind === 'draw' ? 'lost'
+    : abandoned ? 'abandoned'
+    : 'retreated';
   const result = {
     nodeId,
     name: node?.name ?? nodeId,
     turn: campaign.turn + 1,
-    outcome: captured ? 'captured' : kind === 'alliance-win' || kind === 'draw' ? 'lost' : abandoned ? 'abandoned' : 'retreated',
+    outcome,
     kind,
     stardates: game.turn,
     hulls: fleet.length,
     prizes: game.prizesTaken?.[FACTIONS.FEDERATION] ?? 0,
     bounty,
+    ...(defense ? { defense: true } : {}),
   };
-  const sector = captured
-    ? { ...campaign.sector, nodes: campaign.sector.nodes.map((entry) => (entry.id === nodeId ? { ...entry, owner: FACTIONS.FEDERATION } : entry)) }
+  const sector = captured || nodeLost
+    ? {
+      ...campaign.sector,
+      nodes: campaign.sector.nodes.map((entry) => {
+        if (entry.id !== nodeId) return entry;
+        return { ...entry, owner: captured ? FACTIONS.FEDERATION : (attacker ?? entry.owner) };
+      }),
+    }
     : campaign.sector;
   const victory = captured && node?.column === SECTOR.columns - 1;
-  return {
+  const gain = (captured ? (SECTOR.captureCredits[node?.type] ?? 0) : 0) + bounty;
+  const resolved = {
     ...campaign,
     sector,
     fleet,
-    credits: campaign.credits + (captured ? (SECTOR.captureCredits[node?.type] ?? 0) : 0) + bounty,
+    credits: campaign.credits + gain,
+    earned: (campaign.earned ?? 0) + gain,
     paidPrizes: [...(campaign.paidPrizes ?? []), ...newlyPaid],
     turn: campaign.turn + 1,
     currentNode: nodeId,
     results: [...campaign.results, result],
     battle: null,
-    status: fleet.length === 0 ? 'defeat' : victory ? 'victory' : 'active',
+    threat: null,
+    status: fleet.length === 0 || homeLost ? 'defeat' : victory ? 'victory' : 'active',
   };
+  return strategy && resolved.status === 'active' ? resolveStrategy(resolved) : resolved;
 };
 
 /**
- * The player abandons the open battle: the node is ceded (it stays enemy-held)
- * and the fleet carries out exactly as it stands — the campaign-level version
- * of disengaging, and distinct from `resign`, which keeps its spectator meaning
- * and lets the battle resolve headless before mapping normally.
+ * The player abandons the open battle: the node is ceded (an enemy node stays
+ * enemy-held; a defended Federation node falls to the raid's attacker, and
+ * abandoning the home defense ends the campaign) and the fleet carries out
+ * exactly as it stands — the campaign-level version of disengaging, and
+ * distinct from `resign`, which keeps its spectator meaning and lets the
+ * battle resolve headless before mapping normally.
  */
-export const abandonEngagement = (campaign) => (campaign.battle ? resolveNodeBattle(campaign, { abandoned: true }) : campaign);
+export const abandonEngagement = (campaign, options) => (campaign.battle ? resolveNodeBattle(campaign, { abandoned: true, ...options }) : campaign);
 
 /**
  * Fights the current node to its outcome without the player: the harness loop
@@ -544,5 +609,144 @@ export const buyDockyard = (campaign, offerId) => {
       return record;
     });
   }
-  return { ...campaign, fleet, credits: campaign.credits - offer.cost, purchased, purchases };
+  return { ...campaign, fleet, credits: campaign.credits - offer.cost, spent: (campaign.spent ?? 0) + offer.cost, purchased, purchases };
+};
+
+// --- Round 27b: the enemy strategic layer, home defense, and the report ---
+
+const withOwner = (campaign, nodeId, owner) => ({
+  ...campaign.sector,
+  nodes: campaign.sector.nodes.map((entry) => (entry.id === nodeId ? { ...entry, owner } : entry)),
+});
+
+const withNews = (campaign, turn, text) => ({ ...campaign, news: [...(campaign.news ?? []), { turn, text }] });
+
+/**
+ * A raided captured node the fleet is NOT standing on is defended headless by
+ * its garrison: an ordinary two-faction war on its own raid seed, the
+ * Federation side a trimmed default spec within `garrisonBudget`. Nobody
+ * carries out of it — the garrison is local, not the campaign fleet — so only
+ * the node's ownership and the news line survive.
+ */
+const garrisonHolds = (campaign, node, attacker) => {
+  let game = createGame({
+    seed: battleSeed(campaign.seed, `${node.id}:raid:${campaign.turn}`),
+    reimagined: true,
+    loadout: {
+      factions: [FACTIONS.FEDERATION, attacker],
+      budgets: { [FACTIONS.FEDERATION]: SECTOR.strategy.garrisonBudget, [attacker]: SECTOR.strategy.raidBudget },
+      fleets: { [FACTIONS.FEDERATION]: normalizeFleetSpec(LOADOUT.defaultFleet, SECTOR.strategy.garrisonBudget) },
+      xanadu: false,
+    },
+  });
+  while (!game.outcome && game.turn < 600) {
+    const auto = resolveAutopilotTurn(game);
+    game = resolveComputerTurns(auto.game);
+  }
+  return (game.outcome?.kind ?? 'timeout') === 'federation-win';
+};
+
+/**
+ * The enemy strategic layer (round 27b): once per resolved campaign turn, one
+ * abstracted move is drawn on `${seed}:sector-strategy:<turn>` — the same
+ * sub-stream pattern as everything else, so a campaign replays its wars AND
+ * its politics. Categories, filtered to what the map actually offers, are
+ * drawn on `SECTOR.strategy.weights`: enemies **contest** each other's
+ * systems (an instant flip — abstracted battles nobody plays), seize
+ * **empty** ones, **raid** Federation-held ones, or strike at the **home**
+ * system. A raid the fleet can actually stand to (home recalls it; a raided
+ * node it already holds) becomes a pending `threat` — a playable or
+ * auto-resolvable defensive battle that locks travel until resolved; a raid
+ * elsewhere is fought headless by the garrison on the spot. Quiet turns
+ * (`chance`) leave the map alone.
+ */
+export const resolveStrategy = (campaign) => {
+  if (campaign.status !== 'active' || campaign.threat || campaign.battle) return campaign;
+  const rng = createRng(`${campaign.seed}:sector-strategy:${campaign.turn}`);
+  if (rng.next() >= SECTOR.strategy.chance) return campaign;
+  const enemies = campaign.sector.enemies ?? [];
+  const home = homeNodeOf(campaign.sector);
+  const nodes = campaign.sector.nodes;
+  const categories = [];
+  const contestable = nodes.filter((entry) => enemies.length > 1 && entry.owner && entry.owner !== FACTIONS.FEDERATION && entry.id !== home?.id);
+  if (contestable.length) categories.push(['contest', contestable]);
+  const empties = nodes.filter((entry) => !entry.owner);
+  if (empties.length) categories.push(['empty', empties]);
+  const raidable = nodes.filter((entry) => entry.owner === FACTIONS.FEDERATION && entry.id !== home?.id);
+  if (raidable.length) categories.push(['raid', raidable]);
+  if (home) categories.push(['home', [home]]);
+  if (!categories.length) return campaign;
+  const total = categories.reduce((sum, [name]) => sum + (SECTOR.strategy.weights[name] ?? 0), 0);
+  let roll = rng.next() * total;
+  let [category, candidates] = categories[categories.length - 1];
+  for (const [name, list] of categories) {
+    roll -= SECTOR.strategy.weights[name] ?? 0;
+    if (roll < 0) {
+      [category, candidates] = [name, list];
+      break;
+    }
+  }
+  const node = rng.pick(candidates);
+  const turn = campaign.turn;
+  if (category === 'contest') {
+    const attacker = rng.pick(enemies.filter((faction) => faction !== node.owner));
+    return withNews({ ...campaign, sector: withOwner(campaign, node.id, attacker) }, turn, `${attacker} seize ${node.name} from ${node.owner}.`);
+  }
+  if (category === 'empty') {
+    const attacker = rng.pick(enemies);
+    return withNews({ ...campaign, sector: withOwner(campaign, node.id, attacker) }, turn, `${attacker} occupy ${node.name}.`);
+  }
+  const attacker = rng.pick(enemies);
+  if (category === 'home' || campaign.currentNode === node.id) {
+    // A defense the fleet can stand to: home recalls it, a held node already
+    // has it. Travel locks until the raid is resolved.
+    const recalled = category === 'home' ? { ...campaign, currentNode: home.id } : campaign;
+    return withNews(
+      { ...recalled, threat: { nodeId: node.id, attacker } },
+      turn,
+      category === 'home'
+        ? `${attacker} strike at Xanadu — the fleet is recalled home to defend it.`
+        : `${attacker} raid ${node.name} — the fleet stands to defend it.`,
+    );
+  }
+  const holds = garrisonHolds(campaign, node, attacker);
+  return withNews(
+    holds ? campaign : { ...campaign, sector: withOwner(campaign, node.id, attacker) },
+    turn,
+    holds
+      ? `The garrison of ${node.name} beats off the ${attacker} raid.`
+      : `${attacker} take ${node.name} from its garrison.`,
+  );
+};
+
+/**
+ * The campaign report (round 27b): the run graded off the summaries the save
+ * already keeps — battles by outcome, systems held, the lifetime credit
+ * ledger, prizes and bounties, hulls left, and the aces still flying.
+ */
+export const campaignReport = (campaign) => {
+  const results = campaign.results ?? [];
+  const count = (outcome) => results.filter((result) => result.outcome === outcome).length;
+  return {
+    status: campaign.status ?? 'active',
+    turns: campaign.turn ?? 0,
+    battles: results.length,
+    captured: count('captured'),
+    held: count('held'),
+    lost: count('lost'),
+    retreated: count('retreated'),
+    abandoned: count('abandoned'),
+    defenses: results.filter((result) => result.defense).length,
+    nodesHeld: (campaign.sector?.nodes ?? []).filter((node) => node.owner === FACTIONS.FEDERATION).length,
+    nodesTotal: (campaign.sector?.nodes ?? []).length,
+    credits: campaign.credits ?? 0,
+    earned: campaign.earned ?? 0,
+    spent: campaign.spent ?? 0,
+    prizes: results.reduce((total, result) => total + (result.prizes ?? 0), 0),
+    bounties: results.reduce((total, result) => total + (result.bounty ?? 0), 0),
+    hulls: (campaign.fleet ?? []).length,
+    aces: (campaign.fleet ?? [])
+      .filter((record) => (record.kills ?? 0) >= ACE_KILLS)
+      .map((record) => `${record.captain ?? record.name} (${record.kills} kills)`),
+  };
 };
