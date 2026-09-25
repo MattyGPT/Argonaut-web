@@ -163,8 +163,9 @@ h1 {
   left: calc(var(--x) * 1%);
   top: calc(var(--y) * 1%);
   /* --dx/--dy: the stack-declutter fan (render.js), screen px, zero unless a
-     hull shares its point with another. */
-  transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px)));
+     hull shares its point with another. --invzoom: 1/zoom off the world layer
+     (render.js), so glyphs hold a steady screen size while the field spreads. */
+  transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px))) scale(var(--invzoom, 1));
   /* Readability pass (27c): the glyph and its glow were sized for the 100-unit
      classic field, where hulls sit tens of units apart. On the wide Reimagined
      field a melee stands 6–10 units apart and a 1.78rem disc with a 12px glow
@@ -184,7 +185,7 @@ h1 {
 }
 
 .ship:hover, .ship:focus-visible {
-  transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px))) scale(1.22);
+  transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px))) scale(calc(var(--invzoom, 1) * 1.22));
   outline: 2px solid white;
   z-index: 2;
 }
@@ -277,7 +278,9 @@ h1 {
   height: var(--d);
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  border: 1px dashed;
+  /* Stroke holds a steady screen weight under the world layer's zoom scale,
+     like the hull glyphs (--invzoom from render.js). */
+  border: max(.5px, calc(1px * var(--invzoom, 1))) dashed;
   pointer-events: none;
   opacity: .5;
 }
@@ -336,7 +339,7 @@ h1 {
    while free, glowing in the holding alliance's colors while held. Ownership is
    public knowledge — every side can see who holds the objectives. */
 .terrain.relay {
-  border: 2px solid #cfe8ff;
+  border: max(1px, calc(2px * var(--invzoom, 1))) solid #cfe8ff;
   background: radial-gradient(circle at 50% 50%, #cfe8ff38, #cfe8ff14 65%, transparent);
 }
 
@@ -364,7 +367,7 @@ h1 {
   position: absolute;
   left: calc(var(--x) * 1%);
   top: calc(var(--y) * 1%);
-  transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px)));
+  transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px))) scale(var(--invzoom, 1));
   color: #43525f;
   font-size: .85rem;
   line-height: 1;

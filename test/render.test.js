@@ -909,6 +909,18 @@ test('a derelict renders as the vacant ghost it is, boardable from the menu', ()
   assert.match(read('#ship-menu').innerHTML, /data-ship-command="transport"[^>]*>Board ship</, 'and boardable');
 });
 
+test('the world layer exposes a counter-scale so glyphs hold their screen size under zoom', () => {
+  const styled = () => ({ innerHTML: '', textContent: '', style: { setProperty(key, value) { this[key] = value; } } });
+  elements.clear();
+  elements.set('#map-field', styled());
+  renderGame(createGame({ seed: 'invzoom', reimagined: true }), { camera: { cx: 160, cy: 160, zoom: 4, follow: false } });
+  assert.equal(elements.get('#map-field').style['--invzoom'], '0.25', 'zoom 4 counter-scales glyphs to a quarter');
+  elements.clear();
+  elements.set('#map-field', styled());
+  renderGame(createGame({ seed: 'invzoom' }));
+  assert.equal(elements.get('#map-field').style['--invzoom'], '1', 'a classic war draws at identity');
+});
+
 test('stacked hulls fan apart on the map so each glyph is seeable and clickable', () => {
   const stacked = withPair(createGame({ seed: 'stack' }), 'fed-flagship', { x: 60, y: 60 }, 'axis-flagship', { x: 60, y: 60 });
   elements.clear();

@@ -620,7 +620,16 @@ export const renderGame = (game, view = {}) => {
   map.innerHTML = terrainHtml + ringHtml + shipHtml;
   // Slide and scale the world layer so the camera window fills the viewport. The
   // test stub has no `style`, so guard it; the projection is identity at zoom 1.
-  if (map.style) map.style.transform = fieldTransform(win);
+  if (map.style) {
+    map.style.transform = fieldTransform(win);
+    // Counter-scale for hull glyphs (Matt's play-test idea, 2026-09-25): the
+    // world layer scales by the zoom, so without this a ship's disc and letter
+    // grow with it and a zoomed-in melee still reads as blobs. Exposing 1/zoom
+    // lets the glyphs hold a steady SCREEN size while their positions spread —
+    // zooming in separates hulls instead of enlarging them. Identity at zoom 1,
+    // so a classic war draws exactly as before.
+    map.style.setProperty('--invzoom', String(1 / (win.zoom || 1)));
+  }
   animateMoves(map, game, win);
   renderMinimap(game, win, isVisible);
 
