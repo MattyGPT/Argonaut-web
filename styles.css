@@ -1551,6 +1551,51 @@ body.classic .ship .tractor-pip {
   color: var(--cyan);
 }
 
+/* Tractor lock line (play-test fix, 2026-09-25): the beam is physical — a held
+   hull in view draws its lock back to the source even when a nebula hides the
+   hull casting it. Position, not identity: the caster's glyph stays undrawn and
+   the console withholds its name until sensors reach it. Marching dashes read
+   as a live pull; the animation yields to prefers-reduced-motion. */
+.lock-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.tractor-lock {
+  stroke: var(--cyan);
+  stroke-width: 2;
+  stroke-dasharray: 7 5;
+  opacity: .85;
+  animation: lock-march 1.2s linear infinite;
+}
+
+@keyframes lock-march {
+  to { stroke-dashoffset: -12; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tractor-lock { animation: none; }
+}
+
+.legend-swatch.lock-tractor {
+  width: 14px;
+  height: 0;
+  border-top: 2px dashed var(--cyan);
+  background: none;
+  box-shadow: none;
+}
+
+body.classic .tractor-lock {
+  stroke: #38ff38;
+}
+
+body.classic .legend-swatch.lock-tractor {
+  border-top-color: #38ff38;
+}
+
 .fx-impact {
   fill: none;
   stroke: #fff;
