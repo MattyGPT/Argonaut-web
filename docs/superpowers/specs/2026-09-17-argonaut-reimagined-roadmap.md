@@ -244,7 +244,7 @@ star-map screen sketch, and the chunk split):
 | Round | Chunk | Builds | Tested by | Status |
 | --- | --- | --- | --- | --- |
 | 26a | Campaign data layer | `SECTOR` constants + `game/campaign.js`: seeded sector gen on `${seed}:sector`, per-battle seed derivation, fleet-record extraction | Gen determinism; shape/link invariants; record extraction; no stream shift | ✅ PR #64 |
-| 26b | Travel + node battles | Campaign container; `loadout.veterans` injection; headless auto-resolve; outcome mapping; travel; abandon; campaign save | Whole-campaign determinism; injection parity; outcome mapping; old saves load; harness unmoved | — |
+| 26b | Travel + node battles | Campaign container; `loadout.veterans` injection; headless auto-resolve; outcome mapping; travel; abandon; campaign save | Whole-campaign determinism; injection parity; outcome mapping; old saves load; harness unmoved | ✅ PR #65 |
 | 26c | Sector UI | Star-map screen; New game option; battle transitions; report stub; save wiring | Render smokes; manual play-test pass | — |
 | 27a | Persistence/economy | Credits; dockyard between battles; repairs/refits/crew/hulls/drones | Fleet continuity; purchases; determinism | — |
 | 27b | Campaign win/lose | Enemy strategic layer; home-defense battle; victory/defeat; campaign report | Campaign win/lose both ways; report; determinism | — |
