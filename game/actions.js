@@ -880,7 +880,7 @@ export const resolveAsteroidStrike = (game, ship) => {
 const moveAction = (game, action, actor) => {
   const disabled = requiresSystem(game, actor, 'engines');
   if (disabled) return disabled;
-  if (isTractorHeld(game, actor)) return invalid(game, `${actor.name} cannot move while held by a tractor lock.`);
+  if (isTractorHeld(game, actor)) return invalid(game, `${actor.name} cannot move while held by a tractor lock. Hyperspace shakes it off.`);
   const dx = Number(action.dx);
   const dy = Number(action.dy);
   if (!Number.isFinite(dx) || !Number.isFinite(dy)) return invalid(game, 'Movement requires numeric displacement coordinates.');

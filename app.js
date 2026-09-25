@@ -1,6 +1,6 @@
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets } from './game/actions.js';
 import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
-import { alertLevel, appendLog, createGame, defaultLoadout, fleetCost, fleetHulls, getShip, isSpectator, normalizeFleetSpec, systemUnits } from './game/state.js';
+import { alertLevel, appendLog, createGame, defaultLoadout, distance, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, nebulaHides, normalizeFleetSpec, sensorRange, systemUnits } from './game/state.js';
 import { abandonEngagement, autoResolveNode, buyDockyard, createCampaign, nodeById, resolveNodeBattle, startNodeBattle, travelTo } from './game/campaign.js';
 import { scenarioFor } from './game/scenarios.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './game/turns.js';
@@ -269,8 +269,21 @@ const dispatch = async (action) => {
     if (game.phase !== 'player' || game.outcome || isSpectator(game)) return;
     const move = maneuverTo(game, action.x, action.y);
     if (!move) {
-      const actor = getShip(game, game.playerShipId);
-      view = { ...view, entries: [`${actor?.name ?? 'Your ship'} cannot maneuver — no working engines, or held by a tractor beam.`] };
+      // Name the cause (play-test fix, 2026-09-25): a refusal that says
+      // "engines or tractor" while the console shows healthy engines reads as
+      // a bug. A held hull always knows it is held; the holder's name is
+      // sensor intel, so a nebula-camp lock reads as "an unseen hull" — and
+      // the message carries the way out.
+      const actor0 = getShip(game, game.playerShipId);
+      if (actor0 && isTractorHeld(game, actor0)) {
+        const holder = getShip(game, actor0.tractorBy);
+        const seen = holder
+          && distance(actor0, holder) <= sensorRange(game, actor0, 'mapper')
+          && !nebulaHides(game, actor0, holder);
+        view = { ...view, entries: [`${actor0.name} is held by a tractor beam${seen ? ` from ${holder.name}` : ' from an unseen hull'} — hyperspace shakes the lock off.`] };
+      } else {
+        view = { ...view, entries: [`${actor0?.name ?? 'Your ship'} cannot maneuver — no working engines.`] };
+      }
       refresh();
       return;
     }

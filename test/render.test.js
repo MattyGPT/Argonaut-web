@@ -909,6 +909,27 @@ test('a derelict renders as the vacant ghost it is, boardable from the menu', ()
   assert.match(read('#ship-menu').innerHTML, /data-ship-command="transport"[^>]*>Board ship</, 'and boardable');
 });
 
+test('a held hull wears the tractor pip and the console names the holder — or an unseen hull', () => {
+  const held = (holderX) => withPair(
+    createGame({ seed: 'held' }),
+    'fed-flagship', { tractorBy: 'axis-flagship', x: 50, y: 50 },
+    'axis-flagship', { x: holderX, y: 50 },
+  );
+  elements.clear();
+  renderGame(held(60));
+  assert.match(read('#console').innerHTML, /Tractor lock/);
+  assert.match(read('#console').innerHTML, /held by Firebreather/, 'a holder inside mapper reach is named');
+  assert.match(read('#map-field').innerHTML, /tractor-pip/);
+  elements.clear();
+  renderGame(held(200));
+  assert.match(read('#console').innerHTML, /held by an unseen hull/, 'a holder beyond the mapper stays unnamed');
+  assert.match(read('#map-field').innerHTML, /tractor-pip/, 'but the lock itself is always felt');
+  elements.clear();
+  renderGame(createGame({ seed: 'held-free' }));
+  assert.ok(!read('#console').innerHTML.includes('Tractor lock'));
+  assert.ok(!read('#map-field').innerHTML.includes('tractor-pip'));
+});
+
 test('the world layer exposes a counter-scale so glyphs hold their screen size under zoom', () => {
   const styled = () => ({ innerHTML: '', textContent: '', style: { setProperty(key, value) { this[key] = value; } } });
   elements.clear();
