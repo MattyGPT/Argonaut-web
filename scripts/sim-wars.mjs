@@ -82,6 +82,7 @@ export const runWar = (index, { mode = 'extended', precision = false, regional =
     vacantAtEnd: count('vacant'),
     shots: game.ships.reduce((total, ship) => total + (ship.shotsFired ?? 0), 0),
     kills: game.ships.reduce((total, ship) => total + (ship.kills ?? 0), 0),
+    collisions: game.ships.reduce((total, ship) => total + (ship.collisions ?? 0), 0),
     selfDestructs,
     selfDestructsByFaction,
     worstBlast: blasts.reduce((max, blast) => Math.max(max, blast.victims), 0),
@@ -133,6 +134,7 @@ export const simulate = (options = {}) => {
       shots: Math.round(shots),
       kills: Number(mean(wars.map((war) => war.kills)).toFixed(1)),
       volleysPerKill: kills > 0 ? Number((shots / kills).toFixed(1)) : 0,
+      collisions: Number(mean(wars.map((war) => war.collisions)).toFixed(2)),
       selfDestructs: Number(mean(wars.map((war) => war.selfDestructs)).toFixed(2)),
       wipeoutBlastRate: Number((wars.filter((war) => war.wipeoutBlasts > 0).length / wars.length).toFixed(3)),
       worstBlast: wars.reduce((max, war) => Math.max(max, war.worstBlast), 0),
@@ -156,7 +158,7 @@ const printReport = (report) => {
   console.log(`stardates: mean ${s.mean}  median ${s.median}  p10 ${s.p10}  p90 ${s.p90}  max ${s.max}`);
   const w = report.perWar;
   console.log(`hulls destroyed per war: ${w.destroyed} of ${report.hulls}   surrendered: ${w.surrendered}   vacant at end: ${w.vacantAtEnd}`);
-  console.log(`volleys per war: ${w.shots}   kills: ${w.kills}   volleys per kill: ${w.volleysPerKill}`);
+  console.log(`volleys per war: ${w.shots}   kills: ${w.kills}   volleys per kill: ${w.volleysPerKill}   collisions: ${w.collisions}`);
   const factions = Object.entries(report.selfDestructsByFaction).map(([name, count]) => `${name} ${count}`).join(', ');
   console.log(`self-destructs per war: ${w.selfDestructs}${factions ? ` (${factions})` : ''}   worst blast: ${w.worstBlast} hulls   wars with a 4+ hull blast: ${(w.wipeoutBlastRate * 100).toFixed(1)}%`);
   if (report.mode === 'reimagined') {

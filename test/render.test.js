@@ -231,9 +231,9 @@ test('a Reimagined war is badged and draws hulls as a fraction of the wider fiel
   const game = withFlagship(createGame({ seed: 'render-reimagined', reimagined: true }), { x: 60, y: 120 });
   renderGame(game);
   assert.equal(read('#mode-readout').textContent, 'REIMAGINED WAR');
-  // 60 of 240 units is 25% across the field, and 120 of 240 is 50% down; a classic
-  // 100-unit field would have no room for a hull at those coordinates at all.
-  assert.match(read('#map-field').innerHTML, /--x:25;--y:50/);
+  // 60 of 320 units is 18.75% across the field, and 120 of 320 is 37.5% down; a
+  // classic 100-unit field would have no room for a hull at those coordinates.
+  assert.match(read('#map-field').innerHTML, /--x:18.75;--y:37.5/);
   // The minimap and camera chrome only exist for a war wider than the screen.
   assert.match(read('#minimap').innerHTML, /mini-view/);
 });
@@ -907,4 +907,19 @@ test('a derelict renders as the vacant ghost it is, boardable from the menu', ()
   renderGame(game, { contextShipId: ghost.id });
   assert.match(read('#map-field').innerHTML, new RegExp(`class="ship ${ghost.faction} vacant"`), 'dark and dashed like any derelict');
   assert.match(read('#ship-menu').innerHTML, /data-ship-command="transport"[^>]*>Board ship</, 'and boardable');
+});
+
+test('stacked hulls fan apart on the map so each glyph is seeable and clickable', () => {
+  const stacked = withPair(createGame({ seed: 'stack' }), 'fed-flagship', { x: 60, y: 60 }, 'axis-flagship', { x: 60, y: 60 });
+  elements.clear();
+  renderGame(stacked);
+  const html = read('#map-field').innerHTML;
+  const fedStyle = html.match(/style="([^"]*)" data-ship-id="fed-flagship"/)[1];
+  const axisStyle = html.match(/style="([^"]*)" data-ship-id="axis-flagship"/)[1];
+  assert.match(fedStyle, /--dx:-?\d+px;--dy:-?\d+px/, 'a stacked hull wears a fan offset');
+  assert.match(axisStyle, /--dx:-?\d+px;--dy:-?\d+px/);
+  assert.notEqual(fedStyle, axisStyle, 'the two glyphs fan to different offsets');
+  elements.clear();
+  renderGame(createGame({ seed: 'stack' }));
+  assert.ok(!read('#map-field').innerHTML.includes('--dx:'), 'a hull with no stackmate wears no offset');
 });

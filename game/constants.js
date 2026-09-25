@@ -14,7 +14,7 @@ export const GRID_SIZE = 100;
  * The field is large enough that it no longer fits on one screen, which is what the
  * pan/zoom camera and minimap (13c) are for. A balance dial for the roadmap.
  */
-export const REIMAGINED_GRID_SIZE = 240;
+export const REIMAGINED_GRID_SIZE = 320;
 
 export const FACTIONS = Object.freeze({
   FEDERATION: 'Federation',
@@ -710,8 +710,22 @@ export const STARBASE_BLAST_RADIUS = 40;
  * classic or extended war keeps the manual figure byte-identical, since the
  * radius there is recovered behavior, not a balance dial. Measured with
  * `npm run sim`.
+ *
+ * Play-test retune 2026-09-25 (field 320 + drone arrival avoidance): with the
+ * drone wing-stacking rams gone the clusters still stood dense enough for
+ * last stands to massacre (18.0% of wars with a 4+-hull blast, worst 14), so
+ * the scale drops to 0.35 (blast 7, starbase 14) alongside
+ * `REIMAGINED_SUICIDE_MIN_ENEMIES`.
  */
-export const REIMAGINED_SELF_DESTRUCT_SCALE = 0.45;
+export const REIMAGINED_SELF_DESTRUCT_SCALE = 0.35;
+
+/**
+ * Reimagined-only last-stand gate (play-test retune 2026-09-25): the Axis
+ * doctrine dial `suicideMinEnemies` (5) stays for classic/extended wars, but a
+ * Reimagined war — denser since arrival avoidance ended accidental rams —
+ * demands strictly more enemies inside the blast before a captain detonates.
+ */
+export const REIMAGINED_SUICIDE_MIN_ENEMIES = 7;
 
 /**
  * Reimagined volley-damage scale (play-test balance pass, 2026-09-19). The

@@ -159,7 +159,9 @@ h1 {
   position: absolute;
   left: calc(var(--x) * 1%);
   top: calc(var(--y) * 1%);
-  transform: translate(-50%, -50%);
+  /* --dx/--dy: the stack-declutter fan (render.js), screen px, zero unless a
+     hull shares its exact point with another. */
+  transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px)));
   width: 1.78rem;
   height: 1.78rem;
   border-radius: 50%;
@@ -174,7 +176,7 @@ h1 {
 }
 
 .ship:hover, .ship:focus-visible {
-  transform: translate(-50%, -50%) scale(1.22);
+  transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px))) scale(1.22);
   outline: 2px solid white;
   z-index: 2;
 }
@@ -354,7 +356,7 @@ h1 {
   position: absolute;
   left: calc(var(--x) * 1%);
   top: calc(var(--y) * 1%);
-  transform: translate(-50%, -50%);
+  transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px)));
   color: #43525f;
   font-size: .85rem;
   line-height: 1;

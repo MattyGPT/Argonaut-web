@@ -12,6 +12,14 @@ export const MIN_ZOOM = 1;
 export const MAX_ZOOM = 6;
 
 /**
+ * The tightest view stays a ~40-unit window whatever the field size (play-test
+ * retune 2026-09-25, field 320): a fixed MAX_ZOOM would make the closest look
+ * coarser on a wider field, exactly when a clustered firefight needs the
+ * tightest view. Classic fields keep the old cap.
+ */
+export const maxZoomFor = (gridSize) => Math.max(MAX_ZOOM, Math.round((gridSize ?? GRID_SIZE) / 40));
+
+/**
  * The zoom a fresh war opens at: the whole field when it fits on one screen, or a
  * window of roughly `COMFORT_UNITS` across when it does not, so a wide Reimagined
  * field starts framed on a readable engagement rather than on twenty tiny hulls.
@@ -23,7 +31,7 @@ const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 /** Keeps the camera in bounds: zoom inside its range, and the view inside the field. */
 export const clampCamera = (camera, gridSize) => {
   const grid = gridSize ?? GRID_SIZE;
-  const zoom = clamp(camera?.zoom ?? 1, MIN_ZOOM, MAX_ZOOM);
+  const zoom = clamp(camera?.zoom ?? 1, MIN_ZOOM, maxZoomFor(grid));
   const half = grid / zoom / 2;
   // At zoom 1 the view is the whole field, so the center is pinned to its middle.
   return {
@@ -86,7 +94,7 @@ export const zoomAt = (camera, gridSize, vx, vy, factor) => {
   const grid = gridSize ?? GRID_SIZE;
   const win = cameraWindow(grid, camera);
   const anchor = worldFromViewport(vx, vy, win);
-  const zoom = clamp((camera?.zoom ?? 1) * factor, MIN_ZOOM, MAX_ZOOM);
+  const zoom = clamp((camera?.zoom ?? 1) * factor, MIN_ZOOM, maxZoomFor(grid));
   const size = grid / zoom;
   return clampCamera({
     cx: anchor.x - vx * size + size / 2,

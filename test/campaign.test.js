@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FACTIONS, LOADOUT, SECTOR, SHIP_TEMPLATES } from '../game/constants.js';
+import { FACTIONS, LOADOUT, REIMAGINED_GRID_SIZE, SECTOR, SHIP_TEMPLATES } from '../game/constants.js';
 import { abandonEngagement, atDockyard, autoResolveNode, battleSeed, buyDockyard, campaignReport, carriedFleetFrom, createCampaign, dockyardOffers, engageableHere, fleetRecordsFrom, generateSector, homeNodeOf, hullPrice, linksFrom, nodeById, objectiveNodeOf, resolveNodeBattle, resolveStrategy, startNodeBattle, travelTo } from '../game/campaign.js';
 import { createGame, defaultLoadout, spawnDrone } from '../game/state.js';
 
@@ -310,7 +310,7 @@ test('a node battle is a full seeded two-faction war at the fleet\'s node', () =
   const { game } = started.battle;
   assert.equal(game.seed, battleSeed(campaign.seed, nodeId));
   assert.equal(game.reimagined, true);
-  assert.equal(game.gridSize, 240);
+  assert.equal(game.gridSize, REIMAGINED_GRID_SIZE);
   const node = nodeById(campaign.sector, nodeId);
   assert.equal(game.loadout.budgets[node.owner], node.budget);
   const fedIds = game.ships.filter((ship) => ship.faction === FACTIONS.FEDERATION).map((ship) => ship.id).sort();
