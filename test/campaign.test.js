@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FACTIONS, SECTOR, SHIP_TEMPLATES } from '../game/constants.js';
-import { abandonEngagement, autoResolveNode, battleSeed, carriedFleetFrom, createCampaign, engageableHere, fleetRecordsFrom, generateSector, homeNodeOf, linksFrom, nodeById, objectiveNodeOf, resolveNodeBattle, startNodeBattle, travelTo } from '../game/campaign.js';
+import { FACTIONS, LOADOUT, SECTOR, SHIP_TEMPLATES } from '../game/constants.js';
+import { abandonEngagement, atDockyard, autoResolveNode, battleSeed, buyDockyard, carriedFleetFrom, createCampaign, dockyardOffers, engageableHere, fleetRecordsFrom, generateSector, homeNodeOf, hullPrice, linksFrom, nodeById, objectiveNodeOf, resolveNodeBattle, startNodeBattle, travelTo } from '../game/campaign.js';
 import { createGame, defaultLoadout, spawnDrone } from '../game/state.js';
 
 const ENEMY_FACTIONS = Object.values(FACTIONS).filter((faction) => faction !== FACTIONS.FEDERATION);
@@ -447,4 +447,157 @@ test('a campaign survives a JSON save round-trip and plays on', () => {
   const started = startNodeBattle(saved, nodeId);
   assert.ok(started.battle, 'the restored campaign engages');
   assert.equal(started.battle.game.seed, battleSeed(campaign.seed, nodeId));
+});
+
+// --- Round 27a: bounties, the between-battles dockyard, commissions ---
+
+/** A resolved battle whose carried fleet includes one prize hull. */
+const battleWithPrize = (campaign, nodeId) => {
+  const started = startNodeBattle(campaign, nodeId);
+  const ships = started.battle.game.ships.map((ship) => {
+    if (ship.faction !== FACTIONS.FEDERATION) return { ...ship, status: 'destroyed' };
+    if (ship.id === 'vet-fed-flagship') {
+      return { ...ship, prize: { from: nodeById(campaign.sector, nodeId).owner, by: 'vet-fed-flagship', byFaction: FACTIONS.FEDERATION, turn: 4, captain: 'Taken', times: 1 } };
+    }
+    return ship;
+  });
+  return { ...started, battle: { ...started.battle, game: { ...started.battle.game, outcome: { kind: 'federation-win', message: '' }, ships } } };
+};
+
+test('a carried prize pays its class bounty once, on the battle it first carries out', () => {
+  const { campaign, nodeId } = campaignAtEnemy();
+  const resolved = resolveNodeBattle(battleWithPrize(campaign, nodeId));
+  const node = nodeById(campaign.sector, nodeId);
+  assert.equal(resolved.results[0].bounty, SECTOR.prizeValues['battle-cruiser']);
+  assert.equal(resolved.credits, SECTOR.captureCredits[node.type] + SECTOR.prizeValues['battle-cruiser']);
+  assert.ok(resolved.paidPrizes.includes('vet-fed-flagship'));
+
+  // The same prize fights on and carries out of a second battle: no second bounty.
+  const enemyNode = resolved.sector.nodes.find((entry) => entry.owner && entry.owner !== FACTIONS.FEDERATION && entry.id !== nodeId);
+  assert.ok(enemyNode, 'the sector still holds an enemy node');
+  const staged = { ...resolved, currentNode: enemyNode.id };
+  const second = resolveNodeBattle(battleWithPrize(staged, enemyNode.id));
+  assert.equal(second.results[1].bounty, 0, 'the prize already paid');
+  assert.equal(second.credits, resolved.credits + SECTOR.captureCredits[enemyNode.type]);
+});
+
+test('a bounty pays on a retreat too, and an old save without paidPrizes tolerates the field', () => {
+  const { campaign, nodeId } = campaignAtEnemy();
+  const started = battleWithPrize(campaign, nodeId);
+  const retreated = resolveNodeBattle({ ...started, battle: { ...started.battle, game: { ...started.battle.game, outcome: null } } });
+  assert.equal(retreated.results[0].outcome, 'retreated');
+  assert.equal(retreated.results[0].bounty, SECTOR.prizeValues['battle-cruiser']);
+  const legacyBase = ['legacy-1', 'legacy-2', 'legacy-3', 'legacy-4']
+    .map((seed) => {
+      const stripped = { ...createCampaign({ seed }) };
+      delete stripped.paidPrizes;
+      delete stripped.purchased;
+      delete stripped.purchases;
+      return stripped;
+    })
+    .find((stripped) => nodeById(stripped.sector, 'home').next.some((id) => nodeById(stripped.sector, id).owner));
+  assert.ok(legacyBase, 'a legacy-shaped campaign with an enemy neighbor exists');
+  const legacyNode = nodeById(legacyBase.sector, 'home').next.find((id) => nodeById(legacyBase.sector, id).owner);
+  const resolved = resolveNodeBattle(battleWithPrize(travelTo(legacyBase, legacyNode), legacyNode));
+  assert.ok(resolved.credits > 0, 'a 26c-era save still earns bounties');
+});
+
+test('the dockyard works only on Federation-held ground of a live campaign', () => {
+  const home = createCampaign({ seed: 'dock' });
+  assert.equal(atDockyard(home), true);
+  const { campaign } = campaignAtEnemy();
+  assert.equal(atDockyard(campaign), false);
+  assert.deepEqual(dockyardOffers(campaign), []);
+  assert.equal(atDockyard({ ...home, status: 'defeat' }), false);
+  assert.equal(atDockyard({ ...home, battle: { nodeId: 'home', game: null } }), false);
+});
+
+test('the dockyard prices wounds, and buying puts the record back in order', () => {
+  let campaign = { ...createCampaign({ seed: 'dockyard' }), credits: 500 };
+  campaign = {
+    ...campaign,
+    fleet: campaign.fleet.map((record) => (record.id === 'vet-fed-flagship'
+      ? { ...record, shields: 100, crew: 100, systems: { ...record.systems, engines: 2, phasers: record.systems.phasers - 1 } }
+      : record)),
+  };
+  const offers = dockyardOffers(campaign);
+  const base = SHIP_TEMPLATES['battle-cruiser'];
+  const shieldOffer = offers.find((offer) => offer.id === 'shields:vet-fed-flagship');
+  const crewOffer = offers.find((offer) => offer.id === 'crew:vet-fed-flagship');
+  const sysOffer = offers.find((offer) => offer.id === 'systems:vet-fed-flagship');
+  assert.equal(shieldOffer.cost, Math.ceil((base.shields - 100) * SECTOR.dockyard.shieldRate));
+  assert.equal(crewOffer.cost, Math.ceil((base.crew - 100) * SECTOR.dockyard.crewRate));
+  const missingUnits = (base.systems.engines - 2) + 1;
+  assert.equal(sysOffer.cost, missingUnits * SECTOR.dockyard.systemRate, 'burnt engine units plus one burnt phaser unit');
+
+  const shielded = buyDockyard(campaign, shieldOffer.id);
+  const flagship = shielded.fleet.find((record) => record.id === 'vet-fed-flagship');
+  assert.equal(flagship.shields, base.shields);
+  assert.equal(Object.values(flagship.arcs).reduce((sum, value) => sum + value, 0), base.shields, 'arcs re-split to the repaired pool');
+  assert.equal(shielded.credits, 500 - shieldOffer.cost);
+  assert.ok(!dockyardOffers(shielded).some((offer) => offer.id === shieldOffer.id), 'a healed wound stops being offered');
+
+  const crewed = buyDockyard(shielded, crewOffer.id);
+  assert.equal(crewed.fleet.find((record) => record.id === 'vet-fed-flagship').crew, base.crew);
+  const overhauled = buyDockyard(crewed, sysOffer.id);
+  const whole = overhauled.fleet.find((record) => record.id === 'vet-fed-flagship');
+  assert.equal(whole.systems.engines, base.systems.engines);
+  assert.equal(whole.systems.phasers, base.systems.phasers);
+
+  assert.deepEqual(buyDockyard({ ...campaign, credits: 0 }, shieldOffer.id), { ...campaign, credits: 0 }, 'an unaffordable offer is a no-op');
+  assert.deepEqual(buyDockyard(campaign, 'shields:nosuchhull'), campaign, 'an unknown offer is a no-op');
+});
+
+test('refits are re-purchasable at the dockyard up to the template cap', () => {
+  let campaign = { ...createCampaign({ seed: 'refits' }), credits: 500 };
+  const base = SHIP_TEMPLATES['battle-cruiser'].systems.phasers;
+  for (let bought = 0; bought < 2; bought += 1) {
+    const offers = dockyardOffers(campaign);
+    const offer = offers.find((entry) => entry.id === 'refit:vet-fed-flagship:phasers');
+    assert.ok(offer, `refit purchase ${bought + 1} is offered`);
+    assert.equal(offer.cost, SECTOR.dockyard.refit);
+    campaign = buyDockyard(campaign, offer.id);
+  }
+  assert.equal(campaign.fleet.find((record) => record.id === 'vet-fed-flagship').systems.phasers, base + 2);
+  assert.ok(!dockyardOffers(campaign).some((offer) => offer.id === 'refit:vet-fed-flagship:phasers'), 'the cap closes the offer');
+  // An overhaul never sands a purchased refit back down: burn only engines,
+  // leave the over-complement phasers untouched, and they survive it.
+  campaign = {
+    ...campaign,
+    fleet: campaign.fleet.map((record) => (record.id === 'vet-fed-flagship'
+      ? { ...record, systems: { ...record.systems, engines: 2 } }
+      : record)),
+  };
+  const overhauled = buyDockyard(campaign, 'systems:vet-fed-flagship');
+  const wholeRefit = overhauled.fleet.find((record) => record.id === 'vet-fed-flagship');
+  assert.equal(wholeRefit.systems.phasers, base + 2);
+  assert.equal(wholeRefit.systems.engines, SHIP_TEMPLATES['battle-cruiser'].systems.engines);
+});
+
+test('a spent drone bay can be rebuilt, and commissions join the fleet unbudgeted', () => {
+  let campaign = { ...createCampaign({ seed: 'bay' }), credits: 500 };
+  campaign = {
+    ...campaign,
+    fleet: campaign.fleet.map((record) => (record.className === 'Carrier' ? { ...record, dronesLaunched: true } : record)),
+  };
+  const carrier = campaign.fleet.find((record) => record.className === 'Carrier');
+  const rebuilt = buyDockyard(campaign, `bay:${carrier.id}`);
+  assert.ok(!rebuilt.fleet.find((record) => record.id === carrier.id).dronesLaunched, 'the bay is whole again');
+  assert.equal(rebuilt.credits, 500 - SECTOR.dockyard.bay);
+
+  const commissioned = buyDockyard(rebuilt, 'buy:scout');
+  const scout = commissioned.fleet[commissioned.fleet.length - 1];
+  assert.equal(scout.kind, 'scout');
+  assert.equal(scout.shields, SHIP_TEMPLATES.scout.shields);
+  assert.equal(scout.captain, null, 'the next battle deals its captain');
+  assert.equal(scout.name, SECTOR.reserveNames[0]);
+  assert.equal(commissioned.credits, rebuilt.credits - hullPrice('scout'));
+  assert.equal(hullPrice('scout'), LOADOUT.costs.scout * SECTOR.dockyard.hullCreditPerPoint);
+  assert.deepEqual(commissioned.purchased, { scout: 1 });
+
+  // Commissions alone count against the round-19 budget: a spent purchase
+  // ledger closes the offers even though the carried fleet is unbudgeted.
+  const spent = { ...commissioned, purchased: { 'battle-cruiser': 4, carrier: 1 } };
+  assert.ok(!dockyardOffers(spent).some((offer) => offer.kind === 'buy'), 'the purchase budget is exhausted');
+  assert.ok(dockyardOffers(commissioned).some((offer) => offer.kind === 'buy'));
 });
