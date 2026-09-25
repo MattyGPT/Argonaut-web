@@ -532,9 +532,42 @@ export const renderGame = (game, view = {}) => {
     return `<div class="terrain ${feature.type}${holder ? ` ${holder}` : ''}" style="--x:${pct(feature.x)};--y:${pct(feature.y)};--d:${pct(2 * feature.radius)}%;--o:${crisp ? 1 : TERRAIN.faintOpacity}" title="${title}" aria-hidden="true"></div>`;
   }).join('');
 
+  // Stack declutter (play-test retune 27c): hulls that end a stardate on the
+  // same point — a wing riding over its carrier, a prize mid-withdraw, a
+  // converged melee — drew as one indistinguishable glyph and only the topmost
+  // could be clicked. Same-point hulls fan onto a deterministic screen-space
+  // ring so each is seen and clicked; presentation only — positions, beams,
+  // ranges, and every rule read the true coordinates.
+  const stackOffsets = (() => {
+    const groups = new Map();
+    for (const ship of game.ships.filter(isVisible)) {
+      const key = `${ship.x},${ship.y}`;
+      const group = groups.get(key);
+      if (group) group.push(ship.id);
+      else groups.set(key, [ship.id]);
+    }
+    const offsets = new Map();
+    for (const group of groups.values()) {
+      if (group.length < 2) continue;
+      const radius = 10 + 4 * group.length;
+      [...group].sort().forEach((id, index) => {
+        const angle = (index * 2 * Math.PI) / group.length;
+        offsets.set(id, {
+          dx: Math.round(Math.cos(angle) * radius),
+          dy: Math.round(Math.sin(angle) * radius),
+        });
+      });
+    }
+    return offsets;
+  })();
+  const stackStyle = (ship) => {
+    const offset = stackOffsets.get(ship.id);
+    return offset ? `;--dx:${offset.dx}px;--dy:${offset.dy}px` : '';
+  };
+
   const shipHtml = game.ships.filter(isVisible).map((ship) => {
     if (ship.status === 'destroyed') {
-      return `<span class="wreck" style="--x:${pct(ship.x)};--y:${pct(ship.y)}" title="${ship.name}: destroyed" aria-hidden="true">+</span>`;
+      return `<span class="wreck" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" title="${ship.name}: destroyed" aria-hidden="true">+</span>`;
     }
     const threat = threats.has(ship.id) ? ' threat' : '';
     const standing = orderFor(game, ship.id) ?? pendingOrderFor(game, ship.id);
@@ -568,7 +601,7 @@ export const renderGame = (game, view = {}) => {
     const distress = ship.encounter?.type === 'distress' && isActive(ship) && systemUnits(ship, 'engines') === 0;
     const distressClass = distress ? ' distress' : '';
     const distressNote = distress ? ' — broadcasting distress' : '';
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}<span class="glyph">${glyph}</span>${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}</button>`;
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}<span class="glyph">${glyph}</span>${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}</button>`;
   }).join('');
   map.innerHTML = terrainHtml + ringHtml + shipHtml;
   // Slide and scale the world layer so the camera window fills the viewport. The

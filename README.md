@@ -92,7 +92,7 @@ optional tactical sound, the precision fire mode, the extended war mode, the
 loadout** in a Reimagined one. Use the same seed to reproduce the opening state.
 
 **Argonaut Reimagined** is an opt-in expansion mode, under active development, that
-carries the extended war and opens the fight on a much wider 240-unit battlefield
+carries the extended war and opens the fight on a much wider 320-unit battlefield
 the map becomes a pannable, zoomable viewport into (wheel or `+`/`-` to zoom, arrow
 keys or the minimap to pan, `⌖` to re-center on your flagship). Weapon ranges stay
 at their classic units while engine reach scales with the field, so there is real

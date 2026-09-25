@@ -5,7 +5,7 @@ import { createRng } from '../game/rng.js';
 import { scenarioOutcome, scenarioProgress } from '../game/scenarios.js';
 import { abbreviateNarrative, alertLevel, appendLog, applyHeading, arcFocusOf, arcSplit, arcsOf, bearingDeg, blastRadius, clampPowerAllocation, createGame, crewCapacity, deductArcsProportionally, defaultLoadout, distance, dockedAt, engineCapacity, facingOf, fleetCost, fleetHulls, getShip, grownArcs, hasArcs, inRadioContact, insideFeature, ionStormZone, isAce, isDrone, isNeutral, nebulaHides, nebulaRevealRange, normalizeDegrees, normalizeFleetSpec, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, spawnEncounter, stanceOf, struckArc, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
 import { applyPlayerAction, canLaunchDrones, captureHull, damageShip, defaultTargetFor, eligibleTargets, ionDamage, killLines, launchDrones, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, spreadSplash, tractorLock, weaponDamage } from '../game/actions.js';
-import { chooseAiAction } from '../game/ai.js';
+import { chooseAiAction, avoidStackedArrival } from '../game/ai.js';
 import { applySurrender, darkenOrphanDrones, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolveEncounters, resolveObjectives, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
 
@@ -2045,14 +2045,14 @@ test('a Reimagined war maneuvers past the classic 100-unit edge, but not off the
   });
   const past = applyPlayerAction(setup(100), { type: 'move', dx: 30, dy: 0 });
   assert.equal(getShip(past.game, 'fed-flagship').x, 130, 'a coordinate a classic war would refuse lands on the wider field');
-  const offEdge = applyPlayerAction(setup(200), { type: 'move', dx: 50, dy: 0 });
+  const offEdge = applyPlayerAction(setup(300), { type: 'move', dx: 50, dy: 0 });
   assert.match(offEdge.messages.join(' '), /leave the tactical map/i, 'movement still stops at the field edge');
 });
 
 test('engine reach scales with the field, so a wide war closes at the same pace', () => {
   const flagship = getShip(createGame({ seed: 'scale-move' }), 'fed-flagship');
   assert.equal(engineCapacity(flagship), 50, 'the calibrated reach on the classic 100-unit field');
-  assert.equal(engineCapacity(flagship, REIMAGINED_GRID_SIZE), 120, 'the same hull crosses the 240-unit field in the same number of turns');
+  assert.equal(engineCapacity(flagship, REIMAGINED_GRID_SIZE), 160, 'the same hull crosses the 320-unit field in the same number of turns');
 });
 
 // --- Round 22b: the directed tractor beam (Reimagined) ---
@@ -2343,7 +2343,9 @@ test('doctrine power profiles never touch a classic or extended war', () => {
 });
 
 test('a docked hull may take a reactor upgrade in a Reimagined war', () => {
-  const game = withShips(createGame({ seed: 'reactor-refit', reimagined: true }), (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 124, y: 120 } : ship));
+  const base = createGame({ seed: 'reactor-refit', reimagined: true });
+  const dock = getShip(base, 'xanadu');
+  const game = withShips(base, (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: dock.x + 4, y: dock.y } : ship));
   const before = getShip(game, 'fed-cruiser-1').systems.reactor;
   const out = applyPlayerAction(game, { type: 'refit', shipId: 'fed-cruiser-1', kind: 'reactor' });
   assert.equal(getShip(out.game, 'fed-cruiser-1').systems.reactor, before + 1, 'the upgrade adds a reactor unit');
@@ -2358,8 +2360,10 @@ test('a reactor upgrade is refused outside a Reimagined war', () => {
 });
 
 test('the dockyard repairs a damaged reactor (Reimagined)', () => {
-  const game = withShips(createGame({ seed: 'reactor-repair', reimagined: true }), (ship) => (ship.id === 'fed-cruiser-1'
-    ? { ...ship, x: 124, y: 120, systems: { ...ship.systems, reactor: 1 } }
+  const base = createGame({ seed: 'reactor-repair', reimagined: true });
+  const dock = getShip(base, 'xanadu');
+  const game = withShips(base, (ship) => (ship.id === 'fed-cruiser-1'
+    ? { ...ship, x: dock.x + 4, y: dock.y, systems: { ...ship.systems, reactor: 1 } }
     : ship));
   const repaired = getShip(resolveDocking(game).game, 'fed-cruiser-1');
   assert.equal(repaired.systems.reactor, 2, 'the most-damaged subsystem — the reactor — gains a unit');
@@ -3114,7 +3118,7 @@ test('an under-manned prize runs its engines and guns at half until crewed up', 
   assert.equal(powerEffect(out.game, prize, 'engines'), PRIZE.manningPenalty);
   assert.equal(powerEffect(out.game, prize, 'weapons'), PRIZE.manningPenalty);
   assert.equal(powerEffect(out.game, prize, 'sensors'), 1, 'a prize crew can still see');
-  assert.equal(engineCapacity(prize, out.game.gridSize, powerEffect(out.game, prize, 'engines')), 48, 'half the calibrated reach');
+  assert.equal(engineCapacity(prize, out.game.gridSize, powerEffect(out.game, prize, 'engines')), 4 * 10 * (out.game.gridSize / GRID_SIZE) * PRIZE.manningPenalty, 'half the scaled reach');
   const crewed = withShips(out.game, (ship) => (ship.id === 'axis-cruiser-1'
     ? { ...ship, crew: Math.ceil(crewCapacity(ship) * PRIZE.manningFloor) }
     : ship));
@@ -3305,7 +3309,7 @@ test('the interceptor is a glass raider: fastest hull afloat, light guns, thin s
   assert.equal(systemUnits(ship, 'phasers'), 3);
   assert.equal(systemUnits(ship, 'photons'), 1);
   const reach = engineCapacity(ship, game.gridSize, 1);
-  assert.equal(reach, 168, 'seven engine units across the wide field');
+  assert.equal(reach, 224, 'seven engine units across the wide field');
   assert.ok(reach > engineCapacity(getShip(game, 'fed-flagship'), game.gridSize, 1), 'outruns the flagship');
   assert.ok(reach > engineCapacity(getShip(game, 'fed-scout'), game.gridSize, 1), 'and the scout it hunts beside');
 });
@@ -3383,7 +3387,7 @@ test('the artillery trades speed for the hardest warship volley on the field', (
   assert.equal(crewCapacity(ship), 120);
   assert.equal(systemUnits(ship, 'phasers'), 6);
   assert.equal(systemUnits(ship, 'photons'), 2);
-  assert.equal(engineCapacity(ship, game.gridSize, 1), 48, 'two engine units — it holds the edge, it does not chase');
+  assert.equal(engineCapacity(ship, game.gridSize, 1), 64, 'two engine units — it holds the edge, it does not chase');
   assert.ok(engineCapacity(ship, game.gridSize, 1) < engineCapacity(getShip(game, 'fed-interceptor'), game.gridSize, 1));
   // Nominal phaser volley: WEAPONS.phasers is 12 + 4 per unit — 36 for six banks,
   // ahead of every warship afloat and matched only by the starbase's own banks,
@@ -3452,7 +3456,7 @@ test('the carrier is the prize fleet\'s tender: a starbase\'s boarding arm that 
   assert.equal(sensorRange(game, ship, 'transporter'), 40, 'four units reach 40 — farther than anything else that moves');
   assert.ok(sensorRange(game, ship, 'transporter') > sensorRange(game, getShip(game, 'fed-flagship'), 'transporter'));
   assert.equal(systemUnits(ship, 'tractor'), 4, 'and a starbase\'s tow, for hauling prizes and wreck-rams');
-  assert.equal(engineCapacity(ship, game.gridSize, 1), 72, 'three engines — a tender, not a chaser');
+  assert.equal(engineCapacity(ship, game.gridSize, 1), 96, 'three engines — a tender, not a chaser');
   assert.ok(systemUnits(ship, 'phasers') < systemUnits(getShip(game, 'fed-artillery'), 'phasers'),
     'its own guns are modest: it projects force through what it carries');
 });
@@ -3837,7 +3841,7 @@ test('the drone is a fast, fragile, uncrewed gunboat that runs a real reactor', 
   assert.equal(reactorOutput(drone), POWER.reactor.Drone * POWER.perUnit);
   assert.equal(powerEffect(game, drone, 'engines'), 1, 'the default allocation runs every sink at 1.0x');
   assert.equal(powerEffect(game, drone, 'weapons'), 1);
-  assert.equal(engineCapacity(drone, game.gridSize, 1), 144, 'six engines across the wide field — interceptor speed');
+  assert.equal(engineCapacity(drone, game.gridSize, 1), 192, 'six engines across the wide field — interceptor speed');
 });
 
 test('only a Reimagined carrier with drones aboard can launch', () => {
@@ -4021,9 +4025,10 @@ test('a drone neither holds nor contests a relay node, and never docks', () => {
   assert.equal(held.game.held?.[relay.id], undefined, 'an unmanned hull cannot work the node');
   // The dockyard is a crew story: the drone beside Xanadu gets nothing, while the
   // hull parked next to it repairs as always.
+  const xanadu = getShip(wing, 'xanadu');
   const docked = withShips(wing, (ship) => {
-    if (ship.id === 'fed-carrier-drone-1') return { ...ship, x: 120, y: 120, shields: 10 };
-    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 121, y: 120, shields: 50 };
+    if (ship.id === 'fed-carrier-drone-1') return { ...ship, x: xanadu.x, y: xanadu.y, shields: 10 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: xanadu.x + 1, y: xanadu.y, shields: 50 };
     return ship;
   });
   assert.equal(dockedAt(docked, getShip(docked, 'fed-carrier-drone-1')), null);
@@ -4439,9 +4444,10 @@ test('the computer phase resolves an AI ion volley', () => {
 
 test('the dockyard rebuilds an ion-stripped hull back to its class complement', () => {
   const game = ionWar('ion-dockyard');
+  const dock = getShip(game, 'xanadu');
   const stripped = withShips(game, (ship) => {
     if (ship.id !== 'fed-artillery') return ship;
-    return { ...ship, x: 120, y: 120, systems: { ...ship.systems, ion: 0 } };
+    return { ...ship, x: dock.x, y: dock.y, systems: { ...ship.systems, ion: 0 } };
   });
   assert.equal(templateSystems(getShip(stripped, 'fed-artillery')).ion, ION.carry.Artillery,
     'the ion complement is part of the class, so the dockyard sees it');
@@ -4619,8 +4625,9 @@ test('spread never touches a classic or extended war, and old saves tolerate its
 
 test('the dockyard rebuilds spread tubes back to the class complement', () => {
   const game = spreadWar('spread-dockyard');
+  const dock = getShip(game, 'xanadu');
   const stripped = withShips(game, (ship) => (ship.id === 'fed-flagship'
-    ? { ...ship, x: 120, y: 120, systems: { ...ship.systems, spread: 0 } }
+    ? { ...ship, x: dock.x, y: dock.y, systems: { ...ship.systems, spread: 0 } }
     : ship));
   assert.equal(templateSystems(getShip(stripped, 'fed-flagship')).spread, SPREAD.carry['Battle cruiser']);
   const out = resolveDocking(stripped);
@@ -5518,4 +5525,26 @@ test('encounters ride a whole war: arrivals, departures, and the parity of the u
     classic = resolveComputerTurns(resolveAutopilotTurn(classic).game);
   }
   assert.ok(classic.ships.every((ship) => !ship.encounter), 'a classic war meets nobody');
+});
+
+test('drone arrival avoidance nudges stacked landings to a free point, Reimagined only', () => {
+  const base = createGame({ seed: 'avoid', reimagined: true });
+  const game = withShips(base, (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 110, y: 100 };
+    return { ...ship, x: 250, y: 250 };
+  });
+  const actor = getShip(game, 'fed-flagship');
+  const drone = { ...actor, id: 'avoid-drone', className: 'Drone' };
+  assert.deepEqual(avoidStackedArrival(game, drone, 5, 5), { dx: 5, dy: 5 }, 'a free arrival is untouched');
+  const nudged = avoidStackedArrival(game, drone, 10, 0);
+  assert.notDeepEqual(nudged, { dx: 10, dy: 0 }, 'a stacked arrival moves');
+  const arrival = { x: drone.x + nudged.dx, y: drone.y + nudged.dy };
+  assert.ok(game.ships.every((other) => distance(arrival, other) >= 1), 'the nudged landing stacks on nobody');
+  assert.deepEqual(avoidStackedArrival(game, drone, 0, 0), { dx: 0, dy: 0 }, 'the sit-and-ram hold stays');
+  const lineHull = avoidStackedArrival(game, actor, 10, 0);
+  assert.deepEqual(lineHull, { dx: 10, dy: 0 }, 'line hulls keep the calibrated clumsy pursuit');
+  const classic = createGame({ seed: 'avoid' });
+  const classicDrone = { ...getShip(classic, 'fed-flagship'), className: 'Drone' };
+  assert.deepEqual(avoidStackedArrival(classic, classicDrone, 10, 0), { dx: 10, dy: 0 }, 'a classic war never reads it');
 });

@@ -8,6 +8,7 @@ import {
   clampCamera,
   fieldTransform,
   makeCamera,
+  maxZoomFor,
   panBy,
   viewportFromWorld,
   worldFromViewport,
@@ -37,9 +38,12 @@ test('the camera window never slides off the field', () => {
   assert.ok(win.minY + win.size <= REIMAGINED_GRID_SIZE, `the view stays inside the field`);
 });
 
-test('zoom is clamped to its range', () => {
-  assert.equal(clampCamera({ cx: 120, cy: 120, zoom: 99 }, REIMAGINED_GRID_SIZE).zoom, MAX_ZOOM);
+test('zoom is clamped to its range, and the tightest view stays ~40 units on any field', () => {
+  assert.equal(clampCamera({ cx: 120, cy: 120, zoom: 99 }, REIMAGINED_GRID_SIZE).zoom, maxZoomFor(REIMAGINED_GRID_SIZE));
   assert.equal(clampCamera({ cx: 120, cy: 120, zoom: 0.2 }, REIMAGINED_GRID_SIZE).zoom, 1);
+  assert.equal(maxZoomFor(GRID_SIZE), MAX_ZOOM, 'a classic field keeps the old cap');
+  assert.equal(maxZoomFor(REIMAGINED_GRID_SIZE), 8);
+  assert.equal(cameraWindow(REIMAGINED_GRID_SIZE, { cx: 160, cy: 160, zoom: maxZoomFor(REIMAGINED_GRID_SIZE) }).size, 40);
 });
 
 test('viewport and world projections are exact inverses', () => {
@@ -61,8 +65,8 @@ test('the camera center projects to the middle of the viewport', () => {
 test('the field transform is identity for a classic war and slides a zoomed one', () => {
   assert.equal(fieldTransform(cameraWindow(GRID_SIZE, makeCamera(GRID_SIZE))), 'translate(0%, 0%) scale(1)');
   const win = cameraWindow(REIMAGINED_GRID_SIZE, { cx: 120, cy: 120, zoom: 2 });
-  // minX 60 of 240 at zoom 2 slides the layer by -(60/240)*2*100 = -50%.
-  assert.equal(fieldTransform(win), 'translate(-50%, -50%) scale(2)');
+  // minX 40 of 320 at zoom 2 slides the layer by -(40/320)*2*100 = -25%.
+  assert.equal(fieldTransform(win), 'translate(-25%, -25%) scale(2)');
 });
 
 test('zooming toward a cursor keeps that world point under the cursor', () => {

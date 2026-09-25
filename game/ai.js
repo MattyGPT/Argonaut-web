@@ -1,4 +1,4 @@
-import { AI_PURSUIT, DRONE, ENCOUNTERS, FLEET_ORDER_TUNING, GRID_SIZE, PERSONALITIES, RANGES, SPREAD } from './constants.js';
+import { AI_PURSUIT, DRONE, ENCOUNTERS, FLEET_ORDER_TUNING, GRID_SIZE, PERSONALITIES, RANGES, REIMAGINED_SUICIDE_MIN_ENEMIES, SPREAD } from './constants.js';
 import { canLaunchDrones, flushShields, tractorLock } from './actions.js';
 import { createRng } from './rng.js';
 import {
@@ -260,7 +260,10 @@ const suicideRun = (game, actor, doctrine, enemies) => {
   const blast = blastRadius(actor, game);
   const inside = (list) => list.filter((ship) => distance(actor, ship) <= blast).length;
   const friendlies = game.ships.filter((ship) => isActive(ship) && ship.faction === actor.faction && ship.id !== actor.id);
-  if (inside(enemies) < Math.max(doctrine.suicideMinEnemies, inside(friendlies) + 1)) return null;
+  // A Reimagined war's clusters stand denser since drone wing-stacking rams
+  // ended (27c retune), so its last stand demands one more enemy in the blast.
+  const minEnemies = game.reimagined ? REIMAGINED_SUICIDE_MIN_ENEMIES : doctrine.suicideMinEnemies;
+  if (inside(enemies) < Math.max(minEnemies, inside(friendlies) + 1)) return null;
   return { type: 'self-destruct' };
 };
 
@@ -434,7 +437,7 @@ const merchantAction = (game, actor) => {
   return { type: 'pass' };
 };
 
-export const chooseAiAction = (game, shipId) => {
+const chooseAiActionInner = (game, shipId) => {
   const actor = getShip(game, shipId);
   if (!isActive(actor)) return { type: 'pass' };
 
@@ -492,4 +495,53 @@ export const chooseAiAction = (game, shipId) => {
     };
   }
   return { type: 'pass' };
+};
+
+/**
+ * Reimagined arrival avoidance (play-test retune, 2026-09-25): autopilot moves
+ * converge on integer points — a drone wing intercepting one threat, escorts
+ * re-posting around a moving carrier, a fleet concentrating on a shared target,
+ * a clumsy pursuit holding position on top of its quarry — and two hulls that
+ * end a stardate within a unit of each other collide and die regardless of
+ * alliance. Measured on the harness at the 240-unit field: ~20 collisions per
+ * war, 44% of them drones. Widening the field does not help (engine capacity
+ * scales with it: 22.1 per war at 320, 22.8 at 400), so the fix lands at the
+ * arrival: nudge the autopilot's landing to the nearest free integer point
+ * inside its engine capacity. The designed rams are untouched — tractor slams,
+ * hyperspace landings, and the player's own maneuvers still collide, and a
+ * classic or extended war never reads this.
+ */
+export const avoidStackedArrival = (game, actor, dx, dy) => {
+  if (!game.reimagined || !actor) return { dx, dy };
+  // A zero move on top of a quarry is the autopilot's deliberate sit-and-ram —
+  // clumsy attrition that thins firing clusters; avoiding it lets clusters
+  // stay dense enough for last-stand massacres (measured 19.2% 4+-hull blasts).
+  if (dx === 0 && dy === 0) return { dx, dy };
+  if (!isDrone(actor)) return { dx, dy };
+  const grid = game.gridSize ?? GRID_SIZE;
+  const arrival = { x: actor.x + dx, y: actor.y + dy };
+  const stacked = (point) => game.ships
+    .some((other) => other.id !== actor.id && isActive(other) && distance(point, other) < 1);
+  if (!stacked(arrival)) return { dx, dy };
+  const capacity = engineCapacity(actor, grid, powerEffect(game, actor, 'engines'));
+  for (let radius = 1; radius <= 3; radius += 1) {
+    for (let angle = 0; angle < 8; angle += 1) {
+      const candidate = {
+        x: arrival.x + Math.round(Math.cos((angle * Math.PI) / 4) * radius),
+        y: arrival.y + Math.round(Math.sin((angle * Math.PI) / 4) * radius),
+      };
+      const step = { dx: candidate.x - actor.x, dy: candidate.y - actor.y };
+      if (candidate.x < 0 || candidate.y < 0 || candidate.x > grid || candidate.y > grid) continue;
+      if (Math.hypot(step.dx, step.dy) > capacity) continue;
+      if (!stacked(candidate)) return step;
+    }
+  }
+  return { dx, dy };
+};
+
+export const chooseAiAction = (game, shipId) => {
+  const action = chooseAiActionInner(game, shipId);
+  if (action?.type !== 'move') return action;
+  const adjusted = avoidStackedArrival(game, getShip(game, shipId), action.dx, action.dy);
+  return adjusted.dx === action.dx && adjusted.dy === action.dy ? action : { ...action, ...adjusted };
 };
