@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FACTIONS, SECTOR, SHIP_TEMPLATES } from '../game/constants.js';
-import { battleSeed, fleetRecordsFrom, generateSector, homeNodeOf, linksFrom, nodeById, objectiveNodeOf } from '../game/campaign.js';
+import { abandonEngagement, autoResolveNode, battleSeed, carriedFleetFrom, createCampaign, engageableHere, fleetRecordsFrom, generateSector, homeNodeOf, linksFrom, nodeById, objectiveNodeOf, resolveNodeBattle, startNodeBattle, travelTo } from '../game/campaign.js';
 import { createGame, defaultLoadout, spawnDrone } from '../game/state.js';
 
 const ENEMY_FACTIONS = Object.values(FACTIONS).filter((faction) => faction !== FACTIONS.FEDERATION);
@@ -194,4 +194,246 @@ test('a classic war is untouched by the campaign layer existing', () => {
   assert.equal(classic.reimagined, false);
   assert.equal(classic.loadout, null);
   assert.deepEqual(fleetRecordsFrom(classic).length, 5, 'records can be extracted from any war, but nothing in a classic war reads them');
+});
+
+// --- Round 26b: the campaign container, veteran injection, and node battles ---
+
+/** A campaign standing on an enemy-held first-column node, ready to engage. */
+const campaignAtEnemy = (seeds = ['nb-1', 'nb-2', 'nb-3', 'nb-4', 'nb-5', 'nb-6']) => {
+  for (const seed of seeds) {
+    const campaign = createCampaign({ seed });
+    const home = nodeById(campaign.sector, 'home');
+    const nodeId = home.next.find((id) => {
+      const node = nodeById(campaign.sector, id);
+      return node.owner && node.owner !== FACTIONS.FEDERATION;
+    });
+    if (nodeId) return { campaign: travelTo(campaign, nodeId), nodeId };
+  }
+  throw new Error('no seed produced an enemy-held first-column node');
+};
+
+test('a campaign musters the full default fleet at home, deterministically', () => {
+  const a = createCampaign({ seed: 'camp-det' });
+  const b = createCampaign({ seed: 'camp-det' });
+  assert.deepEqual(a, b);
+  assert.equal(a.currentNode, 'home');
+  assert.equal(a.turn, 0);
+  assert.equal(a.credits, 0);
+  assert.equal(a.status, 'active');
+  assert.equal(a.battle, null);
+  assert.equal(a.fleet.length, 8, 'the default loadout fields eight ships of the line');
+  assert.ok(a.fleet.every((record) => record.id.startsWith('vet-')));
+  assert.ok(a.fleet.some((record) => record.id === 'vet-fed-flagship'));
+  assert.ok(a.fleet.every((record) => record.shields > 0 && record.crew > 0 && record.captain));
+});
+
+test('the muster honors a custom loadout', () => {
+  const campaign = createCampaign({
+    seed: 'muster-small',
+    loadout: { ...defaultLoadout(), fleets: { ...defaultLoadout().fleets, [FACTIONS.FEDERATION]: { 'battle-cruiser': 1, cruiser: 1 } } },
+  });
+  assert.equal(campaign.fleet.length, 2);
+  assert.deepEqual(campaign.fleet.map((record) => record.kind).sort(), ['battle-cruiser', 'cruiser']);
+});
+
+test('carried ids never collide, even re-capturing the same garrison slot', () => {
+  const makeFed = (id) => ({ id, name: id, faction: FACTIONS.FEDERATION, className: 'Cruiser', status: 'active', shields: 50, crew: 50, systems: {}, captain: 'Someone', kills: 0, shotsFired: 0 });
+  const records = carriedFleetFrom({ ships: [makeFed('vet-bloc-cruiser-1'), makeFed('bloc-cruiser-1'), makeFed('bloc-cruiser-1')] });
+  assert.deepEqual(records.map((record) => record.id), ['vet-bloc-cruiser-1', 'vet-bloc-cruiser-1-2', 'vet-bloc-cruiser-1-3']);
+});
+
+test('veterans field as wounded hulls with their people, prizes, and arcs intact', () => {
+  const campaign = createCampaign({ seed: 'inject' });
+  const wounded = campaign.fleet.map((record, index) => (index === 0
+    ? { ...record, shields: 12, crew: 9, kills: 3, shotsFired: 4, systems: { ...record.systems, engines: 1 }, prize: { byFaction: FACTIONS.FEDERATION, turn: 2 } }
+    : record));
+  const game = createGame({
+    seed: 'inject:battle:test',
+    reimagined: true,
+    loadout: { factions: [FACTIONS.FEDERATION, FACTIONS.AXIS], budgets: { [FACTIONS.AXIS]: 10 }, veterans: wounded, xanadu: false },
+  });
+  const hull = game.ships.find((ship) => ship.id === wounded[0].id);
+  assert.equal(hull.faction, FACTIONS.FEDERATION);
+  assert.equal(hull.shields, 12);
+  assert.equal(hull.crew, 9);
+  assert.equal(hull.kills, 3);
+  assert.equal(hull.shotsFired, 4);
+  assert.equal(hull.systems.engines, 1);
+  assert.equal(hull.captain, wounded[0].captain, 'the captain carries, not a fresh deal');
+  assert.deepEqual(hull.prize, { byFaction: FACTIONS.FEDERATION, turn: 2 });
+  assert.equal(Object.values(hull.arcs).reduce((sum, value) => sum + value, 0), 12, 'arcs re-split to the carried shields');
+  assert.equal(game.ships.filter((ship) => ship.id === wounded[0].id).length, 1);
+  assert.ok(!game.ships.some((ship) => ship.id === 'xanadu'), 'a field battle has no starbase');
+  const factions = [...new Set(game.ships.map((ship) => ship.faction))].sort();
+  assert.deepEqual(factions, [FACTIONS.FEDERATION, FACTIONS.AXIS].sort(), 'a node battle is a two-faction war');
+  const strongest = [...wounded].sort((a, b) => (b.shields + b.crew) - (a.shields + a.crew))[0];
+  assert.equal(game.playerShipId, strongest.id, 'the conn goes to the strongest carried hull');
+});
+
+test('absent veterans, createGame is untouched — including the captain deal and the conn', () => {
+  const plain = createGame({ seed: 'no-vets', reimagined: true, loadout: defaultLoadout() });
+  const emptyVets = createGame({ seed: 'no-vets', reimagined: true, loadout: { ...defaultLoadout(), veterans: [] } });
+  assert.deepEqual(emptyVets.ships, plain.ships);
+  assert.deepEqual(emptyVets.loadout, plain.loadout);
+  assert.equal(emptyVets.playerShipId, 'fed-flagship');
+  assert.equal(plain.playerShipId, 'fed-flagship');
+  assert.ok(plain.ships.every((ship) => ship.captain));
+});
+
+test('travel moves only along forward links and spends no campaign turn', () => {
+  const campaign = createCampaign({ seed: 'travel' });
+  const home = nodeById(campaign.sector, 'home');
+  const moved = travelTo(campaign, home.next[0]);
+  assert.equal(moved.currentNode, home.next[0]);
+  assert.equal(moved.turn, 0);
+  assert.equal(travelTo(campaign, 'objective').currentNode, 'home', 'a non-adjacent hop is refused');
+  assert.equal(travelTo(campaign, 'home').currentNode, 'home');
+  assert.equal(travelTo(moved, 'home').currentNode, moved.currentNode, 'the corridor never doubles back');
+});
+
+test('a node battle is a full seeded two-faction war at the fleet\'s node', () => {
+  const { campaign, nodeId } = campaignAtEnemy();
+  assert.ok(engageableHere(campaign));
+  const started = startNodeBattle(campaign, nodeId);
+  assert.ok(started.battle);
+  const { game } = started.battle;
+  assert.equal(game.seed, battleSeed(campaign.seed, nodeId));
+  assert.equal(game.reimagined, true);
+  assert.equal(game.gridSize, 240);
+  const node = nodeById(campaign.sector, nodeId);
+  assert.equal(game.loadout.budgets[node.owner], node.budget);
+  const fedIds = game.ships.filter((ship) => ship.faction === FACTIONS.FEDERATION).map((ship) => ship.id).sort();
+  assert.deepEqual(fedIds, campaign.fleet.map((record) => record.id).sort());
+  assert.ok(game.ships.some((ship) => ship.id.endsWith('-flagship') && ship.faction === node.owner), 'the garrison fields its flagship');
+  assert.equal(startNodeBattle(campaign, homeOfNext(campaign, nodeId)).battle, null, 'a battle only opens at the node the fleet stands on');
+  assert.equal(startNodeBattle(started, nodeId), started, 'no second battle while one is open');
+});
+
+const homeOfNext = (campaign, nodeId) => nodeById(campaign.sector, nodeId).next[0] ?? 'objective';
+
+test('a federation win captures the node, pays credits, and carries the wounded out', () => {
+  const { campaign, nodeId } = campaignAtEnemy();
+  const started = startNodeBattle(campaign, nodeId);
+  const game = {
+    ...started.battle.game,
+    outcome: { kind: 'federation-win', message: 'The Federation has triumphed.' },
+    ships: started.battle.game.ships.map((ship) => {
+      if (ship.faction === FACTIONS.FEDERATION && ship.id === 'vet-fed-flagship') return { ...ship, shields: 25 };
+      return ship.faction === FACTIONS.FEDERATION ? ship : { ...ship, status: 'destroyed' };
+    }),
+  };
+  const resolved = resolveNodeBattle({ ...started, battle: { ...started.battle, game } });
+  const node = nodeById(resolved.sector, nodeId);
+  assert.equal(node.owner, FACTIONS.FEDERATION, 'ownership flips');
+  assert.equal(resolved.currentNode, nodeId);
+  assert.equal(resolved.turn, campaign.turn + 1);
+  assert.equal(resolved.battle, null);
+  assert.equal(resolved.status, 'active');
+  assert.equal(resolved.credits, SECTOR.captureCredits[node.type]);
+  const flagship = resolved.fleet.find((record) => record.id === 'vet-fed-flagship');
+  assert.equal(flagship.shields, 25, 'damage carries into the fleet records');
+  assert.equal(resolved.results[0].outcome, 'captured');
+  assert.equal(resolved.results[0].kind, 'federation-win');
+});
+
+test('a hopeless draw or timeout is a retreat: the node stands and the fleet carries out', () => {
+  for (const kind of ['hopeless-draw', 'timeout']) {
+    const { campaign, nodeId } = campaignAtEnemy();
+    const started = startNodeBattle(campaign, nodeId);
+    const game = kind === 'timeout'
+      ? started.battle.game
+      : { ...started.battle.game, outcome: { kind: 'hopeless-draw', message: '' } };
+    const resolved = resolveNodeBattle({ ...started, battle: { ...started.battle, game } });
+    assert.equal(resolved.results[0].outcome, 'retreated');
+    assert.equal(nodeById(resolved.sector, nodeId).owner, nodeById(campaign.sector, nodeId).owner, 'the node stays enemy-held');
+    assert.equal(resolved.credits, 0);
+    assert.equal(resolved.status, 'active');
+    assert.ok(resolved.fleet.length > 0);
+  }
+});
+
+test('losing the whole fleet is a campaign defeat', () => {
+  const { campaign, nodeId } = campaignAtEnemy();
+  const started = startNodeBattle(campaign, nodeId);
+  const game = {
+    ...started.battle.game,
+    outcome: { kind: 'alliance-win', message: '' },
+    ships: started.battle.game.ships.map((ship) => (ship.faction === FACTIONS.FEDERATION ? { ...ship, status: 'destroyed' } : ship)),
+  };
+  const resolved = resolveNodeBattle({ ...started, battle: { ...started.battle, game } });
+  assert.equal(resolved.status, 'defeat');
+  assert.equal(resolved.fleet.length, 0);
+  assert.equal(resolved.results[0].outcome, 'lost');
+  assert.equal(travelTo(resolved, 'objective'), resolved, 'a concluded campaign takes no further action');
+});
+
+test('abandoning an engagement cedes the node and carries the fleet out as it stands', () => {
+  const { campaign, nodeId } = campaignAtEnemy();
+  const started = startNodeBattle(campaign, nodeId);
+  const resolved = abandonEngagement(started);
+  assert.equal(resolved.results[0].outcome, 'abandoned');
+  assert.equal(nodeById(resolved.sector, nodeId).owner, nodeById(campaign.sector, nodeId).owner);
+  assert.equal(resolved.turn, campaign.turn + 1);
+  assert.ok(resolved.fleet.length > 0);
+  assert.equal(resolved.status, 'active');
+  assert.equal(engageableHere(resolved), true, 'the fleet may stand and fight the same node again');
+  assert.equal(abandonEngagement(campaign), campaign, 'nothing to abandon without an open battle');
+});
+
+test('capturing the enemy home node wins the campaign', () => {
+  const campaign = createCampaign({ seed: 'victory' });
+  const node = objectiveNodeOf(campaign.sector);
+  const game = createGame({
+    seed: battleSeed(campaign.seed, node.id),
+    reimagined: true,
+    loadout: { factions: [FACTIONS.FEDERATION, node.owner], budgets: { [node.owner]: node.budget }, veterans: campaign.fleet, xanadu: false },
+  });
+  const staged = { ...campaign, currentNode: node.id, battle: { nodeId: node.id, player: false, game: { ...game, outcome: { kind: 'federation-win', message: '' } } } };
+  const resolved = resolveNodeBattle(staged);
+  assert.equal(resolved.status, 'victory');
+  assert.equal(resolved.credits, SECTOR.captureCredits.home);
+  assert.equal(nodeById(resolved.sector, node.id).owner, FACTIONS.FEDERATION);
+});
+
+test('an auto-resolved node fight plays the full headless war and maps its outcome', () => {
+  const { campaign, nodeId } = campaignAtEnemy();
+  const resolved = autoResolveNode(campaign, nodeId, { maxStardates: 300 });
+  assert.equal(resolved.battle, null);
+  assert.equal(resolved.turn, campaign.turn + 1);
+  assert.ok(['captured', 'lost', 'retreated'].includes(resolved.results[0].outcome));
+  assert.ok(resolved.results[0].stardates >= 1);
+  if (resolved.status !== 'defeat') assert.ok(resolved.fleet.length > 0);
+});
+
+test('a whole auto-resolved campaign is deterministic end to end', () => {
+  const run = (seed) => {
+    let campaign = createCampaign({ seed });
+    const tried = new Set();
+    while (campaign.status === 'active' && campaign.turn < 20) {
+      const node = nodeById(campaign.sector, campaign.currentNode);
+      const enemy = node.owner && node.owner !== FACTIONS.FEDERATION;
+      if (enemy && !tried.has(node.id)) {
+        tried.add(node.id);
+        campaign = autoResolveNode(campaign, node.id, { maxStardates: 300 });
+        continue;
+      }
+      const next = node.next[0];
+      if (!next) break;
+      campaign = travelTo(campaign, next);
+    }
+    return campaign;
+  };
+  const a = run('campaign-e2e');
+  const b = run('campaign-e2e');
+  assert.deepEqual(a, b, 'the same seed replays the same campaign');
+  assert.ok(a.results.length >= 1, 'the walk fought at least one battle');
+});
+
+test('a campaign survives a JSON save round-trip and plays on', () => {
+  const { campaign, nodeId } = campaignAtEnemy();
+  const saved = JSON.parse(JSON.stringify(campaign));
+  assert.deepEqual(saved, campaign);
+  const started = startNodeBattle(saved, nodeId);
+  assert.ok(started.battle, 'the restored campaign engages');
+  assert.equal(started.battle.game.seed, battleSeed(campaign.seed, nodeId));
 });

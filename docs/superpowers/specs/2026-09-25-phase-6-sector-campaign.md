@@ -226,6 +226,23 @@ work flagged for the manual play-test pass.
 - **26c**: render smoke tests where they exist (report/legend patterns);
   everything else flagged for the manual play-test pass.
 
+### Shipped & measured (26a PR #64, 26b PR #65, 2026-09-25)
+
+529 tests green (+27 in `test/campaign.test.js`): everything above except the
+26c UI rows and the app-level old-save check (the v1 `loadSave` path is
+literally untouched; the campaign key is wired in 26c). One implementation
+note recorded here because it was not in the decisions: carried hull ids live
+under a `vet-` namespace with collision suffixes (`carriedFleetFrom`), because
+garrison ids are faction-prefixed and repeat across battles — a prize
+re-captured from the same garrison slot would otherwise duplicate an id.
+**Harness re-run at 26b (where `createGame` changed), digit-for-digit
+identical to the round-24 baseline in all three modes** — classic mean
+22.9/median 22; extended Fed 32.8 / Axis 29.2 / Cabal 20.8 / Bloc 16.8;
+reimagined median 60 (mean 105.3), volleys/kill 16.5, prizes 10.05, hopeless
+draws 15%, timeouts 5%, 4+-hull blasts 5.2%, winners Fed 29.2 / Bloc 21.6 /
+Axis 14.4 / Cabal 14.4 — so no CALIBRATION row changes; the veterans path is
+never taken by a single war.
+
 ### Seams round 26 leaves
 
 - **27a dockyard/economy**: `credits` exists on the container from 26b
@@ -274,7 +291,7 @@ work flagged for the manual play-test pass.
 | Round | Chunk | Ships | Tested by | Status |
 | --- | --- | --- | --- | --- |
 | 26a | Campaign data layer | `SECTOR` constants; `game/campaign.js` — `generateSector` on `${seed}:sector`, `battleSeed`, `fleetRecordsFrom`, graph readers | Gen determinism + shape/link invariants; record extraction; no stream shift | ✅ PR #64 |
-| 26b | Travel + node battles | Campaign container; `loadout.veterans` injection; per-battle seeds; headless auto-resolve; outcome mapping; travel; abandon; campaign save | Whole-campaign determinism; injection parity; outcome mapping; old saves load; harness unmoved | — |
+| 26b | Travel + node battles | Campaign container; `loadout.veterans` injection; per-battle seeds; headless auto-resolve; outcome mapping; travel; abandon; campaign save | Whole-campaign determinism; injection parity; outcome mapping; old saves load; harness unmoved | ✅ PR #65 |
 | 26c | Sector UI | Star-map screen; New game option; battle transitions; report stub; save wiring | Render smokes; manual play-test pass | — |
 | 27a | Persistence/economy | Credits; dockyard between battles; repairs/refits/crew/hulls/drones | Fleet continuity; purchases; determinism | — |
 | 27b | Campaign win/lose | Enemy strategic layer; home-defense battle; victory/defeat; campaign report | Campaign win/lose both ways; report; determinism | — |

@@ -401,6 +401,56 @@ const createFleet = (faction, rng, regional, occupied, gridSize, reimagined, spe
 });
 
 /**
+ * The recording-only fleet spec a carried fleet fields (sector campaign, round
+ * 26b): class → count straight off the records. It never feeds the roster or
+ * `normalizeFleetSpec` — a carried fleet is WON, not budgeted (round 17's rule),
+ * so prizes may exceed any budget and a captured second battle cruiser is legal.
+ */
+const specFromRecords = (records) => records.reduce((spec, record) => ({ ...spec, [record.kind]: (spec[record.kind] ?? 0) + 1 }), {});
+
+/**
+ * The player's carried fleet (sector campaign, round 26b). A node battle fields
+ * the Federation from fleet records instead of a spec: each record builds a hull
+ * through the ordinary `createShip` — so the class template, reactor, ion/spread
+ * carries, and default arcs are all constructed fresh — and then the carried
+ * wounds and history override it (shields, crew, every subsystem unit, arcs,
+ * captain, kills, shots fired, the prize record, a carrier's spent complement).
+ * Placement draws on the same seeded stream, in record order. Shields clamp to
+ * the template pool, a crewed hull keeps at least 1 crew, and carried arcs must
+ * sum to the carried shields or they are re-split (the round-23 invariant).
+ * Absent records, no war reads any of this — see `createGame`'s veterans path.
+ */
+const createVeteranFleet = (records, rng, regional, occupied, gridSize) => records.map((record) => {
+  const position = randomPosition(rng, FACTIONS.FEDERATION, regional, occupied, gridSize);
+  const hull = createShip({
+    id: record.id,
+    name: record.name,
+    faction: FACTIONS.FEDERATION,
+    kind: record.kind,
+    reimagined: true,
+    ...position,
+  });
+  const shields = Math.max(0, Math.min(Math.round(record.shields ?? hull.shields), hull.shields));
+  const crew = Math.max(1, Math.min(Math.round(record.crew ?? hull.crew), hull.crew));
+  const carriedArcs = record.arcs
+    && Object.values(record.arcs).reduce((sum, value) => sum + value, 0) === shields
+    ? { ...record.arcs }
+    : null;
+  return {
+    ...hull,
+    shields,
+    crew,
+    systems: { ...hull.systems, ...record.systems },
+    kills: record.kills ?? 0,
+    shotsFired: record.shotsFired ?? 0,
+    ...(hull.arcs ? { arcs: carriedArcs ?? arcSplit(shields) } : {}),
+    ...(record.captain ? { captain: record.captain } : {}),
+    ...(record.prize ? { prize: { ...record.prize } } : {}),
+    ...(record.dronesLaunched ? { dronesLaunched: true } : {}),
+  };
+});
+
+/**
  * Captain names shuffled on their own seeded stream. Keeping it separate from the
  * war's RNG means ship positions and the vendetta pick come out exactly as they did
  * before captains existed.
@@ -509,14 +559,33 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
   // 21-hull, starbase-defended shape byte-identical.
   const factions = isReimagined ? resolveFactions(loadout?.factions) : Object.values(FACTIONS);
   const spawnXanadu = !isReimagined || loadout?.xanadu !== false || scenarioId === 'defend-xanadu';
+  // The sector campaign's carried fleet (round 26b): `loadout.veterans` is a list
+  // of fleet records a previous battle carried out, and it REPLACES the Federation
+  // spec path — the roster is the records themselves, never budget-limited (prizes
+  // are won, not budgeted). Absent records, everything below behaves exactly as it
+  // did before the campaign existed: this is the one createGame touch the campaign
+  // layer makes, and it is inert in every single war.
+  const veterans = isReimagined && Array.isArray(loadout?.veterans) && loadout.veterans.length
+    ? loadout.veterans
+    : null;
   // The fleet loadout (round 19): a Reimagined war's alliances are composed from
   // their budgets — the Federation from the panel's spec (or the round-18
   // default), the AI alliances drawn on their own seeded sub-stream. A classic or
   // extended war resolves none of it and fields the fixed roster.
-  const resolvedLoadout = isReimagined
-    ? { ...resolveLoadout(normalizedSeed, loadout, factions), factions, xanadu: spawnXanadu }
+  const drawnLoadout = isReimagined ? resolveLoadout(normalizedSeed, loadout, factions) : null;
+  const resolvedLoadout = drawnLoadout
+    ? {
+      ...drawnLoadout,
+      fleets: veterans
+        ? { ...drawnLoadout.fleets, [FACTIONS.FEDERATION]: specFromRecords(veterans) }
+        : drawnLoadout.fleets,
+      factions,
+      xanadu: spawnXanadu,
+    }
     : null;
-  const fleets = factions.flatMap((faction) => createFleet(faction, rng, regional, occupied, gridSize, isReimagined, resolvedLoadout?.fleets?.[faction] ?? null));
+  const fleets = factions.flatMap((faction) => (veterans && faction === FACTIONS.FEDERATION
+    ? createVeteranFleet(veterans, rng, regional, occupied, gridSize)
+    : createFleet(faction, rng, regional, occupied, gridSize, isReimagined, resolvedLoadout?.fleets?.[faction] ?? null)));
   // Xanadu is optional in a Reimagined war (round 19b): without it there is no
   // dockyard, no radio relay, and withdraw runs to the fleet centroid. The center
   // point stays reserved for placement, and the relay nodes still mirror through
@@ -546,6 +615,13 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     : roster;
   const captains = assignCaptains(normalizedSeed, roster.length);
   const vendettaShipId = rng.pick(enemyFlagships).id;
+  // Campaign command continuity (round 26b): when the flagship fell in an earlier
+  // battle, the conn carries to the strongest surviving hull (shields + crew, ties
+  // in record order) — the between-battles version of the in-battle command
+  // transfer. A single war never reads this and keeps `fed-flagship`.
+  const veteranCommandId = veterans
+    ? [...veterans].sort((a, b) => ((b.shields ?? 0) + (b.crew ?? 0)) - ((a.shields ?? 0) + (a.crew ?? 0)))[0]?.id ?? null
+    : null;
 
   return {
     seed: normalizedSeed,
@@ -564,14 +640,17 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     precision: Boolean(precision),
     phase: 'player',
     turn: 1,
-    playerShipId: 'fed-flagship',
+    playerShipId: veteranCommandId ?? 'fed-flagship',
     vendettaShipId,
     scenario: scenarioId,
     // The hunt objective keeps its own reference, since boarding the hunter clears
     // vendettaShipId and the war would otherwise forget what it was about.
     objectiveShipId: scenarioId === 'hunt-the-vendetta' ? vendettaShipId : null,
     randomStep: 0,
-    ships: oriented.map((ship, index) => ({ ...ship, captain: captains[index] })),
+    // A carried veteran keeps the captain it fought under (round 26b); every other
+    // hull — in any single war, byte-identically — is dealt one off the captains
+    // stream, whose consumption this never shifts.
+    ships: oriented.map((ship, index) => ({ ...ship, captain: ship.captain ?? captains[index] })),
     // Standing fleet orders, and orders still travelling because the radio could
     // not reach the ship that received them. Both are empty in a classic war.
     orders: {},
