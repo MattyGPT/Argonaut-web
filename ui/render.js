@@ -532,24 +532,38 @@ export const renderGame = (game, view = {}) => {
     return `<div class="terrain ${feature.type}${holder ? ` ${holder}` : ''}" style="--x:${pct(feature.x)};--y:${pct(feature.y)};--d:${pct(2 * feature.radius)}%;--o:${crisp ? 1 : TERRAIN.faintOpacity}" title="${title}" aria-hidden="true"></div>`;
   }).join('');
 
-  // Stack declutter (play-test retune 27c): hulls that end a stardate on the
-  // same point — a wing riding over its carrier, a prize mid-withdraw, a
-  // converged melee — drew as one indistinguishable glyph and only the topmost
-  // could be clicked. Same-point hulls fan onto a deterministic screen-space
-  // ring so each is seen and clicked; presentation only — positions, beams,
-  // ranges, and every rule read the true coordinates.
+  // Stack declutter (play-test retune 27c, widened in the readability pass):
+  // hulls ending a stardate on top of each other — a wing riding over its
+  // carrier, a prize mid-withdraw, a converged melee standing 1 unit apart —
+  // drew as one indistinguishable blob and only the topmost could be clicked.
+  // Hulls within 2 units cluster (union-find, deterministic) and fan onto a
+  // screen-space ring so each glyph is seen and clicked; presentation only —
+  // positions, beams, ranges, and every rule read the true coordinates.
   const stackOffsets = (() => {
+    const visible = game.ships.filter(isVisible);
+    const parent = new Map(visible.map((ship) => [ship.id, ship.id]));
+    const find = (id) => {
+      let root = id;
+      while (parent.get(root) !== root) root = parent.get(root);
+      for (let cursor = id; parent.get(cursor) !== root; cursor = parent.get(cursor)) parent.set(cursor, root);
+      return root;
+    };
+    for (let i = 0; i < visible.length; i += 1) {
+      for (let j = i + 1; j < visible.length; j += 1) {
+        if (distance(visible[i], visible[j]) < 2) parent.set(find(visible[i].id), find(visible[j].id));
+      }
+    }
     const groups = new Map();
-    for (const ship of game.ships.filter(isVisible)) {
-      const key = `${ship.x},${ship.y}`;
-      const group = groups.get(key);
+    for (const ship of visible) {
+      const root = find(ship.id);
+      const group = groups.get(root);
       if (group) group.push(ship.id);
-      else groups.set(key, [ship.id]);
+      else groups.set(root, [ship.id]);
     }
     const offsets = new Map();
     for (const group of groups.values()) {
       if (group.length < 2) continue;
-      const radius = 10 + 4 * group.length;
+      const radius = 9 + 3 * group.length;
       [...group].sort().forEach((id, index) => {
         const angle = (index * 2 * Math.PI) / group.length;
         offsets.set(id, {

@@ -23,8 +23,11 @@ export const maxZoomFor = (gridSize) => Math.max(MAX_ZOOM, Math.round((gridSize 
  * The zoom a fresh war opens at: the whole field when it fits on one screen, or a
  * window of roughly `COMFORT_UNITS` across when it does not, so a wide Reimagined
  * field starts framed on a readable engagement rather than on twenty tiny hulls.
+ * Tightened 120 → 90 in the 27c readability pass: at 120 a melee (standoffs of
+ * 6–10 units) drew as merged glow-blobs; 90 frames the fight so hull spacing
+ * reads against the glyph size.
  */
-export const COMFORT_UNITS = 120;
+export const COMFORT_UNITS = 90;
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 

@@ -103,11 +103,14 @@ h1 {
 }
 
 #game-root {
-  max-width: 1440px;
+  /* Readability pass (27c): the map column takes more of the page — a wider
+     viewport means more pixels per world unit at any zoom, which is what
+     separates a melee visually. */
+  max-width: 1680px;
   margin: 0 auto;
   padding: 1rem 1.4rem 2rem;
   display: grid;
-  grid-template-columns: minmax(250px, .6fr) minmax(380px, 1.5fr) minmax(270px, .7fr);
+  grid-template-columns: minmax(230px, .5fr) minmax(420px, 1.9fr) minmax(280px, .72fr);
   grid-template-areas: "log map console" "log report report";
   gap: 1rem;
 }
@@ -160,19 +163,24 @@ h1 {
   left: calc(var(--x) * 1%);
   top: calc(var(--y) * 1%);
   /* --dx/--dy: the stack-declutter fan (render.js), screen px, zero unless a
-     hull shares its exact point with another. */
+     hull shares its point with another. */
   transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px)));
-  width: 1.78rem;
-  height: 1.78rem;
+  /* Readability pass (27c): the glyph and its glow were sized for the 100-unit
+     classic field, where hulls sit tens of units apart. On the wide Reimagined
+     field a melee stands 6–10 units apart and a 1.78rem disc with a 12px glow
+     read as one merged blob — smaller disc, tighter glow; hover and selection
+     still lift a hull out of the pack. */
+  width: 1.42rem;
+  height: 1.42rem;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: .72rem;
+  font-size: .62rem;
   font-weight: bold;
   color: #071019;
   border: 2px solid currentColor;
   background: currentColor;
-  box-shadow: 0 0 12px currentColor;
+  box-shadow: 0 0 5px currentColor;
 }
 
 .ship:hover, .ship:focus-visible {
@@ -247,11 +255,11 @@ h1 {
    carrier's wing reads as a screen around it rather than three more capital
    hulls. Faction color still rings it; the glyph is always 'D'. */
 .ship.drone {
-  width: 1.05rem;
-  height: 1.05rem;
-  font-size: .55rem;
+  width: .92rem;
+  height: .92rem;
+  font-size: .5rem;
   border-width: 1px;
-  box-shadow: 0 0 7px currentColor;
+  box-shadow: 0 0 4px currentColor;
 }
 
 /* Combat-stance markers (round 21): a firing hull wears a warm halo, an evasive
