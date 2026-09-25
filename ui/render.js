@@ -22,6 +22,7 @@ import {
   isDrone,
   isNeutral,
   isSpectator,
+  isTractorHeld,
   nebulaHides,
   orderFor,
   pendingOrderFor,
@@ -432,6 +433,7 @@ const renderMapLegend = (game) => {
     legendEntry('ring-photons', 'photon ring'),
     legendEntry('ring-engines', 'engine ring'),
     legendEntry('threat', 'can reach you'),
+    legendEntry('pip-tractor', 'tractor-held'),
     legendEntry('wreck', 'wreck', '+'),
     ...(game.extended ? [
       legendEntry('pip-order', 'under orders'),
@@ -490,6 +492,13 @@ export const renderGame = (game, view = {}) => {
   // outside beyond the short reveal range, however wide the mapper reaches.
   const isVisible = (ship) => !actorActive || ship.id === actor.id
     || (distance(ship, actor) <= mapperRange && !nebulaHides(game, actor, ship));
+  // Tractor-lock readout (play-test fix, 2026-09-25): a held hull always knows
+  // it — the beam is physical — but WHO holds it is sensor intel: named when the
+  // holder is inside mapper reach and not nebula-hidden, else "an unseen hull".
+  // This is what makes an invisible lock from a nebula camp read as a situation
+  // instead of a maneuver refusal with no cause.
+  const heldBy = actorActive && isTractorHeld(game, actor) ? getShip(game, actor.tractorBy) : null;
+  const heldByName = heldBy ? (isVisible(heldBy) ? heldBy.name : 'an unseen hull') : null;
   document.querySelector('#mapper-readout').textContent = actorActive
     ? (Number.isFinite(mapperRange) && mapperRange > 0 ? `Mapper ${mapperRange}` : 'Mapper blacked out')
     : '';
@@ -615,7 +624,12 @@ export const renderGame = (game, view = {}) => {
     const distress = ship.encounter?.type === 'distress' && isActive(ship) && systemUnits(ship, 'engines') === 0;
     const distressClass = distress ? ' distress' : '';
     const distressNote = distress ? ' — broadcasting distress' : '';
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}<span class="glyph">${glyph}</span>${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}</button>`;
+    // A held hull wears a cyan pip (play-test fix, 2026-09-25): the lock is the
+    // victim's own sensation, so the pip never leaks where the holder is.
+    const held = isTractorHeld(game, ship);
+    const heldClass = held ? ' held' : '';
+    const heldNote = held ? ' — held by a tractor beam' : '';
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}${heldClass}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}<span class="glyph">${glyph}</span>${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}${held ? '<span class="tractor-pip" aria-hidden="true"></span>' : ''}</button>`;
   }).join('');
   map.innerHTML = terrainHtml + ringHtml + shipHtml;
   // Slide and scale the world layer so the camera window fills the viewport. The
@@ -662,6 +676,7 @@ export const renderGame = (game, view = {}) => {
       <div class="status-row"><span>Shields</span><b>${actor.shields}</b></div>
       <div class="status-row"><span>Crew</span><b>${actor.crew}</b></div>
       <div class="status-row"><span>Status</span><b>${actor.status}</b></div>
+      ${heldByName ? `<div class="status-row"><span>Tractor lock</span><b class="held-now">held by ${heldByName}</b></div>` : ''}
       ${game.reimagined ? `<div class="status-row"><span>Stance</span><b class="stance-now ${stanceOf(game, actor)}">${stanceOf(game, actor)}</b></div>` : ''}
       ${game.reimagined && hasArcs(game, actor) ? `<div class="status-row"><span>Heading</span><b>${Math.round(facingOf(game, actor))}°</b></div>` : ''}
       ${arcReadout(game, actor) ? `<div class="status-row"><span>Shield arcs</span><b class="arc-readout">${arcReadout(game, actor)}</b></div>` : ''}

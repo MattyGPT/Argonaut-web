@@ -1520,6 +1520,37 @@ body.classic .ship .prize-pip {
   .ship .distress-pip { animation: none; }
 }
 
+/* A hull held by a tractor lock wears a cyan pip at its crown (play-test fix,
+   2026-09-25): the lock is the victim's own sensation, so the pip marks the
+   held hull without leaking where the holder is — a nebula-camp lock stays
+   unseen, but at least reads as a lock. */
+.ship .tractor-pip {
+  position: absolute;
+  top: -7px;
+  left: calc(50% - 3px);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 6px var(--cyan);
+}
+
+body.classic .ship .tractor-pip {
+  background: #38ff38;
+  box-shadow: none;
+}
+
+.legend-swatch.pip-tractor {
+  width: 6px;
+  height: 6px;
+  background: var(--cyan);
+  box-shadow: 0 0 6px var(--cyan);
+}
+
+.held-now {
+  color: var(--cyan);
+}
+
 .fx-impact {
   fill: none;
   stroke: #fff;
