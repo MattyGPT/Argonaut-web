@@ -924,10 +924,13 @@ test('a held hull wears the tractor pip and the console names the holder — or 
   renderGame(held(200));
   assert.match(read('#console').innerHTML, /held by an unseen hull/, 'a holder beyond the mapper stays unnamed');
   assert.match(read('#map-field').innerHTML, /tractor-pip/, 'but the lock itself is always felt');
+  assert.match(read('#map-field').innerHTML, /tractor-lock/, 'and the beam line draws back to the hidden source');
+  assert.ok(!read('#map-field').innerHTML.includes('data-ship-id="axis-flagship"'), 'the hidden holder still draws no glyph');
   elements.clear();
   renderGame(createGame({ seed: 'held-free' }));
   assert.ok(!read('#console').innerHTML.includes('Tractor lock'));
   assert.ok(!read('#map-field').innerHTML.includes('tractor-pip'));
+  assert.ok(!read('#map-field').innerHTML.includes('tractor-lock'));
 });
 
 test('the world layer exposes a counter-scale so glyphs hold their screen size under zoom', () => {

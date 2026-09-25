@@ -434,6 +434,7 @@ const renderMapLegend = (game) => {
     legendEntry('ring-engines', 'engine ring'),
     legendEntry('threat', 'can reach you'),
     legendEntry('pip-tractor', 'tractor-held'),
+    legendEntry('lock-tractor', 'tractor beam'),
     legendEntry('wreck', 'wreck', '+'),
     ...(game.extended ? [
       legendEntry('pip-order', 'under orders'),
@@ -631,7 +632,22 @@ export const renderGame = (game, view = {}) => {
     const heldNote = held ? ' — held by a tractor beam' : '';
     return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}${heldClass}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}<span class="glyph">${glyph}</span>${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}${held ? '<span class="tractor-pip" aria-hidden="true"></span>' : ''}</button>`;
   }).join('');
-  map.innerHTML = terrainHtml + ringHtml + shipHtml;
+  // Tractor lock lines (Matt's call, 2026-09-25): the beam is physical. A held
+  // hull you can see draws its lock back to the source even when a nebula hides
+  // the hull casting it — position, not identity: the console still says "an
+  // unseen hull" until sensors name the caster, and the hidden hull's glyph
+  // stays undrawn. Under the ship layer so glyphs sit on the beam's ends.
+  const lockLines = [];
+  for (const ship of game.ships) {
+    if (!ship.tractorBy || !isVisible(ship)) continue;
+    const holder = getShip(game, ship.tractorBy);
+    if (!holder || holder.status !== 'active') continue;
+    lockLines.push(`<line class="tractor-lock" vector-effect="non-scaling-stroke" x1="${pct(holder.x)}" y1="${pct(holder.y)}" x2="${pct(ship.x)}" y2="${pct(ship.y)}"></line>`);
+  }
+  const lockHtml = lockLines.length
+    ? `<svg class="lock-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${lockLines.join('')}</svg>`
+    : '';
+  map.innerHTML = terrainHtml + ringHtml + lockHtml + shipHtml;
   // Slide and scale the world layer so the camera window fills the viewport. The
   // test stub has no `style`, so guard it; the projection is identity at zoom 1.
   if (map.style) {
