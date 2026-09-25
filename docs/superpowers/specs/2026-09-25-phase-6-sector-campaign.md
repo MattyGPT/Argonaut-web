@@ -273,7 +273,7 @@ work flagged for the manual play-test pass.
 
 | Round | Chunk | Ships | Tested by | Status |
 | --- | --- | --- | --- | --- |
-| 26a | Campaign data layer | `SECTOR` constants; `game/campaign.js` — `generateSector` on `${seed}:sector`, `battleSeed`, `fleetRecordsFrom`, graph readers | Gen determinism + shape/link invariants; record extraction; no stream shift | — |
+| 26a | Campaign data layer | `SECTOR` constants; `game/campaign.js` — `generateSector` on `${seed}:sector`, `battleSeed`, `fleetRecordsFrom`, graph readers | Gen determinism + shape/link invariants; record extraction; no stream shift | ✅ PR #64 |
 | 26b | Travel + node battles | Campaign container; `loadout.veterans` injection; per-battle seeds; headless auto-resolve; outcome mapping; travel; abandon; campaign save | Whole-campaign determinism; injection parity; outcome mapping; old saves load; harness unmoved | — |
 | 26c | Sector UI | Star-map screen; New game option; battle transitions; report stub; save wiring | Render smokes; manual play-test pass | — |
 | 27a | Persistence/economy | Credits; dockyard between battles; repairs/refits/crew/hulls/drones | Fleet continuity; purchases; determinism | — |
