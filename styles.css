@@ -1726,3 +1726,163 @@ body.classic .guide-keys td, body.classic .guide-figure figcaption {
 body.classic .guide-body b {
   color: #baffba;
 }
+
+/* --- Sector campaign (Argonaut Reimagined, Phase 6 round 26c) ---
+   The star chart is its own screen with its own projection; nothing here is
+   read by the tactical map, and the whole block is inert in a single war. */
+.campaign-bar {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: .45rem 1.4rem 0;
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+}
+
+#sector-root {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 1rem 1.4rem 2rem;
+  display: grid;
+  grid-template-columns: minmax(380px, 1.6fr) minmax(280px, .8fr);
+  grid-template-areas: "map side" "log side";
+  gap: 1rem;
+}
+
+.sector-map-panel {
+  grid-area: map;
+}
+
+.sector-log-panel {
+  grid-area: log;
+}
+
+#sector-side {
+  grid-area: side;
+  align-self: start;
+}
+
+#sector-map {
+  padding: .5rem;
+}
+
+#sector-map svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.sector-link {
+  stroke: #31536e;
+  stroke-width: 1.5;
+}
+
+.sector-link.live {
+  stroke: var(--cyan);
+  stroke-width: 2;
+}
+
+.sector-node {
+  cursor: pointer;
+}
+
+.sector-node circle, .sector-node rect {
+  fill: #9fb6c6;
+  stroke: #0b1a2b;
+  stroke-width: 1.5;
+}
+
+.sector-node.Federation circle, .sector-node.Federation rect { fill: var(--fed); }
+.sector-node.Axis circle, .sector-node.Axis rect { fill: var(--axis); }
+.sector-node.Bloc circle, .sector-node.Bloc rect { fill: var(--bloc); }
+.sector-node.Cabal circle, .sector-node.Cabal rect { fill: var(--cabal); }
+
+.sector-node.type-empty circle.hollow {
+  fill: transparent;
+  stroke: #9fb6c6;
+}
+
+.sector-node .core {
+  fill: #08111f;
+}
+
+.sector-node .fleet-marker {
+  fill: none;
+  stroke: #eaf6ff;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+.sector-node.reachable:not(.current) circle,
+.sector-node.reachable:not(.current) rect {
+  stroke: rgba(234, 246, 255, .55);
+  stroke-width: 2;
+}
+
+.sector-node.selected circle, .sector-node.selected rect {
+  stroke: var(--cyan);
+  stroke-width: 2.5;
+}
+
+.sector-label {
+  fill: #a9c7d8;
+  font-size: 11px;
+  text-anchor: middle;
+}
+
+.sector-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  padding: .4rem .75rem;
+}
+
+.sector-fleet {
+  list-style: none;
+  margin: 0;
+  padding: 0 .75rem .6rem;
+  font-size: .78rem;
+  color: #b3cad8;
+}
+
+.sector-fleet li {
+  padding: .18rem 0;
+  border-bottom: 1px dashed rgba(40, 68, 92, .5);
+}
+
+#sector-side .menu-sub {
+  padding: .3rem .75rem;
+  margin: 0;
+}
+
+.sector-banner {
+  padding: .5rem .75rem;
+  margin: 0;
+  font-weight: 700;
+}
+
+.sector-banner.victory { color: var(--fed); }
+.sector-banner.defeat { color: var(--axis); }
+
+#sector-results {
+  margin: 0;
+  padding: .4rem .9rem .6rem 2.1rem;
+  font-size: .8rem;
+  color: #b3cad8;
+}
+
+#sector-results .result-captured { color: var(--fed); }
+#sector-results .result-lost { color: var(--axis); }
+#sector-results .result-retreated, #sector-results .result-abandoned { color: var(--bloc); }
+
+.sector-log-panel .log-scroll {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+@media (max-width: 960px) {
+  #sector-root {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "map" "side" "log";
+  }
+}
