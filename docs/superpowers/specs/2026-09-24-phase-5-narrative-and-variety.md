@@ -1,9 +1,11 @@
 # Argonaut Reimagined — Phase 5: Narrative & variety
 
-Status: round 24 (random encounters) designed in full and shipped 2026-09-24;
-round 25 (officers & morale) recorded as a seam, to be designed when picked up.
-Format follows the Phase 2 (living battlefield), Phase 3 (force & prizes), and
-Phase 4 (combat depth) specs.
+Status: round 24 (random encounters) designed in full and shipped 2026-09-24
+(PR #62); **round 25 (officers & morale) deferred by Matt, 2026-09-24** —
+parked, not dropped; its seams stay recorded below for whenever it is picked
+up, and no later phase may quietly depend on them. Format follows the Phase 2
+(living battlefield), Phase 3 (force & prizes), and Phase 4 (combat depth)
+specs.
 
 ## Purpose
 
@@ -172,7 +174,7 @@ slugfest pathology (visible in the draw dumps: hulls trading 0-damage volleys)
 predates encounters and is a candidate for a minimum-damage floor or a reactor
 repair rule if draws ever drift up again.
 
-## Round 25 — Officers & morale (seam, to be designed when picked up)
+## Round 25 — Officers & morale (DEFERRED by Matt, 2026-09-24 — seam kept for when it is picked up)
 
 The roadmap row: named officers grant passives; morale affects surrender. The
 seams round 24 leaves it:
@@ -197,7 +199,7 @@ seams round 24 leaves it:
 | Round | Chunk | Ships | Tested by | Status |
 | --- | --- | --- | --- | --- |
 | 24 | Random encounters | Seeded derelicts / distress calls / neutral merchants at stardate boundaries on `${seed}:encounters:<turn>`; the rescue window; the full civilian-exclusion pass; seizure-as-prize; gray hulls, blinker, legend, guide | Deterministic draws; replay-safe; arrivals off-field and off the main stream; the cap; the exclusions (victory/surrender/relay/stalemate/targeting/statistics); seizure + boarding + tow + window; parity off | ✅ PR #62 |
-| 25 | Officers & morale | Named officers grant passives; morale affects surrender; the merchant-reputation price | Passive applies; morale→surrender threshold; parity off | — |
+| 25 | ~~Officers & morale~~ | *Deferred (Matt, 2026-09-24)* — named officers grant passives; morale affects surrender; the merchant-reputation price | — | deferred |
 
 ## Parity & determinism guardrails
 

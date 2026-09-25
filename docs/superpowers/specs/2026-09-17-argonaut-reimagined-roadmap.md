@@ -216,7 +216,7 @@ generalizing what the Cabal's `tractorFirst` doctrine already does for the AI.
 - Self-contained — it can be pulled forward ahead of stances or weapon variety if
   Matt wants it sooner.
 
-### Phase 5 — Narrative & variety *(#11, #13)* — 🔨 under way
+### Phase 5 — Narrative & variety *(#11, #13)* — 24 ✅ shipped; 25 deferred
 
 Detailed design (round 24 decisions, the rescue window, the exclusion battery,
 and the round-25 seams):
@@ -225,7 +225,15 @@ and the round-25 seams):
 | Round | Chunk | Builds | Tested by | Status |
 | --- | --- | --- | --- | --- |
 | 24 | Random encounters | Seeded derelicts/distress/neutrals at stardate boundaries; the distress rescue window; neutral merchants excluded from the war math and seized as prizes | Deterministic draws; replay-safe; parity off | ✅ PR #62 |
-| 25 | Officers & morale | Named officers grant passives; morale affects surrender; the merchant-reputation price | Passive applies; morale→surrender threshold | — |
+| 25 | ~~Officers & morale~~ | *Deferred (Matt, 2026-09-24)* — named officers grant passives; morale affects surrender; the merchant-reputation price | — | deferred |
+
+**Round 25 — Officers & morale: DEFERRED** (Matt, 2026-09-24 — parked, not
+dropped, like the mines). Its seams stay recorded in the Phase 5 spec's §25:
+the merchant-reputation price (attacking/seizing neutrals currently costs
+nothing), Cabal predation on merchants, AI distress-rescue doctrine, a morale
+reward for answering calls, officer passives off the captains substrate, and
+morale bending the surrender math. Phase 6 must not quietly depend on any of
+it. The next phase picked up instead: **Phase 6 — the sector campaign**.
 
 ### Phase 6 — The sector campaign *(capstone; #12)*
 
