@@ -775,6 +775,26 @@ export const AI_PURSUIT = Object.freeze({ standoff: 8, speedBase: 0.8, speedJitt
 export const SPECTATOR_TICK_MS = 400;
 
 /**
+ * Real-time movement (Phase 8, round 30, Reimagined-only via the `realtime` war
+ * option). The war keeps its stardate resolution tick; between ticks the field
+ * integrates on a fixed sub-timestep so hulls move through space continuously
+ * instead of appearing at their endpoint. Every number here is a Phase 8 dial,
+ * not a calibrated value — the boundary rules (and therefore the CALIBRATION
+ * tables) read none of them.
+ *
+ * - `ticksPerStardate`: fixed sub-ticks per stardate. The headless core and the
+ *   browser clock always agree on this; it never varies with frame rate.
+ * - `msPerStardate`: real milliseconds one stardate takes to play at 1× speed.
+ * - `speedSteps`: the unpaused time multipliers (round 31 wires the control;
+ *   the core is fixed-timestep either way — speed scales presentation only).
+ */
+export const REALTIME = Object.freeze({
+  ticksPerStardate: 8,
+  msPerStardate: 4000,
+  speedSteps: Object.freeze([1, 2, 4]),
+});
+
+/**
  * Fleet orders, available only in an extended war. `focus` is the original's
  * behavior — concentrate with the fleet — so it is also the default. The targeted
  * orders need a second ship named alongside them. `launch` (round 20) names no

@@ -536,12 +536,14 @@ const generateTerrain = (seed, gridSize, xanadu) => {
   return [...features, ...placeRelays(rng, gridSize, xanadu, features)];
 };
 
-export const createGame = ({ seed = 'xanadu', regional = false, sound = false, extended = false, scenario = 'annihilation', precision = false, reimagined = false, loadout = null } = {}) => {
+export const createGame = ({ seed = 'xanadu', regional = false, sound = false, extended = false, scenario = 'annihilation', precision = false, reimagined = false, realtime = false, loadout = null } = {}) => {
   const normalizedSeed = String(seed);
   // Argonaut Reimagined builds on the extended layer — orders, doctrine, the
   // dockyard, and the scenarios are the substrate the Reimagined systems need — so
-  // the flag implies it, and opens the war on a wider tactical field.
-  const isReimagined = Boolean(reimagined);
+  // the flag implies it, and opens the war on a wider tactical field. Real-time
+  // movement (Phase 8, round 30) rides on top of Reimagined and implies it too.
+  const isRealtime = Boolean(realtime);
+  const isReimagined = Boolean(reimagined) || isRealtime;
   const isExtended = Boolean(extended) || isReimagined;
   const gridSize = isReimagined ? REIMAGINED_GRID_SIZE : GRID_SIZE;
   const rng = createRng(normalizedSeed);
@@ -632,6 +634,11 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     // battlefield to `gridSize`, and gates every Reimagined system. Off by default,
     // so a classic or extended war reads none of it and plays exactly as calibrated.
     reimagined: isReimagined,
+    // Real-time movement (Phase 8, round 30): hulls integrate through space on a
+    // fixed sub-timestep between stardate boundaries instead of appearing at their
+    // endpoint. Implies `reimagined`. Off by default and absent in old saves, so
+    // every reader treats a falsy flag as the turn-based war it has always been.
+    realtime: isRealtime,
     // The tactical field, in map units. 100 for a classic or extended war; wider for
     // a Reimagined one. Absent in old saves, so every reader defaults to GRID_SIZE.
     gridSize,

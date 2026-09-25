@@ -300,6 +300,18 @@ const animateMoves = (map, game, win) => {
 };
 
 /**
+ * Real-time movement (Phase 8, round 30): after a trajectory playback the hull
+ * buttons already stand on their boundary positions, flown there frame by frame
+ * off the core's sub-ticks. Prime the glide memory with those positions so the
+ * next render reads "no move" instead of replaying the stardate as a CSS glide.
+ */
+export const primeMoveMemory = (game) => {
+  if (!game?.ships) return;
+  if (moveMemory.seed !== game.seed) moveMemory = { seed: game.seed, positions: new Map() };
+  for (const ship of game.ships) moveMemory.positions.set(ship.id, { x: ship.x, y: ship.y });
+};
+
+/**
  * The minimap: the whole war zone in miniature, with the hulls the mapper can see and
  * a rectangle for the camera's current window. Dragging it (wired in app.js) re-centers
  * the view; once the field is wider than the screen it is the only whole-war picture,
