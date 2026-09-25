@@ -22,6 +22,11 @@
         <button id="new-game" class="secondary">New game</button>
       </div>
     </header>
+    <div id="campaign-bar" class="campaign-bar" hidden>
+      <span id="campaign-readout" class="mode-badge"></span>
+      <button id="abandon-engagement" class="secondary tiny" type="button">Abandon engagement</button>
+      <button id="return-to-sector" class="tiny" type="button" hidden>Return to sector map</button>
+    </div>
     <main id="game-root">
       <section class="map-panel panel" aria-label="Tactical map">
         <div class="panel-title">
@@ -61,6 +66,32 @@
         </div>
         <div class="log-scroll">
           <ol id="log"></ol>
+        </div>
+      </section>
+    </main>
+    <main id="sector-root" hidden aria-label="Sector campaign">
+      <section class="panel sector-map-panel" aria-label="Sector star map">
+        <div class="panel-title">
+          <span>Sector star map</span>
+          <span class="panel-meta" id="sector-meta"></span>
+        </div>
+        <div id="sector-map" role="group" aria-label="Star systems and travel routes"></div>
+        <div class="map-legend" id="sector-legend">
+          <span class="Federation">■ Federation</span>
+          <span class="Axis">■ Axis</span>
+          <span class="Bloc">■ Bloc</span>
+          <span class="Cabal">■ Cabal</span>
+          <span class="legend-note">◎ home · ● garrison · ◆ supply · ○ empty · dashed ring = your fleet · bright routes lead onward</span>
+        </div>
+      </section>
+      <aside class="panel" id="sector-side" aria-label="System and fleet"></aside>
+      <section class="panel sector-log-panel" aria-label="Campaign log">
+        <div class="panel-title">
+          <span>Campaign log</span>
+          <span class="panel-meta">Oldest first</span>
+        </div>
+        <div class="log-scroll">
+          <ol id="sector-results"></ol>
         </div>
       </section>
     </main>
@@ -178,6 +209,10 @@
           <input id="reimagined" type="checkbox">
           Argonaut Reimagined — the expansion mode (wider battlefield; carries Extended war)
         </label>
+        <label class="check">
+          <input id="campaign" type="checkbox">
+          Sector campaign — fight across a star map, carrying your fleet between battles (carries Argonaut Reimagined)
+        </label>
         <label>
           Scenario
           <select id="scenario" disabled>
@@ -201,7 +236,7 @@
           <p class="console-note" id="loadout-summary"></p>
           <button type="button" class="secondary tiny" id="loadout-reset">Reset to default</button>
         </div>
-        <p class="dialog-note">The same seed reproduces the initial war. Precision fire gives your phaser volleys a power dial and called subsystem shots, and lets a hull burnt out of engines and guns strike its colors; the enemy still fires standard volleys. An extended war keeps every original rule and adds standing orders for the rest of your fleet, alliance doctrines, and the scenarios; a classic war plays exactly as calibrated. <b>Argonaut Reimagined</b> is an opt-in expansion that carries the extended war and opens on a wider tactical field; it is the home for new systems being built out over time, and never changes how a classic or extended war plays.</p>
+        <p class="dialog-note">The same seed reproduces the initial war. Precision fire gives your phaser volleys a power dial and called subsystem shots, and lets a hull burnt out of engines and guns strike its colors; the enemy still fires standard volleys. An extended war keeps every original rule and adds standing orders for the rest of your fleet, alliance doctrines, and the scenarios; a classic war plays exactly as calibrated. <b>Argonaut Reimagined</b> is an opt-in expansion that carries the extended war and opens on a wider tactical field; it is the home for new systems being built out over time, and never changes how a classic or extended war plays. A <b>sector campaign</b> carries Argonaut Reimagined and turns it into a war across a star map: the same seed charts the same corridor of systems, each battle is a full seeded war, and your fleet carries its wounds, prizes, and captains from node to node. Starting a new war of either kind retires the other save.</p>
         <div class="dialog-actions">
           <button value="cancel" class="secondary">Cancel</button>
           <button value="confirm">Begin</button>
@@ -410,6 +445,7 @@
             <p><b>Fleet loadout.</b> A Reimagined war's fleets are composed, not fixed. Tick Reimagined in the <b>New game</b> panel and the <b>fleet loadout</b> appears: spend your points budget (24 by default) on ships of the line — the flagship battle cruiser is required, and carriers, artillery, cruisers, interceptors, and scouts cost 4 / 3 / 2 / 2 / 1, up to eight hulls. You also set <b>every alliance's budget</b>: enemy captains draw seeded fleets within theirs, leaning to their doctrines — Axis gunboat swarms, Bloc artillery lines, Cabal carriers — so the same seed replays the same war, and a new seed fields new navies. Prizes taken in the war are won, not budgeted.</p>
             <p><b>Force customization.</b> The same panel chooses <b>who fights</b> — any two to four alliances, though the Federation always flies and at least one enemy must — and whether <b>Xanadu spawns</b>. Without the starbase there is no dockyard, no radio relay, and withdraw runs to the fleet centroid; the computer report simply says the distance to Xanadu is unknown, and the relay nodes still sit mirrored around where the base would have stood. <b>Hold Xanadu</b> needs its base, so that scenario is unavailable with the starbase off — and the rules force it back on if the war somehow starts that way.</p>
             <p><b>Random encounters.</b> The war's back half is not an empty field. Most stardates are quiet, but now and then something arrives from outside the battlefield, at least 40 units from any hull: a <b>derelict</b> — a ghost ship of some alliance, dark, degraded, and vacant, which anyone can board for a prize (enemy captains race you to them); a <b>distress call</b> — a stranded Federation hull with its engines burnt out, marked by a slow amber blinker, which you can tow home to the dockyard (or transfer crew to) to return it to the fight; or a <b>neutral merchant</b> — an unarmed civilian hull in gray that runs from any warship that closes and jumps out after a bounded visit. A merchant is no one's enemy: captains ignore them, they never count toward victory or surrender, and a relay node cannot be held by one. But a transporter party across <b>seizes it whole</b> — hull, cargo, and crew, as a prize of war. You can also simply shoot one down; nothing prices that yet.</p>
+            <p><b>The sector campaign.</b> Tick <b>Sector campaign</b> in the New game panel (it carries Reimagined) and the war becomes a campaign across a star map: a seeded corridor of systems from Xanadu to the enemy home, five columns deep, with two or three routes per hop. On the <b>sector screen</b> you click a system to read it and travel along the bright routes; at an enemy system you choose <b>Engage</b> to fight the battle yourself or <b>Auto-resolve</b> to let your captains fight it headless. Every node battle is a full Reimagined war — the garrison is drawn within the system's budget, deeper columns fight harder — and what survives carries out: wounds, subsystem burns, prizes, captains, and aces all persist, while orders, power, and stances reset for the next engagement. Winning takes the system and pays credits; a hopeless draw or an <b>Abandon engagement</b> cedes it and lets you move on; losing every hull ends the campaign, and taking the enemy home system wins it. The campaign autosaves under its own slot, and the same seed replays the same sector, the same battles, and the same outcome.</p>
             <p class="dialog-note">Reimagined is balanced by whole-war simulation as it matures, not calibrated against the 1992 original, so enemy strength and war length can differ from a classic war. The build roadmap lives in the repository under <code>docs/superpowers/specs</code>.</p>
           </section>
           <section id="guide-comfort">

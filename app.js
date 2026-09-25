@@ -1,10 +1,12 @@
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets } from './game/actions.js';
 import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
 import { alertLevel, appendLog, createGame, defaultLoadout, fleetCost, fleetHulls, getShip, isSpectator, normalizeFleetSpec, systemUnits } from './game/state.js';
+import { abandonEngagement, autoResolveNode, createCampaign, nodeById, resolveNodeBattle, startNodeBattle, travelTo } from './game/campaign.js';
 import { scenarioFor } from './game/scenarios.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './game/turns.js';
 import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget, promptForTowDestination } from './ui/input.js';
 import { cameraWindow, centerOn, clampCamera, makeCamera, panBy, zoomAt } from './ui/camera.js';
+import { renderSectorScreen } from './ui/sector.js';
 import {
   ordinaryBattleEvents,
   playReplayEvents,
@@ -17,6 +19,11 @@ import { playEffect, playEvent } from './ui/sound.js';
 import { playEffects, replayEffects } from './ui/fx.js';
 
 const SAVE_KEY = 'argonaut-web-save-v1';
+// The sector campaign (round 26c) saves under its own key beside the untouched
+// war save: `loadSave`'s `version === 1` path is literally unchanged, so old
+// saves load into single-war mode untouched. A campaign save owns the session
+// when present; starting a new game of either kind retires the other.
+const CAMPAIGN_SAVE_KEY = 'argonaut-web-save-campaign-v1';
 const TERMINAL_EVENT_MS = 2500;
 
 const loadSave = () => {
@@ -31,9 +38,26 @@ const loadSave = () => {
   }
 };
 
+const loadCampaignSave = () => {
+  try {
+    const raw = localStorage.getItem(CAMPAIGN_SAVE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (data?.version !== 1 || !Array.isArray(data.campaign?.sector?.nodes) || !Array.isArray(data.campaign?.fleet)) return null;
+    return data.campaign;
+  } catch {
+    return null;
+  }
+};
+
+const clearCampaignSave = () => {
+  try { localStorage.removeItem(CAMPAIGN_SAVE_KEY); } catch { /* ignore */ }
+};
+
 const save = () => {
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 1, game }));
+    if (campaign) localStorage.setItem(CAMPAIGN_SAVE_KEY, JSON.stringify({ version: 1, campaign }));
+    else localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 1, game }));
   } catch {
     /* storage unavailable */
   }
@@ -41,11 +65,16 @@ const save = () => {
 
 const randomSeed = () => `war-${Math.random().toString(36).slice(2, 8)}`;
 
-let game = loadSave() ?? createGame({ seed: randomSeed() });
-let view = { entries: ['Tactical systems online. Choose a command.'], camera: null };
+/** The campaign in progress, if any. When set, it owns the session; `game` is its open battle. */
+let campaign = loadCampaignSave();
+/** The star-chart node the side panel reads; defaults to the fleet's node. */
+let sectorSelection = null;
+
+let game = campaign ? campaign.battle?.game ?? null : loadSave() ?? createGame({ seed: randomSeed() });
+let view = { entries: game ? ['Tactical systems online. Choose a command.'] : [], camera: null };
 
 /** The war's field, defaulting safely for an old save that predates `gridSize`. */
-const field = () => game.gridSize ?? GRID_SIZE;
+const field = () => game?.gridSize ?? GRID_SIZE;
 
 /**
  * Keep the camera alive and, while it is following, framed on the command ship. The
@@ -64,7 +93,7 @@ const syncCamera = () => {
 };
 
 /** The camera's visible window, for the FX layer and the click-to-maneuver map. */
-const currentWindow = () => cameraWindow(field(), view.camera);
+const currentWindow = () => (game ? cameraWindow(field(), view.camera) : null);
 
 /**
  * The precision-fire dials as last set in this war's phaser prompts, so a player
@@ -85,12 +114,52 @@ const CONFIRMATIONS = new Map([
   ['hyperspace', (actor) => ['Hyperspace?', `${actor?.name ?? 'Your ship'} will emerge at a random point in the war zone with its shields weakened by the jump — and the jump itself can burn the ship up.`]],
 ]);
 
-const redraw = () => renderGame(game, { ...view, precision: game.precision ? precisionSettings : null });
+const redraw = () => renderGame(game, { ...view, precision: game?.precision ? precisionSettings : null });
+
+/** Whether the star chart is up: a campaign is active and no battle is open. */
+const sectorMode = () => campaign !== null && !campaign.battle;
+
+/** Keep the campaign container pointing at the live battle game it wraps. */
+const syncCampaign = () => {
+  if (campaign?.battle && game && campaign.battle.game !== game) {
+    campaign = { ...campaign, battle: { ...campaign.battle, game } };
+  }
+};
+
+/**
+ * Show the right screen: the star chart between battles, the tactical war while
+ * one is open. The campaign bar carries the two campaign-only battle commands —
+ * Abandon engagement until the fight concludes, Return to sector map after — and
+ * reads the campaign state; a single war never shows it.
+ */
+const showScreens = () => {
+  const sector = sectorMode();
+  document.querySelector('#game-root').hidden = sector;
+  document.querySelector('#sector-root').hidden = !sector;
+  const bar = document.querySelector('#campaign-bar');
+  bar.hidden = campaign === null;
+  if (campaign) {
+    const battle = campaign.battle;
+    document.querySelector('#abandon-engagement').hidden = !(battle && !battle.game.outcome);
+    document.querySelector('#return-to-sector').hidden = !(battle && Boolean(battle.game.outcome));
+    const node = nodeById(campaign.sector, campaign.currentNode);
+    document.querySelector('#campaign-readout').textContent = `SECTOR CAMPAIGN · TURN ${campaign.turn} · ${campaign.credits} CREDITS · ${node?.name ?? '—'}`;
+  }
+  if (sector) {
+    document.querySelector('#mode-readout').textContent = 'SECTOR CAMPAIGN';
+    document.querySelector('#seed-readout').textContent = `SEED ${campaign.seed}`;
+    renderSectorScreen(campaign, { selectedId: sectorSelection ?? campaign.currentNode });
+  }
+};
 
 const refresh = () => {
-  syncCamera();
-  redraw();
-  warnOnRedAlert();
+  syncCampaign();
+  if (game) {
+    syncCamera();
+    redraw();
+    warnOnRedAlert();
+  }
+  showScreens();
   save();
 };
 
@@ -158,7 +227,7 @@ const spectate = () => {
   if (spectating) return;
   spectating = true;
   const step = async () => {
-    if (!isSpectator(game) || game.outcome || game.phase !== 'player') {
+    if (!game || !isSpectator(game) || game.outcome || game.phase !== 'player') {
       spectating = false;
       return;
     }
@@ -168,15 +237,16 @@ const spectate = () => {
     await presentTerminalEvents(auto.events);
     await runComputer();
     refresh();
-    if (isSpectator(game) && !game.outcome && game.phase === 'player') setTimeout(step, SPECTATOR_TICK_MS);
+    if (game && isSpectator(game) && !game.outcome && game.phase === 'player') setTimeout(step, SPECTATOR_TICK_MS);
     else spectating = false;
   };
   step();
 };
 
 const dispatch = async (action) => {
-  // Automated turns and replay mutate the current presentation asynchronously.
-  if (spectating || playbackLocked()) return;
+  // Automated turns and replay mutate the current presentation asynchronously,
+  // and the star chart has no war to command.
+  if (!game || spectating || playbackLocked()) return;
   if (action.type === 'map-select') {
     const ship = game.ships.find((entry) => entry.id === action.targetId);
     if (!ship || ship.status === 'destroyed') return;
@@ -372,12 +442,12 @@ bindInput(document.querySelector('#game-root'), dispatch, currentWindow);
  * unless the war is Reimagined, and clicking the chrome never becomes a maneuver.
  */
 const setCamera = (camera) => { view = { ...view, camera }; redraw(); };
-const zoomBy = (factor) => { if (game.reimagined) setCamera(zoomAt(view.camera, field(), 0.5, 0.5, factor)); };
-const recenter = () => { if (game.reimagined) setCamera(centerOn(view.camera, field(), getShip(game, game.playerShipId))); };
+const zoomBy = (factor) => { if (game?.reimagined) setCamera(zoomAt(view.camera, field(), 0.5, 0.5, factor)); };
+const recenter = () => { if (game?.reimagined) setCamera(centerOn(view.camera, field(), getShip(game, game.playerShipId))); };
 
 const mapEl = document.querySelector('#map');
 mapEl.addEventListener('wheel', (event) => {
-  if (!game.reimagined) return;
+  if (!game?.reimagined) return;
   event.preventDefault();
   const rect = mapEl.getBoundingClientRect();
   if (!rect.width || !rect.height) return;
@@ -387,7 +457,7 @@ mapEl.addEventListener('wheel', (event) => {
 }, { passive: false });
 
 document.addEventListener('keydown', (event) => {
-  if (!game.reimagined || document.querySelector('dialog[open]')) return;
+  if (!game?.reimagined || document.querySelector('dialog[open]')) return;
   if (event.target.matches?.('input,select,textarea')) return;
   const steps = { ArrowLeft: [-0.25, 0], ArrowRight: [0.25, 0], ArrowUp: [0, -0.25], ArrowDown: [0, 0.25] };
   const step = steps[event.key];
@@ -410,7 +480,7 @@ const minimapCenter = (event) => {
   }, grid));
 };
 minimap.addEventListener('pointerdown', (event) => {
-  if (!game.reimagined) return;
+  if (!game?.reimagined) return;
   minimapDragging = true;
   minimap.setPointerCapture?.(event.pointerId);
   minimapCenter(event);
@@ -566,16 +636,17 @@ document.querySelector('#user-guide').addEventListener('click', whenPlaybackUnlo
 
 document.querySelector('#new-game').addEventListener('click', whenPlaybackUnlocked(playbackLocked, () => {
   document.querySelector('#new-seed').value = randomSeed();
-  document.querySelector('#regional').checked = game.regional;
-  document.querySelector('#sound').checked = game.sound;
-  document.querySelector('#precision').checked = game.precision;
-  document.querySelector('#extended').checked = game.extended;
-  document.querySelector('#reimagined').checked = game.reimagined ?? false;
-  document.querySelector('#scenario').value = game.scenario ?? 'annihilation';
+  document.querySelector('#regional').checked = game?.regional ?? false;
+  document.querySelector('#sound').checked = game?.sound ?? false;
+  document.querySelector('#precision').checked = game?.precision ?? false;
+  document.querySelector('#extended').checked = game?.extended ?? false;
+  document.querySelector('#reimagined').checked = campaign !== null || (game?.reimagined ?? false);
+  document.querySelector('#campaign').checked = campaign !== null;
+  document.querySelector('#scenario').value = game?.scenario ?? 'annihilation';
   syncScenarioAvailability();
   // The panel pre-fills from the war being left, so "same as last time" is one
   // click away; an old save without a loadout gets the defaults.
-  loadoutDraft = game.loadout
+  loadoutDraft = game?.loadout
     ? {
       budgets: { ...game.loadout.budgets },
       fleet: { ...(game.loadout.fleets?.Federation ?? LOADOUT.defaultFleet) },
@@ -598,6 +669,19 @@ document.querySelector('#extended').addEventListener('change', syncScenarioAvail
 // extended too and live-enables the scenario picker — and the fleet loadout.
 document.querySelector('#reimagined').addEventListener('change', (event) => {
   if (event.target.checked) document.querySelector('#extended').checked = true;
+  // The sector campaign carries Reimagined, so unticking it unticks the campaign.
+  else document.querySelector('#campaign').checked = false;
+  syncScenarioAvailability();
+  syncLoadoutAvailability();
+});
+
+// The sector campaign (round 26c) is a game-start option that carries Argonaut
+// Reimagined — ticking it ticks Reimagined (and extended) and shows the loadout.
+document.querySelector('#campaign').addEventListener('change', (event) => {
+  if (event.target.checked) {
+    document.querySelector('#reimagined').checked = true;
+    document.querySelector('#extended').checked = true;
+  }
   syncScenarioAvailability();
   syncLoadoutAvailability();
 });
@@ -620,30 +704,126 @@ const openingLines = (war) => {
 document.querySelector('#new-game-form').addEventListener('submit', whenPlaybackUnlocked(playbackLocked, (event) => {
   // method="dialog" sets dialog.returnValue only as the default action, after this
   // handler runs, so read the clicked button instead of the stale returnValue.
-  if (event.submitter?.value === 'confirm') {
-    game = createGame({
-      seed: document.querySelector('#new-seed').value || 'xanadu',
-      regional: document.querySelector('#regional').checked,
-      sound: document.querySelector('#sound').checked,
-      precision: document.querySelector('#precision').checked,
-      extended: document.querySelector('#extended').checked,
-      reimagined: document.querySelector('#reimagined').checked,
-      scenario: document.querySelector('#scenario').value,
-      // The composed forces (rounds 19 + 19b): ignored unless the war is Reimagined.
-      loadout: document.querySelector('#reimagined').checked
-        ? {
-          budgets: loadoutDraft.budgets,
-          fleets: { Federation: loadoutDraft.fleet },
-          factions: loadoutDraft.factions,
-          xanadu: loadoutDraft.xanadu,
-        }
-        : null,
-    });
-    precisionSettings = { power: 100, focus: null };
-    view = { entries: openingLines(game), camera: null };
+  if (event.submitter?.value !== 'confirm') return;
+  const seedValue = document.querySelector('#new-seed').value || 'xanadu';
+  const wantsCampaign = document.querySelector('#campaign').checked;
+  // A sector campaign carries Argonaut Reimagined, whatever the box reads.
+  const reimagined = wantsCampaign || document.querySelector('#reimagined').checked;
+  // The composed forces (rounds 19 + 19b): ignored unless the war is Reimagined.
+  const loadout = reimagined
+    ? {
+      budgets: loadoutDraft.budgets,
+      fleets: { Federation: loadoutDraft.fleet },
+      factions: loadoutDraft.factions,
+      xanadu: loadoutDraft.xanadu,
+    }
+    : null;
+  precisionSettings = { power: 100, focus: null };
+  if (wantsCampaign) {
+    // One active game at a time: starting a campaign retires the single-war
+    // save, and starting a single war retires the campaign (below).
+    try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
+    campaign = createCampaign({ seed: seedValue, loadout });
+    sectorSelection = 'home';
+    game = null;
+    view = { entries: [], camera: null };
+    refresh();
+    return;
+  }
+  campaign = null;
+  clearCampaignSave();
+  game = createGame({
+    seed: seedValue,
+    regional: document.querySelector('#regional').checked,
+    sound: document.querySelector('#sound').checked,
+    precision: document.querySelector('#precision').checked,
+    extended: document.querySelector('#extended').checked,
+    reimagined,
+    scenario: document.querySelector('#scenario').value,
+    loadout,
+  });
+  sectorSelection = null;
+  view = { entries: openingLines(game), camera: null };
+  refresh();
+}));
+
+/**
+ * Campaign chrome (round 26c). Abandoning a battle cedes the node through the
+ * confirmation dialog; returning to the star chart maps a concluded battle's
+ * outcome onto the campaign. Both are campaign-only — a single war never shows
+ * the bar — and `resign` keeps its spectator meaning inside a battle: the war
+ * resolves headless from there and Return maps it like any other outcome.
+ */
+const leaveBattle = (resolved) => {
+  campaign = resolved;
+  game = null;
+  sectorSelection = campaign.currentNode;
+  view = { entries: [], camera: null, report: null, contextShipId: null, terminalEvent: null };
+};
+
+document.querySelector('#abandon-engagement').addEventListener('click', whenPlaybackUnlocked(playbackLocked, async () => {
+  if (!campaign?.battle || campaign.battle.game.outcome) return;
+  const confirmed = await promptForConfirmation('Abandon engagement?', 'The fleet disengages and cedes this system — your ships carry out exactly as they stand, and the node stays in enemy hands.');
+  if (!confirmed) return;
+  leaveBattle(abandonEngagement({ ...campaign, battle: { ...campaign.battle, game } }));
+  refresh();
+}));
+
+document.querySelector('#return-to-sector').addEventListener('click', whenPlaybackUnlocked(playbackLocked, () => {
+  if (!campaign?.battle || !game?.outcome) return;
+  leaveBattle(resolveNodeBattle({ ...campaign, battle: { ...campaign.battle, game } }));
+  refresh();
+}));
+
+/** Opens a player-fought node battle: the tactical screen takes over the war. */
+const enterBattle = (next) => {
+  if (!next.battle) return;
+  campaign = next;
+  game = campaign.battle.game;
+  precisionSettings = { power: 100, focus: null };
+  view = { entries: openingLines(game), camera: null };
+};
+
+/**
+ * Star-chart interaction (round 26c): clicking a node selects it for the side
+ * panel; travel and engagement are explicit buttons in that panel, so a stray
+ * click on the chart never starts a war.
+ */
+document.querySelector('#sector-root').addEventListener('click', (event) => {
+  const actionButton = event.target.closest('[data-sector-action]');
+  if (actionButton) {
+    const nodeId = actionButton.dataset.node;
+    const action = actionButton.dataset.sectorAction;
+    if (action === 'travel') {
+      campaign = travelTo(campaign, nodeId);
+      sectorSelection = campaign.currentNode;
+    } else if (action === 'engage') {
+      enterBattle(startNodeBattle(campaign, nodeId));
+    } else if (action === 'auto') {
+      campaign = autoResolveNode(campaign, nodeId);
+      sectorSelection = campaign.currentNode;
+    }
+    refresh();
+    return;
+  }
+  const nodeEl = event.target.closest('[data-node]');
+  if (nodeEl) {
+    sectorSelection = nodeEl.dataset.node;
     refresh();
   }
-}));
+});
+
+// An SVG node group does not fire click on keyboard activation; this keeps the
+// chart reachable by keyboard. The panel's own buttons carry data-sector-action
+// and are left to their native click.
+document.querySelector('#sector-root').addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  const nodeEl = event.target.closest?.('[data-node]');
+  if (!nodeEl || nodeEl.closest('[data-sector-action]')) return;
+  event.preventDefault();
+  sectorSelection = nodeEl.dataset.node;
+  refresh();
+});
 
 const THEME_KEY = 'argonaut-web-theme';
 let theme = 'modern';
@@ -660,5 +840,5 @@ document.querySelector('#theme-toggle').addEventListener('click', () => {
 applyTheme(theme);
 
 refresh();
-if (game.phase === 'computer') { runComputer(); refresh(); }
-if (isSpectator(game) && !game.outcome && game.phase === 'player') spectate();
+if (game?.phase === 'computer') { runComputer(); refresh(); }
+if (game && isSpectator(game) && !game.outcome && game.phase === 'player') spectate();
