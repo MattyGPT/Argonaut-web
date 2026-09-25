@@ -1041,3 +1041,43 @@ export const REFIT_IDS = Object.freeze(Object.keys(REFITS));
 
 /** A refit may not push a system this many units above its template complement. */
 export const REFIT_OVER_TEMPLATE = 2;
+
+/**
+ * The sector campaign (Argonaut Reimagined, Phase 6 — round 26). A campaign
+ * fights across a branching corridor of star systems: column 0 is the
+ * Federation home node, the last column is the enemy home objective, and the
+ * middle columns hold 3–4 nodes each (~11–14 nodes total) linked strictly
+ * column → column+1. The graph, its owners, names, and garrison budgets are
+ * drawn on `${seed}:sector` (the captains/terrain sub-stream pattern), so a
+ * campaign is deterministic per seed and no battle stream ever shifts. Every
+ * figure here is a campaign dial, not a calibrated value. Settled with Matt,
+ * 2026-09-25; the design lives in
+ * `docs/superpowers/specs/2026-09-25-phase-6-sector-campaign.md`.
+ */
+export const SECTOR = Object.freeze({
+  /** Columns in the corridor: home, three middle columns, enemy objective. */
+  columns: 5,
+  /** Node count range per middle column. */
+  nodesPerColumn: Object.freeze([3, 4]),
+  /** Relative weights of the middle-column node types. */
+  typeWeights: Object.freeze({ battle: 6, objective: 2, empty: 2 }),
+  /** How many enemy alliances hold the sector: the primary, sometimes a second. */
+  enemyCounts: Object.freeze([1, 1, 2]),
+  /**
+   * Garrison budget per node, spent on the round-19 loadout draw — the deeper
+   * the column, the harder the fight. `empty` nodes field nothing; the enemy
+   * home node fields the campaign's biggest garrison. The player's carried
+   * fleet is never budget-limited (prizes are won, not budgeted).
+   */
+  garrisonBudgets: Object.freeze({
+    battleByColumn: Object.freeze([10, 14, 19]),
+    objectiveByColumn: Object.freeze([12, 16, 21]),
+    enemyHome: 30,
+  }),
+  /** Star-system names for the middle columns and the objective — this remake's own expression. */
+  names: Object.freeze([
+    'Meridian', 'Kaldra', 'Vesh', 'Orun', 'Sable', 'Perihelion',
+    'Torchline', 'Ebon Gate', 'Caldera', 'Windrose', 'Ilium', 'Pale Verge',
+    'Threnody', 'Aster', 'Longlight', 'Corvus Reach', 'Sundown Bar', 'Heliacal',
+  ]),
+});
