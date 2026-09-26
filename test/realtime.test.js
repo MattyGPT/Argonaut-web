@@ -2,13 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { REALTIME, REIMAGINED_GRID_SIZE } from '../game/constants.js';
 import { createGame, engineCapacity, powerEffect } from '../game/state.js';
-import { resolveAutopilotTurn, resolveComputerTurns } from '../game/turns.js';
-import { arrivalTick, integrateStardate, positionAt, positionsOf } from '../game/realtime.js';
+import { applyPlayerAction } from '../game/actions.js';
+import { resolveAutopilotTurn, resolveComputerTurns, resolveRealtimeBoundary } from '../game/turns.js';
+import { advanceSubtick, arrivalTick, integrateStardate, positionAt, positionsOf, simTimeOf, stepRealtime } from '../game/realtime.js';
 
 const TICKS = REALTIME.ticksPerStardate;
 
 /** One full stardate: the autopilot flies the conn, then the field resolves. */
 const playTurn = (game) => resolveComputerTurns(resolveAutopilotTurn(game).game);
+
+/** Drives a live real-time war sub-tick by sub-tick, resolving each boundary it crosses. */
+const drive = (game, subticks) => {
+  let current = game;
+  for (let step = 0; step < subticks; step += 1) current = stepRealtime(current, resolveRealtimeBoundary);
+  return current;
+};
 
 test('the realtime option implies Reimagined and widens the field', () => {
   const game = createGame({ seed: 'rt-flag', realtime: true });
@@ -157,4 +165,123 @@ test('a turn-based war never grows the trajectory fields', () => {
   assert.equal(game.trajectory, undefined);
   assert.equal(game.preTurn, undefined);
   assert.equal(game.realtime, false);
+});
+
+test('the sim clock crosses a stardate on schedule and the chain fires', () => {
+  let game = createGame({ seed: 'rt-clock', realtime: true });
+  assert.equal(simTimeOf(game), 0);
+  assert.equal(game.turn, 1);
+  game = drive(game, TICKS);
+  assert.equal(game.turn, 2);
+  assert.ok(Math.abs(simTimeOf(game) - 1) < 1e-9);
+  // The shared boundary chain ran: the stalemate signature is stamped and the
+  // captains plotted their next burns.
+  assert.ok(game.warSignature);
+  assert.ok(game.ships.some((ship) => ship.dest), 'captains plot destinations at the boundary');
+  assert.ok(game.log.length > 0);
+});
+
+test('batching equals stepping: pause and speed are presentation only', () => {
+  const straight = drive(createGame({ seed: 'rt-batch', realtime: true }), 40);
+  let paused = createGame({ seed: 'rt-batch', realtime: true });
+  // A pause is simply not stepping; a speed step is stepping in bigger real-time
+  // chunks. The core only ever moves in whole sub-ticks, so both match exactly.
+  paused = drive(paused, 10);
+  paused = drive(paused, 7);
+  paused = drive(paused, 23);
+  assert.deepEqual(paused, straight);
+});
+
+test('a plotted burn arrives early and holds at its destination', () => {
+  let game = createGame({ seed: 'rt-arrive', realtime: true });
+  game = {
+    ...game,
+    ships: game.ships.map((ship) => {
+      if (ship.id === 'fed-flagship') return { ...ship, x: 10, y: 10, dest: { x: 15, y: 10 } };
+      if (ship.id === 'xanadu') return ship;
+      return { ...ship, x: 300, y: 300, dest: null };
+    }),
+  };
+  game = drive(game, TICKS);
+  const arrived = game.ships.find((ship) => ship.id === 'fed-flagship');
+  assert.equal(arrived.dest ?? null, null, 'the burn ends at the destination');
+  assert.equal(arrived.x, 15);
+  assert.equal(arrived.y, 10);
+});
+
+test('arrivals collide: two hulls plotted onto one point meet at the boundary', () => {
+  let game = createGame({ seed: 'rt-collide', realtime: true });
+  game = {
+    ...game,
+    ships: game.ships.map((ship) => {
+      if (ship.id === 'fed-flagship') return { ...ship, x: 150, y: 150, dest: { x: 160, y: 160 } };
+      if (ship.id === 'axis-flagship') return { ...ship, x: 170, y: 170, dest: { x: 160, y: 160 } };
+      return { ...ship, x: 10, y: 10, dest: null };
+    }),
+  };
+  game = drive(game, TICKS);
+  assert.match((game.lastRound?.entries ?? []).join(' '), /Collision:/,
+    'the boundary resolves what the arrivals flew into');
+});
+
+test('volleys cycle on the sim-time cooldown, one per stardate', () => {
+  let game = createGame({ seed: 'rt-cooldown', realtime: true });
+  game = {
+    ...game,
+    ships: game.ships.map((ship) => {
+      if (ship.id === 'fed-flagship') return { ...ship, x: 70, y: 60 };
+      if (ship.id === 'axis-flagship') return { ...ship, x: 60, y: 60 };
+      return ship;
+    }),
+  };
+  const first = applyPlayerAction(game, { type: 'phasers', targetId: 'axis-flagship' });
+  assert.notEqual(first.game, game);
+  assert.equal(first.game.readyAt?.['fed-flagship'], simTimeOf(game) + REALTIME.volleyInterval);
+  const second = applyPlayerAction(first.game, { type: 'phasers', targetId: 'axis-flagship' });
+  assert.equal(second.game, first.game, 'the guns are still cycling');
+  assert.match(second.messages.join(' '), /still cycling/i);
+  const cycled = drive(first.game, TICKS);
+  const third = applyPlayerAction(cycled, { type: 'phasers', targetId: 'axis-flagship' });
+  assert.notEqual(third.game, cycled, 'a stardate later the guns are ready');
+});
+
+test('re-destination is free and instant; pass holds position', () => {
+  const game = createGame({ seed: 'rt-free', realtime: true });
+  const start = game.ships.find((ship) => ship.id === game.playerShipId);
+  const dx = start.x > 160 ? -20 : 20;
+  const one = applyPlayerAction(game, { type: 'move', dx, dy: 0 });
+  assert.notEqual(one.game, game);
+  assert.deepEqual(one.game.ships.find((ship) => ship.id === game.playerShipId).dest, { x: start.x + dx, y: start.y });
+  const two = applyPlayerAction(one.game, { type: 'move', dx: -dx / 2, dy: 5 });
+  assert.notEqual(two.game, one.game, 'a second burn plots without waiting on any cooldown');
+  const held = applyPlayerAction(two.game, { type: 'pass' });
+  assert.equal(held.game.ships.find((ship) => ship.id === game.playerShipId).dest ?? null, null);
+});
+
+test('the autopilot conn flies the command ship until a manual command takes it back', () => {
+  const game = createGame({ seed: 'rt-conn', realtime: true });
+  const toggled = applyPlayerAction(game, { type: 'autopilot' });
+  assert.equal(toggled.game.autoConn, true);
+  const flown = drive(toggled.game, TICKS * 2);
+  const before = game.ships.find((ship) => ship.id === game.playerShipId);
+  const after = flown.ships.find((ship) => ship.id === flown.playerShipId);
+  assert.ok(after.x !== before.x || after.y !== before.y || after.dest,
+    'the autopilot flew or plotted the command ship across two boundaries');
+  const dx = after.x > 160 ? -5 : 5;
+  const manual = applyPlayerAction(flown, { type: 'move', dx, dy: 0 });
+  assert.equal(manual.game.autoConn, false, 'a manual burn takes the conn back');
+});
+
+test('a mid-flight save resumes into exactly the same war', () => {
+  const live = drive(createGame({ seed: 'rt-save', realtime: true }), 20);
+  const resumed = drive(JSON.parse(JSON.stringify(live)), 20);
+  const straight = drive(live, 20);
+  assert.deepEqual(resumed, straight);
+});
+
+test('a round-30 real-time save without a sim clock resumes at the stardate start', () => {
+  const legacy = { ...createGame({ seed: 'rt-legacy', realtime: true }), simTime: undefined, turn: 5 };
+  assert.equal(simTimeOf(legacy), 4);
+  const stepped = advanceSubtick(legacy);
+  assert.ok(Math.abs(simTimeOf(stepped.game) - 4.125) < 1e-9);
 });

@@ -1467,6 +1467,18 @@ body.classic .ship.has-order::before {
   letter-spacing: .02em;
 }
 
+/* Real-time time controls (Phase 8, round 31): pause and the speed steps.
+   The pressed speed wears the same cyan as the current order button. */
+#time-controls {
+  display: inline-flex;
+  gap: .25rem;
+  margin-right: .5rem;
+}
+#time-controls button[aria-pressed="true"] {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
 .ship.ace::after {
   content: "★";
   position: absolute;

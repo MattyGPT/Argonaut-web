@@ -386,7 +386,7 @@ const renderMinimap = (game, win, isVisible) => {
     .join('');
   const dots = game.ships
     .filter((ship) => ship.status !== 'destroyed' && isVisible(ship))
-    .map((ship) => `<span class="mini-dot ${ship.faction}${ship.id === game.playerShipId ? ' you' : ''}" style="--mx:${frac(ship.x)};--my:${frac(ship.y)}"></span>`)
+    .map((ship) => `<span class="mini-dot ${ship.faction}${ship.id === game.playerShipId ? ' you' : ''}" data-ship-id="${ship.id}" style="--mx:${frac(ship.x)};--my:${frac(ship.y)}"></span>`)
     .join('');
   const viewport = `<span class="mini-view" style="--vx:${frac(win.minX)};--vy:${frac(win.minY)};--vw:${frac(win.size)}"></span>`;
   minimap.innerHTML = terrain + dots + viewport;

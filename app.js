@@ -3,10 +3,10 @@ import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, REALTIME, TARGETED_ORDERS, WEAPO
 import { alertLevel, appendLog, createGame, defaultLoadout, distance, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, nebulaHides, normalizeFleetSpec, sensorRange, systemUnits } from './game/state.js';
 import { abandonEngagement, autoResolveNode, buyDockyard, createCampaign, nodeById, resolveNodeBattle, startNodeBattle, travelTo } from './game/campaign.js';
 import { scenarioFor } from './game/scenarios.js';
-import { positionAt, positionsOf } from './game/realtime.js';
-import { resolveAutopilotTurn, resolveComputerTurns } from './game/turns.js';
+import { positionAt, positionsOf, advanceSubtick, simTimeOf } from './game/realtime.js';
+import { resolveAutopilotTurn, resolveComputerTurns, resolveRealtimeBoundary } from './game/turns.js';
 import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget, promptForTowDestination } from './ui/input.js';
-import { cameraWindow, centerOn, clampCamera, makeCamera, panBy, zoomAt } from './ui/camera.js';
+import { cameraWindow, centerOn, clampCamera, fieldTransform, makeCamera, panBy, zoomAt } from './ui/camera.js';
 import { renderSectorScreen } from './ui/sector.js';
 import {
   ordinaryBattleEvents,
@@ -33,7 +33,12 @@ const loadSave = () => {
     if (!raw) return null;
     const data = JSON.parse(raw);
     if (data?.version !== 1 || !Array.isArray(data.game?.ships)) return null;
-    return data.game;
+    // Round-31 real-time saves carry the sim clock; a round-30 real-time save
+    // predates it and resumes at the start of its current stardate, hulls
+    // holding until commanded.
+    const saved = data.game;
+    if (saved.realtime && saved.simTime == null) saved.simTime = (saved.turn ?? 1) - 1;
+    return saved;
   } catch {
     return null;
   }
@@ -72,7 +77,7 @@ let campaign = loadCampaignSave();
 let sectorSelection = null;
 
 let game = campaign ? campaign.battle?.game ?? null : loadSave() ?? createGame({ seed: randomSeed() });
-let view = { entries: game ? ['Tactical systems online. Choose a command.'] : [], camera: null };
+let view = { entries: game ? ['Tactical systems online. Choose a command.'] : [], camera: null, paused: false, speed: 1 };
 
 /** The war's field, defaulting safely for an old save that predates `gridSize`. */
 const field = () => game?.gridSize ?? GRID_SIZE;
@@ -137,6 +142,7 @@ const showScreens = () => {
   const sector = sectorMode();
   document.querySelector('#game-root').hidden = sector;
   document.querySelector('#sector-root').hidden = !sector;
+  syncTimeControls();
   const bar = document.querySelector('#campaign-bar');
   bar.hidden = campaign === null;
   if (campaign) {
@@ -295,8 +301,151 @@ const runComputer = async () => {
   }
 };
 
+/**
+ * Real-time movement (round 31): the browser's sim clock. One requestAnimation
+ * frame accrues real milliseconds (scaled by the speed step), and every whole
+ * sub-tick's worth advances the fixed-timestep core — so pause and speed are
+ * pure presentation: the core only ever moves in `SUBTICK` steps, and a paused
+ * or sped-up war is state-identical to an uninterrupted one. Crossing a
+ * stardate boundary resolves it through the shared chain and presents its
+ * terminal events with the sim halted (the playback lock), exactly like the
+ * turn-based war presents them.
+ */
+let simAccumulator = 0;
+let lastFrameAt = null;
+
+/**
+ * Per-frame repaint of a live real-time war: hull buttons and minimap dots ride
+ * their fractional positions, decluttered by the same fan the boundary render
+ * uses, and a following camera keeps its transform current — without a full
+ * re-render, which only boundaries and events deserve.
+ */
+const renderFrame = () => {
+  const map = document.querySelector('#map');
+  if (!map?.querySelectorAll || !game) return;
+  const grid = field();
+  const entries = [];
+  map.querySelectorAll('.ship[data-ship-id]').forEach((el) => {
+    const ship = getShip(game, el.dataset.shipId);
+    if (ship) entries.push({ el, id: ship.id, x: ship.x, y: ship.y });
+  });
+  const offsets = fanOutOffsets(entries);
+  for (const { el, id, x, y } of entries) {
+    el.style.left = `${(x / grid) * 100}%`;
+    el.style.top = `${(y / grid) * 100}%`;
+    const offset = offsets.get(id);
+    if (offset) {
+      el.style.setProperty('--dx', `${offset.dx}px`);
+      el.style.setProperty('--dy', `${offset.dy}px`);
+    } else {
+      el.style.removeProperty('--dx');
+      el.style.removeProperty('--dy');
+    }
+  }
+  document.querySelector('#minimap')?.querySelectorAll('.mini-dot[data-ship-id]').forEach((dot) => {
+    const ship = getShip(game, dot.dataset.shipId);
+    if (!ship) return;
+    dot.style.setProperty('--mx', (ship.x / grid) * 100);
+    dot.style.setProperty('--my', (ship.y / grid) * 100);
+  });
+  if (view.camera?.follow) {
+    syncCamera();
+    const win = currentWindow();
+    const mapField = document.querySelector('#map-field');
+    if (mapField) mapField.style.transform = fieldTransform(win);
+    const viewport = document.querySelector('#minimap .mini-view');
+    if (viewport) {
+      const frac = (value) => (value / grid) * 100;
+      viewport.style.setProperty('--vx', frac(win.minX));
+      viewport.style.setProperty('--vy', frac(win.minY));
+      viewport.style.setProperty('--vw', frac(win.size));
+    }
+  }
+  // The readout rides the sim clock between boundaries, so pause and speed are
+  // visible on the header without a full re-render.
+  const readout = document.querySelector('#turn-readout');
+  if (readout) readout.textContent = `Stardate ${simTimeOf(game).toFixed(1)}`;
+};
+
+const simLoop = (now) => {
+  requestAnimationFrame(simLoop);
+  const dt = lastFrameAt === null ? 0 : Math.min(250, now - lastFrameAt);
+  lastFrameAt = now;
+  if (!game?.realtime || game.outcome || sectorMode() || playbackLocked() || view.paused) return;
+  const subtickMs = REALTIME.msPerStardate / REALTIME.ticksPerStardate;
+  simAccumulator += dt * (view.speed ?? 1);
+  let budget = Math.floor(simAccumulator / subtickMs);
+  if (budget <= 0) return;
+  let consumed = 0;
+  let arrived = [];
+  let crossed = false;
+  while (consumed < budget && !crossed && !game.outcome) {
+    const step = advanceSubtick(game);
+    game = step.game;
+    arrived = [...arrived, ...step.arrived];
+    crossed = step.crossed;
+    consumed += 1;
+  }
+  // Unspent sub-ticks stay in the accumulator: the core never loses or gains
+  // time to a frame rate.
+  simAccumulator = Math.max(0, simAccumulator - consumed * subtickMs);
+  if (game.outcome) {
+    refresh();
+    return;
+  }
+  if (crossed) {
+    game = resolveRealtimeBoundary(game, arrived);
+    view = { ...view, entries: [] };
+    showEvents(game.events);
+    presentTerminalEvents(game.events);
+    refresh();
+    return;
+  }
+  renderFrame();
+};
+requestAnimationFrame(simLoop);
+
+/** Pause halts integration but never command; the speed steps scale pacing only. */
+const syncTimeControls = () => {
+  const controls = document.querySelector('#time-controls');
+  if (controls) controls.hidden = !game?.realtime || sectorMode();
+  const pause = document.querySelector('#pause-button');
+  if (pause) pause.textContent = view.paused ? 'Resume' : 'Pause';
+  for (const step of REALTIME.speedSteps) {
+    const button = document.querySelector(`#speed-${step}`);
+    if (button) button.setAttribute('aria-pressed', String((view.speed ?? 1) === step));
+  }
+};
+const setPaused = (paused) => { view = { ...view, paused }; syncTimeControls(); };
+const setSpeed = (speed) => { view = { ...view, speed }; syncTimeControls(); };
+
+document.querySelector('#pause-button').addEventListener('click', () => setPaused(!view.paused));
+for (const step of REALTIME.speedSteps) {
+  document.querySelector(`#speed-${step}`).addEventListener('click', () => setSpeed(step));
+}
+
+// Space pauses; , and . step the speed. Only in a real-time war, never while a
+// dialog owns the keyboard or focus sits on a control Space should activate.
+document.addEventListener('keydown', (event) => {
+  if (!game?.realtime || sectorMode() || document.querySelector('dialog[open]')) return;
+  if (event.target.matches?.('input,select,textarea,button')) return;
+  if (event.key === ' ') {
+    event.preventDefault();
+    setPaused(!view.paused);
+    return;
+  }
+  if (event.key === ',' || event.key === '.') {
+    const steps = REALTIME.speedSteps;
+    const index = Math.max(0, steps.indexOf(view.speed ?? 1));
+    setSpeed(steps[event.key === ',' ? Math.max(0, index - 1) : Math.min(steps.length - 1, index + 1)]);
+  }
+});
+
 let spectating = false;
 const spectate = () => {
+  // A real-time war spectates on the sim clock below — the autopilot conn
+  // decides at each boundary there, exactly as it does for the AI alliances.
+  if (game?.realtime) return;
   if (spectating) return;
   spectating = true;
   const step = async () => {
@@ -318,8 +467,9 @@ const spectate = () => {
 
 const dispatch = async (action) => {
   // Automated turns and replay mutate the current presentation asynchronously,
-  // and the star chart has no war to command.
-  if (!game || spectating || playbackLocked()) return;
+  // and the star chart has no war to command. A real-time spectator war takes
+  // no commands at all — the autopilot conn flies it on the sim clock.
+  if (!game || spectating || playbackLocked() || (game.realtime && isSpectator(game))) return;
   if (action.type === 'map-select') {
     const ship = game.ships.find((entry) => entry.id === action.targetId);
     if (!ship || ship.status === 'destroyed') return;
@@ -483,7 +633,7 @@ const dispatch = async (action) => {
     return;
   }
 
-  if (action.type === 'autopilot') {
+  if (action.type === 'autopilot' && !game.realtime) {
     const auto = resolveAutopilotTurn(game);
     game = { ...auto.game, log: appendLog(game.log, auto.messages) };
     view = { ...view, contextShipId: null, entries: [] };
