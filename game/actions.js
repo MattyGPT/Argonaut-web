@@ -902,7 +902,7 @@ const moveAction = (game, action, actor) => {
   if (game.realtime) {
     if (x < 0 || x > grid || y < 0 || y > grid) return invalid(game, 'Movement would leave the tactical map.');
     const plotted = { ...applyHeading(game, actor, x, y), dest: { x, y } };
-    return result(completeTurn(replaceShip(game, plotted)), [`${actor.name} sets course for ${x},${y}.`]);
+    return result(completeTurn(replaceShip(game, plotted)), [`${actor.name} sets course for ${Math.round(x)},${Math.round(y)}.`]);
   }
   const displacement = Math.hypot(dx, dy);
   const capacity = engineCapacity(actor, game.gridSize ?? GRID_SIZE, powerEffect(game, actor, 'engines'));
@@ -1502,7 +1502,7 @@ const disengageAction = (game, actor) => {
     // Round 31: the escape run plots a destination; the integrator flies it and
     // the boundary resolves what the runner arrives into.
     const plotted = { ...applyHeading(game, actor, x, y), dest: { x, y } };
-    return result(completeTurn(replaceShip(game, plotted)), [`${actor.name} disengages from ${threat.name}, running to ${x},${y}.`]);
+    return result(completeTurn(replaceShip(game, plotted)), [`${actor.name} disengages from ${threat.name}, running to ${Math.round(x)},${Math.round(y)}.`]);
   }
   const movedActor = applyHeading(game, actor, x, y);
   const collision = resolveCollision(replaceShip(game, movedActor), movedActor);
@@ -1622,6 +1622,7 @@ const applyCommand = (game, action = {}) => {
  * limits how fast a hull can go.
  */
 const REALTIME_COOLDOWN = new Set(['shields', 'phasers', 'photons', 'spread', 'ion', 'tractor', 'hyperspace', 'transport', 'launch', 'self-destruct']);
+export { REALTIME_COOLDOWN };
 
 /** Manual burns and volleys take the conn back from a real-time autopilot. */
 const REALTIME_MANUAL_CONN = new Set(['move', 'disengage', 'phasers', 'photons', 'spread', 'ion', 'tractor', 'hyperspace']);

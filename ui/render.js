@@ -91,6 +91,13 @@ const terminalDescription = (event) => {
   return `${victim} — destroyed by ${event.cause}.`;
 };
 
+/**
+ * Positions are fractional in a real-time war (round 31); every narrative and
+ * report readout rounds them, the way the turn-based war's integer field always
+ * read. The map and the sim clock keep the fractions.
+ */
+const coordOf = (ship) => `${Math.round(ship.x)}, ${Math.round(ship.y)}`;
+
 export const terminalNarrative = (event) => {
   if (!event) return '';
   return `<li class="terminal-event ${event.faction}"><strong>${terminalHeading(event)}</strong><span>${terminalDescription(event)}</span></li>`;
@@ -282,6 +289,18 @@ const animateMoves = (map, game, win) => {
   if (!map?.querySelectorAll) return;
   const grid = win?.gridSize ?? game.gridSize ?? GRID_SIZE;
   if (moveMemory.seed !== game.seed) moveMemory = { seed: game.seed, positions: new Map() };
+  // Round 31: in a real-time war the flight IS the motion — the frame loop
+  // positions hulls at live fractional coordinates every rAF. The park-and-
+  // glide here would fight it (and a boundary-to-boundary trail line would
+  // scribble over the flight), so just keep the memory current and let the
+  // sim clock draw.
+  if (game.realtime) {
+    map.querySelectorAll('.ship[data-ship-id]').forEach((button) => {
+      const ship = getShip(game, button.dataset.shipId);
+      if (ship) moveMemory.positions.set(ship.id, { x: ship.x, y: ship.y });
+    });
+    return;
+  }
   map.querySelectorAll('.ship[data-ship-id]').forEach((button) => {
     const ship = getShip(game, button.dataset.shipId);
     if (!ship) return;
@@ -713,7 +732,7 @@ export const renderGame = (game, view = {}) => {
     <div class="panel-title"><span>Command console</span><span class="alert-${condition.toLowerCase()}">Condition: ${condition}</span></div>
     <div class="status">
       <div class="status-row"><span>Command</span><b>${actor.name}</b></div>
-      <div class="status-row"><span>Location</span><b>${actor.x}, ${actor.y}</b></div>
+      <div class="status-row"><span>Location</span><b>${coordOf(actor)}</b></div>
       <div class="status-row"><span>Shields</span><b>${actor.shields}</b></div>
       <div class="status-row"><span>Crew</span><b>${actor.crew}</b></div>
       <div class="status-row"><span>Status</span><b>${actor.status}</b></div>
@@ -762,7 +781,7 @@ export const renderGame = (game, view = {}) => {
       view.report?.title ?? null,
       view.terminalEvent ? `${terminalHeading(view.terminalEvent)}. ${terminalDescription(view.terminalEvent)}` : null,
       `Condition ${condition}.`,
-      `${actor.name} at ${actor.x}, ${actor.y}; shields ${actor.shields}, crew ${actor.crew}.`,
+      `${actor.name} at ${coordOf(actor)}; shields ${actor.shields}, crew ${actor.crew}.`,
       narrated[narrated.length - 1] ?? null,
     ].filter(Boolean).join(' ');
   }
@@ -809,7 +828,7 @@ export const reportFor = (game, type) => {
       // Course table; Course is the one column the remake does not track.
       lines: game.ships.map((ship) => {
         const range = command ? distance(command, ship).toFixed(1) : '?';
-        return `${ship.name} — ${ship.faction} ${ship.className} at ${ship.x},${ship.y}, ${range} away; ${statusLabel(ship)}; shields ${ship.shields}; crew ${ship.crew}.`;
+        return `${ship.name} — ${ship.faction} ${ship.className} at ${coordOf(ship)}, ${range} away; ${statusLabel(ship)}; shields ${ship.shields}; crew ${ship.crew}.`;
       }),
     };
   }
@@ -863,7 +882,7 @@ export const reportFor = (game, type) => {
         const arcNote = game.reimagined && isActive(ship) && hasArcs(game, ship)
           ? `, bow ${Math.round(facingOf(game, ship))}°, arcs ${arcReadout(game, ship)}`
           : '';
-        return `${ship.name}${prizeNote(ship)} — ${describeOrder(game, standing)}${stanceNote}${arcNote}${mark}; condition ${alertLevel(ship)} at ${ship.x},${ship.y}.`;
+        return `${ship.name}${prizeNote(ship)} — ${describeOrder(game, standing)}${stanceNote}${arcNote}${mark}; condition ${alertLevel(ship)} at ${coordOf(ship)}.`;
       });
     return {
       title: `Fleet orders, Stardate ${game.turn}`,
@@ -910,6 +929,6 @@ export const reportFor = (game, type) => {
   const survivors = game.ships.filter((ship) => ship.status !== 'destroyed');
   return {
     title: 'War zone map',
-    lines: survivors.map((ship) => `${ship.name} (${ship.faction}) — ${statusLabel(ship)} at ${ship.x}, ${ship.y}.`),
+    lines: survivors.map((ship) => `${ship.name} (${ship.faction}) — ${statusLabel(ship)} at ${coordOf(ship)}.`),
   };
 };

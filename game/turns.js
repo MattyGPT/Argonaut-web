@@ -288,7 +288,7 @@ const resolveAiAction = (startGame, shipId, plotDest = false) => {
     // its round-30 teleport-and-resolve semantics.
     if (plotDest) {
       const plotted = { ...applyHeading(game, actor, x, y), dest: { x, y } };
-      return { game: replaceShip(game, plotted), messages: [`${actor.name} moves to ${x},${y}.`], type: action.type };
+      return { game: replaceShip(game, plotted), messages: [`${actor.name} moves to ${Math.round(x)},${Math.round(y)}.`], type: action.type };
     }
     return { game: replaceShip(game, applyHeading(game, actor, x, y)), messages: [`${actor.name} moves to ${x},${y}.`], type: action.type };
   }

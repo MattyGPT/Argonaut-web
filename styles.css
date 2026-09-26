@@ -196,6 +196,13 @@ h1 {
   transition: left .55s ease-in-out, top .55s ease-in-out;
 }
 
+/* Round 31: in a real-time war the sim clock positions hulls every frame; the
+   stardate glide would swallow the flight (each frame's set would start a new
+   half-second ease). Live flight is the motion here. */
+body.realtime .ship {
+  transition: none;
+}
+
 .ship.Federation, .Federation {
   color: var(--fed);
 }

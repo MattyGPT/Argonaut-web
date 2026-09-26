@@ -1,9 +1,9 @@
-import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets } from './game/actions.js';
+import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets, REALTIME_COOLDOWN } from './game/actions.js';
 import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, REALTIME, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
-import { alertLevel, appendLog, createGame, defaultLoadout, distance, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, nebulaHides, normalizeFleetSpec, sensorRange, systemUnits } from './game/state.js';
+import { alertLevel, appendLog, createGame, defaultLoadout, distance, engineCapacity, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, nebulaHides, normalizeFleetSpec, powerEffect, sensorRange, systemUnits } from './game/state.js';
 import { abandonEngagement, autoResolveNode, buyDockyard, createCampaign, nodeById, resolveNodeBattle, startNodeBattle, travelTo } from './game/campaign.js';
 import { scenarioFor } from './game/scenarios.js';
-import { positionAt, positionsOf, advanceSubtick, simTimeOf } from './game/realtime.js';
+import { positionAt, positionsOf, advanceSubtick, simTimeOf, SUBTICK } from './game/realtime.js';
 import { resolveAutopilotTurn, resolveComputerTurns, resolveRealtimeBoundary } from './game/turns.js';
 import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget, promptForTowDestination } from './ui/input.js';
 import { cameraWindow, centerOn, clampCamera, fieldTransform, makeCamera, panBy, zoomAt } from './ui/camera.js';
@@ -142,6 +142,9 @@ const showScreens = () => {
   const sector = sectorMode();
   document.querySelector('#game-root').hidden = sector;
   document.querySelector('#sector-root').hidden = !sector;
+  // Round 31: the stylesheet kills the stardate glide while a real-time war's
+  // sim clock is the motion.
+  document.body.classList.toggle('realtime', Boolean(game?.realtime));
   syncTimeControls();
   const bar = document.querySelector('#campaign-bar');
   bar.hidden = campaign === null;
@@ -324,10 +327,28 @@ const renderFrame = () => {
   const map = document.querySelector('#map');
   if (!map?.querySelectorAll || !game) return;
   const grid = field();
+  // Interpolate the in-flight sub-tick: the core steps in whole sub-ticks, but
+  // the eye should not — each hull draws where its burn will have carried it
+  // partway through the sub-tick the accumulator is holding.
+  const frac = Math.min(1, simAccumulator / (REALTIME.msPerStardate / REALTIME.ticksPerStardate));
+  const drawn = (ship) => {
+    const dest = ship.dest;
+    if (!dest || ship.status !== 'active' || frac <= 0 || isTractorHeld(game, ship)) return ship;
+    const speed = engineCapacity(ship, grid, powerEffect(game, ship, 'engines'));
+    if (speed <= 0) return ship;
+    const dx = dest.x - ship.x;
+    const dy = dest.y - ship.y;
+    const span = Math.hypot(dx, dy);
+    const step = speed * SUBTICK * frac;
+    if (span <= step) return { ...ship, x: dest.x, y: dest.y };
+    return { ...ship, x: ship.x + (dx / span) * step, y: ship.y + (dy / span) * step };
+  };
   const entries = [];
   map.querySelectorAll('.ship[data-ship-id]').forEach((el) => {
     const ship = getShip(game, el.dataset.shipId);
-    if (ship) entries.push({ el, id: ship.id, x: ship.x, y: ship.y });
+    if (!ship) return;
+    const at = drawn(ship);
+    entries.push({ el, id: ship.id, x: at.x, y: at.y });
   });
   const offsets = fanOutOffsets(entries);
   for (const { el, id, x, y } of entries) {
@@ -345,8 +366,9 @@ const renderFrame = () => {
   document.querySelector('#minimap')?.querySelectorAll('.mini-dot[data-ship-id]').forEach((dot) => {
     const ship = getShip(game, dot.dataset.shipId);
     if (!ship) return;
-    dot.style.setProperty('--mx', (ship.x / grid) * 100);
-    dot.style.setProperty('--my', (ship.y / grid) * 100);
+    const at = drawn(ship);
+    dot.style.setProperty('--mx', (at.x / grid) * 100);
+    dot.style.setProperty('--my', (at.y / grid) * 100);
   });
   if (view.camera?.follow) {
     syncCamera();
@@ -355,12 +377,19 @@ const renderFrame = () => {
     if (mapField) mapField.style.transform = fieldTransform(win);
     const viewport = document.querySelector('#minimap .mini-view');
     if (viewport) {
-      const frac = (value) => (value / grid) * 100;
-      viewport.style.setProperty('--vx', frac(win.minX));
-      viewport.style.setProperty('--vy', frac(win.minY));
-      viewport.style.setProperty('--vw', frac(win.size));
+      const frac2 = (value) => (value / grid) * 100;
+      viewport.style.setProperty('--vx', frac2(win.minX));
+      viewport.style.setProperty('--vy', frac2(win.minY));
+      viewport.style.setProperty('--vw', frac2(win.size));
     }
   }
+  // Cooldown-gate the command buttons per frame, so a cycling gun reads as a
+  // grey button before the click, not as a refusal after it.
+  const baseline = game.phase !== 'player' || game.outcome || isSpectator(game) || view.battlePaused;
+  const cycling = (game.readyAt?.[game.playerShipId] ?? 0) > simTimeOf(game);
+  document.querySelectorAll('[data-command]').forEach((button) => {
+    if (REALTIME_COOLDOWN.has(button.dataset.command)) button.disabled = baseline || cycling;
+  });
   // The readout rides the sim clock between boundaries, so pause and speed are
   // visible on the header without a full re-render.
   const readout = document.querySelector('#turn-readout');
