@@ -1,8 +1,9 @@
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets } from './game/actions.js';
-import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
+import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, REALTIME, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
 import { alertLevel, appendLog, createGame, defaultLoadout, distance, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, nebulaHides, normalizeFleetSpec, sensorRange, systemUnits } from './game/state.js';
 import { abandonEngagement, autoResolveNode, buyDockyard, createCampaign, nodeById, resolveNodeBattle, startNodeBattle, travelTo } from './game/campaign.js';
 import { scenarioFor } from './game/scenarios.js';
+import { positionAt, positionsOf } from './game/realtime.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './game/turns.js';
 import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget, promptForTowDestination } from './ui/input.js';
 import { cameraWindow, centerOn, clampCamera, makeCamera, panBy, zoomAt } from './ui/camera.js';
@@ -14,7 +15,7 @@ import {
   whenPlaybackUnlocked,
   withPlaybackLock,
 } from './ui/battle-events.js';
-import { renderGame, reportFor } from './ui/render.js';
+import { fanOutOffsets, primeMoveMemory, renderGame, reportFor } from './ui/render.js';
 import { playEffect, playEvent } from './ui/sound.js';
 import { playEffects, replayEffects } from './ui/fx.js';
 
@@ -196,7 +197,8 @@ const showEvents = (events) => {
 
 let presentingTerminalEvents = false;
 let replayingRound = false;
-const playbackLocked = () => presentingTerminalEvents || replayingRound;
+let playingTrajectory = false;
+const playbackLocked = () => presentingTerminalEvents || replayingRound || playingTrajectory;
 const wait = (duration) => new Promise((resolve) => setTimeout(resolve, duration));
 const clearTerminalPresentation = () => {
   view = { ...view, terminalEvent: null, battlePaused: replayingRound };
@@ -213,10 +215,81 @@ const presentTerminalEvents = (events) => withPlaybackLock(
   clearTerminalPresentation,
 );
 
+/**
+ * Real-time movement (Phase 8, round 30): plays the resolved stardate's sub-tick
+ * trajectory — the hull buttons fly the course the fixed-timestep core computed,
+ * over `REALTIME.msPerStardate` of real time at 1×, before the boundary unlocks.
+ * The clock is presentation only: headless runs and playback never disagree, and
+ * the boundary positions are exactly the ones the rules decided. Reduced motion
+ * snaps to the boundary, the same respect the CSS glide pays.
+ */
+const playTrajectory = () => new Promise((resolve) => {
+  const trajectory = game?.trajectory;
+  const map = document.querySelector('#map');
+  const reduced = typeof window !== 'undefined'
+    && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if (!game?.realtime || !trajectory || !map?.querySelectorAll || reduced) {
+    if (game?.realtime) primeMoveMemory(game);
+    resolve();
+    return;
+  }
+  const grid = field();
+  const place = (el, point) => {
+    el.style.left = `${(point.x / grid) * 100}%`;
+    el.style.top = `${(point.y / grid) * 100}%`;
+  };
+  const flying = [...map.querySelectorAll('.ship[data-ship-id]')]
+    .map((el) => ({ el, id: el.dataset.shipId, points: trajectory[el.dataset.shipId] }))
+    .filter((entry) => Array.isArray(entry.points) && entry.points.length > 1);
+  if (flying.length === 0) {
+    primeMoveMemory(game);
+    resolve();
+    return;
+  }
+  playingTrajectory = true;
+  // Park every hull at the start of its course with the CSS glide suppressed —
+  // the frames below are the glide, at the core's sub-tick resolution.
+  flying.forEach(({ el, points }) => { el.style.transition = 'none'; place(el, points[0]); });
+  const started = performance.now();
+  const frame = (now) => {
+    const t = Math.min(1, (now - started) / REALTIME.msPerStardate);
+    const positions = flying.map(({ el, id, points }) => ({ el, id, at: positionAt(points, t) }));
+    // The stack declutter runs in flight too: hulls crossing within 2 units fan
+    // onto the same screen-space ring the boundary render uses, so a converging
+    // melee reads as separate glyphs instead of one blob mid-burn.
+    const offsets = fanOutOffsets(positions.map(({ id, at }) => ({ id, x: at.x, y: at.y })));
+    positions.forEach(({ el, id, at }) => {
+      place(el, at);
+      const offset = offsets.get(id);
+      if (offset) {
+        el.style.setProperty('--dx', `${offset.dx}px`);
+        el.style.setProperty('--dy', `${offset.dy}px`);
+      } else {
+        el.style.removeProperty('--dx');
+        el.style.removeProperty('--dy');
+      }
+    });
+    if (t < 1) {
+      requestAnimationFrame(frame);
+      return;
+    }
+    flying.forEach(({ el }) => { el.style.transition = ''; });
+    playingTrajectory = false;
+    // The hulls are already standing on their boundary positions; prime the
+    // render's glide memory so the next redraw does not replay the move.
+    primeMoveMemory(game);
+    resolve();
+  };
+  requestAnimationFrame(frame);
+});
+
 const runComputer = async () => {
   if (game.phase === 'computer' && !game.outcome) {
     game = resolveComputerTurns(game);
     view = { ...view, entries: [] };
+    // A real-time war flies the stardate first, so the boundary's events are
+    // presented on hulls standing where the resolution actually put them.
+    await playTrajectory();
     showEvents(game.events);
     await presentTerminalEvents(game.events);
   }
@@ -421,6 +494,14 @@ const dispatch = async (action) => {
     return;
   }
 
+  // Real-time movement (Phase 8, round 30): snapshot where every hull stands
+  // BEFORE this stardate's turn-spending burn resolves — the sub-tick trajectory
+  // `resolveComputerTurns` builds at the boundary starts here. Stamped at the
+  // dispatch entry (not inside `applyPlayerAction`) so a refused command keeps
+  // returning the identical game object and reads as the no-op it is. Free
+  // commands re-find the snapshot already present; nothing moves between
+  // boundaries except a resolution, which clears it.
+  if (game.realtime && !game.preTurn) game = { ...game, preTurn: positionsOf(game) };
   const outcome = applyPlayerAction(game, action);
   const acted = outcome.game !== game;
   game = acted
@@ -655,6 +736,7 @@ document.querySelector('#new-game').addEventListener('click', whenPlaybackUnlock
   document.querySelector('#extended').checked = game?.extended ?? false;
   document.querySelector('#reimagined').checked = campaign !== null || (game?.reimagined ?? false);
   document.querySelector('#campaign').checked = campaign !== null;
+  document.querySelector('#realtime').checked = campaign === null && (game?.realtime ?? false);
   document.querySelector('#scenario').value = game?.scenario ?? 'annihilation';
   syncScenarioAvailability();
   // The panel pre-fills from the war being left, so "same as last time" is one
@@ -682,8 +764,12 @@ document.querySelector('#extended').addEventListener('change', syncScenarioAvail
 // extended too and live-enables the scenario picker — and the fleet loadout.
 document.querySelector('#reimagined').addEventListener('change', (event) => {
   if (event.target.checked) document.querySelector('#extended').checked = true;
-  // The sector campaign carries Reimagined, so unticking it unticks the campaign.
-  else document.querySelector('#campaign').checked = false;
+  else {
+    // The sector campaign and real-time movement both carry Reimagined, so
+    // unticking it unticks them.
+    document.querySelector('#campaign').checked = false;
+    document.querySelector('#realtime').checked = false;
+  }
   syncScenarioAvailability();
   syncLoadoutAvailability();
 });
@@ -694,6 +780,22 @@ document.querySelector('#campaign').addEventListener('change', (event) => {
   if (event.target.checked) {
     document.querySelector('#reimagined').checked = true;
     document.querySelector('#extended').checked = true;
+    // Campaign battles stay turn-based in round 30; the real-time flag joins the
+    // campaign container in round 31.
+    document.querySelector('#realtime').checked = false;
+  }
+  syncScenarioAvailability();
+  syncLoadoutAvailability();
+});
+
+// Real-time movement (Phase 8, round 30) is a game-start option that carries
+// Argonaut Reimagined — ticking it ticks Reimagined (and extended) and shows
+// the loadout, exactly like the campaign does.
+document.querySelector('#realtime').addEventListener('change', (event) => {
+  if (event.target.checked) {
+    document.querySelector('#reimagined').checked = true;
+    document.querySelector('#extended').checked = true;
+    document.querySelector('#campaign').checked = false;
   }
   syncScenarioAvailability();
   syncLoadoutAvailability();
@@ -720,8 +822,11 @@ document.querySelector('#new-game-form').addEventListener('submit', whenPlayback
   if (event.submitter?.value !== 'confirm') return;
   const seedValue = document.querySelector('#new-seed').value || 'xanadu';
   const wantsCampaign = document.querySelector('#campaign').checked;
+  // Real-time movement (Phase 8, round 30) carries Argonaut Reimagined, whatever
+  // the box reads; a campaign stays turn-based this round, so it never reads it.
+  const wantsRealtime = !wantsCampaign && document.querySelector('#realtime').checked;
   // A sector campaign carries Argonaut Reimagined, whatever the box reads.
-  const reimagined = wantsCampaign || document.querySelector('#reimagined').checked;
+  const reimagined = wantsCampaign || wantsRealtime || document.querySelector('#reimagined').checked;
   // The composed forces (rounds 19 + 19b): ignored unless the war is Reimagined.
   const loadout = reimagined
     ? {
@@ -752,6 +857,7 @@ document.querySelector('#new-game-form').addEventListener('submit', whenPlayback
     precision: document.querySelector('#precision').checked,
     extended: document.querySelector('#extended').checked,
     reimagined,
+    realtime: wantsRealtime,
     scenario: document.querySelector('#scenario').value,
     loadout,
   });

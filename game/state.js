@@ -536,12 +536,14 @@ const generateTerrain = (seed, gridSize, xanadu) => {
   return [...features, ...placeRelays(rng, gridSize, xanadu, features)];
 };
 
-export const createGame = ({ seed = 'xanadu', regional = false, sound = false, extended = false, scenario = 'annihilation', precision = false, reimagined = false, loadout = null } = {}) => {
+export const createGame = ({ seed = 'xanadu', regional = false, sound = false, extended = false, scenario = 'annihilation', precision = false, reimagined = false, realtime = false, loadout = null } = {}) => {
   const normalizedSeed = String(seed);
   // Argonaut Reimagined builds on the extended layer — orders, doctrine, the
   // dockyard, and the scenarios are the substrate the Reimagined systems need — so
-  // the flag implies it, and opens the war on a wider tactical field.
-  const isReimagined = Boolean(reimagined);
+  // the flag implies it, and opens the war on a wider tactical field. Real-time
+  // movement (Phase 8, round 30) rides on top of Reimagined and implies it too.
+  const isRealtime = Boolean(realtime);
+  const isReimagined = Boolean(reimagined) || isRealtime;
   const isExtended = Boolean(extended) || isReimagined;
   const gridSize = isReimagined ? REIMAGINED_GRID_SIZE : GRID_SIZE;
   const rng = createRng(normalizedSeed);
@@ -632,6 +634,11 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     // battlefield to `gridSize`, and gates every Reimagined system. Off by default,
     // so a classic or extended war reads none of it and plays exactly as calibrated.
     reimagined: isReimagined,
+    // Real-time movement (Phase 8, round 30): hulls integrate through space on a
+    // fixed sub-timestep between stardate boundaries instead of appearing at their
+    // endpoint. Implies `reimagined`. Off by default and absent in old saves, so
+    // every reader treats a falsy flag as the turn-based war it has always been.
+    realtime: isRealtime,
     // The tactical field, in map units. 100 for a classic or extended war; wider for
     // a Reimagined one. Absent in old saves, so every reader defaults to GRID_SIZE.
     gridSize,
@@ -1329,12 +1336,27 @@ export const describeOrder = (game, order) => {
 /**
  * A damaged radio abbreviates the battle narrative, per the manual. Your own
  * ship's lines stay whole — those reach you over the intercom, not the radio.
+ * The damage LOSES traffic rather than shaving every line to the same stub:
+ * each line's stable noise draw under the integrity survives whole, and the
+ * rest cut off mid-sentence at the integrity fraction — degraded, but still a
+ * narrative you can follow. The draw hashes the line text, so a given line
+ * garbles the same way on every render and in every replay.
  */
+const lineNoise = (text) => {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash / 0x100000000;
+};
+
 export const abbreviateNarrative = (entries, integrity, ownName) => {
   if (integrity >= 1) return entries;
   return entries.map((entry) => {
     const text = String(entry);
     if (ownName && text.startsWith(ownName)) return text;
+    if (lineNoise(text) < integrity) return text;
     const words = text.split(/\s+/).filter(Boolean);
     const keep = Math.max(1, Math.round(words.length * integrity));
     return keep >= words.length ? text : `${words.slice(0, keep).join(' ')} …`;

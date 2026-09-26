@@ -1,6 +1,7 @@
 import { DOCKING, ENCOUNTERS, FACTIONS, GRID_SIZE, POWER, PRIZE, RANGES, REIMAGINED_WEAPON_DAMAGE_SCALE, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
 import { captureHull, canLaunchDrones, damageShip, detonate, fireEvent, flushShields, ionDamage, killLines, launchDrones, resolveAsteroidStrike, resolveCollision, spreadSplash, terminalEvent, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
+import { integrateStardate, positionsOf } from './realtime.js';
 import { createRng } from './rng.js';
 import { scenarioOutcome } from './scenarios.js';
 import {
@@ -681,8 +682,12 @@ const warSignature = (game) => game.ships
 
 /** Runs one autopilot turn for the player's ship (backtick command / spectator mode). */
 export const resolveAutopilotTurn = (game) => {
-  const shipId = game.playerShipId;
-  const action = resolveAiAction(game, shipId);
+  // Real-time movement (Phase 8, round 30): snapshot where every hull stands
+  // BEFORE this stardate's burns resolve — the trajectory `resolveComputerTurns`
+  // builds at the boundary starts here. Pure presentation data; no rule reads it.
+  const stamped = game.realtime && !game.preTurn ? { ...game, preTurn: positionsOf(game) } : game;
+  const shipId = stamped.playerShipId;
+  const action = resolveAiAction(stamped, shipId);
   let next = action.game;
   const log = [...action.messages];
   const events = [...(action.events ?? [])];
@@ -789,5 +794,14 @@ export const resolveComputerTurns = (initialGame) => {
     // Kept so the player can watch the round back: twenty autopilot decisions
     // otherwise arrive as one wall of text.
     lastRound: { events, entries: log },
+    // Real-time movement (Phase 8, round 30): the sub-tick trajectory of the
+    // stardate that just resolved — where every hull flew through, from its
+    // pre-resolution snapshot to the endpoint the rules decided. Pure, RNG-free
+    // presentation data; no rule reads it, and a war without the flag never
+    // grows the field. A stardate resolved with no snapshot (an old save picked
+    // up mid-flight) holds every hull at its endpoint instead of gliding.
+    ...(game.realtime
+      ? { trajectory: integrateStardate(game, initialGame.preTurn ?? null), preTurn: null }
+      : {}),
   };
 };
