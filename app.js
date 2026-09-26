@@ -410,7 +410,12 @@ const simLoop = (now) => {
   const subtickMs = REALTIME.msPerStardate / REALTIME.ticksPerStardate;
   simAccumulator += dt * (view.speed ?? 1);
   let budget = Math.floor(simAccumulator / subtickMs);
-  if (budget <= 0) return;
+  // Frames between sub-ticks still draw: this is where the interpolation lives.
+  // Returning here (the round-31 bug) left hulls popping once per sub-tick.
+  if (budget <= 0) {
+    renderFrame();
+    return;
+  }
   let consumed = 0;
   let arrived = [];
   let crossed = false;
