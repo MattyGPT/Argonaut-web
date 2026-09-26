@@ -371,7 +371,13 @@ const renderFrame = () => {
     dot.style.setProperty('--my', (at.y / grid) * 100);
   });
   if (view.camera?.follow) {
-    syncCamera();
+    // Center on the DRAWN (interpolated) position of the command ship, never on
+    // the stepped state: the state advances in whole sub-ticks, and centering on
+    // it lurches the whole layer once per sub-tick while the glyphs glide — the
+    // bounce Matt saw in the round-31 play-test.
+    const focus = getShip(game, game.playerShipId);
+    const at = focus ? drawn(focus) : null;
+    if (at) view = { ...view, camera: clampCamera({ ...view.camera, cx: at.x, cy: at.y }, field()) };
     const win = currentWindow();
     const mapField = document.querySelector('#map-field');
     if (mapField) mapField.style.transform = fieldTransform(win);
