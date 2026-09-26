@@ -18,6 +18,7 @@ import {
   isDrone,
   isImmovable,
   isNeutral,
+  isSpectator,
   isStranded,
   isTractorHeld,
   powerEffect,
@@ -61,7 +62,7 @@ const faceThreat = (game, actor, action) => {
   return actor.facing === facing ? actor : { ...actor, facing };
 };
 
-const resolveAiAction = (startGame, shipId) => {
+const resolveAiAction = (startGame, shipId, plotDest = false) => {
   let game = startGame;
   let actor = getShip(game, shipId);
   if (!isActive(actor)) return { game, messages: [], type: 'pass' };
@@ -74,7 +75,12 @@ const resolveAiAction = (startGame, shipId) => {
     actor = faced;
     game = replaceShip(game, faced);
   }
-  if (action.type === 'pass') return { game, messages: [`${actor.name} holds position.`], type: action.type };
+  if (action.type === 'pass') {
+    // Round 31: holding position in a real-time war means killing the burn —
+    // a plotted destination left standing would carry the hull on.
+    const holding = plotDest && actor.dest ? replaceShip(game, { ...actor, dest: null }) : game;
+    return { game: holding, messages: [`${actor.name} holds position.`], type: action.type };
+  }
   if (action.type === 'shields') {
     const flushed = flushShields(actor, game);
     if (!flushed) return { game, messages: [`${actor.name} holds position.`], type: 'pass' };
@@ -274,7 +280,16 @@ const resolveAiAction = (startGame, shipId) => {
     const grid = game.gridSize ?? GRID_SIZE;
     const x = Math.max(0, Math.min(grid, actor.x + action.dx));
     const y = Math.max(0, Math.min(grid, actor.y + action.dy));
-    // Round 23: an AI burn implies its heading, exactly like the player's move.
+    // Round 31: a real-time captain plots a destination and the integrator
+    // flies it — early arrival holds, a full burn lands on the boundary, and
+    // the boundary resolves what the arrival meets. The burn implies the
+    // heading exactly as a turn-based move does (round 23). Only the live
+    // real-time boundary plots (`plotDest`); the turn-shaped pipeline keeps
+    // its round-30 teleport-and-resolve semantics.
+    if (plotDest) {
+      const plotted = { ...applyHeading(game, actor, x, y), dest: { x, y } };
+      return { game: replaceShip(game, plotted), messages: [`${actor.name} moves to ${Math.round(x)},${Math.round(y)}.`], type: action.type };
+    }
     return { game: replaceShip(game, applyHeading(game, actor, x, y)), messages: [`${actor.name} moves to ${x},${y}.`], type: action.type };
   }
   return { game, messages: [], type: action.type };
@@ -734,6 +749,20 @@ export const resolveComputerTurns = (initialGame) => {
   // An alliance whose last crewed hull died this stardate takes its drones with
   // it (round 20), before the dockyard, the objectives, and the outcome checks
   // read the field.
+  return resolveStardateChain(game, log, events);
+};
+
+/**
+ * The stardate boundary chain, shared VERBATIM by the turn-based pipeline
+ * (`resolveComputerTurns`) and the real-time boundary
+ * (`resolveRealtimeBoundary`, round 31): orphan drones, encounters, dockyard,
+ * objectives, regen, strike-colors, order relay, command transfer,
+ * surrender, the stalemate signature, the outcome, and the turn increment.
+ * One source of truth, so the two presentations of a war can never disagree
+ * about what a stardate does. `log` and `events` are the caller's accumulators.
+ */
+export const resolveStardateChain = (startGame, log, events) => {
+  let game = startGame;
   const darkened = darkenOrphanDrones(game);
   game = darkened.game;
   log.push(...darkened.messages);
@@ -801,7 +830,45 @@ export const resolveComputerTurns = (initialGame) => {
     // grows the field. A stardate resolved with no snapshot (an old save picked
     // up mid-flight) holds every hull at its endpoint instead of gliding.
     ...(game.realtime
-      ? { trajectory: integrateStardate(game, initialGame.preTurn ?? null), preTurn: null }
+      ? { trajectory: integrateStardate(game, game.preTurn ?? null), preTurn: null }
       : {}),
   };
+};
+
+/**
+ * Round 31 — the real-time stardate boundary. Arrivals go first: a hull that
+ * finished its burn this stardate meets whatever it arrived on — collision and
+ * rock strikes, in id order — the continuous-time successor of the turn-based
+ * endpoint check. Then every captain with a conn decides: the AI alliances
+ * always, and the player's hull too when the autopilot has the conn
+ * (resignation, spectator, or the player's own autopilot order). Then the
+ * shared chain fires exactly as it does in a turn-based war.
+ */
+export const resolveRealtimeBoundary = (initialGame, arrived = []) => {
+  let game = initialGame;
+  const log = [];
+  const events = [];
+  for (const shipId of [...arrived].sort()) {
+    const actor = getShip(game, shipId);
+    if (!isActive(actor)) continue;
+    const collision = resolveCollision(game, actor);
+    game = collision.game;
+    log.push(...collision.messages);
+    events.push(...(collision.events ?? []));
+    const strike = resolveAsteroidStrike(game, getShip(game, shipId));
+    game = strike.game;
+    log.push(...strike.messages);
+    events.push(...(strike.events ?? []));
+  }
+  const order = game.ships
+    .filter((ship) => isActive(ship) && (isSpectator(game) || game.autoConn || ship.id !== game.playerShipId))
+    .map((ship) => ship.id);
+  for (const shipId of order) {
+    if (evaluateOutcome(game).kind !== 'active') break;
+    const action = resolveAiAction(game, shipId, true);
+    game = action.game;
+    log.push(...action.messages);
+    events.push(...(action.events ?? []));
+  }
+  return resolveStardateChain(game, log, events);
 };

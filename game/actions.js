@@ -16,6 +16,7 @@ import {
   POWER_SINKS,
   PRIZE,
   RANGES,
+  REALTIME,
   REFITS,
   REFIT_OVER_TEMPLATE,
   REIMAGINED_WEAPON_DAMAGE_SCALE,
@@ -32,6 +33,7 @@ import {
   WEAPONS,
 } from './constants.js';
 import { createRng } from './rng.js';
+import { simTimeOf } from './realtime.js';
 import {
   alertLevel,
   applyHeading,
@@ -133,7 +135,7 @@ const replaceShip = (game, replacement) => ({
   ships: game.ships.map((ship) => ship.id === replacement.id ? replacement : ship),
 });
 
-const completeTurn = (game) => ({ ...game, phase: 'computer' });
+const completeTurn = (game) => (game.realtime ? game : { ...game, phase: 'computer' });
 
 const result = (game, messages, options = {}) => ({
   game,
@@ -386,6 +388,13 @@ export const maneuverTo = (game, x, y) => {
   const dy = y - actor.y;
   const span = Math.hypot(dx, dy);
   if (span < 0.5) return null; // a click on your own hull is not an order
+  // Round 31: a real-time destination may lie past this stardate's reach — the
+  // hull burns toward it across as many stardates as the drive needs, so the
+  // engine ring reads as this stardate's reach, not as an order limit.
+  if (game.realtime) {
+    const grid = game.gridSize ?? GRID_SIZE;
+    return { dx: Math.max(0, Math.min(grid, x)) - actor.x, dy: Math.max(0, Math.min(grid, y)) - actor.y };
+  }
   const capacity = engineCapacity(actor, game.gridSize ?? GRID_SIZE, powerEffect(game, actor, 'engines'));
   const reach = Math.min(capacity, span);
   let moveX = Math.round((dx / span) * reach);
@@ -884,12 +893,20 @@ const moveAction = (game, action, actor) => {
   const dx = Number(action.dx);
   const dy = Number(action.dy);
   if (!Number.isFinite(dx) || !Number.isFinite(dy)) return invalid(game, 'Movement requires numeric displacement coordinates.');
-  const displacement = Math.hypot(dx, dy);
-  const capacity = engineCapacity(actor, game.gridSize ?? GRID_SIZE, powerEffect(game, actor, 'engines'));
-  if (displacement > capacity) return invalid(game, `Movement exceeds engine capacity of ${capacity}.`);
   const grid = game.gridSize ?? GRID_SIZE;
   const x = actor.x + dx;
   const y = actor.y + dy;
+  // Round 31: a real-time burn plots a destination — the integrator flies it,
+  // early arrivals hold, and the boundary resolves what the arrival meets. No
+  // capacity gate: speed limits the motion, not the order.
+  if (game.realtime) {
+    if (x < 0 || x > grid || y < 0 || y > grid) return invalid(game, 'Movement would leave the tactical map.');
+    const plotted = { ...applyHeading(game, actor, x, y), dest: { x, y } };
+    return result(completeTurn(replaceShip(game, plotted)), [`${actor.name} sets course for ${Math.round(x)},${Math.round(y)}.`]);
+  }
+  const displacement = Math.hypot(dx, dy);
+  const capacity = engineCapacity(actor, game.gridSize ?? GRID_SIZE, powerEffect(game, actor, 'engines'));
+  if (displacement > capacity) return invalid(game, `Movement exceeds engine capacity of ${capacity}.`);
   if (x < 0 || x > grid || y < 0 || y > grid) return invalid(game, 'Movement would leave the tactical map.');
   // Round 23: the move implies the heading — a Reimagined hull ends the burn
   // facing the direction it traveled (inert elsewhere, so parity holds).
@@ -1481,6 +1498,12 @@ const disengageAction = (game, actor) => {
   const y = Math.max(0, Math.min(grid, Math.round(actor.y + ((actor.y - threat.y) / span) * capacity)));
   // Round 23: the escape burn sets the heading — the runner presents its weak aft
   // arc to whatever is chasing (Reimagined only; inert elsewhere).
+  if (game.realtime) {
+    // Round 31: the escape run plots a destination; the integrator flies it and
+    // the boundary resolves what the runner arrives into.
+    const plotted = { ...applyHeading(game, actor, x, y), dest: { x, y } };
+    return result(completeTurn(replaceShip(game, plotted)), [`${actor.name} disengages from ${threat.name}, running to ${Math.round(x)},${Math.round(y)}.`]);
+  }
   const movedActor = applyHeading(game, actor, x, y);
   const collision = resolveCollision(replaceShip(game, movedActor), movedActor);
   const strike = resolveAsteroidStrike(collision.game, movedActor);
@@ -1491,7 +1514,7 @@ const disengageAction = (game, actor) => {
   ], { events: [...collision.events, ...strike.events] });
 };
 
-export const applyPlayerAction = (game, action = {}) => {
+const applyCommand = (game, action = {}) => {
   if (!game || !action.type) return invalid(game, 'Choose a command.');
   if (game.outcome || game.phase === 'ended') return invalid(game, 'The war has already ended.');
   if (game.phase !== 'player') return invalid(game, 'Wait for the player turn.');
@@ -1518,7 +1541,13 @@ export const applyPlayerAction = (game, action = {}) => {
     case 'tractor': return tractorAction(game, action, actor);
     case 'hyperspace': return hyperspaceAction(game, action, actor);
     case 'self-destruct': return selfDestructAction(game, actor);
-    case 'pass': return result(completeTurn(game), `${actor.name} holds position.`);
+    case 'pass':
+      // Round 31: holding position in a real-time war kills the burn — a plotted
+      // destination left standing would carry the hull on through the pause.
+      return result(
+        completeTurn(game.realtime ? replaceShip(game, { ...actor, dest: null }) : game),
+        `${actor.name} holds position.`,
+      );
     case 'computer': return result(game, 'Computer report ready.', { report: computerReport(game, actor) });
     case 'scan': {
       const disabled = requiresSystem(game, actor, 'scanner');
@@ -1553,7 +1582,19 @@ export const applyPlayerAction = (game, action = {}) => {
     case 'stance': return setStance(game, action, actor);
     case 'facing': return setFacing(game, action, actor);
     case 'arcFocus': return setArcFocus(game, action, actor);
-    case 'autopilot': return result(completeTurn(game), `${actor.name} autopilot holds course.`);
+    case 'autopilot':
+      // Round 31: in a real-time war the autopilot is a conn toggle, not a
+      // one-stardate stand-in — it flies the command ship at each boundary
+      // until a manual burn or volley takes the conn back.
+      if (game.realtime) {
+        return result(
+          { ...game, autoConn: !game.autoConn },
+          game.autoConn
+            ? `${actor.name} resumes manual conn.`
+            : `${actor.name} autopilot has the conn; any manual burn or volley takes it back.`,
+        );
+      }
+      return result(completeTurn(game), `${actor.name} autopilot holds course.`);
     case 'resign': {
       if (game.resigned) return invalid(game, 'You have already resigned command; the autopilot has the conn.');
       // The same rule as losing your ship, rather than a second copy of it that can
@@ -1571,4 +1612,34 @@ export const applyPlayerAction = (game, action = {}) => {
     }
     default: return invalid(game, `Unknown command: ${action.type}.`);
   }
+};
+
+/**
+ * Round 31: commands that spend a stardate in a turn-based war cycle on a
+ * sim-time cooldown in a real-time one — `REALTIME.volleyInterval` stardates
+ * between them, which preserves today's damage-per-stardate exactly. Movement
+ * is not here: re-destination is free, because the drive, not the order book,
+ * limits how fast a hull can go.
+ */
+const REALTIME_COOLDOWN = new Set(['shields', 'phasers', 'photons', 'spread', 'ion', 'tractor', 'hyperspace', 'transport', 'launch', 'self-destruct']);
+export { REALTIME_COOLDOWN };
+
+/** Manual burns and volleys take the conn back from a real-time autopilot. */
+const REALTIME_MANUAL_CONN = new Set(['move', 'disengage', 'phasers', 'photons', 'spread', 'ion', 'tractor', 'hyperspace']);
+
+export const applyPlayerAction = (game, action = {}) => {
+  if (game?.realtime && REALTIME_COOLDOWN.has(action.type)) {
+    const ready = game.readyAt?.[game.playerShipId] ?? 0;
+    if (ready > simTimeOf(game)) {
+      return invalid(game, `${getShip(game, game.playerShipId)?.name ?? 'Your ship'} is still cycling — ready again at stardate ${Math.floor(ready) + 1}.`);
+    }
+  }
+  const outcome = applyCommand(game, action);
+  if (!game?.realtime || outcome.game === game) return outcome;
+  let next = outcome.game;
+  if (REALTIME_COOLDOWN.has(action.type)) {
+    next = { ...next, readyAt: { ...(next.readyAt ?? {}), [game.playerShipId]: simTimeOf(game) + REALTIME.volleyInterval } };
+  }
+  if (next.autoConn && REALTIME_MANUAL_CONN.has(action.type)) next = { ...next, autoConn: false };
+  return next === outcome.game ? outcome : { ...outcome, game: next };
 };

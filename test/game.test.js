@@ -684,11 +684,11 @@ test("roll call gives each ship's location and its distance from command", () =>
   const game = createGame({ seed: 'rollcall-columns' });
   const argo = getShip(game, 'fed-flagship');
   const line = reportFor(game, 'rollcall').lines.find((entry) => entry.startsWith('Argo'));
-  assert.match(line, new RegExp(`at ${argo.x},${argo.y}, 0\\.0 away`));
+  assert.match(line, new RegExp(`at ${argo.x}, ${argo.y}, 0\\.0 away`));
   assert.match(line, /Active/);
   const enemy = getShip(game, 'axis-flagship');
   const enemyLine = reportFor(game, 'rollcall').lines.find((entry) => entry.startsWith('Firebreather'));
-  assert.match(enemyLine, new RegExp(`at ${enemy.x},${enemy.y}, ${Math.hypot(enemy.x - argo.x, enemy.y - argo.y).toFixed(1)} away`));
+  assert.match(enemyLine, new RegExp(`at ${enemy.x}, ${enemy.y}, ${Math.hypot(enemy.x - argo.x, enemy.y - argo.y).toFixed(1)} away`));
 });
 
 test('weapon damage varies from shot to shot inside the manual band', () => {
@@ -4062,7 +4062,7 @@ test('a drone reads as unmanned on every surface, never as "Captain undefined"',
   assert.ok(scanned.report.lines.includes('Command: none — an unmanned fighter drone.'));
   assert.ok(scanned.report.lines.every((line) => !/undefined/.test(line)));
   const rollcall = reportFor(wing, 'rollcall').lines.find((line) => line.startsWith('Lexington D1'));
-  assert.match(rollcall, /Lexington D1 — Federation Drone at 102,100/);
+  assert.match(rollcall, /Lexington D1 — Federation Drone at 102, 100/);
   assert.ok(!rollcall.includes('undefined'));
   const fleet = reportFor(wing, 'fleet').lines.find((line) => line.startsWith('Lexington D1'));
   assert.ok(fleet && !fleet.includes('undefined'), 'the fleet report lists the wing');

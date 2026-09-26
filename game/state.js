@@ -639,6 +639,12 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     // endpoint. Implies `reimagined`. Off by default and absent in old saves, so
     // every reader treats a falsy flag as the turn-based war it has always been.
     realtime: isRealtime,
+    // Round 31: the real-time sim clock — fractional elapsed stardates, one
+    // stardate per integer crossing — and the per-hull command cooldowns
+    // (shipId → the simTime it is ready again). Absent outside a real-time war
+    // and in round-30 saves, so readers default: `simTime` to `turn − 1`,
+    // cooldowns to ready-now.
+    ...(isRealtime ? { simTime: 0, readyAt: {} } : {}),
     // The tactical field, in map units. 100 for a classic or extended war; wider for
     // a Reimagined one. Absent in old saves, so every reader defaults to GRID_SIZE.
     gridSize,
