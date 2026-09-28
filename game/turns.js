@@ -21,6 +21,7 @@ import {
   isSpectator,
   isStranded,
   isTractorHeld,
+  plotCourse,
   powerEffect,
   segmentCrossesFeature,
   sensorRange,
@@ -287,7 +288,7 @@ const resolveAiAction = (startGame, shipId, plotDest = false) => {
     // real-time boundary plots (`plotDest`); the turn-shaped pipeline keeps
     // its round-30 teleport-and-resolve semantics.
     if (plotDest) {
-      const plotted = { ...applyHeading(game, actor, x, y), dest: { x, y } };
+      const plotted = plotCourse(game, actor, x, y);
       return { game: replaceShip(game, plotted), messages: [`${actor.name} moves to ${Math.round(x)},${Math.round(y)}.`], type: action.type };
     }
     return { game: replaceShip(game, applyHeading(game, actor, x, y)), messages: [`${actor.name} moves to ${x},${y}.`], type: action.type };

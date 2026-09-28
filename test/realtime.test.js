@@ -248,14 +248,40 @@ test('volleys cycle on the sim-time cooldown, one per stardate', () => {
 test('re-destination is free and instant; pass holds position', () => {
   const game = createGame({ seed: 'rt-free', realtime: true });
   const start = game.ships.find((ship) => ship.id === game.playerShipId);
-  const dx = start.x > 160 ? -20 : 20;
+  const dx = start.x > 160 ? -60 : 60;
   const one = applyPlayerAction(game, { type: 'move', dx, dy: 0 });
   assert.notEqual(one.game, game);
-  assert.deepEqual(one.game.ships.find((ship) => ship.id === game.playerShipId).dest, { x: start.x + dx, y: start.y });
+  const plottedShip = one.game.ships.find((ship) => ship.id === game.playerShipId);
+  assert.deepEqual(plottedShip.dest, { x: start.x + dx, y: start.y });
+  // THE round-31 play-test bug: plotting a course must never teleport the hull.
+  assert.equal(plottedShip.x, start.x, 'plotting a course teleported the hull');
+  assert.equal(plottedShip.y, start.y);
+  // Two sub-ticks into a 60-unit burn: partway, provably not at the destination.
+  const partial = drive(one.game, 2);
+  const mid = partial.ships.find((ship) => ship.id === game.playerShipId);
+  assert.ok(Math.abs(mid.x - start.x) > 0, 'the burn is not flying');
+  assert.ok(Math.abs(mid.x - (start.x + dx)) > 1, 'the hull arrived instantly — teleport, not flight');
   const two = applyPlayerAction(one.game, { type: 'move', dx: -dx / 2, dy: 5 });
   assert.notEqual(two.game, one.game, 'a second burn plots without waiting on any cooldown');
   const held = applyPlayerAction(two.game, { type: 'pass' });
   assert.equal(held.game.ships.find((ship) => ship.id === game.playerShipId).dest ?? null, null);
+});
+
+test('an AI captain plots without teleporting: a burn never exceeds its sub-tick step', () => {
+  let game = createGame({ seed: 'rt-noteleport', realtime: true });
+  game = drive(game, TICKS); // boundary 1: the captains plot their burns
+  const plotters = game.ships.filter((ship) => ship.dest && ship.status === 'active');
+  assert.ok(plotters.length > 0, 'no captain plotted a burn');
+  const before = new Map(plotters.map((ship) => [ship.id, { x: ship.x, y: ship.y }]));
+  const flown = drive(game, 1); // one sub-tick into the flight
+  for (const ship of flown.ships) {
+    const was = before.get(ship.id);
+    if (!was) continue;
+    const moved = Math.hypot(ship.x - was.x, ship.y - was.y);
+    const speed = engineCapacity(ship, game.gridSize, powerEffect(game, ship, 'engines'));
+    assert.ok(moved <= speed / TICKS + 1e-9,
+      `${ship.id} moved ${moved} in one sub-tick (speed cap ${speed / TICKS}) — the plot teleported it`);
+  }
 });
 
 test('the autopilot conn flies the command ship until a manual command takes it back', () => {

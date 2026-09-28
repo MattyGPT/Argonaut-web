@@ -1303,6 +1303,20 @@ export const applyHeading = (game, ship, x, y) => {
 };
 
 /**
+ * Round 31: plot a real-time burn — point the bow at the destination and set
+ * `dest`, but DO NOT move the hull. The fixed-timestep integrator flies the
+ * burn across its sub-ticks and arrival is what repositions the hull; using
+ * `applyHeading` here (the turn-based mover) teleported plotted hulls to their
+ * destination, which is the pop the round-31 play-test caught. Drones have no
+ * facing; a zero-displacement plot keeps the last heading.
+ */
+export const plotCourse = (game, ship, x, y) => {
+  const plotted = { ...ship, dest: { x, y } };
+  if (!hasArcs(game, ship) || (ship.x === x && ship.y === y)) return plotted;
+  return { ...plotted, facing: Math.round(bearingDeg(ship, { x, y })) };
+};
+
+/**
  * The friendly starbase this hull is docked at, if any — close enough, and healthy
  * enough to spare the resources. Starbases and tractor-held hulls never dock, and
  * neither does a drone (round 20): the dockyard's story is crew transfers and
