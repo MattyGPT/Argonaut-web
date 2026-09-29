@@ -338,3 +338,76 @@ test('a round-30 real-time save without a sim clock resumes at the stardate star
   const stepped = advanceSubtick(legacy);
   assert.ok(Math.abs(simTimeOf(stepped.game) - 4.125) < 1e-9);
 });
+
+/** The gunnery fixture: command ship and a target 8 units off (inside the 10-unit photon reach), the rest parked far away and spread out. */
+const gunneryWar = (seed = 'rt-torp') => {
+  const game = createGame({ seed, realtime: true });
+  return {
+    ...game,
+    ships: game.ships.map((ship, index) => {
+      if (ship.id === 'fed-flagship') return { ...ship, x: 50, y: 60 };
+      if (ship.id === 'axis-flagship') return { ...ship, x: 58, y: 60 };
+      return { ...ship, x: 4 + ((index * 37) % 312), y: 300, dest: null };
+    }),
+  };
+};
+
+test('a photon enters flight and detonates on the run — rolls at impact, none at launch', () => {
+  const game = gunneryWar();
+  const fired = applyPlayerAction(game, { type: 'photons', targetId: 'axis-flagship' });
+  assert.equal((fired.game.ordnance ?? []).length, 1, 'the warhead is in flight');
+  assert.equal(fired.game.randomStep, game.randomStep, 'the launch consumes no roll');
+  // A 20-unit run at 280/stardate lands inside the first sub-tick.
+  const flown = drive(fired.game, 2);
+  assert.equal((flown.ordnance ?? []).length, 0, 'the warhead detonated');
+  assert.ok(flown.randomStep > fired.game.randomStep, 'the detonation rolled on the main stream');
+  assert.match((flown.log ?? []).join(' '), /photons hit|splash wide|detonates harmlessly/);
+});
+
+test('a target that burns perpendicular lives — dodging is real', () => {
+  let game = gunneryWar('rt-dodge');
+  game = {
+    ...game,
+    ships: game.ships.map((ship) => (ship.id === 'axis-flagship' ? { ...ship, dest: { x: 58, y: 90 } } : ship)),
+  };
+  const shieldsBefore = game.ships.find((ship) => ship.id === 'axis-flagship').shields;
+  const fired = applyPlayerAction(game, { type: 'photons', targetId: 'axis-flagship' });
+  const flown = drive(fired.game, 2);
+  assert.equal((flown.ordnance ?? []).length, 0);
+  assert.match((flown.log ?? []).join(' '), /detonates harmlessly/, 'the warhead splashed the point the target had left');
+  const axis = flown.ships.find((ship) => ship.id === 'axis-flagship');
+  assert.equal(axis.shotsTaken, 0);
+  assert.equal(axis.shields, shieldsBefore, 'the dodge saved every point of shield');
+});
+
+test('a tractor lock hauls smoothly across the sub-ticks — same pull, no teleport', () => {
+  let game = createGame({ seed: 'rt-tow', realtime: true });
+  game = {
+    ...game,
+    ships: game.ships.map((ship, index) => {
+      if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
+      if (ship.id === 'axis-flagship') return { ...ship, x: 115, y: 100 };
+      return { ...ship, x: 4 + ((index * 37) % 312), y: 300, dest: null };
+    }),
+  };
+  const locked = applyPlayerAction(game, { type: 'tractor', targetId: 'axis-flagship' });
+  const victim = locked.game.ships.find((ship) => ship.id === 'axis-flagship');
+  assert.equal(victim.tractorBy, 'fed-flagship');
+  assert.ok(victim.tow, 'the lock schedules a tow');
+  assert.equal(victim.x, 115, 'the lock does not teleport the victim');
+  const pull = victim.tow.remaining;
+  // Seven sub-ticks: seven eighths of the pull, hauled smoothly, rope not yet out.
+  const hauled = drive(locked.game, TICKS - 1);
+  const after = hauled.ships.find((ship) => ship.id === 'axis-flagship');
+  assert.ok(Math.abs((115 - after.x) - (pull * 7) / 8) < 1e-9, `hauled ${(115 - after.x).toFixed(3)} of ${pull}`);
+  assert.ok(after.tow && Math.abs(after.tow.remaining - pull / 8) < 1e-9);
+});
+
+test('a long real-time war replays identically — the whole continuum is deterministic', () => {
+  const run = () => {
+    let current = { ...createGame({ seed: 'rt-long', realtime: true }), autoConn: true };
+    for (let tick = 0; tick < 80; tick += 1) current = stepContinuum(current).game;
+    return current;
+  };
+  assert.deepEqual(run(), run());
+});

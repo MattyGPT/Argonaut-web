@@ -21,7 +21,8 @@
  */
 import { pathToFileURL } from 'node:url';
 import { appendLog, createGame } from '../game/state.js';
-import { resolveAutopilotTurn, resolveComputerTurns } from '../game/turns.js';
+import { resolveAutopilotTurn, resolveComputerTurns, stepContinuum } from '../game/turns.js';
+import { REALTIME } from '../game/constants.js';
 
 export const DEFAULTS = Object.freeze({ mode: 'all', seeds: 250, precision: false, regional: false, maxStardates: 600 });
 
@@ -30,11 +31,19 @@ export const DEFAULTS = Object.freeze({ mode: 'all', seeds: 250, precision: fals
  * The player's hull flies the same autopilot the enemy captains do; a war the
  * Federation loses plays on spectated until the field decides it, exactly as
  * the shipped game does.
+ *
+ * `--mode realtime` (round 32) plays the same war on the continuous-time
+ * core: the conn hull flies on the autopilot toggle (`autoConn`), captains
+ * plot burns at each boundary, torpedoes fly ballistically, collisions and
+ * avoidance happen mid-tick. It is a SEPARATE baseline — 'all' stays the
+ * three turn-based modes so cross-commit comparisons keep their meaning.
  */
 export const runWar = (index, { mode = 'extended', precision = false, regional = false, maxStardates = DEFAULTS.maxStardates } = {}) => {
-  const reimagined = mode === 'reimagined';
+  const realtime = mode === 'realtime';
+  const reimagined = mode === 'reimagined' || realtime;
   const extended = mode === 'extended' || reimagined;
-  let game = createGame({ seed: `sim-${index}`, extended, reimagined, precision, regional });
+  let game = createGame({ seed: `sim-${index}`, extended, reimagined, realtime, precision, regional });
+  if (realtime) game = { ...game, autoConn: true };
 
   // Self-destruct tracking off the terminal events: a detonation's own card has
   // no attacker; every hull its blast or shrapnel finishes carries attackerId =
@@ -60,11 +69,23 @@ export const runWar = (index, { mode = 'extended', precision = false, regional =
     }
   };
 
-  while (!game.outcome && game.turn < maxStardates) {
-    const auto = resolveAutopilotTurn(game);
-    tally(auto.events);
-    game = resolveComputerTurns(auto.game);
-    tally(game.events);
+  if (realtime) {
+    // The continuous-time driver: one call = one sub-tick (integration,
+    // ordnance, strikes, the collision sweep, and the boundary on a crossing).
+    let guard = (maxStardates + 1) * REALTIME.ticksPerStardate;
+    while (!game.outcome && guard > 0) {
+      const step = stepContinuum(game);
+      tally(step.events);
+      game = step.game;
+      guard -= 1;
+    }
+  } else {
+    while (!game.outcome && game.turn < maxStardates) {
+      const auto = resolveAutopilotTurn(game);
+      tally(auto.events);
+      game = resolveComputerTurns(auto.game);
+      tally(game.events);
+    }
   }
 
   const count = (status) => game.ships.filter((ship) => ship.status === status).length;
@@ -161,7 +182,7 @@ const printReport = (report) => {
   console.log(`volleys per war: ${w.shots}   kills: ${w.kills}   volleys per kill: ${w.volleysPerKill}   collisions: ${w.collisions}`);
   const factions = Object.entries(report.selfDestructsByFaction).map(([name, count]) => `${name} ${count}`).join(', ');
   console.log(`self-destructs per war: ${w.selfDestructs}${factions ? ` (${factions})` : ''}   worst blast: ${w.worstBlast} hulls   wars with a 4+ hull blast: ${(w.wipeoutBlastRate * 100).toFixed(1)}%`);
-  if (report.mode === 'reimagined') {
+  if (report.mode === 'reimagined' || report.mode === 'realtime') {
     console.log(`prizes taken per war: ${w.prizesTaken}   still held at the end: ${w.prizesHeldAtEnd}`);
   }
   console.log(`outcomes: ${Object.entries(report.outcomes).map(([kind, count]) => `${kind} ${pct(count, report.wars)}`).join(', ')}`);
@@ -169,6 +190,8 @@ const printReport = (report) => {
   console.log('');
 };
 
+// 'all' stays the three TURN-BASED modes so cross-commit baseline comparisons
+// keep their meaning; the real-time baseline is measured with --mode realtime.
 const MODES = ['classic', 'extended', 'reimagined'];
 
 const parseArgs = (argv) => {
@@ -176,7 +199,7 @@ const parseArgs = (argv) => {
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const next = argv[index + 1];
-    if (flag === '--mode' && (MODES.includes(next) || next === 'all')) { args.mode = next; index += 1; } else if (flag === '--seeds' && Number.isFinite(Number(next))) { args.seeds = Number(next); index += 1; } else if (flag === '--max-stardates' && Number.isFinite(Number(next))) { args.maxStardates = Number(next); index += 1; } else if (flag === '--precision') args.precision = true;
+    if (flag === '--mode' && (MODES.includes(next) || next === 'realtime' || next === 'all')) { args.mode = next; index += 1; } else if (flag === '--seeds' && Number.isFinite(Number(next))) { args.seeds = Number(next); index += 1; } else if (flag === '--max-stardates' && Number.isFinite(Number(next))) { args.maxStardates = Number(next); index += 1; } else if (flag === '--precision') args.precision = true;
     else if (flag === '--regional') args.regional = true;
     else if (flag === '--json') args.json = true;
   }

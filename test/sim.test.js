@@ -32,6 +32,15 @@ test('the harness is deterministic: the same seed replays the same war', () => {
   assert.deepEqual(first, second);
 });
 
+test('the harness plays a real-time war on the continuous core (round 32)', () => {
+  const war = runWar(0, { mode: 'realtime', maxStardates: 40 });
+  assert.ok(war.turns > 1, 'the continuum advanced the stardates');
+  assert.ok(war.shots >= 0);
+  assert.ok(war.collisions >= 0);
+  const again = runWar(0, { mode: 'realtime', maxStardates: 40 });
+  assert.deepEqual(war, again, 'the real-time harness is deterministic');
+});
+
 test('simulate folds a short run into an aggregate report', () => {
   const report = simulate({ mode: 'classic', seeds: 3 });
   assert.equal(report.wars, 3);

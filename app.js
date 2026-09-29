@@ -370,6 +370,15 @@ const renderFrame = () => {
     dot.style.setProperty('--mx', (at.x / grid) * 100);
     dot.style.setProperty('--my', (at.y / grid) * 100);
   });
+  // Warheads ride the same in-flight interpolation — a salvo crosses the field
+  // at ~3× hull speed, so per-frame drawing is what makes it dodgeable to the eye.
+  map.querySelectorAll('.warhead[data-ordnance-id]').forEach((el) => {
+    const warhead = (game.ordnance ?? []).find((entry) => entry.id === el.dataset.ordnanceId);
+    if (!warhead) return;
+    const travel = Math.min(warhead.remaining ?? 0, REALTIME.torpedoSpeed * SUBTICK * frac);
+    el.style.left = `${((warhead.x + warhead.ux * travel) / grid) * 100}%`;
+    el.style.top = `${((warhead.y + warhead.uy * travel) / grid) * 100}%`;
+  });
   if (view.camera?.follow) {
     // Center on the DRAWN (interpolated) position of the command ship, never on
     // the stepped state: the state advances in whole sub-ticks, and centering on

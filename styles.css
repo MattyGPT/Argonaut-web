@@ -203,6 +203,26 @@ body.realtime .ship {
   transition: none;
 }
 
+/* Warheads in flight (round 32): the ballistic photon run and the spread salvo
+   draw as hot traveling dots — the state is the timeline, and the frame loop
+   moves them, so an incoming salvo is something you can see and dodge. */
+.warhead {
+  position: absolute;
+  left: calc(var(--x) * 1%);
+  top: calc(var(--y) * 1%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: #ff9d5c;
+  box-shadow: 0 0 6px #ff9d5c;
+  pointer-events: none;
+}
+.warhead.spread {
+  background: #ffd257;
+  box-shadow: 0 0 6px #ffd257;
+}
+
 .ship.Federation, .Federation {
   color: var(--fed);
 }

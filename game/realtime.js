@@ -183,7 +183,29 @@ export const advanceSubtick = (game) => {
   }
   // Movement pass.
   const arrived = [];
+  const towsDone = [];
   const ships = game.ships.map((ship) => {
+    // Round 32: a tractor lock hauls its victim smoothly toward the point the
+    // beam was laid on — the same per-stardate pull total, spread across the
+    // ticks. Running out of rope finishes the tow; the continuum rolls the
+    // rock strike there, exactly like a turn-based tow's end.
+    if (ship.tow && ship.tow.remaining > 0 && isActive(ship)) {
+      const dx = ship.tow.x - ship.x;
+      const dy = ship.tow.y - ship.y;
+      const dist = Math.hypot(dx, dy);
+      const travel = Math.min(ship.tow.rate, dist, ship.tow.remaining);
+      const remaining = ship.tow.remaining - travel;
+      if (dist <= travel || remaining <= 1e-9) {
+        towsDone.push(ship.id);
+        return { ...ship, x: ship.tow.x, y: ship.tow.y, tow: null };
+      }
+      return {
+        ...ship,
+        x: ship.x + (dx / dist) * travel,
+        y: ship.y + (dy / dist) * travel,
+        tow: { ...ship.tow, remaining },
+      };
+    }
     const burn = burns.get(ship.id);
     if (!burn) return ship;
     if (burn.arrival) {
@@ -214,6 +236,7 @@ export const advanceSubtick = (game) => {
   return {
     game: { ...game, simTime, ships },
     arrived,
+    towsDone,
     crossed: Math.floor(simTime) > Math.floor(before),
   };
 };

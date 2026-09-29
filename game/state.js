@@ -1303,6 +1303,17 @@ export const applyHeading = (game, ship, x, y) => {
 };
 
 /**
+ * Round 32: point the bow at a coordinate WITHOUT moving — the heading-only
+ * half of `applyHeading`, for the continuous-time paths (tows, plots) where
+ * repositioning belongs to the integrator alone. Drones have no facing; a
+ * zero-displacement turn keeps the last heading.
+ */
+export const facePoint = (game, ship, x, y) => {
+  if (!hasArcs(game, ship) || (ship.x === x && ship.y === y)) return ship;
+  return { ...ship, facing: Math.round(bearingDeg(ship, { x, y })) };
+};
+
+/**
  * Round 31: plot a real-time burn — point the bow at the destination and set
  * `dest`, but DO NOT move the hull. The fixed-timestep integrator flies the
  * burn across its sub-ticks and arrival is what repositions the hull; using
@@ -1310,11 +1321,7 @@ export const applyHeading = (game, ship, x, y) => {
  * destination, which is the pop the round-31 play-test caught. Drones have no
  * facing; a zero-displacement plot keeps the last heading.
  */
-export const plotCourse = (game, ship, x, y) => {
-  const plotted = { ...ship, dest: { x, y } };
-  if (!hasArcs(game, ship) || (ship.x === x && ship.y === y)) return plotted;
-  return { ...plotted, facing: Math.round(bearingDeg(ship, { x, y })) };
-};
+export const plotCourse = (game, ship, x, y) => ({ ...facePoint(game, ship, x, y), dest: { x, y } });
 
 /**
  * The friendly starbase this hull is docked at, if any — close enough, and healthy

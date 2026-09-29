@@ -386,6 +386,34 @@ modules.
     baseline. Combat resolves identically paused and unpaused throughout —
     the core is the same fixed-timestep driver either way (asserted).
 
+### Shipped & measured (round 32 — 2026-09-25)
+
+**584 tests green** (+5: torpedo flight & impact-time rolls, the dodge that
+lives, the smooth seven-eighths tow, whole-continuum determinism over ten
+stardates, and the realtime harness smoke). One design correction worth
+keeping: the contact geometry is **time-synchronized closest approach**
+(relative-motion CPA over the shared sub-tick parameter), NOT plain
+segment-segment distance — unsynchronized segments would "collide" crossing
+paths that were never co-present and would clip a dodging target at its
+launch position; position sampling alone would tunnel (12–35 units of travel
+per sub-tick against a 1–2 unit radius). And a **hold-short arrival**
+replaced the deflected-arrival skim after measurement showed a 15° bend has
+no lateral authority at arm's length.
+
+**Turn-based harness digit-for-digit unchanged** in all three modes (the
+round's one shared-code touch — `spreadSplash` delegating to `spreadSplashAt`
+— is byte-identical by construction and parity-proven). **The real-time
+baseline (`--mode realtime`, 250 seeds)** is recorded as its own CALIBRATION
+row: median **58** stardates (mean 101), volleys/kill **16.5** (dodging's
+intended tax), prizes **9.23/war**, hopeless draws **15%**, timeouts 4%,
+last stands and 4+-hull blasts **extinct** (clusters no longer stack on
+points), winners **Federation 34.4 / Axis 20.8 / Bloc 18.8 / Cabal 6.8** —
+Cabal halved (tow-rams now haul over 8 sub-ticks under fire, and trickster
+convergences get dodged). **Collisions 19.71/war, UP from 13.51 despite
+avoidance** — the mid-tick sweep sees convergences the endpoint check never
+did; the avoidance dials (margin 2 / angle 15° / lookahead 2) are the levers,
+flagged for Matt's play-test rather than tuned blind.
+
 ### Round 32 — direction (as settled with Matt, kept for history)
 
 - Photons and spread torpedoes in flight per sub-tick
