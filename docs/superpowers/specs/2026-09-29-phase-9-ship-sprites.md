@@ -180,9 +180,13 @@ the shipped assets, so every PNG bows right; `sheet-meta.json` records
 
 - Reimagined war, seed `sprite-measure`: 6 sprite buttons on the field, all
   `img.complete && naturalWidth > 0`, computed `image-rendering: pixelated`.
-- Screen size constant across zoom extremes: fed flagship sprite 28.1×27.2
+- Screen size constant across zoom extremes: fed flagship sprite 48×46.5
   CSS px at zoom 1, fully zoomed out, and fully zoomed in — the `--invzoom`
-  counter-scale carries sprites exactly as it carries glyphs.
+  counter-scale carries sprites exactly as it carries glyphs. Sizing fixes
+  the LONG side (width 3rem, height off the silhouette): Matt's play-test
+  caught that a fixed height made the near-square federation battle cruiser
+  the smallest box on the field; measured hierarchy now reads
+  BC 48×46.5 > interceptor 48×31.5 > artillery 48×25.5 > cruiser 48×21.8.
 - `#art-toggle` round-trips: sprites → 0 sprites/6 glyphs + localStorage
   `argonaut-web-ship-art: letters` → back to 6 sprites; label tracks state.
 - Classic view under sprites preference: `body.classic`, 0 sprites, 6 glyphs

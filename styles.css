@@ -276,8 +276,13 @@ body.realtime .ship {
 }
 .ship.has-sprite .sprite {
   display: block;
-  height: 1.7rem;
-  width: auto;
+  /* Constant LONG side (every shipped asset is wider than tall, bloc's
+     included after the baked 90° normalization), height off the silhouette.
+     A fixed height instead made the near-square federation battle cruiser
+     (64x62) the smallest box on the field while wide hulls stretched —
+     Matt's play-test 2026-09-29; the BC is the biggest hull in the art. */
+  width: 3rem;
+  height: auto;
   image-rendering: pixelated;
   filter: drop-shadow(0 0 2px currentColor);
 }
