@@ -260,6 +260,28 @@ body.realtime .ship {
   color: #071019;
 }
 
+/* Round 33: a ship of the line wears its pixel-art sprite (modern view, ship-art
+   setting) instead of the disc+letter. The button sheds the filled disc but keeps
+   the faction ring — a 1px border plus glow in the alliance color — so identity
+   still reads at a glance alongside the minimap dot; the sprite carries detail.
+   Sizing rides the same --invzoom counter-scale the glyph uses (the button's
+   transform), so hulls hold a steady screen size while the field spreads. */
+.ship.has-sprite {
+  width: auto;
+  height: auto;
+  padding: 1px;
+  border-width: 1px;
+  border-radius: 6px;
+  background: transparent;
+}
+.ship.has-sprite .sprite {
+  display: block;
+  height: 1.7rem;
+  width: auto;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 2px currentColor);
+}
+
 .ship.vacant .glyph {
   color: #b5c1ca;
 }

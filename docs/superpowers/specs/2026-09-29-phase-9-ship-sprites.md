@@ -163,8 +163,8 @@ the shipped assets, so every PNG bows right; `sheet-meta.json` records
   The glyph branch stays untouched for classic and for the toggle-off state.
 - `styles.css`: `.ship .sprite` sizing on `--invzoom`,
   `image-rendering: pixelated`; classic selectors untouched.
-- Round 33 renders sprites **unrotated or with the static per-sheet bow
-  offset only** — heading-true rotation is round 34.
+- Round 33 renders sprites **unrotated** (the bow normalization is baked into
+  the assets, not the renderer) — heading-true rotation is round 34.
 
 ### Tested by
 
@@ -176,16 +176,34 @@ the shipped assets, so every PNG bows right; `sheet-meta.json` records
 - Matt's manual review of the sliced PNGs (the model never claims to have
   seen them) and manual play-test at both zoom extremes.
 
+### Measured pre-merge (headless Edge, `.qwen/tmp/measure-sprites.cjs`, 2026-09-29)
+
+- Reimagined war, seed `sprite-measure`: 6 sprite buttons on the field, all
+  `img.complete && naturalWidth > 0`, computed `image-rendering: pixelated`.
+- Screen size constant across zoom extremes: fed flagship sprite 28.1×27.2
+  CSS px at zoom 1, fully zoomed out, and fully zoomed in — the `--invzoom`
+  counter-scale carries sprites exactly as it carries glyphs.
+- `#art-toggle` round-trips: sprites → 0 sprites/6 glyphs + localStorage
+  `argonaut-web-ship-art: letters` → back to 6 sprites; label tracks state.
+- Classic view under sprites preference: `body.classic`, 0 sprites, 6 glyphs
+  — the theme forces letters at the redraw seam, never CSS.
+- Real-time war frame pacing with sprites on the field: 180 rAF samples,
+  median 16.7ms, p95 17.1ms — 60fps held on the measurement machine.
+- Suite 588/588 (584 standing + 4 seam tests); `npm run sim` digit-for-digit
+  in all four modes against the recorded baselines.
+
 ### Seams round 33 leaves
 
-- `sheet-meta.json` carries bow offsets round 34 consumes for rotation.
+- Bow normalization is baked into the assets, so round 34's heading-true
+  rotation is a uniform `rotate(ship.facing)` with no per-alliance offset;
+  `sheet-meta.json` keeps `sourceBowDegrees` as provenance only.
 - The art toggle is the precedent for future presentation settings.
 - Drones/merchants/Xanadu/wrecks still on letters — round 34 decides.
 
 ## Round 34 — Fleet chrome
 
-- Heading-true rotation: CSS `rotate()` from `ship.facing` + per-sheet bow
-  offset off `sheet-meta.json`.
+- Heading-true rotation: CSS `rotate()` from `ship.facing` alone — the assets
+  ship bows-right, so no per-alliance offset remains.
 - Alliance palette decision applied as play-test dictates (default: none —
   ring carries identity).
 - Drones/merchants/Xanadu/wreck treatments (keep letters, or dedicated art

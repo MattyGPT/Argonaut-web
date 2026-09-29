@@ -598,6 +598,54 @@ test('a drone is drawn small with the D glyph and reads as unmanned in its menu'
   assert.ok(!/Transport crew/.test(menu), 'no berth, no transfer button');
 });
 
+test('a ship of the line wears its alliance sprite when the modern view asks for sprites', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'render-sprite' }), { shipArt: 'sprites' });
+  const field = read('#map-field').innerHTML;
+  assert.match(field, /class="ship Federation active has-sprite"/, 'the hull wears the sprite seam');
+  assert.match(field, /<img class="sprite" src="assets\/sprites\/federation\/battle-cruiser\.png" alt="" aria-hidden="true" draggable="false">/,
+    'the flagship wears its federation battle-cruiser sprite');
+  assert.match(field, /<img class="sprite" src="assets\/sprites\/axis\/cruiser\.png"/,
+    'the enemy hull wears its own alliance sprite');
+  assert.ok(!/<button[^>]*has-sprite[^>]*>(?:<span class="heading-glyph"[^>]*><\/span>)?<span class="glyph">/.test(field),
+    'no sprite button falls back to a letter disc');
+});
+
+test('drones and the starbase keep their letters under sprite art', () => {
+  elements.clear();
+  renderGame(bayGame('render-sprite-drone'), { shipArt: 'sprites' });
+  const field = read('#map-field').innerHTML;
+  assert.match(field, /data-ship-id="fed-carrier-drone-1"[^>]*><span class="glyph">D<\/span>/,
+    'the wing still reads D');
+  assert.ok(!/has-sprite/.test(field.match(/<button[^>]*data-ship-id="fed-carrier-drone-1"[^>]*>/)[0]),
+    'the drone button carries no sprite seam');
+  elements.clear();
+  renderGame(createGame({ seed: 'render-sprite-starbase' }), { shipArt: 'sprites' });
+  assert.match(read('#map-field').innerHTML, /data-ship-id="xanadu"[^>]*><span class="glyph">/,
+    'the starbase keeps its disc until round 34 decides its treatment');
+});
+
+test('letters art and the default view keep the disc glyphs byte-for-byte', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'render-sprite-letters' }), { shipArt: 'letters' });
+  const letters = read('#map-field').innerHTML;
+  elements.clear();
+  renderGame(createGame({ seed: 'render-sprite-letters' }));
+  const plain = read('#map-field').innerHTML;
+  assert.equal(letters, plain, 'an explicit letters ask draws exactly the default field');
+  assert.ok(!/class="sprite"|has-sprite/.test(plain), 'no sprite markup without the ask');
+});
+
+test('the sprite seam keeps the marker layer stacked on the button', () => {
+  elements.clear();
+  const game = withFlagship(createGame({ seed: 'render-sprite-markers' }), { prize: true });
+  renderGame(game, { shipArt: 'sprites' });
+  const field = read('#map-field').innerHTML;
+  const button = field.match(/<button[^>]*data-ship-id="fed-flagship"[^>]*>[\s\S]*?<\/button>/)[0];
+  assert.match(button, /<img class="sprite"/, 'the sprite replaces the disc+letter');
+  assert.match(button, /prize-pip/, 'the prize pip still stacks on the sprite button');
+});
+
 test('the Launch drones order grows out of a carrier menu alone', () => {
   const staged = withPair(bayGame('render-launch-order', false), 'fed-cruiser-1', { x: 108, y: 100 });
   elements.clear();
