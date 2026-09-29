@@ -196,6 +196,13 @@ h1 {
   transition: left .55s ease-in-out, top .55s ease-in-out;
 }
 
+/* Round 31: in a real-time war the sim clock positions hulls every frame; the
+   stardate glide would swallow the flight (each frame's set would start a new
+   half-second ease). Live flight is the motion here. */
+body.realtime .ship {
+  transition: none;
+}
+
 .ship.Federation, .Federation {
   color: var(--fed);
 }
@@ -1465,6 +1472,18 @@ body.classic .ship.has-order::before {
   font-size: .68rem;
   text-transform: none;
   letter-spacing: .02em;
+}
+
+/* Real-time time controls (Phase 8, round 31): pause and the speed steps.
+   The pressed speed wears the same cyan as the current order button. */
+#time-controls {
+  display: inline-flex;
+  gap: .25rem;
+  margin-right: .5rem;
+}
+#time-controls button[aria-pressed="true"] {
+  border-color: var(--cyan);
+  color: var(--cyan);
 }
 
 .ship.ace::after {

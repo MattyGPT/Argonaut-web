@@ -639,6 +639,12 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     // endpoint. Implies `reimagined`. Off by default and absent in old saves, so
     // every reader treats a falsy flag as the turn-based war it has always been.
     realtime: isRealtime,
+    // Round 31: the real-time sim clock — fractional elapsed stardates, one
+    // stardate per integer crossing — and the per-hull command cooldowns
+    // (shipId → the simTime it is ready again). Absent outside a real-time war
+    // and in round-30 saves, so readers default: `simTime` to `turn − 1`,
+    // cooldowns to ready-now.
+    ...(isRealtime ? { simTime: 0, readyAt: {} } : {}),
     // The tactical field, in map units. 100 for a classic or extended war; wider for
     // a Reimagined one. Absent in old saves, so every reader defaults to GRID_SIZE.
     gridSize,
@@ -1294,6 +1300,20 @@ export const applyHeading = (game, ship, x, y) => {
   const moved = { ...ship, x, y };
   if (!hasArcs(game, ship) || (ship.x === x && ship.y === y)) return moved;
   return { ...moved, facing: Math.round(bearingDeg(ship, moved)) };
+};
+
+/**
+ * Round 31: plot a real-time burn — point the bow at the destination and set
+ * `dest`, but DO NOT move the hull. The fixed-timestep integrator flies the
+ * burn across its sub-ticks and arrival is what repositions the hull; using
+ * `applyHeading` here (the turn-based mover) teleported plotted hulls to their
+ * destination, which is the pop the round-31 play-test caught. Drones have no
+ * facing; a zero-displacement plot keeps the last heading.
+ */
+export const plotCourse = (game, ship, x, y) => {
+  const plotted = { ...ship, dest: { x, y } };
+  if (!hasArcs(game, ship) || (ship.x === x && ship.y === y)) return plotted;
+  return { ...plotted, facing: Math.round(bearingDeg(ship, { x, y })) };
 };
 
 /**

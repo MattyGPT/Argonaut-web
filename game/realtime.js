@@ -19,7 +19,7 @@
  */
 
 import { GRID_SIZE, REALTIME } from './constants.js';
-import { engineCapacity, powerEffect } from './state.js';
+import { engineCapacity, isTractorHeld, powerEffect } from './state.js';
 
 /** Where every hull stands right now — the pre-resolution snapshot a stardate's trajectory starts from. */
 export const positionsOf = (game) => Object.fromEntries(game.ships.map((ship) => [ship.id, { x: ship.x, y: ship.y }]));
@@ -88,4 +88,64 @@ export const arrivalTick = (points) => {
   if (!Array.isArray(points) || points.length === 0) return null;
   const end = points[points.length - 1];
   return points.findIndex((point) => point.x === end.x && point.y === end.y);
+};
+
+/** One fixed sub-tick, as a fraction of a stardate. */
+export const SUBTICK = 1 / REALTIME.ticksPerStardate;
+
+/** The sim clock a war is on: fractional elapsed stardates, tolerant of round-30 saves that predate it. */
+export const simTimeOf = (game) => game.simTime ?? (game.turn ?? 1) - 1;
+
+/**
+ * Round 31 — the live core. Advances a real-time war by ONE fixed sub-tick:
+ * every hull with a destination burns toward it at its own speed —
+ * `engineCapacity` re-read as units-per-stardate of velocity, every existing
+ * modifier multiplicative — arriving early when the burn is short, exactly at
+ * the boundary when it is full. Tractor-held hulls do not burn (round 32 moves
+ * the lock into continuous time); engines burnt out mid-burn simply stop it.
+ *
+ * The integrator resolves nothing: arrivals are returned for the boundary to
+ * meet with collisions and rock strikes, and `crossed` says the sim clock
+ * passed an integer — the stardate boundary, where the whole chain fires.
+ * Pure and RNG-free like the round-30 trajectory math: the same sub-tick
+ * sequence from the same state always produces the same state, which is what
+ * makes pause and speed presentation-only.
+ */
+export const advanceSubtick = (game) => {
+  const before = simTimeOf(game);
+  const simTime = before + SUBTICK;
+  const grid = game.gridSize ?? GRID_SIZE;
+  const arrived = [];
+  const ships = game.ships.map((ship) => {
+    const dest = ship.dest;
+    if (!dest || ship.status !== 'active' || isTractorHeld(game, ship)) return ship;
+    const speed = engineCapacity(ship, grid, powerEffect(game, ship, 'engines'));
+    if (speed <= 0) return ship;
+    const dx = dest.x - ship.x;
+    const dy = dest.y - ship.y;
+    const span = Math.hypot(dx, dy);
+    const step = speed * SUBTICK;
+    if (span <= step) {
+      arrived.push(ship.id);
+      return { ...ship, x: dest.x, y: dest.y, dest: null };
+    }
+    return { ...ship, x: ship.x + (dx / span) * step, y: ship.y + (dy / span) * step };
+  });
+  return {
+    game: { ...game, simTime, ships },
+    arrived,
+    crossed: Math.floor(simTime) > Math.floor(before),
+  };
+};
+
+/**
+ * One sub-tick plus the boundary it may cross: the headless driver every
+ * real-time war runs on — browser clock, spectator, tests. `resolveBoundary`
+ * is passed in (turns.js owns the rules) so this module stays rules-free and
+ * import-cycle-free.
+ */
+export const stepRealtime = (game, resolveBoundary) => {
+  const step = advanceSubtick(game);
+  if (!step.crossed) return step.game;
+  return resolveBoundary(step.game, step.arrived);
 };

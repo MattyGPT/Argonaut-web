@@ -31,7 +31,13 @@ const server = createServer(async (request, response) => {
 
   try {
     const body = await readFile(filePath);
-    response.writeHead(200, { 'content-type': contentTypes[extname(filePath)] ?? 'application/octet-stream' });
+    // no-store keeps the dev browser from serving stale modules: the game is
+    // ES modules loaded once per tab, and a cached app.js silently plays an
+    // old round. Production is GitHub Pages, which never reads this file.
+    response.writeHead(200, {
+      'content-type': contentTypes[extname(filePath)] ?? 'application/octet-stream',
+      'cache-control': 'no-store',
+    });
     response.end(body);
   } catch {
     response.writeHead(404, { 'content-type': 'text/plain' });

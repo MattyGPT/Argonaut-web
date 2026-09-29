@@ -5,8 +5,11 @@ answered ("all recs"), plus Matt's confirmation that movement is
 **destination-driven** ("fly here"), and the engine-power question settled:
 **reactor power on the engine sink scales speed**, which is the
 balance-preserving reading, not a new feature (decision 11 below). Round 30
-(movement prototype) begins on `round-30-real-time-movement`. Format follows
-the Phase 2–6 specs.
+(movement prototype) **shipped as PR #76** the same day, with two play-test
+retunes in the same PR (in-flight stack declutter; the damaged-radio
+narrative now loses traffic instead of shaving every line). Round 31 (pause
+& planning) in progress on `round-31-pause-planning`. Format follows the
+Phase 2–6 specs.
 
 ## Purpose
 
@@ -220,7 +223,60 @@ Unchanged this round: doctrines decide per stardate on today's state
   fractional `simTime`, round 32 extends it with ordnance events.
 - `REALTIME` is the dial block every later constant joins.
 
-## Round 31 — Pause & planning *(direction settled; detailed design after 30 lands and Matt play-tests)*
+## Round 31 — Pause & planning *(designed 2026-09-25, after Matt's round-30 play-test; in progress)*
+
+Direction as settled above (fractional `simTime`, pause halts integration but
+not command, 1×/2×/4×, cooldowns, spectator onto the rAF clock, mid-flight
+saves). The detailed decisions, within that direction:
+
+1. **`game.simTime` is the clock; the stardate is an interval on it.**
+   Fractional elapsed stardates, 0 at war start; `game.turn` derives as
+   `floor(simTime) + 1`. When `simTime` crosses an integer the boundary fires
+   and runs the stardate chain — extracted VERBATIM from
+   `resolveComputerTurns` into a shared `resolveStardateChain`, so the
+   turn-based pipeline stays byte-identical and the chain has one source of
+   truth (dockyard, objectives, regen, encounters, strike-colors, relay,
+   transfer, surrender, stalemate signature, outcome, turn increment).
+2. **Destinations become rules state: `ship.dest`.** In a real-time war an AI
+   move action sets a destination (clamped to capacity and field, heading set
+   by the burn) instead of teleporting; integration carries the hull there —
+   early when the burn is short, exactly at the boundary when it is full.
+   Arrivals resolve **collision and rock strikes at the boundary** (the
+   continuous-time successor of endpoint collision), in id order, before that
+   boundary's decisions. This is the round's one deliberate divergence from
+   turn-based timing, and it is measured: `npm run sim --mode realtime` lands
+   in round 32 with the rest of combat timing.
+3. **The player commands in continuous time** (`applyRealtimeAction`):
+   re-destination is free and instant — a far destination simply burns across
+   stardates; volleys, tractor attempts, hyperspace, transports, and
+   self-destruct resolve immediately at live positions, gated by a per-hull
+   sim-time cooldown `REALTIME.volleyInterval` (one stardate — today's DPS);
+   free commands (orders, power, stance, helm, focus, information) are
+   unchanged; `pass` becomes hold-position (clears the destination). The war
+   never waits: `phase` stays `player` until the outcome.
+4. **Pause & speed are presentation.** Pause (`Space` + console button) stops
+   sub-tick accumulation but not command; 1×/2×/4× scale real-time pacing
+   only. The core is fixed-timestep, so paused and sped-up runs are
+   state-identical to uninterrupted ones — asserted, not assumed.
+5. **The browser renders the state, not a trajectory.** An rAF sim clock
+   advances the core in sub-tick batches and repositions hulls (and minimap
+   dots, via `data-ship-id`) every frame at their live fractional positions,
+   with the per-frame `fanOutOffsets` declutter from round 30; full re-renders
+   happen at boundaries and events only. Terminal events present with the sim
+   halted, through the existing playback lock. Round 30's trajectory playback
+   retires for live real-time wars — the state IS the timeline — while
+   `resolveComputerTurns` keeps its trajectory glue as the turn-shaped
+   real-time resolution (round-30 tests, future headless callers).
+6. **Spectator/resign runs the same rAF clock** in a real-time war; the
+   autopilot conn decides the player's hull at boundaries, destinations like
+   everyone else. `SPECTATOR_TICK_MS` remains for turn-based wars only.
+7. **Saves resume mid-flight for free**: fractional positions, `dest`,
+   `simTime`, and cooldowns serialize inside the existing save. A round-30
+   real-time save (no `simTime`) normalizes on load to `simTime = turn − 1`
+   with destinations unset — hulls hold until commanded. Turn-based saves are
+   untouched.
+
+## Round 31 — direction (as settled with Matt, kept for history)
 
 - `game.simTime` becomes fractional stardate elapsed; the stardate boundary
   fires when `simTime` crosses an integer, running the same chain unchanged.
@@ -247,6 +303,15 @@ Unchanged this round: doctrines decide per stardate on today's state
   real-time wars; tractor pulls spread across sub-ticks, same per-stardate
   total (decision 10). `warSignature` rounds fractional positions so
   stalemate detection still works.
+- **Matt's addition (2026-09-25, for consideration): real captains pilot to
+  avoid collisions.** The continuous-time collision model should weigh
+  collision-avoidance — a hull that anticipates an overlap course-corrects
+  (a bounded dodge burn off its plotted course, doctrines leaning into it),
+  so a mid-tick collision reads as failed seamanship rather than the default.
+  Open questions when 32 starts: how much authority avoidance gets over a
+  plotted destination, whether a dodge burn costs speed, and how deliberate
+  rams (tractor slams, suicide burns) opt out. Seeded, deterministic, and
+  measured like everything else.
 - Terminal playback and the round-replay become a `simTime`-keyed event
   timeline: play/pause/step, scrubbing a stretch goal.
 - Optional AI reaction tick for incoming ordnance (decision 3), only if it
@@ -260,8 +325,8 @@ Unchanged this round: doctrines decide per stardate on today's state
 
 | Round | Chunk | Builds | Tested by | Status |
 | --- | --- | --- | --- | --- |
-| 30 | Movement prototype | `REALTIME` constants; `realtime` flag (implies Reimagined); `game/realtime.js` fixed-timestep integration (RNG-free); trajectory glue in turns.js; rAF-paced rendering of fractional positions | Trajectory determinism; boundary equivalence with turn-based Reimagined; speed semantics; no RNG consumption; parity green; harness unmoved; old saves load | ⏳ in progress |
-| 31 | Pause & planning | Fractional `simTime`; pause (Space + button); 1×/2×/4×; command cooldowns; spectator onto the rAF clock; mid-flight saves | Pausing halts motion but not command; boundaries fire on schedule; saves resume mid-flight; determinism | ⏸ stop for Matt first |
+| 30 | Movement prototype | `REALTIME` constants; `realtime` flag (implies Reimagined); `game/realtime.js` fixed-timestep integration (RNG-free); trajectory glue in turns.js; rAF-paced rendering of fractional positions | Trajectory determinism; boundary equivalence with turn-based Reimagined; speed semantics; no RNG consumption; parity green; harness unmoved; old saves load | ✅ PR #76 |
+| 31 | Pause & planning | Fractional `simTime`; pause (Space + button); 1×/2×/4×; command cooldowns; spectator onto the rAF clock; mid-flight saves | Pausing halts motion but not command; boundaries fire on schedule; saves resume mid-flight; determinism | ⏳ in progress |
 | 32 | Combat timing | In-flight torpedoes; mid-tick collisions; continuous tractor; `simTime` replay timeline; AI cadence stretch; harness `--mode realtime` | Combat identical paused/unpaused; replay reconstructs; streams valid; new baseline measured + recorded | ⏸ stop for Matt first |
 
 ## Parity & determinism guardrails

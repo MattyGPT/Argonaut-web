@@ -262,21 +262,23 @@ reproducible seed challenges cheap, so 28 arguably gets easier after 30–32.
 | 28 | Seed challenges + score export | Shareable seed string, stardate score | Reproducible; export/import |
 | 29 | Async PvP / hotseat | Two-sided play off one seed | Both sides act; turn hand-off |
 
-### Phase 8 — Real-time movement *(candidate — Matt's proposal, 2026-09-19)*
+### Phase 8 — Real-time movement *(in progress — design doc 2026-09-25)*
 
 Step away from the turn-based model: ships **move through space continuously**
 at their own speed instead of appearing at their stardate endpoint, and a
 **pause** control (a button, and a key) stops time so you can think and plan —
 the bridge decisions (orders, power, called shots) are made paused, and the war
-unfolds between them. This is a big shift to the core loop, so it is tagged as
-a *candidate* phase and gets its own design doc — with its own open questions
-for Matt — when it is picked up. Provisional chunks, to be re-cut by that doc:
+unfolds between them. Designed in full with Matt on 2026-09-25 (all ten open
+questions answered "all recs", plus destination-driven movement and
+engine-power-scales-speed); the authoritative decisions, seams, and guardrails
+live in `docs/superpowers/specs/2026-09-25-phase-8-real-time-movement.md`,
+which re-cut the provisional chunks below:
 
-| Round | Chunk | Builds | Tested by |
-| --- | --- | --- | --- |
-| 30 | Movement prototype | Continuous position integration with `engineCapacity` re-read as a speed, behind a flag; stardates stay the resolution tick | Fixed-timestep headless sim: the same seed + commands produce the same trajectories; classic/extended stay tick-based (parity) |
-| 31 | Pause & planning | A pause control that halts integration but keeps the UI live; orders/power/commands issuable while paused; the stardate becomes an elapsed-sim-time interval that still resolves dockyard/objectives/regen | Pausing halts motion but not command; tick resolutions fire on schedule; saves store sim time and resume mid-flight |
-| 32 | Combat timing | Volleys/tractor/collisions in continuous time (ordnance in flight vs instant beams with travel FX), the AI decision cadence, and the round-replay/FX story | Combat resolves identically paused and unpaused; replay reconstructs; seeded streams stay valid |
+| Round | Chunk | Builds | Tested by | Status |
+| --- | --- | --- | --- | --- |
+| 30 | Movement prototype | Continuous position integration with `engineCapacity` re-read as a speed, behind a flag; stardates stay the resolution tick | Fixed-timestep headless sim: the same seed + commands produce the same trajectories; classic/extended stay tick-based (parity) | ✅ PR #76 |
+| 31 | Pause & planning | A pause control that halts integration but keeps the UI live; orders/power/commands issuable while paused; the stardate becomes an elapsed-sim-time interval that still resolves dockyard/objectives/regen | Pausing halts motion but not command; tick resolutions fire on schedule; saves store sim time and resume mid-flight | ⏳ in progress |
+| 32 | Combat timing | Volleys/tractor/collisions in continuous time (ordnance in flight vs instant beams with travel FX), the AI decision cadence, and the round-replay/FX story. **Matt's addition (2026-09-25): real captains avoid collisions as they pilot — consider collision-avoidance and anticipatory course-correction in the continuous-time collision model.** | Combat resolves identically paused and unpaused; replay reconstructs; seeded streams stay valid | ⏸ next |
 
 Design notes for the doc:
 

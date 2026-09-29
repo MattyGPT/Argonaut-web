@@ -792,6 +792,11 @@ export const REALTIME = Object.freeze({
   ticksPerStardate: 8,
   msPerStardate: 4000,
   speedSteps: Object.freeze([1, 2, 4]),
+  // Round 31: how long a turn-spending command takes to cycle again in a
+  // real-time war, in stardates of sim time. One stardate preserves today's
+  // damage-per-stardate exactly — a hull volleys once per boundary, player and
+  // AI alike. A dial, not a calibrated value.
+  volleyInterval: 1,
 });
 
 /**
