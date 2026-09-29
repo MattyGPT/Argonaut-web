@@ -291,6 +291,12 @@ body.realtime .ship {
   transform: rotate(var(--rot, 0deg));
 }
 
+/* Xanadu is a starbase, not a hull: it reads bigger than a battle cruiser
+   (batch-2 art, round 34). Radially symmetric, so rotation never applies. */
+.ship.has-sprite .sprite[src$="/starbase.png"] {
+  width: 4.2rem;
+}
+
 .ship.vacant .glyph {
   color: #b5c1ca;
 }

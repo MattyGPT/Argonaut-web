@@ -109,6 +109,11 @@ SPEC at a time; generate each image separately and save it under
 
 ## Acceptance checklist (Matt, before handing them back)
 
+*Addendum 2026-09-29 (after Xanadu landed): JPEG output is acceptable —
+the chroma path keys it fine, including enclosed see-through gaps (the
+starbase ring's spokes) and JPEG magenta ringing, both handled in
+`scripts/slice-sprites.mjs`. PNG is still preferred if Gemini offers it.*
+
 1. Eyedropper all four corners of every image: exactly rgb(255, 0, 255).
 2. 400% zoom: pixel boundaries are exact squares; no anti-aliased
    stair-steps, no soft edges, no JPEG-style ringing.

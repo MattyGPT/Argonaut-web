@@ -109,6 +109,8 @@ const SPRITE_SLUGS = new Map([
   ['Interceptor', 'interceptor'],
   ['Artillery', 'artillery'],
   ['Carrier', 'carrier'],
+  // Round 34, Gemini batch 2: Xanadu wears its commissioned starbase art.
+  ['Starbase', 'starbase'],
 ]);
 
 export const terminalNarrative = (event) => {

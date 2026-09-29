@@ -83,6 +83,14 @@
             64,
             35
           ]
+        },
+        "starbase": {
+          "png": "federation/starbase.png",
+          "source": "assets/sprites/concept/batch2/xanadu.jpeg",
+          "size": [
+            96,
+            96
+          ]
         }
       }
     },

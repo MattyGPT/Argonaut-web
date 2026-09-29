@@ -106,6 +106,21 @@ const PROVENANCE =
   'and keyed by scripts/slice-sprites.mjs with class mapping and visual ' +
   'review by Matt.';
 
+// Batch 2 (Gemini, 2026-09-29, prompt pack in docs/superpowers/briefs/
+// 2026-09-29-gemini-batch-2-prompt.md): single-subject images on a flat
+// #FF00FF chroma field. JPEG sources are fine here: magenta sits 270+
+// channel-distance from every federation/neutral palette color, so the key
+// needs no connectivity guard — which matters, because open structures like
+// the starbase ring ENCLOSE their see-through gaps (an edge-connected flood
+// never reaches them and they ship as opaque magenta; measured 2026-09-29).
+// Tolerance stays tight (60): the bloc drone plume magenta #e83ce8 sits 106
+// away and must survive as art, not key as background.
+const CHROMA_REF = { r: 255, g: 0, b: 255 };
+const CHROMA_TOL = 60;
+const CHROMA_SOURCES = [
+  { alliance: 'federation', cls: 'starbase', source: 'assets/sprites/concept/batch2/xanadu.jpeg', target: 96, defringe: true },
+];
+
 function chanDist(a, b) {
   return Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b);
 }
@@ -333,6 +348,95 @@ for (const sheet of SHEETS) {
     };
     console.log(`${sheet.alliance}/${cls}.png  ${tw}x${th} -> ${sw}x${sh}  (kept largest ${largest}px, dropped ${dropped} island(s))`);
   }
+}
+
+// Batch 2 chroma sources: whole-image key against #FF00FF, no calibration
+// bbox (one subject per image by construction).
+for (const entry of CHROMA_SOURCES) {
+  const img = await Jimp.read(entry.source);
+  const { width, height } = img.bitmap;
+  const n = width * height;
+  const px = new Array(n);
+  for (let i = 0; i < n; i++) px[i] = intToRGBA(img.getPixelColor(i % width, (i / width) | 0));
+  const bgLike = new Uint8Array(n);
+  for (let i = 0; i < n; i++) if (chanDist(px[i], CHROMA_REF) < CHROMA_TOL) bgLike[i] = 1;
+  const bg = bgLike; // no connectivity guard — see the CHROMA_TOL note above
+  const { keep, bbox, largest, dropped } = keepMainComponents(img, bg);
+  if (!bbox) throw new Error(`${entry.alliance}/${entry.cls}: nothing survived chroma keying`);
+  // JPEG ringing leaves magenta-tinted fringe pixels just inside the
+  // silhouette. Where the palette carries no magenta of its own (flag per
+  // entry — bloc drone plumes ARE magenta and must not defringe), recolor
+  // fringe pixels from their nearest clean hull neighbour.
+  if (entry.defringe) {
+    // Ringing blends magenta into the silhouette as purples. "Magenta-ish"
+    // is green deficiency (magenta has G=0), NOT channel distance to #FF00FF:
+    // ice-blue hull (205,241,250) sits 296 away by channel distance and a
+    // distance threshold recolors legitimate hull while missing real fringe
+    // (measured 2026-09-29). Entries whose palette carries real magenta
+    // (bloc plumes) flag defringe off.
+    const magentaish = (c) => c.r > 70 && c.b > 70 && c.g < Math.min(c.r, c.b) - 50;
+    // Iterative: a ringing band has outer pixels whose only hull-side
+    // neighbours are fringe too, so clean color must grow outward pass by pass.
+    for (let pass = 0; pass < 4; pass += 1) {
+      const clean = (i) => keep[i] && !magentaish(px[i]);
+      const updates = [];
+      const drops = [];
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const i = y * width + x;
+          if (!keep[i] || !magentaish(px[i])) continue;
+          let touchesBg = false;
+          let r = 0, g = 0, b = 0, cn = 0;
+          for (let dy = -2; dy <= 2; dy += 1) {
+            for (let dx = -2; dx <= 2; dx += 1) {
+              const nx = x + dx, ny = y + dy;
+              if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+              const np = ny * width + nx;
+              if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1 && bg[np]) touchesBg = true;
+              if (clean(np)) { const c = px[np]; r += c.r; g += c.g; b += c.b; cn++; }
+            }
+          }
+          if (cn) updates.push([i, Math.round(r / cn), Math.round(g / cn), Math.round(b / cn)]);
+          else if (touchesBg) drops.push(i); // contaminated from every side: erase the tip
+        }
+      }
+      for (const [i, r, g, b] of updates) px[i] = { r, g, b, a: 255 };
+      for (const i of drops) keep[i] = 0;
+      if (!updates.length && !drops.length) break;
+    }
+  }
+  bleedColors(img, keep);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      const c = px[i]; // defringed colors live in px, not the image bitmap
+      img.setPixelColor(rgbaToInt(c.r, c.g, c.b, keep[i] ? 255 : 0), x, y);
+    }
+  }
+  const tw = bbox.x1 - bbox.x0 + 1, th = bbox.y1 - bbox.y0 + 1;
+  const trimmed = img.clone().crop({ x: bbox.x0, y: bbox.y0, w: tw, h: th });
+  const scale = Math.min(1, entry.target / Math.max(tw, th));
+  const fw = Math.max(1, Math.round(tw * scale));
+  const fh = Math.max(1, Math.round(th * scale));
+  const sprite = scale < 1 ? trimmed.clone().resize({ w: fw, h: fh }) : trimmed;
+  const sw0 = sprite.bitmap.width, sh0 = sprite.bitmap.height;
+  for (let y = 0; y < sh0; y++) {
+    for (let x = 0; x < sw0; x++) {
+      const c = intToRGBA(sprite.getPixelColor(x, y));
+      sprite.setPixelColor(rgbaToInt(c.r, c.g, c.b, c.a >= 96 ? 255 : 0), x, y);
+    }
+  }
+  const outAlliance = path.join(OUT_DIR, entry.alliance);
+  mkdirSync(outAlliance, { recursive: true });
+  const out = path.join(outAlliance, `${entry.cls}.png`);
+  await sprite.write(out);
+  meta.alliances[entry.alliance] ??= { source: entry.source, bowDegrees: 0, sourceBowDegrees: 0, classes: {} };
+  meta.alliances[entry.alliance].classes[entry.cls] = {
+    png: `${entry.alliance}/${entry.cls}.png`,
+    source: entry.source,
+    size: [sw0, sh0],
+  };
+  console.log(`${entry.alliance}/${entry.cls}.png  ${tw}x${th} -> ${sw0}x${sh0}  (kept largest ${largest}px, dropped ${dropped} island(s))`);
 }
 
 writeFileSync(path.join(OUT_DIR, 'sheet-meta.json'), JSON.stringify(meta, null, 2) + '\n');
