@@ -277,8 +277,8 @@ which re-cut the provisional chunks below:
 | Round | Chunk | Builds | Tested by | Status |
 | --- | --- | --- | --- | --- |
 | 30 | Movement prototype | Continuous position integration with `engineCapacity` re-read as a speed, behind a flag; stardates stay the resolution tick | Fixed-timestep headless sim: the same seed + commands produce the same trajectories; classic/extended stay tick-based (parity) | ✅ PR #76 |
-| 31 | Pause & planning | A pause control that halts integration but keeps the UI live; orders/power/commands issuable while paused; the stardate becomes an elapsed-sim-time interval that still resolves dockyard/objectives/regen | Pausing halts motion but not command; tick resolutions fire on schedule; saves store sim time and resume mid-flight | ⏳ in progress |
-| 32 | Combat timing | Volleys/tractor/collisions in continuous time (ordnance in flight vs instant beams with travel FX), the AI decision cadence, and the round-replay/FX story. **Matt's addition (2026-09-25): real captains avoid collisions as they pilot — consider collision-avoidance and anticipatory course-correction in the continuous-time collision model.** | Combat resolves identically paused and unpaused; replay reconstructs; seeded streams stay valid | ⏸ next |
+| 31 | Pause & planning | A pause control that halts integration but keeps the UI live; orders/power/commands issuable while paused; the stardate becomes an elapsed-sim-time interval that still resolves dockyard/objectives/regen | Pausing halts motion but not command; tick resolutions fire on schedule; saves store sim time and resume mid-flight | ✅ PR #77 |
+| 32 | Combat timing | Volleys/tractor/collisions in continuous time (ordnance in flight vs instant beams with travel FX), the AI decision cadence, and the round-replay/FX story. **Matt's addition (2026-09-25): real captains avoid collisions as they pilot — consider collision-avoidance and anticipatory course-correction in the continuous-time collision model.** | Combat resolves identically paused and unpaused; replay reconstructs; seeded streams stay valid | ⏳ in progress |
 
 Design notes for the doc:
 

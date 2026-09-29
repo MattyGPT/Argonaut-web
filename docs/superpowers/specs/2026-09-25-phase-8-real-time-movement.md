@@ -8,8 +8,11 @@ balance-preserving reading, not a new feature (decision 11 below). Round 30
 (movement prototype) **shipped as PR #76** the same day, with two play-test
 retunes in the same PR (in-flight stack declutter; the damaged-radio
 narrative now loses traffic instead of shaving every line). Round 31 (pause
-& planning) in progress on `round-31-pause-planning`. Format follows the
-Phase 2–6 specs.
+& planning) **shipped as PR #77** the same day, with three play-test fixes
+in the PR — culminating in the real no-glide bug: `applyHeading` is the
+turn-based mover, and every plot branch teleported its hull; `plotCourse`
+fixed it (see "Shipped & play-tested" below). Round 32 (combat timing) is
+in progress on `round-32-combat-timing`. Format follows the Phase 2–6 specs.
 
 ## Purpose
 
@@ -276,6 +279,29 @@ saves). The detailed decisions, within that direction:
    with destinations unset — hulls hold until commanded. Turn-based saves are
    untouched.
 
+### Shipped & play-tested (round 31 — PR #77, 2026-09-25)
+
+**578 tests green (+10):** boundary schedule, batching/pause invariance (a
+paused or sped run is state-identical to an uninterrupted one), early arrival
+holds, arrival collisions, volley cooldowns, free re-destination, conn
+toggle, mid-flight save round-trip, round-30 save normalization. Harness
+re-run digit-for-digit on baseline in all three modes — the chain extraction
+is verbatim, no CALIBRATION row moves. Three play-test fixes shipped inside
+the same PR, in the order Matt's reports found them: **(1)** the following
+camera now rides the interpolated position (the sub-tick bounce); **(2)** the
+frame loop draws on every rAF and interpolates the in-flight sub-tick (the
+8-hops-per-stardate pop); **(3) the actual teleport** — `applyHeading` is the
+turn-based MOVER (it returns the hull at the target point), and all three
+plot branches used it, so every plotted course teleported its hull onto the
+destination; `plotCourse` now sets heading + dest without moving, and two
+regression tests pin the invariants (plotting never moves a hull; nothing
+moves more than one sub-tick step per sub-tick). The methodology that caught
+it: headless playwright-core driving Edge against localhost, sampling
+per-frame DOM positions and live state — the rig lives in `.qwen/tmp/` for
+any future presentation bug. The dev server also now sends
+`cache-control: no-store`, because browsers were silently replaying old
+modules.
+
 ## Round 31 — direction (as settled with Matt, kept for history)
 
 - `game.simTime` becomes fractional stardate elapsed; the stardate boundary
@@ -294,7 +320,73 @@ saves). The detailed decisions, within that direction:
 - Saves store `simTime`, per-hull destinations/velocities, and resume
   mid-flight; old saves default in.
 
-## Round 32 — Combat timing *(direction settled; detailed design after 31)*
+## Round 32 — Combat timing *(designed 2026-09-25 within the settled direction + Matt's collision-avoidance addition; in progress on `round-32-combat-timing`)*
+
+1. **Beams stay instant.** Phasers and ion resolve at command/boundary time
+   through the existing shared roll — no stream reordering inside boundary
+   decisions — with a travel-time visual only (decision 5 stands).
+2. **Torpedoes fly ballistically.** A fired photon or spread enters
+   `game.ordnance` as a warhead aimed at the target's position AT LAUNCH — no
+   homing — traveling `REALTIME.torpedoSpeed` (dial, default 280 units per
+   stardate ≈ 3× hull speed: a 30-unit run lands in about half a second at
+   1×). It detonates on the first sub-tick it comes within
+   `REALTIME.impactRadius` (dial, 2) of ANY hull, or at its end point, and
+   the whole existing volley resolution (miss roll, `weaponDamage`, the
+   `damageShip` lottery, arcs, spread splash with its friendly fire) runs AT
+   IMPACT, consuming the main stream at that moment — the round's deliberate,
+   measured stream reordering. **Dodging is real:** burn perpendicular and
+   the run splashes empty space; a hull that dies before impact leaves the
+   warhead to detonate harmless. Saves carry in-flight ordnance (`?? []`).
+3. **Mid-tick collisions.** After each sub-tick's integration, active pairs
+   (sorted ids) inside `REALTIME.collisionRadius` (dial, 1 — the turn-based
+   distance) resolve through the existing collision machinery, and survivors
+   are nudged apart to just outside the radius — deterministic, no RNG — so a
+   crippled pair never re-collides every sub-tick. The boundary arrival-
+   collision pass retires (the sub-tick sweep subsumes it). Known limitation,
+   recorded: a fast perpendicular crosser can tunnel between sub-ticks; the
+   radius dial and avoidance (4) are the levers.
+4. **Collision avoidance — Matt's addition, adopted.** An AI-conned hull
+   under burn (never the player's manual conn, never a hull stamped
+   `noAvoid`) runs a lookahead each sub-tick (`REALTIME.avoidLookahead`,
+   dial 2 sub-ticks): when the projected closest approach to another moving
+   hull falls inside `collisionRadius × REALTIME.avoidMargin` (dial 2), the
+   sub-tick's step vector deflects by `REALTIME.avoidAngle` (dial 15°) toward
+   the deterministic side of the relative bearing — a COLREGS flavor, pure
+   geometry, no RNG. **A dodge does not cost speed**; it bends the path, and
+   the plotted destination stands, so hulls still arrive — on slightly curved
+   courses. Intended consequences, all measured: accidental pursuit
+   collisions fall sharply; a player ram only connects when it cuts off or
+   corners a dodging target (captains avoid YOU too); Cabal tow-rams are
+   unaffected (a tractor pull is not a burn). The avoidance dials are the
+   lever if collisions fall further than the flavor wants.
+5. **Continuous tractor.** While a lock holds, the victim moves toward the
+   holder each sub-tick by the pull's per-stardate total divided across the
+   ticks — the same `TRACTOR_PULL_PER_UNIT` balance, applied smoothly
+   (decision 10) — with the holder's power sink re-read live. A towed hull
+   does not burn (round 31) and does not avoid (it is not under conn); a
+   slam arrives through the sub-tick collision sweep.
+6. **`simTime`-stamped events.** Real-time events carry the sim clock; the
+   round replay paces on stamp deltas where present and falls back to the
+   fixed step otherwise. Scrubbing stays the stretch goal.
+7. **The AI cadence stays per-stardate** (round-30 decision 3). A reaction
+   tick for incoming ordnance is a post-baseline experiment only if it never
+   shifts a stream — not in the first cut.
+8. **`warSignature` rounds positions** (`Math.round`) so stalemate detection
+   works on fractional fields — an identity for the turn-based integer field,
+   so parity holds byte-identically.
+9. **Harness grows `--mode realtime`**: a resigned war driven on the
+   continuous core to its outcome; the fresh baseline is measured and
+   CALIBRATION records a "Reimagined real-time balance" row. The turn-based
+   reimagined/classic/extended rows must not move — the turn pipeline is
+   untouched, and its parity scaffolds plus harness invariance prove it.
+10. **Chunking on one branch → one PR** (commits per chunk): **32a** sub-tick
+    collisions + avoidance + separation + signature rounding; **32b**
+    ballistic ordnance (photons + spread); **32c** continuous tractor;
+    **32d** simTime stamps + replay pacing; **32e** harness mode + measured
+    baseline. Combat resolves identically paused and unpaused throughout —
+    the core is the same fixed-timestep driver either way (asserted).
+
+### Round 32 — direction (as settled with Matt, kept for history)
 
 - Photons and spread torpedoes in flight per sub-tick
   (`REALTIME.torpedoSpeed`), impacting on proximity — dodging and interception
@@ -311,7 +403,9 @@ saves). The detailed decisions, within that direction:
   Open questions when 32 starts: how much authority avoidance gets over a
   plotted destination, whether a dodge burn costs speed, and how deliberate
   rams (tractor slams, suicide burns) opt out. Seeded, deterministic, and
-  measured like everything else.
+  measured like everything else. **(Answered by decisions 3–5 above: bounded
+  per-sub-tick deflection, no speed cost, the player's manual conn and
+  `noAvoid` stamps opt out; flagged reversible.)**
 - Terminal playback and the round-replay become a `simTime`-keyed event
   timeline: play/pause/step, scrubbing a stretch goal.
 - Optional AI reaction tick for incoming ordnance (decision 3), only if it
@@ -326,8 +420,8 @@ saves). The detailed decisions, within that direction:
 | Round | Chunk | Builds | Tested by | Status |
 | --- | --- | --- | --- | --- |
 | 30 | Movement prototype | `REALTIME` constants; `realtime` flag (implies Reimagined); `game/realtime.js` fixed-timestep integration (RNG-free); trajectory glue in turns.js; rAF-paced rendering of fractional positions | Trajectory determinism; boundary equivalence with turn-based Reimagined; speed semantics; no RNG consumption; parity green; harness unmoved; old saves load | ✅ PR #76 |
-| 31 | Pause & planning | Fractional `simTime`; pause (Space + button); 1×/2×/4×; command cooldowns; spectator onto the rAF clock; mid-flight saves | Pausing halts motion but not command; boundaries fire on schedule; saves resume mid-flight; determinism | ⏳ in progress |
-| 32 | Combat timing | In-flight torpedoes; mid-tick collisions; continuous tractor; `simTime` replay timeline; AI cadence stretch; harness `--mode realtime` | Combat identical paused/unpaused; replay reconstructs; streams valid; new baseline measured + recorded | ⏸ stop for Matt first |
+| 31 | Pause & planning | Fractional `simTime`; pause (Space + button); 1×/2×/4×; command cooldowns; spectator onto the rAF clock; mid-flight saves | Pausing halts motion but not command; boundaries fire on schedule; saves resume mid-flight; determinism | ✅ PR #77 |
+| 32 | Combat timing | In-flight torpedoes; mid-tick collisions; continuous tractor; `simTime` replay timeline; AI cadence stretch; harness `--mode realtime` | Combat identical paused/unpaused; replay reconstructs; streams valid; new baseline measured + recorded | ⏳ in progress |
 
 ## Parity & determinism guardrails
 
