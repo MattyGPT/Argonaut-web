@@ -3,8 +3,8 @@ import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, REALTIME, TARGETED_ORDERS, WEAPO
 import { alertLevel, appendLog, createGame, defaultLoadout, distance, engineCapacity, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, nebulaHides, normalizeFleetSpec, powerEffect, sensorRange, systemUnits } from './game/state.js';
 import { abandonEngagement, autoResolveNode, buyDockyard, createCampaign, nodeById, resolveNodeBattle, startNodeBattle, travelTo } from './game/campaign.js';
 import { scenarioFor } from './game/scenarios.js';
-import { positionAt, positionsOf, advanceSubtick, simTimeOf, SUBTICK } from './game/realtime.js';
-import { resolveAutopilotTurn, resolveComputerTurns, resolveRealtimeBoundary } from './game/turns.js';
+import { positionAt, positionsOf, simTimeOf, SUBTICK } from './game/realtime.js';
+import { resolveAutopilotTurn, resolveComputerTurns, stepContinuum } from './game/turns.js';
 import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget, promptForTowDestination } from './ui/input.js';
 import { cameraWindow, centerOn, clampCamera, fieldTransform, makeCamera, panBy, zoomAt } from './ui/camera.js';
 import { renderSectorScreen } from './ui/sector.js';
@@ -417,27 +417,25 @@ const simLoop = (now) => {
     return;
   }
   let consumed = 0;
-  let arrived = [];
   let crossed = false;
+  const frameEvents = [];
   while (consumed < budget && !crossed && !game.outcome) {
-    const step = advanceSubtick(game);
+    // Round 32: the continuum driver moves the field (with avoidance), meets
+    // arrivals with rock strikes, sweeps mid-tick collisions, and runs the
+    // boundary on a crossing — one sub-tick per call, whatever the frame rate.
+    const step = stepContinuum(game);
     game = step.game;
-    arrived = [...arrived, ...step.arrived];
+    frameEvents.push(...step.events);
     crossed = step.crossed;
     consumed += 1;
   }
   // Unspent sub-ticks stay in the accumulator: the core never loses or gains
   // time to a frame rate.
   simAccumulator = Math.max(0, simAccumulator - consumed * subtickMs);
-  if (game.outcome) {
-    refresh();
-    return;
-  }
-  if (crossed) {
-    game = resolveRealtimeBoundary(game, arrived);
+  if (game.outcome || crossed || frameEvents.length) {
     view = { ...view, entries: [] };
-    showEvents(game.events);
-    presentTerminalEvents(game.events);
+    showEvents(frameEvents);
+    presentTerminalEvents(frameEvents);
     refresh();
     return;
   }

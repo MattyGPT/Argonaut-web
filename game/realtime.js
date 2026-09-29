@@ -19,7 +19,7 @@
  */
 
 import { GRID_SIZE, REALTIME } from './constants.js';
-import { engineCapacity, isTractorHeld, powerEffect } from './state.js';
+import { engineCapacity, isActive, isSpectator, isTractorHeld, powerEffect } from './state.js';
 
 /** Where every hull stands right now — the pre-resolution snapshot a stardate's trajectory starts from. */
 export const positionsOf = (game) => Object.fromEntries(game.ships.map((ship) => [ship.id, { x: ship.x, y: ship.y }]));
@@ -101,51 +101,119 @@ export const simTimeOf = (game) => game.simTime ?? (game.turn ?? 1) - 1;
  * every hull with a destination burns toward it at its own speed —
  * `engineCapacity` re-read as units-per-stardate of velocity, every existing
  * modifier multiplicative — arriving early when the burn is short, exactly at
- * the boundary when it is full. Tractor-held hulls do not burn (round 32 moves
- * the lock into continuous time); engines burnt out mid-burn simply stop it.
+ * the boundary when it is full. Tractor-held hulls do not burn (round 32's
+ * continuum pulls them); engines burnt out mid-burn simply stop it.
  *
- * The integrator resolves nothing: arrivals are returned for the boundary to
- * meet with collisions and rock strikes, and `crossed` says the sim clock
- * passed an integer — the stardate boundary, where the whole chain fires.
- * Pure and RNG-free like the round-30 trajectory math: the same sub-tick
- * sequence from the same state always produces the same state, which is what
- * makes pause and speed presentation-only.
+ * Round 32 — collision avoidance (Matt's addition): before moving, every
+ * AI-conned burner projects its closest approach to each other active hull
+ * over `avoidLookahead` sub-ticks; a closing course inside
+ * `collisionRadius × avoidMargin` deflects THIS sub-tick's step to starboard
+ * by `avoidAngle` — pure geometry, no RNG, no speed cost, and the plotted
+ * destination stands, so the path bends around traffic instead of through
+ * it. The player's manual conn and `noAvoid` stamps opt out: a ram you order
+ * is a ram you get, and both hulls deflecting starboard makes head-on pairs
+ * pass port-to-port. Facing is NOT re-read on a deflection — it is a small
+ * course correction, not a new burn.
+ *
+ * The integrator resolves nothing: arrivals are returned for the continuum to
+ * meet with rock strikes and the collision sweep, and `crossed` says the sim
+ * clock passed an integer — the stardate boundary. Pure and RNG-free: the
+ * same sub-tick sequence from the same state always produces the same state,
+ * which is what makes pause and speed presentation-only.
  */
 export const advanceSubtick = (game) => {
   const before = simTimeOf(game);
   const simTime = before + SUBTICK;
   const grid = game.gridSize ?? GRID_SIZE;
-  const arrived = [];
-  const ships = game.ships.map((ship) => {
+  // First pass: every burning hull's raw step — unit vector and length.
+  const burns = new Map();
+  for (const ship of game.ships) {
     const dest = ship.dest;
-    if (!dest || ship.status !== 'active' || isTractorHeld(game, ship)) return ship;
+    if (!dest || !isActive(ship) || isTractorHeld(game, ship)) continue;
     const speed = engineCapacity(ship, grid, powerEffect(game, ship, 'engines'));
-    if (speed <= 0) return ship;
+    if (speed <= 0) continue;
     const dx = dest.x - ship.x;
     const dy = dest.y - ship.y;
     const span = Math.hypot(dx, dy);
-    const step = speed * SUBTICK;
-    if (span <= step) {
-      arrived.push(ship.id);
-      return { ...ship, x: dest.x, y: dest.y, dest: null };
+    const stepLen = speed * SUBTICK;
+    burns.set(ship.id, {
+      ship,
+      dest,
+      ux: span > 0 ? dx / span : 0,
+      uy: span > 0 ? dy / span : 0,
+      stepLen,
+      arrival: span <= stepLen,
+    });
+  }
+  // Avoidance pass: deflect the sub-tick step of any AI-conned burner whose
+  // projected closest approach closes inside the margin.
+  const manualConn = !isSpectator(game) && !game.autoConn;
+  const threshold = REALTIME.collisionRadius * REALTIME.avoidMargin;
+  const turn = (REALTIME.avoidAngle * Math.PI) / 180;
+  const cos = Math.cos(turn);
+  const sin = Math.sin(turn);
+  const deflects = new Set();
+  for (const [id, burn] of burns) {
+    // Arriving hulls are checked too: a destination already occupied by
+    // traffic is exactly the collision the avoidance exists to prevent — a
+    // threatened arrival becomes a deflected pass-by that keeps its plot and
+    // tries again next sub-tick (bounded: captains re-plot at the boundary).
+    if (burn.ship.noAvoid) continue;
+    if (manualConn && id === game.playerShipId) continue;
+    const vx = burn.ux * burn.stepLen;
+    const vy = burn.uy * burn.stepLen;
+    for (const other of game.ships) {
+      if (other.id === id || !isActive(other)) continue;
+      const otherBurn = burns.get(other.id);
+      const wx = otherBurn && !otherBurn.arrival ? otherBurn.ux * otherBurn.stepLen : 0;
+      const wy = otherBurn && !otherBurn.arrival ? otherBurn.uy * otherBurn.stepLen : 0;
+      const px = burn.ship.x - other.x;
+      const py = burn.ship.y - other.y;
+      const rvx = vx - wx;
+      const rvy = vy - wy;
+      const along = px * rvx + py * rvy;
+      if (along >= 0) continue; // opening, not closing
+      const rvv = rvx * rvx + rvy * rvy;
+      const t = rvv < 1e-9 ? 0 : Math.max(0, Math.min(REALTIME.avoidLookahead, -along / rvv));
+      if (Math.hypot(px + rvx * t, py + rvy * t) < threshold) {
+        deflects.add(id);
+        break;
+      }
     }
-    return { ...ship, x: ship.x + (dx / span) * step, y: ship.y + (dy / span) * step };
+  }
+  // Movement pass.
+  const arrived = [];
+  const ships = game.ships.map((ship) => {
+    const burn = burns.get(ship.id);
+    if (!burn) return ship;
+    if (burn.arrival) {
+      if (deflects.has(ship.id)) {
+        // A threatened arrival holds short of the occupied point and retries
+        // next sub-tick: a captain loiters instead of ramming the anchorage.
+        // (A 15° bend has no lateral authority at arm's length — holding does,
+        // and the boundary re-plot bounds how long anyone waits.)
+        return ship;
+      }
+      arrived.push(ship.id);
+      return { ...ship, x: burn.dest.x, y: burn.dest.y, dest: null };
+    }
+    let ux = burn.ux;
+    let uy = burn.uy;
+    if (deflects.has(ship.id)) {
+      // Starboard rotation in y-down field coordinates: both hulls of a
+      // head-on pair deflect the same way and pass port-to-port.
+      ux = burn.ux * cos - burn.uy * sin;
+      uy = burn.ux * sin + burn.uy * cos;
+    }
+    return {
+      ...ship,
+      x: Math.max(0, Math.min(grid, ship.x + ux * burn.stepLen)),
+      y: Math.max(0, Math.min(grid, ship.y + uy * burn.stepLen)),
+    };
   });
   return {
     game: { ...game, simTime, ships },
     arrived,
     crossed: Math.floor(simTime) > Math.floor(before),
   };
-};
-
-/**
- * One sub-tick plus the boundary it may cross: the headless driver every
- * real-time war runs on — browser clock, spectator, tests. `resolveBoundary`
- * is passed in (turns.js owns the rules) so this module stays rules-free and
- * import-cycle-free.
- */
-export const stepRealtime = (game, resolveBoundary) => {
-  const step = advanceSubtick(game);
-  if (!step.crossed) return step.game;
-  return resolveBoundary(step.game, step.arrived);
 };

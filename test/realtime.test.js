@@ -3,18 +3,18 @@ import assert from 'node:assert/strict';
 import { REALTIME, REIMAGINED_GRID_SIZE } from '../game/constants.js';
 import { createGame, engineCapacity, powerEffect } from '../game/state.js';
 import { applyPlayerAction } from '../game/actions.js';
-import { resolveAutopilotTurn, resolveComputerTurns, resolveRealtimeBoundary } from '../game/turns.js';
-import { advanceSubtick, arrivalTick, integrateStardate, positionAt, positionsOf, simTimeOf, stepRealtime } from '../game/realtime.js';
+import { resolveAutopilotTurn, resolveComputerTurns, stepContinuum } from '../game/turns.js';
+import { advanceSubtick, arrivalTick, integrateStardate, positionAt, positionsOf, simTimeOf } from '../game/realtime.js';
 
 const TICKS = REALTIME.ticksPerStardate;
 
 /** One full stardate: the autopilot flies the conn, then the field resolves. */
 const playTurn = (game) => resolveComputerTurns(resolveAutopilotTurn(game).game);
 
-/** Drives a live real-time war sub-tick by sub-tick, resolving each boundary it crosses. */
+/** Drives a live real-time war sub-tick by sub-tick on the round-32 continuum. */
 const drive = (game, subticks) => {
   let current = game;
-  for (let step = 0; step < subticks; step += 1) current = stepRealtime(current, resolveRealtimeBoundary);
+  for (let step = 0; step < subticks; step += 1) current = stepContinuum(current).game;
   return current;
 };
 
@@ -209,19 +209,46 @@ test('a plotted burn arrives early and holds at its destination', () => {
   assert.equal(arrived.y, 10);
 });
 
-test('arrivals collide: two hulls plotted onto one point meet at the boundary', () => {
-  let game = createGame({ seed: 'rt-collide', realtime: true });
-  game = {
+/**
+ * The convergence fixture: fed (the player's manual conn — never avoids) rams
+ * toward (160,160); axis converges on the same point; the rest of the field
+ * parks spread out and far away (a stacked fleet would tractor-slam itself at
+ * the boundary and pollute the log).
+ */
+const convergingWar = (axisChanges = {}) => {
+  const game = createGame({ seed: 'rt-collide', realtime: true });
+  return {
     ...game,
-    ships: game.ships.map((ship) => {
+    ships: game.ships.map((ship, index) => {
       if (ship.id === 'fed-flagship') return { ...ship, x: 150, y: 150, dest: { x: 160, y: 160 } };
-      if (ship.id === 'axis-flagship') return { ...ship, x: 170, y: 170, dest: { x: 160, y: 160 } };
-      return { ...ship, x: 10, y: 10, dest: null };
+      if (ship.id === 'axis-flagship') return { ...ship, x: 170, y: 170, dest: { x: 160, y: 160 }, ...axisChanges };
+      return { ...ship, x: 4 + ((index * 37) % 312), y: 300, dest: null };
     }),
   };
-  game = drive(game, TICKS);
-  assert.match((game.lastRound?.entries ?? []).join(' '), /Collision:/,
-    'the boundary resolves what the arrivals flew into');
+};
+
+const collisionsOf = (game, id) => game.ships.find((ship) => ship.id === id)?.collisions ?? 0;
+
+test('a deliberate ram connects: the mid-tick sweep resolves what the flight meets', () => {
+  // noAvoid = a captain bent on the point whatever is coming — the ram opt-out.
+  const game = drive(convergingWar({ noAvoid: true }), TICKS);
+  assert.ok(collisionsOf(game, 'axis-flagship') >= 1 && collisionsOf(game, 'fed-flagship') >= 1,
+    'the converging pair met and the sweep counted it on both hulls');
+});
+
+test("captains avoid collisions as they pilot: the same convergence is dodged, not met (Matt's round-32 rule)", () => {
+  const game = drive(convergingWar(), TICKS);
+  assert.equal(collisionsOf(game, 'axis-flagship'), 0, 'the axis captain never met the rammer');
+  assert.equal(collisionsOf(game, 'fed-flagship'), 0);
+  const axis = game.ships.find((ship) => ship.id === 'axis-flagship');
+  // The threatened arrival held short of the occupied point instead of snapping
+  // onto it, plot still standing — loitering, not ramming the anchorage.
+  assert.equal(axis.x, 170);
+  assert.equal(axis.y, 170);
+  assert.deepEqual(axis.dest, { x: 160, y: 160 });
+  // Determinism: the dodge replays identically.
+  const twin = drive(convergingWar(), TICKS);
+  assert.deepEqual(twin.ships.find((ship) => ship.id === 'axis-flagship'), axis);
 });
 
 test('volleys cycle on the sim-time cooldown, one per stardate', () => {

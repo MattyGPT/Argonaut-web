@@ -1,7 +1,7 @@
-import { DOCKING, ENCOUNTERS, FACTIONS, GRID_SIZE, POWER, PRIZE, RANGES, REIMAGINED_WEAPON_DAMAGE_SCALE, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
+import { DOCKING, ENCOUNTERS, FACTIONS, GRID_SIZE, POWER, PRIZE, RANGES, REALTIME, REIMAGINED_WEAPON_DAMAGE_SCALE, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
 import { captureHull, canLaunchDrones, damageShip, detonate, fireEvent, flushShields, ionDamage, killLines, launchDrones, resolveAsteroidStrike, resolveCollision, spreadSplash, terminalEvent, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
-import { integrateStardate, positionsOf } from './realtime.js';
+import { advanceSubtick, integrateStardate, positionsOf } from './realtime.js';
 import { createRng } from './rng.js';
 import { scenarioOutcome } from './scenarios.js';
 import {
@@ -687,7 +687,10 @@ const warSignature = (game) => game.ships
   .filter((ship) => !isNeutral(ship))
   .map((ship) => [
     ship.id,
-    `${ship.x},${ship.y}`,
+    // Round 32: a real-time war's positions are fractional; the signature
+    // rounds them so a field drifting sub-unit jitter still reads as quiet.
+    // An identity on the turn-based integer field — parity holds.
+    `${Math.round(ship.x)},${Math.round(ship.y)}`,
     ship.status,
     ship.faction,
     `${ship.shields}/${ship.crew}`,
@@ -837,30 +840,18 @@ export const resolveStardateChain = (startGame, log, events) => {
 };
 
 /**
- * Round 31 — the real-time stardate boundary. Arrivals go first: a hull that
- * finished its burn this stardate meets whatever it arrived on — collision and
- * rock strikes, in id order — the continuous-time successor of the turn-based
- * endpoint check. Then every captain with a conn decides: the AI alliances
- * always, and the player's hull too when the autopilot has the conn
- * (resignation, spectator, or the player's own autopilot order). Then the
- * shared chain fires exactly as it does in a turn-based war.
+ * Round 31 — the real-time stardate boundary: every captain with a conn
+ * decides — the AI alliances always, and the player's hull too when the
+ * autopilot has the conn (resignation, spectator, or the player's own
+ * autopilot order) — then the shared chain fires exactly as it does in a
+ * turn-based war. (Round 32 moved arrival collisions and rock strikes into
+ * the sub-tick continuum, where they happen in flight rather than in a batch
+ * here; the boundary is decisions + chain only.)
  */
-export const resolveRealtimeBoundary = (initialGame, arrived = []) => {
+export const resolveRealtimeBoundary = (initialGame) => {
   let game = initialGame;
   const log = [];
   const events = [];
-  for (const shipId of [...arrived].sort()) {
-    const actor = getShip(game, shipId);
-    if (!isActive(actor)) continue;
-    const collision = resolveCollision(game, actor);
-    game = collision.game;
-    log.push(...collision.messages);
-    events.push(...(collision.events ?? []));
-    const strike = resolveAsteroidStrike(game, getShip(game, shipId));
-    game = strike.game;
-    log.push(...strike.messages);
-    events.push(...(strike.events ?? []));
-  }
   const order = game.ships
     .filter((ship) => isActive(ship) && (isSpectator(game) || game.autoConn || ship.id !== game.playerShipId))
     .map((ship) => ship.id);
@@ -872,4 +863,173 @@ export const resolveRealtimeBoundary = (initialGame, arrived = []) => {
     events.push(...(action.events ?? []));
   }
   return resolveStardateChain(game, log, events);
+};
+
+/**
+ * Round 32: after a collision resolves, survivors standing inside the
+ * collision radius are nudged apart to just outside it — deterministic, no
+ * RNG, a few passes to settle clusters. Without it a crippled pair would
+ * re-collide every sub-tick forever; with it a collision happens once, the
+ * way the turn-based endpoint check always did.
+ */
+const separateOverlaps = (game) => {
+  const grid = game.gridSize ?? GRID_SIZE;
+  let next = game;
+  for (let pass = 0; pass < 3; pass += 1) {
+    const active = next.ships.filter((ship) => isActive(ship)).sort((a, b) => a.id.localeCompare(b.id));
+    const positions = new Map(active.map((ship) => [ship.id, { x: ship.x, y: ship.y }]));
+    let moved = false;
+    for (let i = 0; i < active.length; i += 1) {
+      for (let j = i + 1; j < active.length; j += 1) {
+        const a = positions.get(active[i].id);
+        const b = positions.get(active[j].id);
+        const d = Math.hypot(b.x - a.x, b.y - a.y);
+        if (d >= REALTIME.collisionRadius) continue;
+        // A dead-astern overlap (d = 0) separates along +x, deterministically.
+        const ux = d > 0 ? (b.x - a.x) / d : 1;
+        const uy = d > 0 ? (b.y - a.y) / d : 0;
+        const push = (REALTIME.collisionRadius + 0.01 - d) / 2;
+        positions.set(active[i].id, {
+          x: Math.max(0, Math.min(grid, a.x - ux * push)),
+          y: Math.max(0, Math.min(grid, a.y - uy * push)),
+        });
+        positions.set(active[j].id, {
+          x: Math.max(0, Math.min(grid, b.x + ux * push)),
+          y: Math.max(0, Math.min(grid, b.y + uy * push)),
+        });
+        moved = true;
+      }
+    }
+    if (!moved) return next;
+    next = {
+      ...next,
+      ships: next.ships.map((ship) => {
+        const point = positions.get(ship.id);
+        return point ? { ...ship, x: point.x, y: point.y } : ship;
+      }),
+    };
+  }
+  return next;
+};
+
+/**
+ * Round 32: the closest points between two segments (the standard Ericson
+ * segment-segment algorithm) — what makes the mid-tick sweep robust. Hulls
+ * close 12–24 units per sub-tick against a 1-unit radius, so sampling
+ * positions alone would tunnel straight through contacts; sweeping the
+ * segments each hull actually flew this sub-tick cannot miss.
+ */
+const closestOnSegments = (p1, p2, p3, p4) => {
+  const d1x = p2.x - p1.x;
+  const d1y = p2.y - p1.y;
+  const d2x = p4.x - p3.x;
+  const d2y = p4.y - p3.y;
+  const rx = p1.x - p3.x;
+  const ry = p1.y - p3.y;
+  const a = d1x * d1x + d1y * d1y;
+  const e = d2x * d2x + d2y * d2y;
+  const f = d2x * rx + d2y * ry;
+  const EPS = 1e-12;
+  let s;
+  let t;
+  if (a <= EPS && e <= EPS) {
+    s = 0; t = 0;
+  } else if (a <= EPS) {
+    s = 0; t = Math.min(1, Math.max(0, f / e));
+  } else {
+    const c = d1x * rx + d1y * ry;
+    if (e <= EPS) {
+      t = 0; s = Math.min(1, Math.max(0, -c / a));
+    } else {
+      const b = d1x * d2x + d1y * d2y;
+      const denom = a * e - b * b;
+      s = denom > EPS ? Math.min(1, Math.max(0, (b * f - c * e) / denom)) : 0;
+      t = (b * s + f) / e;
+      if (t < 0) { t = 0; s = Math.min(1, Math.max(0, -c / a)); }
+      else if (t > 1) { t = 1; s = Math.min(1, Math.max(0, (b - c) / a)); }
+    }
+  }
+  const c1 = { x: p1.x + d1x * s, y: p1.y + d1y * s };
+  const c2 = { x: p3.x + d2x * t, y: p3.y + d2y * t };
+  return { dist: Math.hypot(c1.x - c2.x, c1.y - c2.y), c1, c2 };
+};
+
+/**
+ * Round 32: the mid-tick collision sweep. For every active pair (sorted ids),
+ * the segments both hulls flew this sub-tick are tested for a closest approach
+ * inside `REALTIME.collisionRadius` (1 unit — the turn-based rule's own
+ * distance). A contact places the pair at the closest-approach points — the
+ * moment they met — and resolves through the existing collision machinery,
+ * consuming the main stream like every other combat roll, then separates the
+ * survivors so one meeting is one collision.
+ */
+const sweepCollisions = (game, prev) => {
+  let next = game;
+  const messages = [];
+  const events = [];
+  const actives = next.ships.filter((ship) => isActive(ship)).sort((a, b) => a.id.localeCompare(b.id));
+  for (let i = 0; i < actives.length; i += 1) {
+    for (let j = i + 1; j < actives.length; j += 1) {
+      const a = getShip(next, actives[i].id);
+      const b = getShip(next, actives[j].id);
+      if (!isActive(a) || !isActive(b)) continue;
+      const pa = prev?.[a.id] ?? { x: a.x, y: a.y };
+      const pb = prev?.[b.id] ?? { x: b.x, y: b.y };
+      // A collision needs at least one mover: two hulls parked on the same
+      // point (a dockyard anchorage, a riding wing) never fought each other
+      // in the turn-based war, and the sweep keeps that peace — flying
+      // THROUGH an anchorage is the dangerous part, and that it catches.
+      const aMoved = pa.x !== a.x || pa.y !== a.y;
+      const bMoved = pb.x !== b.x || pb.y !== b.y;
+      if (!aMoved && !bMoved) continue;
+      const contact = closestOnSegments(pa, { x: a.x, y: a.y }, pb, { x: b.x, y: b.y });
+      if (contact.dist >= REALTIME.collisionRadius) continue;
+      const staged = {
+        ...next,
+        ships: next.ships.map((ship) => {
+          if (ship.id === a.id) return { ...ship, x: contact.c1.x, y: contact.c1.y };
+          if (ship.id === b.id) return { ...ship, x: contact.c2.x, y: contact.c2.y };
+          return ship;
+        }),
+      };
+      const resolved = resolveCollision(staged, getShip(staged, a.id));
+      next = separateOverlaps(resolved.game);
+      messages.push(...resolved.messages);
+      events.push(...(resolved.events ?? []));
+    }
+  }
+  return { game: next, messages, events };
+};
+
+/**
+ * Round 32 — the continuous-time driver: ONE sub-tick of the live war. The
+ * pure integrator moves the field (with avoidance), arrivals meet their rock
+ * strikes, the collision sweep resolves whatever the flight brought together,
+ * and crossing an integer runs the real-time boundary (decisions + the shared
+ * chain). Returns the events for the caller to present; messages go straight
+ * onto the log. This is the single driver every real-time war runs on —
+ * browser clock, spectator, tests, and the harness's `--mode realtime`.
+ */
+export const stepContinuum = (game) => {
+  const prev = positionsOf(game);
+  const step = advanceSubtick(game);
+  let next = step.game;
+  const messages = [];
+  const events = [];
+  for (const shipId of [...step.arrived].sort()) {
+    const actor = getShip(next, shipId);
+    if (!isActive(actor)) continue;
+    const strike = resolveAsteroidStrike(next, actor);
+    next = strike.game;
+    messages.push(...strike.messages);
+    events.push(...(strike.events ?? []));
+  }
+  const swept = sweepCollisions(next, prev);
+  next = swept.game;
+  messages.push(...swept.messages);
+  events.push(...swept.events);
+  if (messages.length) next = { ...next, log: appendLog(next.log, messages) };
+  if (!step.crossed || next.outcome) return { game: next, events, crossed: step.crossed };
+  const boundary = resolveRealtimeBoundary(next);
+  return { game: boundary, events: [...events, ...(boundary.events ?? [])], crossed: true };
 };
