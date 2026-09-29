@@ -393,6 +393,14 @@
             64,
             29
           ]
+        },
+        "wreck": {
+          "png": "neutral/wreck.png",
+          "source": "assets/sprites/concept/batch2/wreck.jpeg",
+          "size": [
+            64,
+            40
+          ]
         }
       }
     }

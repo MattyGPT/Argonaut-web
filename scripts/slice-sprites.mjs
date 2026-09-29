@@ -129,6 +129,9 @@ const CHROMA_SOURCES = [
   // green-deficiency test reads the plumes as JPEG ringing and erases them.
   { alliance: 'bloc', cls: 'drone', source: 'assets/sprites/concept/batch2/drone-bloc.jpeg', target: 24, defringe: false },
   { alliance: 'cabal', cls: 'drone', source: 'assets/sprites/concept/batch2/drone-cabal.jpeg', target: 24, defringe: true },
+  // The wreck's snapped halves are two detached components by design; both
+  // clear the 0.5% floor and the snap gap keys to transparent.
+  { alliance: 'neutral', cls: 'wreck', source: 'assets/sprites/concept/batch2/wreck.jpeg', target: 64, defringe: true },
 ];
 
 function chanDist(a, b) {

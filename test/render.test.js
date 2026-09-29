@@ -640,6 +640,32 @@ test('each alliance wing wears its own faction drone sprite', () => {
     'an Axis wing draws the Axis drone sprite, not the Federation one');
 });
 
+test('a wreck draws the commissioned hulk under sprite art and the plus under letters', () => {
+  elements.clear();
+  const game = withFlagship(createGame({ seed: 'render-sprite-wreck', reimagined: true }), { status: 'destroyed' });
+  renderGame(game, { shipArt: 'sprites' });
+  assert.match(read('#map-field').innerHTML, /class="wreck"[^>]*><img class="wreck-sprite" src="assets\/sprites\/neutral\/wreck\.png"/,
+    'the dead hull reads as the hulk');
+  elements.clear();
+  renderGame(game, { shipArt: 'letters' });
+  assert.match(read('#map-field').innerHTML, /class="wreck"[^>]*>\+<\/span>/,
+    'letters keep the plus');
+});
+
+test('the legend mirrors sprite icons under sprite art and glyphs under letters', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'render-sprite-legend', reimagined: true }), { shipArt: 'sprites' });
+  const legend = read('#map-legend').innerHTML;
+  assert.match(legend, /legend-swatch wreck[^>]*><img src="assets\/sprites\/neutral\/wreck\.png"/, 'wreck chip is the hulk');
+  assert.match(legend, /legend-swatch drone-glyph[^>]*><img src="assets\/sprites\/federation\/drone\.png"/, 'drone chip is a sprite');
+  assert.match(legend, /heading \(hull faces its bow\)/, 'the bow cue reads as hull facing');
+  elements.clear();
+  renderGame(createGame({ seed: 'render-sprite-legend', reimagined: true }), { shipArt: 'letters' });
+  const plain = read('#map-legend').innerHTML;
+  assert.match(plain, /legend-swatch wreck[^>]*>\+</, 'letters keep the plus chip');
+  assert.match(plain, /heading \(bow\)/, 'letters keep the needle key');
+});
+
 test('Xanadu wears its commissioned starbase sprite under sprite art', () => {
   elements.clear();
   renderGame(createGame({ seed: 'render-sprite-starbase' }), { shipArt: 'sprites' });

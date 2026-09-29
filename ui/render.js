@@ -526,9 +526,14 @@ const legendEntry = (swatch, label, content = '') => `<span class="legend-entry"
  * every color on the map appears here, and the chips mirror the real thing
  * (rings dashed, pips glowing, terrain translucent).
  */
-const renderMapLegend = (game) => {
+const renderMapLegend = (game, shipArt) => {
   const legend = document.querySelector('#map-legend');
   if (!legend) return;
+  // Under sprite art the legend chips mirror what the field actually draws:
+  // the wreck, drone, and merchant icons become their sprites, and the bow
+  // cue reads as the hull's facing rather than the needle spoke.
+  const spritesOn = shipArt === 'sprites';
+  const legendImg = (src) => `<img src="${src}" alt="">`;
   const factions = ['Federation', 'Axis', 'Bloc', 'Cabal'].map((name) => `<span class="${name}">■ ${name}</span>`).join('');
   const entries = [
     legendEntry('ring-phasers', 'phaser ring'),
@@ -537,7 +542,7 @@ const renderMapLegend = (game) => {
     legendEntry('threat', 'can reach you'),
     legendEntry('pip-tractor', 'tractor-held'),
     legendEntry('lock-tractor', 'tractor beam'),
-    legendEntry('wreck', 'wreck', '+'),
+    legendEntry('wreck', 'wreck', spritesOn ? legendImg('assets/sprites/neutral/wreck.png') : '+'),
     ...(game.extended ? [
       legendEntry('pip-order', 'under orders'),
       legendEntry('star-ace', 'scanned ace', '★'),
@@ -549,11 +554,11 @@ const renderMapLegend = (game) => {
       legendEntry('terrain-ion', 'ion storm'),
       legendEntry('terrain-relay', 'relay node'),
       legendEntry('pip-prize', 'prize of war'),
-      legendEntry('drone-glyph', 'fighter drone', 'D'),
+      legendEntry('drone-glyph', 'fighter drone', spritesOn ? legendImg('assets/sprites/federation/drone.png') : 'D'),
       legendEntry('stance-firing', 'firing stance'),
       legendEntry('stance-evasive', 'evasive stance'),
-      legendEntry('heading-glyph', 'heading (bow)', '▲'),
-      legendEntry('neutral-glyph', 'neutral merchant', 'M'),
+      legendEntry('heading-glyph', spritesOn ? 'heading (hull faces its bow)' : 'heading (bow)', spritesOn ? '➤' : '▲'),
+      legendEntry('neutral-glyph', 'neutral merchant', spritesOn ? legendImg('assets/sprites/neutral/merchant.png') : 'M'),
       legendEntry('pip-distress', 'distress call'),
     ] : []),
   ].join('');
@@ -587,7 +592,7 @@ export const renderGame = (game, view = {}) => {
     : game.extended
       ? (scenarioFor(game).id === 'annihilation' ? 'EXTENDED WAR' : `EXTENDED · ${scenarioFor(game).title.toUpperCase()}`)
       : '';
-  renderMapLegend(game);
+  renderMapLegend(game, view.shipArt);
 
   const actorActive = Boolean(actor) && actor.status === 'active';
   const mapperRange = actorActive ? sensorRange(game, actor, 'mapper') : Infinity;
@@ -660,7 +665,12 @@ export const renderGame = (game, view = {}) => {
 
   const shipHtml = game.ships.filter(isVisible).map((ship) => {
     if (ship.status === 'destroyed') {
-      return `<span class="wreck" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" title="${ship.name}: destroyed" aria-hidden="true">+</span>`;
+      // Round 34: under sprite art the wreck is the commissioned hulk, snapped
+      // spine and all, desaturated by CSS; letters and classic keep the '+'.
+      const wreckMark = view.shipArt === 'sprites'
+        ? '<img class="wreck-sprite" src="assets/sprites/neutral/wreck.png" alt="" aria-hidden="true">'
+        : '+';
+      return `<span class="wreck" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" title="${ship.name}: destroyed" aria-hidden="true">${wreckMark}</span>`;
     }
     const threat = threats.has(ship.id) ? ' threat' : '';
     const standing = orderFor(game, ship.id) ?? pendingOrderFor(game, ship.id);

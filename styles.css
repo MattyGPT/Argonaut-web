@@ -445,6 +445,26 @@ body.realtime .ship {
   pointer-events: none;
 }
 
+/* Round 34: under sprite art a wreck is the commissioned hulk — snapped spine,
+   vent holes, rust — desaturated and dimmed so dead metal never competes with
+   living hulls for the eye. Letters and classic keep the '+'. */
+.wreck .wreck-sprite {
+  display: block;
+  width: 2.4rem;
+  height: auto;
+  image-rendering: pixelated;
+  filter: grayscale(.45) brightness(.8);
+}
+
+/* Legend chips mirror the field: under sprite art the wreck/drone/merchant
+   entries key with their sprites instead of letter glyphs. */
+.legend-swatch img {
+  width: 1.15rem;
+  height: auto;
+  image-rendering: pixelated;
+  vertical-align: middle;
+}
+
 /* Camera chrome for a Reimagined war, whose field is wider than the screen. Both
    are overlays on the viewport, hidden in a classic or extended war, and clicking
    them is never a maneuver (input.js skips them). */
