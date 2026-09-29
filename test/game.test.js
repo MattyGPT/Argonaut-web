@@ -6,7 +6,7 @@ import { scenarioOutcome, scenarioProgress } from '../game/scenarios.js';
 import { abbreviateNarrative, alertLevel, appendLog, applyHeading, arcFocusOf, arcSplit, arcsOf, bearingDeg, blastRadius, clampPowerAllocation, createGame, crewCapacity, deductArcsProportionally, defaultLoadout, distance, dockedAt, engineCapacity, facingOf, fleetCost, fleetHulls, getShip, grownArcs, hasArcs, inRadioContact, insideFeature, ionStormZone, isAce, isDrone, isNeutral, nebulaHides, nebulaRevealRange, normalizeDegrees, normalizeFleetSpec, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, spawnEncounter, stanceOf, struckArc, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
 import { applyPlayerAction, canLaunchDrones, captureHull, damageShip, defaultTargetFor, eligibleTargets, ionDamage, killLines, launchDrones, maneuverTo, orderTargets, resolveAsteroidStrike, resolveCollision, shipCommands, spreadSplash, tractorLock, weaponDamage } from '../game/actions.js';
 import { chooseAiAction, avoidStackedArrival } from '../game/ai.js';
-import { applySurrender, darkenOrphanDrones, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolveEncounters, resolveObjectives, resolvePowerRegen, transferCommandIfNeeded } from '../game/turns.js';
+import { applySurrender, darkenOrphanDrones, evaluateOutcome, resolveAutopilotTurn, resolveComputerTurns, resolveDisabledSurrender, resolveDocking, resolveEncounters, resolveObjectives, resolvePowerRegen, separateOverlaps, transferCommandIfNeeded } from '../game/turns.js';
 import { reportFor } from '../ui/render.js';
 
 const withShips = (game, update) => ({ ...game, ships: game.ships.map(update) });
@@ -5543,7 +5543,7 @@ test('encounters ride a whole war: arrivals, departures, and the parity of the u
   assert.ok(classic.ships.every((ship) => !ship.encounter), 'a classic war meets nobody');
 });
 
-test('drone arrival avoidance nudges stacked landings to a free point, Reimagined only', () => {
+test('arrival avoidance nudges stacked landings to a free point, Reimagined only', () => {
   const base = createGame({ seed: 'avoid', reimagined: true });
   const game = withShips(base, (ship) => {
     if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
@@ -5558,9 +5558,35 @@ test('drone arrival avoidance nudges stacked landings to a free point, Reimagine
   const arrival = { x: drone.x + nudged.dx, y: drone.y + nudged.dy };
   assert.ok(game.ships.every((other) => distance(arrival, other) >= 1), 'the nudged landing stacks on nobody');
   assert.deepEqual(avoidStackedArrival(game, drone, 0, 0), { dx: 0, dy: 0 }, 'the sit-and-ram hold stays');
+  // Round 35: the 250-war attribution found the mechanism is fleet seamanship
+  // (57% both-movers, 21% mover-into-sitter), not drones (3%) — so line hulls
+  // deconflict their arrivals too.
   const lineHull = avoidStackedArrival(game, actor, 10, 0);
-  assert.deepEqual(lineHull, { dx: 10, dy: 0 }, 'line hulls keep the calibrated clumsy pursuit');
+  assert.notDeepEqual(lineHull, { dx: 10, dy: 0 }, 'line hulls deconflict stacked arrivals too');
+  const lineArrival = { x: actor.x + lineHull.dx, y: actor.y + lineHull.dy };
+  assert.ok(game.ships.every((other) => other.id === actor.id || distance(lineArrival, other) >= 1),
+    'the nudged line-hull landing stacks on nobody');
+  const withEnemy = { ...game, ships: [...game.ships, { ...actor, id: 'avoid-enemy', faction: 'Axis', x: 120, y: 100 }] };
+  assert.deepEqual(avoidStackedArrival(withEnemy, actor, 20, 0), { dx: 20, dy: 0 },
+    'cross-alliance rams stay in the game — enemy overlap is combat, not ineptitude');
   const classic = createGame({ seed: 'avoid' });
   const classicDrone = { ...getShip(classic, 'fed-flagship'), className: 'Drone' };
   assert.deepEqual(avoidStackedArrival(classic, classicDrone, 10, 0), { dx: 10, dy: 0 }, 'a classic war never reads it');
+});
+
+test('round 35: survivors left inside the collision radius separate — one meeting, one collision', () => {
+  const base = createGame({ seed: 'separate-overlaps', reimagined: true });
+  const game = withShips(base, (ship) => {
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 200, y: 200 };
+    if (ship.id === 'fed-cruiser-2') return { ...ship, x: 200, y: 200 };
+    return ship;
+  });
+  const after = separateOverlaps(game);
+  const a = getShip(after, 'fed-cruiser-1');
+  const b = getShip(after, 'fed-cruiser-2');
+  assert.ok(distance(a, b) >= 1, 'the stacked pair is pushed apart to just outside the radius');
+  // Separation is presentation-adjacent physics: no RNG, no status changes.
+  assert.equal(a.status, 'active');
+  assert.equal(b.status, 'active');
+  assert.equal(a.shields, getShip(base, 'fed-cruiser-1').shields, 'separation damages nobody');
 });
