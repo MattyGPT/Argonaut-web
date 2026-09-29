@@ -43,8 +43,11 @@ mines stay parked. Nothing here depends on any of them.
   on a y-down field; the heading needle already renders off it.
 - **The playwright rig** from round 31/32 debugging lives in `.qwen/tmp/`
   (`pw/` + `measure*.cjs`, headless Edge against localhost:8080) — reused
-  for DOM/geometry assertions and performance measurement. The assistant
-  cannot see images; every visual claim is Matt's review or a measurement.
+  for DOM/geometry assertions and performance measurement. Visual review:
+  the session brief assumed the model cannot see images; in this runtime
+  `read_file` returns PNGs as vision input, so the assistant reviews every
+  slice pass itself against the concept crops — Matt remains the acceptance
+  gate on art, and geometry/performance claims still require measurement.
 - **The concept sheets are committed sources**: `assets/sprites/concept/` —
   four 2048×2048 JPEGs (federation: dark panelled bg, white/blue art, frame
   grid detected as a full-canvas blob; axis: white bg, crimson art, numbered
@@ -56,17 +59,22 @@ mines stay parked. Nothing here depends on any of them.
 1. **Slicing pipeline (b): assistant-written Node slicer.** A `scripts/`
    tool using **jimp (new devDependency — flagged and approved; scripts-only,
    never runtime)**: connected-component blob detection per sheet → numbered
-   preview crops → **Matt reviews the previews and supplies the class
-   mapping** (the model cannot see images) → keyed/downscaled per-class
-   transparent PNGs at 32–64px native, committed under `assets/sprites/`.
+   preview crops → **Matt supplies the class mapping** (the brief assumed
+   the model cannot see images; this runtime can, but Matt's mapping is the
+   record) → keyed/downscaled per-class transparent PNGs at 32–64px native, committed under `assets/sprites/`.
 2. **Identity vs palette:** the sprite keeps its own art; the existing
    faction ring/border + minimap dot keep carrying alliance identity at a
    glance. No CSS recoloring in round 33; revisit if play-test says the
    sheets' hues confuse.
-3. **Rotation:** CSS `rotate()` on the sprite element from `ship.facing`
-   plus a per-sheet bow offset (bows-right sheets: 0°; bloc bows-up: −90°,
-   confirmed per-ship with Matt), `image-rendering: pixelated`. No
-   pre-rotated frame atlas — the DOM is the renderer.
+3. **Rotation:** the bow normalization is **baked into the slicer** — bloc's
+   bows-up source art is rotated 90° at slice time (an exact pixel
+   permutation), so all 24 shipped sprites bow right and the renderer is
+   offset-free: CSS `rotate()` from `ship.facing` alone, with
+   `image-rendering: pixelated`. Baking avoids a CSS-rotated layout box
+   disagreeing with its visual box (hover scale, pip/needle seating, click
+   targets). `sheet-meta.json` keeps `sourceBowDegrees` as provenance and
+   reports `bowDegrees: 0` for every shipped asset. No pre-rotated frame
+   atlas — the DOM is the renderer.
 4. **Scale:** sprites ride the existing `--invzoom` counter-scale (constant
    screen size, like glyphs today) — NOT world-scaled, which gets unreadable
    at the 320-field zoom-out.
@@ -99,7 +107,7 @@ yielded exactly six ship blobs plus text-label blobs (~60–95px tall);
 federation's panel frame/grid merges into one full-canvas blob and is
 discarded. Previews: `.qwen/tmp/previews/<alliance>-NN.png`.
 
-### Class mapping (Matt's eyes — the model cannot see the crops; COMPLETE 2026-09-29)
+### Class mapping (Matt's eyes on the numbered previews; COMPLETE 2026-09-29)
 
 | blob | federation | axis | bloc | cabal |
 | --- | --- | --- | --- | --- |
@@ -114,22 +122,37 @@ discarded. Previews: `.qwen/tmp/previews/<alliance>-NN.png`.
 
 Bow directions (Matt, 2026-09-29): federation **all right**, axis **all
 right**, bloc **all up**, cabal **all right** (from the mapping reply; axis
-crop sanity confirmed — axis-01 clean). `sheet-meta.json` records each
-sheet's native bow in field degrees (`bowDegrees`: right = 0, up = −90);
-the renderer rotates by `ship.facing − bowDegrees`.
+crop sanity confirmed — axis-01 clean). The slicer bakes bloc's −90° into
+the shipped assets, so every PNG bows right; `sheet-meta.json` records
+`sourceBowDegrees` per sheet as provenance and the renderer rotates by
+`ship.facing` alone.
 
 ## Round 33 — Sprite pipeline
 
 ### Data
 
-- `scripts/slice-sprites.mjs` — the committed slicer: blob detect (as
-  measured above) → key background to alpha (per-sheet strategy: luminance
-  threshold on dark-bg sheets; flood-fill-from-edges with tolerance on
-  axis's white bg; federation needs panel-grid handling — ship pixels are
-  bright, bg is dark, so a luminance key is expected to work) → downscale to
-  ≤64px native (preserving aspect; nearest-neighbor) → write
-  `assets/sprites/<alliance>/<class>.png` + `sheet-meta.json` (bbox, bow
-  offset, source file, provenance). Matt reviews staged output before commit.
+- `scripts/slice-sprites.mjs` — the committed slicer, calibration hardcoded
+  (the one-time grid Matt reviewed): per class crop —
+  1. **keyed background** = pixels connected to the crop edge through pixels
+     within `keyTol` of a dominant border-ring reference color (≥30% ring
+     share, max 2). Connectivity protects interior highlights (axis white-bg
+     sheets); the fixed reference blocks JPEG gradient staircasing into dark
+     hull shading (bloc/cabal); per-sheet `keyTol` (70 federation/axis, 45
+     bloc/cabal) keeps black contour lines — which are indistinguishable
+     from the black bg by color — from keying out and severing pods/wings;
+  2. **component keep** measured on a 3px-closed copy of the mask so keyed
+     1–3px contour veins cannot sever sub-assemblies into sub-threshold
+     islands, then applied back to the raw mask; components < max(800px, 4%
+     of largest) drop (sheet numbers, label fragments);
+  3. **color bleed** 3 passes into keyed-out pixels so downscale sampling
+     never mixes bg color into sprite edges;
+  4. **bilinear downscale** to ≤64px long side, **alpha threshold** ≥96 for
+     crisp pixel-art edges, and bloc's **90° normalization baked in**;
+  → `assets/sprites/<alliance>/<class>.png` + `sheet-meta.json` (source
+  bbox, size, bow provenance). Matt reviews staged output before commit.
+  Four measured failure modes of earlier keying recipes are recorded in the
+  script's comments (staircase, label-promoted reference, contour keying,
+  vein severing) so future sheet batches know what each guard is for.
 - jimp as devDependency only; nothing new in the runtime bundle.
 
 ### UI (the render seam)
@@ -197,5 +220,6 @@ the renderer rotates by `ship.facing − bowDegrees`.
   round-24 revert-and-reland precedent). Multiple Qwen sessions may share
   this checkout: check `git status`/branch before staging; stage only own
   hunks.
-- For any presentation bug: MEASURE in the headless browser rig; never claim
-  to have seen a screenshot or video.
+- For any presentation bug: MEASURE in the headless browser rig for
+  geometry/performance claims; visual claims cite the reviewed image or
+  Matt's verdict — never an unverified "looks fine".
