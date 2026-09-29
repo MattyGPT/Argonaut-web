@@ -806,7 +806,7 @@ export const REALTIME = Object.freeze({
   collisionRadius: 1,
   avoidLookahead: 2,
   avoidMargin: 2,
-  avoidAngle: 15,
+  avoidAngle: 25,
   // Round 32 (ordnance): photon and spread warheads fly ballistically — aimed
   // at the target's position AT LAUNCH, no homing — at `torpedoSpeed` units
   // per stardate (~3× hull speed: a 30-unit run lands in about half a second

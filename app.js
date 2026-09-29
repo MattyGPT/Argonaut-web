@@ -1,9 +1,9 @@
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets, REALTIME_COOLDOWN } from './game/actions.js';
 import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, REALTIME, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
-import { alertLevel, appendLog, createGame, defaultLoadout, distance, engineCapacity, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, nebulaHides, normalizeFleetSpec, powerEffect, sensorRange, systemUnits } from './game/state.js';
+import { alertLevel, appendLog, createGame, defaultLoadout, distance, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, nebulaHides, normalizeFleetSpec, sensorRange, systemUnits } from './game/state.js';
 import { abandonEngagement, autoResolveNode, buyDockyard, createCampaign, nodeById, resolveNodeBattle, startNodeBattle, travelTo } from './game/campaign.js';
 import { scenarioFor } from './game/scenarios.js';
-import { positionAt, positionsOf, simTimeOf, SUBTICK } from './game/realtime.js';
+import { positionAt, positionsOf, simTimeOf } from './game/realtime.js';
 import { resolveAutopilotTurn, resolveComputerTurns, stepContinuum } from './game/turns.js';
 import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget, promptForTowDestination } from './ui/input.js';
 import { cameraWindow, centerOn, clampCamera, fieldTransform, makeCamera, panBy, zoomAt } from './ui/camera.js';
@@ -318,30 +318,34 @@ let simAccumulator = 0;
 let lastFrameAt = null;
 
 /**
- * Per-frame repaint of a live real-time war: hull buttons and minimap dots ride
- * their fractional positions, decluttered by the same fan the boundary render
- * uses, and a following camera keeps its transform current — without a full
- * re-render, which only boundaries and events deserve.
+ * Per-frame repaint of a live real-time war, by BACKWARD snapshot
+ * interpolation: hulls, warheads, and minimap dots are drawn partway between
+ * where the last consumed sub-tick started and where it ended, on the
+ * accumulator's fraction. The round-32 play-test bounce (hulls lunging
+ * forward, snapping back, four-five times a stardate) was forward prediction:
+ * drawing "state + velocity × frac" overshoots whenever the core deflects a
+ * burn around traffic or holds short of an occupied point — and every
+ * event/boundary re-render snapped the glyph back to the truth. Interpolating
+ * between two positions the core actually occupied can never disagree with
+ * it: deflections draw as the curve they are, holds draw as stillness, and
+ * the display trails the sim by at most one sub-tick (500 ms at 1×), which is
+ * what snapshot interpolation costs and why it is worth it.
  */
+let prevPositions = null;
+let prevOrdnance = null;
+
 const renderFrame = () => {
   const map = document.querySelector('#map');
   if (!map?.querySelectorAll || !game) return;
   const grid = field();
-  // Interpolate the in-flight sub-tick: the core steps in whole sub-ticks, but
-  // the eye should not — each hull draws where its burn will have carried it
-  // partway through the sub-tick the accumulator is holding.
   const frac = Math.min(1, simAccumulator / (REALTIME.msPerStardate / REALTIME.ticksPerStardate));
+  const lerp = (from, to) => (from && frac > 0
+    ? { x: from.x + (to.x - from.x) * frac, y: from.y + (to.y - from.y) * frac }
+    : to);
   const drawn = (ship) => {
-    const dest = ship.dest;
-    if (!dest || ship.status !== 'active' || frac <= 0 || isTractorHeld(game, ship)) return ship;
-    const speed = engineCapacity(ship, grid, powerEffect(game, ship, 'engines'));
-    if (speed <= 0) return ship;
-    const dx = dest.x - ship.x;
-    const dy = dest.y - ship.y;
-    const span = Math.hypot(dx, dy);
-    const step = speed * SUBTICK * frac;
-    if (span <= step) return { ...ship, x: dest.x, y: dest.y };
-    return { ...ship, x: ship.x + (dx / span) * step, y: ship.y + (dy / span) * step };
+    const from = prevPositions?.[ship.id];
+    if (!from) return ship;
+    return { ...ship, ...lerp(from, ship) };
   };
   const entries = [];
   map.querySelectorAll('.ship[data-ship-id]').forEach((el) => {
@@ -370,20 +374,23 @@ const renderFrame = () => {
     dot.style.setProperty('--mx', (at.x / grid) * 100);
     dot.style.setProperty('--my', (at.y / grid) * 100);
   });
-  // Warheads ride the same in-flight interpolation — a salvo crosses the field
-  // at ~3× hull speed, so per-frame drawing is what makes it dodgeable to the eye.
+  // Warheads ride the same backward interpolation — a salvo crosses the field
+  // at ~3× hull speed, so per-frame drawing is what makes it dodgeable to the
+  // eye — and a detonated warhead's marker leaves the field immediately
+  // instead of hanging until the next full render.
   map.querySelectorAll('.warhead[data-ordnance-id]').forEach((el) => {
     const warhead = (game.ordnance ?? []).find((entry) => entry.id === el.dataset.ordnanceId);
-    if (!warhead) return;
-    const travel = Math.min(warhead.remaining ?? 0, REALTIME.torpedoSpeed * SUBTICK * frac);
-    el.style.left = `${((warhead.x + warhead.ux * travel) / grid) * 100}%`;
-    el.style.top = `${((warhead.y + warhead.uy * travel) / grid) * 100}%`;
+    if (!warhead) {
+      el.remove();
+      return;
+    }
+    const at = lerp(prevOrdnance?.[warhead.id] ?? warhead, warhead);
+    el.style.left = `${(at.x / grid) * 100}%`;
+    el.style.top = `${(at.y / grid) * 100}%`;
   });
   if (view.camera?.follow) {
-    // Center on the DRAWN (interpolated) position of the command ship, never on
-    // the stepped state: the state advances in whole sub-ticks, and centering on
-    // it lurches the whole layer once per sub-tick while the glyphs glide — the
-    // bounce Matt saw in the round-31 play-test.
+    // Center on the DRAWN position of the command ship, never on the stepped
+    // state, or the whole layer lurches once per sub-tick.
     const focus = getShip(game, game.playerShipId);
     const at = focus ? drawn(focus) : null;
     if (at) view = { ...view, camera: clampCamera({ ...view.camera, cx: at.x, cy: at.y }, field()) };
@@ -432,8 +439,13 @@ const simLoop = (now) => {
     // Round 32: the continuum driver moves the field (with avoidance), meets
     // arrivals with rock strikes, sweeps mid-tick collisions, and runs the
     // boundary on a crossing — one sub-tick per call, whatever the frame rate.
+    // The snapshots feed the backward interpolation renderFrame draws with.
+    const snapshot = positionsOf(game);
+    const ordnanceSnapshot = Object.fromEntries((game.ordnance ?? []).map((warhead) => [warhead.id, { x: warhead.x, y: warhead.y }]));
     const step = stepContinuum(game);
     game = step.game;
+    prevPositions = snapshot;
+    prevOrdnance = ordnanceSnapshot;
     frameEvents.push(...step.events);
     crossed = step.crossed;
     consumed += 1;
@@ -442,6 +454,10 @@ const simLoop = (now) => {
   // time to a frame rate.
   simAccumulator = Math.max(0, simAccumulator - consumed * subtickMs);
   if (game.outcome || crossed || frameEvents.length) {
+    // A full render draws the true state; snap the interpolation baseline to
+    // it so the next frame never drags a glyph back toward a stale snapshot.
+    prevPositions = positionsOf(game);
+    prevOrdnance = Object.fromEntries((game.ordnance ?? []).map((warhead) => [warhead.id, { x: warhead.x, y: warhead.y }]));
     view = { ...view, entries: [] };
     showEvents(frameEvents);
     presentTerminalEvents(frameEvents);
@@ -714,6 +730,13 @@ const dispatch = async (action) => {
     ...(['orders', 'refit', 'stance', 'facing', 'arcFocus'].includes(action.type) ? {} : { contextShipId: null }),
   };
   if (!['phasers', 'photons'].includes(action.type)) playEffect('command', game.sound);
+  // A command can reposition a hull outright (hyperspace) and the refresh that
+  // follows draws true state — drop the interpolation baseline so the frame
+  // loop never drags glyphs back toward a pre-command snapshot.
+  if (game.realtime) {
+    prevPositions = null;
+    prevOrdnance = null;
+  }
   showEvents(outcome.events);
   await presentTerminalEvents(outcome.events);
   await runComputer();
