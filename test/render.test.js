@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, getShip, isNeutral, spawnEncounter } from '../game/state.js';
+import { createGame, getShip, isNeutral, spawnDrone, spawnEncounter } from '../game/state.js';
 import { createRng } from '../game/rng.js';
 import { launchDrones } from '../game/actions.js';
 import { fanOutOffsets, renderGame, reportFor, terminalNarrative } from '../ui/render.js';
@@ -611,18 +611,72 @@ test('a ship of the line wears its alliance sprite when the modern view asks for
     'no sprite button falls back to a letter disc');
 });
 
-test('drones and the starbase keep their letters under sprite art', () => {
+test('a drone wears its faction drone sprite under sprite art and D under letters', () => {
   elements.clear();
   renderGame(bayGame('render-sprite-drone'), { shipArt: 'sprites' });
   const field = read('#map-field').innerHTML;
-  assert.match(field, /data-ship-id="fed-carrier-drone-1"[^>]*><span class="glyph">D<\/span>/,
-    'the wing still reads D');
-  assert.ok(!/has-sprite/.test(field.match(/<button[^>]*data-ship-id="fed-carrier-drone-1"[^>]*>/)[0]),
-    'the drone button carries no sprite seam');
+  assert.match(field, /class="ship Federation active drone has-sprite"[^>]*data-ship-id="fed-carrier-drone-1"/,
+    'the wing button wears the sprite seam');
+  assert.match(field, /<img class="sprite" src="assets\/sprites\/federation\/drone\.png"/,
+    'the wing draws its faction drone sprite');
+  elements.clear();
+  renderGame(bayGame('render-sprite-drone'), { shipArt: 'letters' });
+  assert.match(read('#map-field').innerHTML, /data-ship-id="fed-carrier-drone-1"[^>]*><span class="glyph">D<\/span>/,
+    'the letters preference keeps the D disc');
+});
+
+test('each alliance wing wears its own faction drone sprite', () => {
+  elements.clear();
+  // Scenario rosters vary by seed (this one gives Axis no carrier), so the
+  // wing is spawned straight off the Axis flagship — drones ride the ships
+  // array either way.
+  const base = withPair(createGame({ seed: 'render-sprite-drone-axis', reimagined: true }),
+    'fed-flagship', { x: 100, y: 100 },
+    'axis-flagship', { x: 104, y: 100 });
+  const parent = getShip(base, 'axis-flagship');
+  const game = { ...base, ships: [...base.ships, spawnDrone(parent, 1, 104, 100)] };
+  renderGame(game, { shipArt: 'sprites' });
+  assert.match(read('#map-field').innerHTML, /<img class="sprite" src="assets\/sprites\/axis\/drone\.png"/,
+    'an Axis wing draws the Axis drone sprite, not the Federation one');
+});
+
+test('a wreck draws the commissioned hulk under sprite art and the plus under letters', () => {
+  elements.clear();
+  const game = withFlagship(createGame({ seed: 'render-sprite-wreck', reimagined: true }), { status: 'destroyed' });
+  renderGame(game, { shipArt: 'sprites' });
+  assert.match(read('#map-field').innerHTML, /class="wreck"[^>]*><img class="wreck-sprite" src="assets\/sprites\/neutral\/wreck\.png"/,
+    'the dead hull reads as the hulk');
+  elements.clear();
+  renderGame(game, { shipArt: 'letters' });
+  assert.match(read('#map-field').innerHTML, /class="wreck"[^>]*>\+<\/span>/,
+    'letters keep the plus');
+});
+
+test('the legend mirrors sprite icons under sprite art and glyphs under letters', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'render-sprite-legend', reimagined: true }), { shipArt: 'sprites' });
+  const legend = read('#map-legend').innerHTML;
+  assert.match(legend, /legend-swatch wreck[^>]*><img src="assets\/sprites\/neutral\/wreck\.png"/, 'wreck chip is the hulk');
+  assert.match(legend, /legend-swatch drone-glyph[^>]*><img src="assets\/sprites\/federation\/drone\.png"/, 'drone chip is a sprite');
+  assert.match(legend, /heading \(hull faces its bow\)/, 'the bow cue reads as hull facing');
+  elements.clear();
+  renderGame(createGame({ seed: 'render-sprite-legend', reimagined: true }), { shipArt: 'letters' });
+  const plain = read('#map-legend').innerHTML;
+  assert.match(plain, /legend-swatch wreck[^>]*>\+</, 'letters keep the plus chip');
+  assert.match(plain, /heading \(bow\)/, 'letters keep the needle key');
+});
+
+test('Xanadu wears its commissioned starbase sprite under sprite art', () => {
   elements.clear();
   renderGame(createGame({ seed: 'render-sprite-starbase' }), { shipArt: 'sprites' });
+  const field = read('#map-field').innerHTML;
+  assert.match(field, /class="ship Federation active has-sprite"[^>]*data-ship-id="xanadu"/, 'the starbase button wears the seam');
+  assert.match(field, /<img class="sprite" src="assets\/sprites\/federation\/starbase\.png"/,
+    'Xanadu draws the batch-2 starbase art');
+  elements.clear();
+  renderGame(createGame({ seed: 'render-sprite-starbase' }), { shipArt: 'letters' });
   assert.match(read('#map-field').innerHTML, /data-ship-id="xanadu"[^>]*><span class="glyph">/,
-    'the starbase keeps its disc until round 34 decides its treatment');
+    'the letters preference keeps Xanadu on its disc');
 });
 
 test('letters art and the default view keep the disc glyphs byte-for-byte', () => {
@@ -644,6 +698,21 @@ test('the sprite seam keeps the marker layer stacked on the button', () => {
   const button = field.match(/<button[^>]*data-ship-id="fed-flagship"[^>]*>[\s\S]*?<\/button>/)[0];
   assert.match(button, /<img class="sprite"/, 'the sprite replaces the disc+letter');
   assert.match(button, /prize-pip/, 'the prize pip still stacks on the sprite button');
+});
+
+test('a sprite wears its heading as rotation and sheds the needle; a glyph keeps the needle', () => {
+  elements.clear();
+  const game = createGame({ seed: 'render-sprite-rot', reimagined: true });
+  renderGame(game, { shipArt: 'sprites' });
+  const field = read('#map-field').innerHTML;
+  const button = field.match(/<button[^>]*data-ship-id="fed-flagship"[^>]*>[\s\S]*?<\/button>/)[0];
+  assert.match(button, /--rot:-?\d+deg/, 'the sprite button carries its heading as --rot');
+  assert.ok(!/heading-glyph/.test(button), 'the hull art is the heading marker; no needle spoke');
+  assert.match(button, /heading \d+°/, 'the heading still reads in the title and aria-label');
+  elements.clear();
+  renderGame(game, { shipArt: 'letters' });
+  assert.match(read('#map-field').innerHTML, /data-ship-id="fed-flagship"[^>]*><span class="heading-glyph"/,
+    'a glyph button keeps the needle');
 });
 
 test('the Launch drones order grows out of a carrier menu alone', () => {

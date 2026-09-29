@@ -285,6 +285,22 @@ body.realtime .ship {
   height: auto;
   image-rendering: pixelated;
   filter: drop-shadow(0 0 2px currentColor);
+  /* Round 34: heading-true rotation — the asset bows right, so --rot off
+     ship.facing is the whole transform; app.js refreshes it per frame in a
+     real-time war so the hull swings with its course between renders. */
+  transform: rotate(var(--rot, 0deg));
+}
+
+/* Xanadu is a starbase, not a hull: it reads bigger than a battle cruiser
+   (batch-2 art, round 34). Radially symmetric, so rotation never applies. */
+.ship.has-sprite .sprite[src$="/starbase.png"] {
+  width: 4.2rem;
+}
+
+/* A drone sprite stays a small dot-scale marker, a touch bigger than the old
+   disc so the arrowhead reads; merchants ride the hull default. */
+.ship.has-sprite .sprite[src$="/drone.png"] {
+  width: 1.4rem;
 }
 
 .ship.vacant .glyph {
@@ -308,8 +324,9 @@ body.realtime .ship {
 
 /* A fighter drone (round 20) is a smaller dot than a ship of the line, so a
    carrier's wing reads as a screen around it rather than three more capital
-   hulls. Faction color still rings it; the glyph is always 'D'. */
-.ship.drone {
+   hulls. Faction color still rings it; the glyph is always 'D'. Under sprite
+   art (round 34) the drone button sizes to its sprite instead. */
+.ship.drone:not(.has-sprite) {
   width: .92rem;
   height: .92rem;
   font-size: .5rem;
@@ -426,6 +443,26 @@ body.realtime .ship {
   font-size: .85rem;
   line-height: 1;
   pointer-events: none;
+}
+
+/* Round 34: under sprite art a wreck is the commissioned hulk — snapped spine,
+   vent holes, rust — desaturated and dimmed so dead metal never competes with
+   living hulls for the eye. Letters and classic keep the '+'. */
+.wreck .wreck-sprite {
+  display: block;
+  width: 2.4rem;
+  height: auto;
+  image-rendering: pixelated;
+  filter: grayscale(.45) brightness(.8);
+}
+
+/* Legend chips mirror the field: under sprite art the wreck/drone/merchant
+   entries key with their sprites instead of letter glyphs. */
+.legend-swatch img {
+  width: 1.15rem;
+  height: auto;
+  image-rendering: pixelated;
+  vertical-align: middle;
 }
 
 /* Camera chrome for a Reimagined war, whose field is wider than the screen. Both

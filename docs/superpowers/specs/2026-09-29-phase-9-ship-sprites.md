@@ -207,7 +207,43 @@ the shipped assets, so every PNG bows right; `sheet-meta.json` records
 ## Round 34 — Fleet chrome
 
 - Heading-true rotation: CSS `rotate()` from `ship.facing` alone — the assets
-  ship bows-right, so no per-alliance offset remains.
+  ship bows-right, so no per-alliance offset remains. **Shipped & measured
+  2026-09-29 (`f58ea57`):** `--rot` set at render and refreshed per frame in
+  `renderFrame`; helm-turn measurement (headless Edge, real-time war):
+  207° → 252° with the computed transform matrix exactly cos/sin(252°).
+  **The sprite IS the heading marker**: sprite buttons shed the needle
+  spoke (it buried itself in the hull art and duplicated the bow cue);
+  glyph buttons — letters preference, classic wars, drones, starbase —
+  keep it unchanged; title/aria heading notes unchanged everywhere.
+- Missing treatments (drones/merchants/Xanadu/wrecks): Matt commissioned a
+  second Gemini batch from the prescriptive prompt pack at
+  `docs/superpowers/briefs/2026-09-29-gemini-batch-2-prompt.md` (flat #FF00FF
+  chroma bg, no text, bows right, coarse pixel grid, per-subject palettes
+  sampled from the fleet-sheet style); the slicer grows a chroma-key path
+  and the seam grows the four treatments when the art lands.
+  **Batch 2 COMPLETE 2026-09-29 — all seven sliced & wired:**
+  - `federation/starbase.png` 96px (Xanadu, 4.2rem — a starbase reads bigger
+    than a battle cruiser); enclosed ring gaps key to transparent; JPEG
+    magenta ringing removed by an iterative green-deficiency defringe
+    (measured 0 magenta-ish opaque pixels).
+  - `neutral/merchant.png` 64px; `neutral/wreck.png` 64px — the wreck span
+    swaps '+' for the hulk under a desaturating CSS filter
+    (grayscale .45 / brightness .8) so dead metal never competes with
+    living hulls; letters and classic keep '+'.
+  - `federation|axis|bloc|cabal/drone.png` 24px — wings swap the D disc for
+    their faction arrowhead at 1.4rem; `DRONE_SPRITE_FACTIONS` gates the
+    seam per faction so a missing file can never reach the field. Bloc
+    sliced with defringe OFF: its plumes are magenta art, exactly what the
+    fringe test would otherwise erase.
+  - Chroma path: whole-image key at tol 60 with NO connectivity guard
+    (open structures enclose their see-through gaps; an edge-connected
+    flood ships them as opaque magenta — measured on the starbase),
+    component floor 0.5% (detached plumes are art islands; chroma sources
+    carry no label text to shed).
+  - Legend mirrors the field under sprite art: wreck/drone/merchant chips
+    become their sprites and the bow key reads "heading (hull faces its
+    bow) ➤"; letters keep '+', 'D', 'M', and the needle '▲'. User guide
+    gains the ship-art line with the commissioned-art provenance.
 - Alliance palette decision applied as play-test dictates (default: none —
   ring carries identity).
 - Drones/merchants/Xanadu/wreck treatments (keep letters, or dedicated art
@@ -223,8 +259,8 @@ the shipped assets, so every PNG bows right; `sheet-meta.json` records
 
 | Round | Branch | Chunk | PR | Status |
 | --- | --- | --- | --- | --- |
-| 33 | `round-33-sprite-pipeline` | Slicer + assets + render seam | — | in progress |
-| 34 | `round-34-fleet-chrome` | Rotation, palette, markers, legend/guide | — | not started |
+| 33 | `round-33-sprite-pipeline` | Slicer + assets + render seam | #80 | ✅ merged 2026-09-29 |
+| 34 | `round-34-fleet-chrome` | Rotation, palette, markers, legend/guide | — | in progress |
 
 ## Parity & determinism guardrails
 

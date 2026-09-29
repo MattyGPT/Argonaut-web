@@ -83,6 +83,22 @@
             64,
             35
           ]
+        },
+        "starbase": {
+          "png": "federation/starbase.png",
+          "source": "assets/sprites/concept/batch2/xanadu.jpeg",
+          "size": [
+            96,
+            96
+          ]
+        },
+        "drone": {
+          "png": "federation/drone.png",
+          "source": "assets/sprites/concept/batch2/drone-federation.jpeg",
+          "size": [
+            24,
+            21
+          ]
         }
       }
     },
@@ -167,6 +183,14 @@
           "size": [
             64,
             31
+          ]
+        },
+        "drone": {
+          "png": "axis/drone.png",
+          "source": "assets/sprites/concept/batch2/drone-axis.jpeg",
+          "size": [
+            24,
+            18
           ]
         }
       }
@@ -253,6 +277,14 @@
             64,
             44
           ]
+        },
+        "drone": {
+          "png": "bloc/drone.png",
+          "source": "assets/sprites/concept/batch2/drone-bloc.jpeg",
+          "size": [
+            24,
+            21
+          ]
         }
       }
     },
@@ -337,6 +369,37 @@
           "size": [
             64,
             34
+          ]
+        },
+        "drone": {
+          "png": "cabal/drone.png",
+          "source": "assets/sprites/concept/batch2/drone-cabal.jpeg",
+          "size": [
+            24,
+            21
+          ]
+        }
+      }
+    },
+    "neutral": {
+      "source": "assets/sprites/concept/batch2/merchant.jpeg",
+      "bowDegrees": 0,
+      "sourceBowDegrees": 0,
+      "classes": {
+        "merchant": {
+          "png": "neutral/merchant.png",
+          "source": "assets/sprites/concept/batch2/merchant.jpeg",
+          "size": [
+            64,
+            29
+          ]
+        },
+        "wreck": {
+          "png": "neutral/wreck.png",
+          "source": "assets/sprites/concept/batch2/wreck.jpeg",
+          "size": [
+            64,
+            40
           ]
         }
       }

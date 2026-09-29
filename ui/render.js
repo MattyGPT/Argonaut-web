@@ -109,7 +109,19 @@ const SPRITE_SLUGS = new Map([
   ['Interceptor', 'interceptor'],
   ['Artillery', 'artillery'],
   ['Carrier', 'carrier'],
+  // Round 34, Gemini batch 2: Xanadu wears its commissioned starbase art.
+  ['Starbase', 'starbase'],
+  // Batch 2: drones swap the D disc for their faction's drone sprite, and
+  // neutral merchants swap the civilian disc (wreck treatment waits on art).
+  ['Drone', 'drone'],
+  ['Merchant', 'merchant'],
 ]);
+
+// Batch-2 drone art lands one faction at a time; a wing whose alliance has no
+// drone sprite yet keeps its D disc rather than referencing a missing file.
+// All four faction drones landed 2026-09-29; the gate stays as the pattern
+// for any future faction-specific sprite gap.
+const DRONE_SPRITE_FACTIONS = new Set(['Federation', 'Axis', 'Bloc', 'Cabal']);
 
 export const terminalNarrative = (event) => {
   if (!event) return '';
@@ -514,9 +526,14 @@ const legendEntry = (swatch, label, content = '') => `<span class="legend-entry"
  * every color on the map appears here, and the chips mirror the real thing
  * (rings dashed, pips glowing, terrain translucent).
  */
-const renderMapLegend = (game) => {
+const renderMapLegend = (game, shipArt) => {
   const legend = document.querySelector('#map-legend');
   if (!legend) return;
+  // Under sprite art the legend chips mirror what the field actually draws:
+  // the wreck, drone, and merchant icons become their sprites, and the bow
+  // cue reads as the hull's facing rather than the needle spoke.
+  const spritesOn = shipArt === 'sprites';
+  const legendImg = (src) => `<img src="${src}" alt="">`;
   const factions = ['Federation', 'Axis', 'Bloc', 'Cabal'].map((name) => `<span class="${name}">■ ${name}</span>`).join('');
   const entries = [
     legendEntry('ring-phasers', 'phaser ring'),
@@ -525,7 +542,7 @@ const renderMapLegend = (game) => {
     legendEntry('threat', 'can reach you'),
     legendEntry('pip-tractor', 'tractor-held'),
     legendEntry('lock-tractor', 'tractor beam'),
-    legendEntry('wreck', 'wreck', '+'),
+    legendEntry('wreck', 'wreck', spritesOn ? legendImg('assets/sprites/neutral/wreck.png') : '+'),
     ...(game.extended ? [
       legendEntry('pip-order', 'under orders'),
       legendEntry('star-ace', 'scanned ace', '★'),
@@ -537,11 +554,11 @@ const renderMapLegend = (game) => {
       legendEntry('terrain-ion', 'ion storm'),
       legendEntry('terrain-relay', 'relay node'),
       legendEntry('pip-prize', 'prize of war'),
-      legendEntry('drone-glyph', 'fighter drone', 'D'),
+      legendEntry('drone-glyph', 'fighter drone', spritesOn ? legendImg('assets/sprites/federation/drone.png') : 'D'),
       legendEntry('stance-firing', 'firing stance'),
       legendEntry('stance-evasive', 'evasive stance'),
-      legendEntry('heading-glyph', 'heading (bow)', '▲'),
-      legendEntry('neutral-glyph', 'neutral merchant', 'M'),
+      legendEntry('heading-glyph', spritesOn ? 'heading (hull faces its bow)' : 'heading (bow)', spritesOn ? '➤' : '▲'),
+      legendEntry('neutral-glyph', 'neutral merchant', spritesOn ? legendImg('assets/sprites/neutral/merchant.png') : 'M'),
       legendEntry('pip-distress', 'distress call'),
     ] : []),
   ].join('');
@@ -575,7 +592,7 @@ export const renderGame = (game, view = {}) => {
     : game.extended
       ? (scenarioFor(game).id === 'annihilation' ? 'EXTENDED WAR' : `EXTENDED · ${scenarioFor(game).title.toUpperCase()}`)
       : '';
-  renderMapLegend(game);
+  renderMapLegend(game, view.shipArt);
 
   const actorActive = Boolean(actor) && actor.status === 'active';
   const mapperRange = actorActive ? sensorRange(game, actor, 'mapper') : Infinity;
@@ -648,7 +665,12 @@ export const renderGame = (game, view = {}) => {
 
   const shipHtml = game.ships.filter(isVisible).map((ship) => {
     if (ship.status === 'destroyed') {
-      return `<span class="wreck" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" title="${ship.name}: destroyed" aria-hidden="true">+</span>`;
+      // Round 34: under sprite art the wreck is the commissioned hulk, snapped
+      // spine and all, desaturated by CSS; letters and classic keep the '+'.
+      const wreckMark = view.shipArt === 'sprites'
+        ? '<img class="wreck-sprite" src="assets/sprites/neutral/wreck.png" alt="" aria-hidden="true">'
+        : '+';
+      return `<span class="wreck" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" title="${ship.name}: destroyed" aria-hidden="true">${wreckMark}</span>`;
     }
     const threat = threats.has(ship.id) ? ' threat' : '';
     const standing = orderFor(game, ship.id) ?? pendingOrderFor(game, ship.id);
@@ -670,7 +692,9 @@ export const renderGame = (game, view = {}) => {
     // keep their letters until round 34 decides their treatments. The sprite
     // replaces the disc+letter only — every marker below still stacks on the
     // button. Classic never asks for sprites (app.js passes 'letters').
-    const useSprite = view.shipArt === 'sprites' && SPRITE_SLUGS.has(ship.className);
+    const spriteSlug = SPRITE_SLUGS.get(ship.className);
+    const droneWaitsForArt = ship.className === 'Drone' && !DRONE_SPRITE_FACTIONS.has(ship.faction);
+    const useSprite = view.shipArt === 'sprites' && Boolean(spriteSlug) && !droneWaitsForArt;
     // A non-standard combat stance wears a marker (round 21): a firing hull glows
     // hot, an evasive hull runs cold. It changes how your volleys land, so like the
     // threat ring it is public combat intel, not hidden state.
@@ -681,7 +705,11 @@ export const renderGame = (game, view = {}) => {
     // needle pointing where its bow faces, so which arc an exchange would strike
     // is readable off the map. Public combat intel, like the threat outline.
     const heading = game.reimagined && isActive(ship) && hasArcs(game, ship) ? Math.round(facingOf(game, ship)) : null;
-    const headingHtml = heading === null ? '' : `<span class="heading-glyph" style="--heading:${heading}deg" aria-hidden="true"></span>`;
+    // Round 34: a sprite IS the heading marker — the hull art rotates to face
+    // (--rot, refreshed per frame in realtime by app.js), so the needle spoke
+    // only stacks on glyph buttons, where a letter needs it to show its bow.
+    const headingHtml = heading === null || useSprite ? '' : `<span class="heading-glyph" style="--heading:${heading}deg" aria-hidden="true"></span>`;
+    const rotStyle = heading === null || !useSprite ? '' : `;--rot:${heading}deg`;
     const headingNote = heading === null ? '' : ` — heading ${heading}°`;
     // A hull broadcasting distress (round 24) wears a marker: the call is public,
     // and the rescue is the point.
@@ -693,7 +721,7 @@ export const renderGame = (game, view = {}) => {
     const held = isTractorHeld(game, ship);
     const heldClass = held ? ' held' : '';
     const heldNote = held ? ' — held by a tractor beam' : '';
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}${heldClass}${useSprite ? ' has-sprite' : ''}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}${useSprite ? `<img class="sprite" src="assets/sprites/${ship.faction.toLowerCase()}/${SPRITE_SLUGS.get(ship.className)}.png" alt="" aria-hidden="true" draggable="false">` : `<span class="glyph">${glyph}</span>`}${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}${held ? '<span class="tractor-pip" aria-hidden="true"></span>' : ''}</button>`;
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}${heldClass}${useSprite ? ' has-sprite' : ''}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}${rotStyle}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}${useSprite ? `<img class="sprite" src="assets/sprites/${ship.faction.toLowerCase()}/${SPRITE_SLUGS.get(ship.className)}.png" alt="" aria-hidden="true" draggable="false">` : `<span class="glyph">${glyph}</span>`}${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}${held ? '<span class="tractor-pip" aria-hidden="true"></span>' : ''}</button>`;
   }).join('');
   // Tractor lock lines (Matt's call, 2026-09-25): the beam is physical. A held
   // hull you can see draws its lock back to the source even when a nebula hides
