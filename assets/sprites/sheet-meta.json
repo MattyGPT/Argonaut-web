@@ -91,6 +91,14 @@
             96,
             96
           ]
+        },
+        "drone": {
+          "png": "federation/drone.png",
+          "source": "assets/sprites/concept/batch2/drone-federation.jpeg",
+          "size": [
+            24,
+            21
+          ]
         }
       }
     },
@@ -345,6 +353,21 @@
           "size": [
             64,
             34
+          ]
+        }
+      }
+    },
+    "neutral": {
+      "source": "assets/sprites/concept/batch2/merchant.jpeg",
+      "bowDegrees": 0,
+      "sourceBowDegrees": 0,
+      "classes": {
+        "merchant": {
+          "png": "neutral/merchant.png",
+          "source": "assets/sprites/concept/batch2/merchant.jpeg",
+          "size": [
+            64,
+            29
           ]
         }
       }

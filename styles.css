@@ -297,6 +297,12 @@ body.realtime .ship {
   width: 4.2rem;
 }
 
+/* A drone sprite stays a small dot-scale marker, a touch bigger than the old
+   disc so the arrowhead reads; merchants ride the hull default. */
+.ship.has-sprite .sprite[src$="/drone.png"] {
+  width: 1.4rem;
+}
+
 .ship.vacant .glyph {
   color: #b5c1ca;
 }
@@ -318,8 +324,9 @@ body.realtime .ship {
 
 /* A fighter drone (round 20) is a smaller dot than a ship of the line, so a
    carrier's wing reads as a screen around it rather than three more capital
-   hulls. Faction color still rings it; the glyph is always 'D'. */
-.ship.drone {
+   hulls. Faction color still rings it; the glyph is always 'D'. Under sprite
+   art (round 34) the drone button sizes to its sprite instead. */
+.ship.drone:not(.has-sprite) {
   width: .92rem;
   height: .92rem;
   font-size: .5rem;

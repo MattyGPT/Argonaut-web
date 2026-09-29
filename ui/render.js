@@ -111,7 +111,15 @@ const SPRITE_SLUGS = new Map([
   ['Carrier', 'carrier'],
   // Round 34, Gemini batch 2: Xanadu wears its commissioned starbase art.
   ['Starbase', 'starbase'],
+  // Batch 2: drones swap the D disc for their faction's drone sprite, and
+  // neutral merchants swap the civilian disc (wreck treatment waits on art).
+  ['Drone', 'drone'],
+  ['Merchant', 'merchant'],
 ]);
+
+// Batch-2 drone art lands one faction at a time; a wing whose alliance has no
+// drone sprite yet keeps its D disc rather than referencing a missing file.
+const DRONE_SPRITE_FACTIONS = new Set(['Federation']);
 
 export const terminalNarrative = (event) => {
   if (!event) return '';
@@ -672,7 +680,9 @@ export const renderGame = (game, view = {}) => {
     // keep their letters until round 34 decides their treatments. The sprite
     // replaces the disc+letter only — every marker below still stacks on the
     // button. Classic never asks for sprites (app.js passes 'letters').
-    const useSprite = view.shipArt === 'sprites' && SPRITE_SLUGS.has(ship.className);
+    const spriteSlug = SPRITE_SLUGS.get(ship.className);
+    const droneWaitsForArt = ship.className === 'Drone' && !DRONE_SPRITE_FACTIONS.has(ship.faction);
+    const useSprite = view.shipArt === 'sprites' && Boolean(spriteSlug) && !droneWaitsForArt;
     // A non-standard combat stance wears a marker (round 21): a firing hull glows
     // hot, an evasive hull runs cold. It changes how your volleys land, so like the
     // threat ring it is public combat intel, not hidden state.

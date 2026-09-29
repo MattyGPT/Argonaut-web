@@ -611,14 +611,18 @@ test('a ship of the line wears its alliance sprite when the modern view asks for
     'no sprite button falls back to a letter disc');
 });
 
-test('drones keep their letters under sprite art until batch-2 art lands', () => {
+test('a drone wears its faction drone sprite under sprite art and D under letters', () => {
   elements.clear();
   renderGame(bayGame('render-sprite-drone'), { shipArt: 'sprites' });
   const field = read('#map-field').innerHTML;
-  assert.match(field, /data-ship-id="fed-carrier-drone-1"[^>]*><span class="glyph">D<\/span>/,
-    'the wing still reads D');
-  assert.ok(!/has-sprite/.test(field.match(/<button[^>]*data-ship-id="fed-carrier-drone-1"[^>]*>/)[0]),
-    'the drone button carries no sprite seam');
+  assert.match(field, /class="ship Federation active drone has-sprite"[^>]*data-ship-id="fed-carrier-drone-1"/,
+    'the wing button wears the sprite seam');
+  assert.match(field, /<img class="sprite" src="assets\/sprites\/federation\/drone\.png"/,
+    'the wing draws its faction drone sprite');
+  elements.clear();
+  renderGame(bayGame('render-sprite-drone'), { shipArt: 'letters' });
+  assert.match(read('#map-field').innerHTML, /data-ship-id="fed-carrier-drone-1"[^>]*><span class="glyph">D<\/span>/,
+    'the letters preference keeps the D disc');
 });
 
 test('Xanadu wears its commissioned starbase sprite under sprite art', () => {

@@ -119,6 +119,11 @@ const CHROMA_REF = { r: 255, g: 0, b: 255 };
 const CHROMA_TOL = 60;
 const CHROMA_SOURCES = [
   { alliance: 'federation', cls: 'starbase', source: 'assets/sprites/concept/batch2/xanadu.jpeg', target: 96, defringe: true },
+  // Plumes are detached islands at ~2-3% of hull mass; chroma sources carry
+  // no junk islands (the prompt pack forbids text), so the component floor
+  // drops to 0.5% here where batch-1 sheets needed 4% to shed labels.
+  { alliance: 'neutral', cls: 'merchant', source: 'assets/sprites/concept/batch2/merchant.jpeg', target: 64, defringe: true },
+  { alliance: 'federation', cls: 'drone', source: 'assets/sprites/concept/batch2/drone-federation.jpeg', target: 24, defringe: true },
 ];
 
 function chanDist(a, b) {
@@ -191,7 +196,7 @@ function keyBackground(img, keyTol) {
 // pods/wings into sub-threshold islands (measured 2026-09-29 on
 // cabal/battle-cruiser: engine pods dropped at 4% while the mask held them);
 // sheet numbers/labels sit far enough away that closing does not bridge them.
-function keepMainComponents(img, bg) {
+function keepMainComponents(img, bg, frac = 0.04, floor = 800) {
   const { width, height } = img.bitmap;
   const n = width * height;
   const fg = new Uint8Array(n);
@@ -237,7 +242,7 @@ function keepMainComponents(img, bg) {
     sizes.push(size);
   }
   const largest = Math.max(...sizes);
-  const minKeep = Math.max(800, Math.ceil(largest * 0.04));
+  const minKeep = Math.max(floor, Math.ceil(largest * frac));
   const keep = new Uint8Array(n);
   let x0 = width, y0 = height, x1 = -1, y1 = -1;
   for (let i = 0; i < n; i++) {
@@ -361,7 +366,7 @@ for (const entry of CHROMA_SOURCES) {
   const bgLike = new Uint8Array(n);
   for (let i = 0; i < n; i++) if (chanDist(px[i], CHROMA_REF) < CHROMA_TOL) bgLike[i] = 1;
   const bg = bgLike; // no connectivity guard — see the CHROMA_TOL note above
-  const { keep, bbox, largest, dropped } = keepMainComponents(img, bg);
+  const { keep, bbox, largest, dropped } = keepMainComponents(img, bg, 0.005, 300);
   if (!bbox) throw new Error(`${entry.alliance}/${entry.cls}: nothing survived chroma keying`);
   // JPEG ringing leaves magenta-tinted fringe pixels just inside the
   // silhouette. Where the palette carries no magenta of its own (flag per
