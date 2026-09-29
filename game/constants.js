@@ -797,6 +797,23 @@ export const REALTIME = Object.freeze({
   // damage-per-stardate exactly — a hull volleys once per boundary, player and
   // AI alike. A dial, not a calibrated value.
   volleyInterval: 1,
+  // Round 32 (combat timing). `collisionRadius` must match resolveCollision's
+  // 1-unit rule — it is named here so the continuous sweep and the avoidance
+  // lookahead read one number. The avoidance dials are Matt's round-32
+  // addition: captains anticipate overlaps and bend their burn around them —
+  // pure geometry, no RNG, no speed cost; `noAvoid` and the player's manual
+  // conn opt out (a ram you order is a ram you get).
+  collisionRadius: 1,
+  avoidLookahead: 2,
+  avoidMargin: 2,
+  avoidAngle: 25,
+  // Round 32 (ordnance): photon and spread warheads fly ballistically — aimed
+  // at the target's position AT LAUNCH, no homing — at `torpedoSpeed` units
+  // per stardate (~3× hull speed: a 30-unit run lands in about half a second
+  // at 1×), detonating on the first sub-tick they come within `impactRadius`
+  // of any hull, or at their end point. Dodging is real; so is body-blocking.
+  torpedoSpeed: 280,
+  impactRadius: 2,
 });
 
 /**

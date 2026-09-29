@@ -691,7 +691,11 @@ export const renderGame = (game, view = {}) => {
   const lockHtml = lockLines.length
     ? `<svg class="lock-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${lockLines.join('')}</svg>`
     : '';
-  map.innerHTML = terrainHtml + ringHtml + lockHtml + shipHtml;
+  // Warheads in flight (round 32): ballistic photon and spread runs draw as hot
+  // dots on the field — the state is the timeline, and the frame loop rides them
+  // between renders, so a salvo is something you can see coming and burn out of.
+  const warheadHtml = (game.ordnance ?? []).map((warhead) => `<span class="warhead ${warhead.kind}" data-ordnance-id="${warhead.id}" style="--x:${pct(warhead.x)};--y:${pct(warhead.y)}" aria-hidden="true"></span>`).join('');
+  map.innerHTML = terrainHtml + ringHtml + lockHtml + shipHtml + warheadHtml;
   // Slide and scale the world layer so the camera window fills the viewport. The
   // test stub has no `style`, so guard it; the projection is identity at zoom 1.
   if (map.style) {

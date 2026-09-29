@@ -1,4 +1,4 @@
-import { GRID_SIZE, SPREAD } from '../game/constants.js';
+import { GRID_SIZE, REALTIME, SPREAD } from '../game/constants.js';
 import { isTerminalEvent } from './battle-events.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -193,11 +193,25 @@ export const drawMove = (map, from, to, win = FULL_FIELD) => {
 /**
  * Replays a whole round: every ship's volleys, not only the ones that touched you,
  * paced slowly enough to follow. Returns how long the replay runs, in milliseconds.
+ * Round 32: a real-time round's events carry `simTime` stamps, and a stamped
+ * timeline replays on the war clock — the gaps between volleys are the real
+ * gaps (clamped to stay watchable). Unstamped events keep the fixed step.
  */
 export const replayEffects = (events, map, stepMs = 420, win = FULL_FIELD) => {
   if (!map || !events?.length) return 0;
   const svg = layer(map, win);
   svg.innerHTML = '';
-  events.forEach((e, i) => setTimeout(() => draw(svg, e), i * stepMs));
-  return events.length * stepMs;
+  if (!events.every((e) => e.simTime != null)) {
+    events.forEach((e, i) => setTimeout(() => draw(svg, e), i * stepMs));
+    return events.length * stepMs;
+  }
+  let at = 0;
+  events.forEach((e, i) => {
+    if (i > 0) {
+      at += Math.max(60, Math.min(2400, (e.simTime - events[i - 1].simTime) * REALTIME.msPerStardate));
+    }
+    const fire = at;
+    setTimeout(() => draw(svg, e), fire);
+  });
+  return at + stepMs;
 };

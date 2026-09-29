@@ -49,6 +49,7 @@ import {
   dockedAt,
   dronesOf,
   engineCapacity,
+  facePoint,
   facingOf,
   getLivingShips,
   getShip,
@@ -625,6 +626,13 @@ const weaponAction = (game, action, actor, type) => {
   const range = RANGES[type];
   const targetDistance = distance(actor, found.target);
   if (targetDistance > range) return invalid(game, `${found.target.name} is out of range for ${type}.`);
+  if (game.realtime && type === 'photons') {
+    // Round 32: the torpedo enters flight — a ballistic run aimed where the
+    // target is NOW. Beams (phasers) stay instant. The rolls wait for the
+    // detonation, and a target that burns out of the impact radius lives.
+    const launched = launchWarhead(game, actor, found.target, 'photons');
+    return result(completeTurn(launched), `${actor.name} fires photons at ${found.target.name}.`);
+  }
   const { power, focus } = precisionSettings(game, action, type, found.target);
   const details = {
     ...(focus ? { focus } : {}),
@@ -740,8 +748,15 @@ const ionAction = (game, action, actor) => {
  * finishes. Shared by the player's command and the autopilots' so both splashes are
  * identical. Returns the raw game (no turn completion); the caller wraps it.
  */
-export const spreadSplash = (game, actor, target, full, rng) => {
-  const impact = { x: target.x, y: target.y };
+export const spreadSplash = (game, actor, target, full, rng) => spreadSplashAt(game, actor, target, { x: target.x, y: target.y }, full, rng);
+
+/**
+ * Round 32: the splash centered on an arbitrary IMPACT POINT — a ballistic
+ * warhead detonates where it flew to, not where its target has since moved.
+ * `spreadSplash` is the turn-based delegate (impact = the target's position),
+ * byte-identical to before; the real-time continuum calls this directly.
+ */
+export const spreadSplashAt = (game, actor, target, impact, full, rng, creditShooter = true) => {
   const radius = SPREAD.splashRadius;
   const messages = [];
   const events = [];
@@ -756,21 +771,55 @@ export const spreadSplash = (game, actor, target, full, rng) => {
     // Round 23: only the salvo's primary hit is aimed — it lands on the target's
     // arc the launcher bears on. The splash on secondary hulls is positional:
     // it hits the total pool and burns the arcs proportionally.
-    const hit = damageShip(ship, amount, rng, ship.id === target.id ? { arc: struckArc(game, actor, target) } : {});
+    const hit = damageShip(ship, amount, rng, ship.id === target?.id ? { arc: struckArc(game, actor, target) } : {});
     if (before === 'active' && hit.status !== 'active') {
       if (ship.faction !== actor.faction) kills += 1;
       events.push({ kind: 'explosion', fromId: actor.id, toId: ship.id, x1: ship.x, y1: ship.y, x2: ship.x, y2: ship.y, hit: true });
       events.push(terminalEvent('destruction', 'spread', hit, { attacker: actor }));
     }
-    messages.push(ship.id === target.id
+    messages.push(ship.id === target?.id
       ? `${ship.name} takes the full spread for ${amount} damage.`
       : `${ship.name} is caught in the spread for ${amount} damage.`);
     return { ...hit, shotsTaken: hit.shotsTaken + 1 };
   });
+  // Round 32: a ballistic warhead already counted its shot at LAUNCH, so the
+  // detonation credits kills only — `creditShooter` false. The turn-based path
+  // delegates with the default and keeps its byte-identical bookkeeping.
   const ships = splashed.map((ship) => (ship.id === actor.id
-    ? { ...ship, shotsFired: ship.shotsFired + 1, kills: ship.kills + kills }
+    ? { ...ship, ...(creditShooter ? { shotsFired: ship.shotsFired + 1 } : {}), kills: ship.kills + kills }
     : ship));
   return { game: { ...game, ships }, messages, events, kills };
+};
+
+/**
+ * Round 32: a torpedo enters flight. The warhead is ballistic — aimed at the
+ * target's position at launch, no homing — and carries its shooter snapshot so
+ * the detonation can resolve the volley even if the launcher dies in flight.
+ * The shot is COUNTED here (shotsFired); the rolls wait for the impact, in the
+ * continuum. The id rides a counter, never the RNG stream.
+ */
+export const launchWarhead = (game, actor, target, kind) => {
+  const dx = target.x - actor.x;
+  const dy = target.y - actor.y;
+  const span = Math.hypot(dx, dy) || 1;
+  const warhead = {
+    id: `ord-${game.ordnanceCount ?? 0}`,
+    kind,
+    shooterId: actor.id,
+    shooter: actor,
+    targetId: target.id,
+    x: actor.x,
+    y: actor.y,
+    ux: dx / span,
+    uy: dy / span,
+    remaining: span,
+  };
+  return {
+    ...game,
+    ordnance: [...(game.ordnance ?? []), warhead],
+    ordnanceCount: (game.ordnanceCount ?? 0) + 1,
+    ships: game.ships.map((ship) => (ship.id === actor.id ? { ...ship, shotsFired: ship.shotsFired + 1 } : ship)),
+  };
 };
 
 const spreadAction = (game, action, actor) => {
@@ -781,6 +830,13 @@ const spreadAction = (game, action, actor) => {
   const found = hostileTarget(game, action, actor);
   if (found.error) return invalid(game, found.error, found.requiresTarget);
   if (distance(actor, found.target) > RANGES.spread) return invalid(game, `${found.target.name} is out of range for the spread torpedoes.`);
+  if (game.realtime) {
+    // Round 32: the salvo enters flight — a ballistic spread aimed where the
+    // target is NOW. The rolls wait for the detonation; a target that burns
+    // out of the blast point is splashed by nothing but vacuum.
+    const launched = launchWarhead(game, actor, found.target, 'spread');
+    return result(completeTurn(launched), `${actor.name} fires a spread of torpedoes at ${found.target.name}.`);
+  }
   const rng = seededRng(game);
   if (rng.next() < volleyMissChance(game, actor, found.target)) {
     const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
@@ -982,6 +1038,21 @@ const tractorAction = (game, action, actor) => {
   // and pulls toward the caster exactly as calibrated.
   const destination = game.reimagined ? towDestination(game, action, grid) : null;
   const { pull, position } = tractorLock(actor, found.target, grid, destination, powerEffect(game, actor, 'tractor'));
+  if (game.realtime) {
+    // Round 32: the lock schedules a TOW — the same per-stardate pull total,
+    // hauled smoothly across the sub-ticks instead of teleporting. The slam's
+    // collision resolves mid-flight in the sweep, and the rock strike rolls
+    // when the tow runs out, exactly like a turn-based tow's end.
+    const towed = {
+      ...facePoint(game, found.target, position.x, position.y),
+      tractorBy: actor.id,
+      tow: { x: position.x, y: position.y, rate: pull / REALTIME.ticksPerStardate, remaining: pull },
+    };
+    return result(completeTurn(replaceShip(game, towed)), [
+      `${actor.name} locks a tractor beam on ${found.target.name}.`,
+      `Tractor beam good for ${pull} units pull. ${actor.name} is hauling ${found.target.name} toward ${Math.round(position.x)},${Math.round(position.y)}.`,
+    ]);
+  }
   // Round 23: a towed hull heads the way it was dragged (Reimagined only).
   const pulled = { ...applyHeading(game, found.target, position.x, position.y), tractorBy: actor.id };
   // A beam can drag a hull straight into another one, and that is a collision like

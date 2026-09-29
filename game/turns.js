@@ -1,7 +1,7 @@
-import { DOCKING, ENCOUNTERS, FACTIONS, GRID_SIZE, POWER, PRIZE, RANGES, REIMAGINED_WEAPON_DAMAGE_SCALE, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
-import { captureHull, canLaunchDrones, damageShip, detonate, fireEvent, flushShields, ionDamage, killLines, launchDrones, resolveAsteroidStrike, resolveCollision, spreadSplash, terminalEvent, tractorLock, weaponDamage } from './actions.js';
+import { DOCKING, ENCOUNTERS, FACTIONS, GRID_SIZE, POWER, PRIZE, RANGES, REALTIME, REIMAGINED_WEAPON_DAMAGE_SCALE, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
+import { captureHull, canLaunchDrones, damageShip, detonate, fireEvent, flushShields, ionDamage, killLines, launchDrones, launchWarhead, resolveAsteroidStrike, resolveCollision, spreadSplash, spreadSplashAt, terminalEvent, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
-import { integrateStardate, positionsOf } from './realtime.js';
+import { advanceSubtick, integrateStardate, positionsOf, simTimeOf, SUBTICK } from './realtime.js';
 import { createRng } from './rng.js';
 import { scenarioOutcome } from './scenarios.js';
 import {
@@ -12,6 +12,7 @@ import {
   describeOrder,
   distance,
   dockedAt,
+  facePoint,
   getShip,
   grownArcs,
   isActive,
@@ -97,6 +98,20 @@ const resolveAiAction = (startGame, shipId, plotDest = false) => {
   }
   if (['phasers', 'photons'].includes(action.type)) {
     const target = getShip(game, action.targetId);
+    // Round 32: in the continuum a torpedo ENTERS FLIGHT — the salvo launches
+    // now and the detonation resolves wherever the warhead meets the field.
+    // Beams stay instant, exactly as below.
+    if (plotDest && action.type === 'photons') {
+      if (!target || !isActive(target) || distance(actor, target) > RANGES.photons) {
+        return { game, messages: [`${actor.name} holds position.`], type: 'pass' };
+      }
+      return {
+        game: launchWarhead(game, actor, target, 'photons'),
+        messages: [`${actor.name} fires photons at ${target.name}.`],
+        type: action.type,
+        events: [],
+      };
+    }
     const rng = rngFor(game);
     // Autopilots miss at the same rate as the player, from the same roll order,
     // against the same shared terrain threshold (15c + 15d): asteroid cover on the
@@ -196,6 +211,18 @@ const resolveAiAction = (startGame, shipId, plotDest = false) => {
     // looses it into a clean cluster (engage/spreadWorthIt guarantees no friendly
     // fire). spreadSplash credits the shooter's shotsFired and any kills itself.
     const target = getShip(game, action.targetId);
+    if (plotDest) {
+      // Round 32: the salvo flies — the splash centers on the detonation point.
+      if (!target || !isActive(target) || distance(actor, target) > RANGES.spread) {
+        return { game, messages: [`${actor.name} holds position.`], type: 'pass' };
+      }
+      return {
+        game: launchWarhead(game, actor, target, 'spread'),
+        messages: [`${actor.name} fires a spread of torpedoes at ${target.name}.`],
+        type: action.type,
+        events: [],
+      };
+    }
     const rng = rngFor(game);
     if (rng.next() < volleyMissChance(game, actor, target)) {
       const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
@@ -222,6 +249,25 @@ const resolveAiAction = (startGame, shipId, plotDest = false) => {
       return { game, messages: [`${actor.name} holds position.`], type: 'pass' };
     }
     const { pull, position } = tractorLock(actor, target, game.gridSize ?? GRID_SIZE, null, powerEffect(game, actor, 'tractor'));
+    if (plotDest) {
+      // Round 32: the lock schedules a TOW — the same pull total, hauled
+      // smoothly across the sub-ticks; the slam's collision resolves in the
+      // sweep and the rock strike rolls when the rope runs out.
+      const towed = {
+        ...facePoint(game, target, position.x, position.y),
+        tractorBy: actor.id,
+        tow: { x: position.x, y: position.y, rate: pull / REALTIME.ticksPerStardate, remaining: pull },
+      };
+      return {
+        game: replaceShip(game, towed),
+        messages: [
+          `${actor.name} locks ${target.name} in a tractor beam.`,
+          `Tractor beam good for ${pull} units pull. ${actor.name} is hauling ${target.name} toward ${Math.round(position.x)},${Math.round(position.y)}.`,
+        ],
+        type: action.type,
+        events: [],
+      };
+    }
     // Round 23: a towed hull heads the way it was dragged (Reimagined only).
     const pulled = { ...applyHeading(game, target, position.x, position.y), tractorBy: actor.id };
     const collision = resolveCollision(replaceShip(game, pulled), pulled);
@@ -687,7 +733,10 @@ const warSignature = (game) => game.ships
   .filter((ship) => !isNeutral(ship))
   .map((ship) => [
     ship.id,
-    `${ship.x},${ship.y}`,
+    // Round 32: a real-time war's positions are fractional; the signature
+    // rounds them so a field drifting sub-unit jitter still reads as quiet.
+    // An identity on the turn-based integer field — parity holds.
+    `${Math.round(ship.x)},${Math.round(ship.y)}`,
     ship.status,
     ship.faction,
     `${ship.shields}/${ship.crew}`,
@@ -837,30 +886,18 @@ export const resolveStardateChain = (startGame, log, events) => {
 };
 
 /**
- * Round 31 — the real-time stardate boundary. Arrivals go first: a hull that
- * finished its burn this stardate meets whatever it arrived on — collision and
- * rock strikes, in id order — the continuous-time successor of the turn-based
- * endpoint check. Then every captain with a conn decides: the AI alliances
- * always, and the player's hull too when the autopilot has the conn
- * (resignation, spectator, or the player's own autopilot order). Then the
- * shared chain fires exactly as it does in a turn-based war.
+ * Round 31 — the real-time stardate boundary: every captain with a conn
+ * decides — the AI alliances always, and the player's hull too when the
+ * autopilot has the conn (resignation, spectator, or the player's own
+ * autopilot order) — then the shared chain fires exactly as it does in a
+ * turn-based war. (Round 32 moved arrival collisions and rock strikes into
+ * the sub-tick continuum, where they happen in flight rather than in a batch
+ * here; the boundary is decisions + chain only.)
  */
-export const resolveRealtimeBoundary = (initialGame, arrived = []) => {
+export const resolveRealtimeBoundary = (initialGame) => {
   let game = initialGame;
   const log = [];
   const events = [];
-  for (const shipId of [...arrived].sort()) {
-    const actor = getShip(game, shipId);
-    if (!isActive(actor)) continue;
-    const collision = resolveCollision(game, actor);
-    game = collision.game;
-    log.push(...collision.messages);
-    events.push(...(collision.events ?? []));
-    const strike = resolveAsteroidStrike(game, getShip(game, shipId));
-    game = strike.game;
-    log.push(...strike.messages);
-    events.push(...(strike.events ?? []));
-  }
   const order = game.ships
     .filter((ship) => isActive(ship) && (isSpectator(game) || game.autoConn || ship.id !== game.playerShipId))
     .map((ship) => ship.id);
@@ -872,4 +909,297 @@ export const resolveRealtimeBoundary = (initialGame, arrived = []) => {
     events.push(...(action.events ?? []));
   }
   return resolveStardateChain(game, log, events);
+};
+
+/**
+ * Round 32: after a collision resolves, survivors standing inside the
+ * collision radius are nudged apart to just outside it — deterministic, no
+ * RNG, a few passes to settle clusters. Without it a crippled pair would
+ * re-collide every sub-tick forever; with it a collision happens once, the
+ * way the turn-based endpoint check always did.
+ */
+const separateOverlaps = (game) => {
+  const grid = game.gridSize ?? GRID_SIZE;
+  let next = game;
+  for (let pass = 0; pass < 3; pass += 1) {
+    const active = next.ships.filter((ship) => isActive(ship)).sort((a, b) => a.id.localeCompare(b.id));
+    const positions = new Map(active.map((ship) => [ship.id, { x: ship.x, y: ship.y }]));
+    let moved = false;
+    for (let i = 0; i < active.length; i += 1) {
+      for (let j = i + 1; j < active.length; j += 1) {
+        const a = positions.get(active[i].id);
+        const b = positions.get(active[j].id);
+        const d = Math.hypot(b.x - a.x, b.y - a.y);
+        if (d >= REALTIME.collisionRadius) continue;
+        // A dead-astern overlap (d = 0) separates along +x, deterministically.
+        const ux = d > 0 ? (b.x - a.x) / d : 1;
+        const uy = d > 0 ? (b.y - a.y) / d : 0;
+        const push = (REALTIME.collisionRadius + 0.01 - d) / 2;
+        positions.set(active[i].id, {
+          x: Math.max(0, Math.min(grid, a.x - ux * push)),
+          y: Math.max(0, Math.min(grid, a.y - uy * push)),
+        });
+        positions.set(active[j].id, {
+          x: Math.max(0, Math.min(grid, b.x + ux * push)),
+          y: Math.max(0, Math.min(grid, b.y + uy * push)),
+        });
+        moved = true;
+      }
+    }
+    if (!moved) return next;
+    next = {
+      ...next,
+      ships: next.ships.map((ship) => {
+        const point = positions.get(ship.id);
+        return point ? { ...ship, x: point.x, y: point.y } : ship;
+      }),
+    };
+  }
+  return next;
+};
+
+/**
+ * Round 32: the closest synchronized approach between two hulls sweeping
+ * their sub-tick segments SIMULTANEOUSLY — the relative-motion CPA over the
+ * shared parameter t ∈ [0,1]. Plain segment-segment distance would be wrong
+ * here: it pairs points flown at different moments, so crossing paths that
+ * were never co-present would "collide," and a target burning clear of a
+ * torpedo run would be clipped at its launch position. Sampling positions
+ * alone would be wrong the other way: at 12–35 units of travel per sub-tick
+ * against a 1–2 unit radius, contacts tunnel between samples. Returns the
+ * distance and both hulls' positions at the moment of closest approach.
+ */
+const closestApproach = (a0, a1, b0, b1) => {
+  const px = a0.x - b0.x;
+  const py = a0.y - b0.y;
+  const rx = (a1.x - a0.x) - (b1.x - b0.x);
+  const ry = (a1.y - a0.y) - (b1.y - b0.y);
+  const rr = rx * rx + ry * ry;
+  const t = rr < 1e-12 ? 0 : Math.max(0, Math.min(1, -(px * rx + py * ry) / rr));
+  const ca = { x: a0.x + (a1.x - a0.x) * t, y: a0.y + (a1.y - a0.y) * t };
+  const cb = { x: b0.x + (b1.x - b0.x) * t, y: b0.y + (b1.y - b0.y) * t };
+  return { dist: Math.hypot(ca.x - cb.x, ca.y - cb.y), ca, cb };
+};
+
+/**
+ * Round 32: the mid-tick collision sweep. For every active pair (sorted ids),
+ * the segments both hulls flew this sub-tick are tested for a closest approach
+ * inside `REALTIME.collisionRadius` (1 unit — the turn-based rule's own
+ * distance). A contact places the pair at the closest-approach points — the
+ * moment they met — and resolves through the existing collision machinery,
+ * consuming the main stream like every other combat roll, then separates the
+ * survivors so one meeting is one collision.
+ */
+const sweepCollisions = (game, prev) => {
+  let next = game;
+  const messages = [];
+  const events = [];
+  const actives = next.ships.filter((ship) => isActive(ship)).sort((a, b) => a.id.localeCompare(b.id));
+  for (let i = 0; i < actives.length; i += 1) {
+    for (let j = i + 1; j < actives.length; j += 1) {
+      const a = getShip(next, actives[i].id);
+      const b = getShip(next, actives[j].id);
+      if (!isActive(a) || !isActive(b)) continue;
+      const pa = prev?.[a.id] ?? { x: a.x, y: a.y };
+      const pb = prev?.[b.id] ?? { x: b.x, y: b.y };
+      // A collision needs at least one mover: two hulls parked on the same
+      // point (a dockyard anchorage, a riding wing) never fought each other
+      // in the turn-based war, and the sweep keeps that peace — flying
+      // THROUGH an anchorage is the dangerous part, and that it catches.
+      const aMoved = pa.x !== a.x || pa.y !== a.y;
+      const bMoved = pb.x !== b.x || pb.y !== b.y;
+      if (!aMoved && !bMoved) continue;
+      const contact = closestApproach(pa, { x: a.x, y: a.y }, pb, { x: b.x, y: b.y });
+      if (contact.dist >= REALTIME.collisionRadius) continue;
+      const staged = {
+        ...next,
+        ships: next.ships.map((ship) => {
+          if (ship.id === a.id) return { ...ship, x: contact.ca.x, y: contact.ca.y };
+          if (ship.id === b.id) return { ...ship, x: contact.cb.x, y: contact.cb.y };
+          return ship;
+        }),
+      };
+      const resolved = resolveCollision(staged, getShip(staged, a.id));
+      next = separateOverlaps(resolved.game);
+      messages.push(...resolved.messages);
+      events.push(...(resolved.events ?? []));
+    }
+  }
+  return { game: next, messages, events };
+};
+
+/**
+ * Round 32: a warhead detonates. The full volley resolution from the
+ * turn-based fire code — miss roll, damage roll, internals lottery, arcs, the
+ * spread's indiscriminate splash — runs AT IMPACT on the main stream: the
+ * round's deliberate, measured reordering. A warhead that finds nothing in
+ * its blast radius duds WITHOUT consuming a roll, so dodging is real. The
+ * launch-time shooter snapshot keeps the volley resolvable even if the
+ * launcher died in flight; the shot itself was counted at launch.
+ */
+const resolveWarheadImpact = (game, warhead) => {
+  const point = { x: warhead.x, y: warhead.y };
+  const live = getShip(game, warhead.shooterId);
+  const actor = isActive(live) ? live : warhead.shooter;
+  const target = getShip(game, warhead.targetId);
+  const at = `${Math.round(point.x)},${Math.round(point.y)}`;
+  const boom = { kind: 'explosion', fromId: warhead.shooterId, toId: warhead.targetId, x1: point.x, y1: point.y, x2: point.x, y2: point.y, hit: true };
+  if (warhead.kind === 'photons') {
+    if (!target || !isActive(target) || distance(point, target) > REALTIME.impactRadius) {
+      return { game, messages: [`A photon warhead from ${actor.name} detonates harmlessly at ${at}.`], events: [boom] };
+    }
+    const rng = rngFor(game);
+    if (rng.next() < volleyMissChance(game, actor, target)) {
+      return {
+        game: advanceRandom(game),
+        messages: [`${actor.name}'s photons splash wide of ${target.name}. Missed!`],
+        events: [boom, fireEvent('photons', actor, target, false)],
+      };
+    }
+    const grudge = vendettaGrudge(game, actor, target);
+    const damage = weaponDamage('photons', actor, rng, grudge, powerEffect(game, actor, 'weapons'), game.reimagined ? REIMAGINED_WEAPON_DAMAGE_SCALE : 1);
+    const before = target.status;
+    const arc = struckArc(game, actor, target);
+    const hit = damageShip(target, damage, rng, arc ? { arc } : {});
+    const kill = before === 'active' && hit.status !== 'active' ? 1 : 0;
+    const victim = { ...hit, shotsTaken: hit.shotsTaken + 1 };
+    const shooter = kill ? { ...actor, kills: actor.kills + kill } : null;
+    const updated = advanceRandom({
+      ...game,
+      ships: game.ships.map((ship) => {
+        if (ship.id === victim.id) return victim;
+        if (shooter && ship.id === shooter.id) return shooter;
+        return ship;
+      }),
+    });
+    const events = [boom, fireEvent('photons', actor, target, true)];
+    if (hit.status === 'destroyed') {
+      events.push({ kind: 'explosion', fromId: actor.id, toId: victim.id, x1: victim.x, y1: victim.y, x2: victim.x, y2: victim.y, hit: true });
+      events.push(terminalEvent('destruction', 'photons', victim, { attacker: actor }));
+    }
+    return {
+      game: updated,
+      messages: [
+        `${actor.name}'s photons hit ${target.name} for ${damage} damage.`,
+        ...(arc && hit.arcs ? [`The hit lands on ${target.name}'s ${arc} arc.`] : []),
+        ...(kill ? killLines(game, actor, victim) : []),
+      ],
+      events,
+    };
+  }
+  // The spread salvo: splash centered on the DETONATION POINT — a target that
+  // burned out of the blast is simply not caught. The miss roll needs the
+  // aimed hull alive (stances and terrain bias it); a dead target leaves the
+  // salvo to detonate harmless.
+  if (!target || !isActive(target)) {
+    return { game, messages: [`A spread salvo detonates harmlessly at ${at}.`], events: [boom] };
+  }
+  const rng = rngFor(game);
+  if (rng.next() < volleyMissChance(game, actor, target)) {
+    return {
+      game: advanceRandom(game),
+      messages: [`${actor.name}'s spread splashes nothing at ${at}. Missed!`],
+      events: [boom, fireEvent('spread', actor, target, false)],
+    };
+  }
+  const grudge = vendettaGrudge(game, actor, target);
+  const full = weaponDamage('spread', actor, rng, grudge, powerEffect(game, actor, 'weapons'), game.reimagined ? REIMAGINED_WEAPON_DAMAGE_SCALE : 1);
+  const splash = spreadSplashAt(game, actor, target, point, full, rng, false);
+  return {
+    game: advanceRandom(splash.game),
+    messages: [`${actor.name}'s spread detonates at ${at}.`, ...splash.messages],
+    events: [boom, fireEvent('spread', actor, target, true), ...splash.events],
+  };
+};
+
+/**
+ * Round 32: the ordnance in flight. Every warhead flies its ballistic step —
+ * `torpedoSpeed` per stardate along the launch bearing — and detonates on the
+ * first sub-tick its swept segment comes within `impactRadius` of any active
+ * hull (its launcher excepted: the shot leaves the tube clear), or at its end
+ * point. Segment-tested like the collision sweep: at 35 units per sub-tick a
+ * position sample would fly straight through a hull.
+ */
+const advanceOrdnance = (game, prev) => {
+  const ordnance = game.ordnance ?? [];
+  if (ordnance.length === 0) return { game, messages: [], events: [] };
+  let next = game;
+  const messages = [];
+  const events = [];
+  const survivors = [];
+  const stepLen = REALTIME.torpedoSpeed * SUBTICK;
+  for (const warhead of ordnance) {
+    const travel = Math.min(stepLen, warhead.remaining);
+    const from = { x: warhead.x, y: warhead.y };
+    const to = travel > 0 ? { x: from.x + warhead.ux * travel, y: from.y + warhead.uy * travel } : from;
+    const remaining = warhead.remaining - travel;
+    let contact = null;
+    const hulls = next.ships.filter((ship) => isActive(ship) && ship.id !== warhead.shooterId)
+      .sort((a, b) => a.id.localeCompare(b.id));
+    for (const hull of hulls) {
+      const hullFrom = prev?.[hull.id] ?? { x: hull.x, y: hull.y };
+      const near = closestApproach(from, to, hullFrom, { x: hull.x, y: hull.y });
+      if (near.dist <= REALTIME.impactRadius) {
+        contact = near.ca;
+        break;
+      }
+    }
+    if (!contact && remaining > 1e-9) {
+      survivors.push({ ...warhead, x: to.x, y: to.y, remaining });
+      continue;
+    }
+    const detonated = contact ? { ...warhead, x: contact.x, y: contact.y } : { ...warhead, x: to.x, y: to.y };
+    const impact = resolveWarheadImpact(next, detonated);
+    next = impact.game;
+    messages.push(...impact.messages);
+    events.push(...impact.events);
+  }
+  return { game: { ...next, ordnance: survivors }, messages, events };
+};
+
+/**
+ * Round 32 — the continuous-time driver: ONE sub-tick of the live war. The
+ * pure integrator moves the field (with avoidance), arrivals meet their rock
+ * strikes, the collision sweep resolves whatever the flight brought together,
+ * and crossing an integer runs the real-time boundary (decisions + the shared
+ * chain). Returns the events for the caller to present; messages go straight
+ * onto the log. This is the single driver every real-time war runs on —
+ * browser clock, spectator, tests, and the harness's `--mode realtime`.
+ */
+export const stepContinuum = (game) => {
+  const prev = positionsOf(game);
+  const step = advanceSubtick(game);
+  let next = step.game;
+  const messages = [];
+  const events = [];
+  // Ordnance flies and detonates against the field as it stood this sub-tick.
+  const ordnanceStep = advanceOrdnance(next, prev);
+  next = ordnanceStep.game;
+  messages.push(...ordnanceStep.messages);
+  events.push(...ordnanceStep.events);
+  // Arrivals and finished tows meet the rocks they ended inside (15c).
+  for (const shipId of [...new Set([...step.arrived, ...step.towsDone])].sort()) {
+    const actor = getShip(next, shipId);
+    if (!isActive(actor)) continue;
+    const strike = resolveAsteroidStrike(next, actor);
+    next = strike.game;
+    messages.push(...strike.messages);
+    events.push(...(strike.events ?? []));
+  }
+  const swept = sweepCollisions(next, prev);
+  next = swept.game;
+  messages.push(...swept.messages);
+  events.push(...swept.events);
+  if (messages.length) next = { ...next, log: appendLog(next.log, messages) };
+  // Round 32: real-time events carry the sim clock, so the replay timeline can
+  // pace on stamps instead of a fixed step (32d).
+  const stamp = simTimeOf(next);
+  const stamped = events.map((event) => (event.simTime == null ? { ...event, simTime: stamp } : event));
+  if (!step.crossed || next.outcome) return { game: next, events: stamped, crossed: step.crossed };
+  const boundary = resolveRealtimeBoundary(next);
+  return {
+    game: boundary,
+    events: [...stamped, ...(boundary.events ?? []).map((event) => (event.simTime == null ? { ...event, simTime: stamp } : event))],
+    crossed: true,
+  };
 };

@@ -3,18 +3,18 @@ import assert from 'node:assert/strict';
 import { REALTIME, REIMAGINED_GRID_SIZE } from '../game/constants.js';
 import { createGame, engineCapacity, powerEffect } from '../game/state.js';
 import { applyPlayerAction } from '../game/actions.js';
-import { resolveAutopilotTurn, resolveComputerTurns, resolveRealtimeBoundary } from '../game/turns.js';
-import { advanceSubtick, arrivalTick, integrateStardate, positionAt, positionsOf, simTimeOf, stepRealtime } from '../game/realtime.js';
+import { resolveAutopilotTurn, resolveComputerTurns, stepContinuum } from '../game/turns.js';
+import { advanceSubtick, arrivalTick, integrateStardate, positionAt, positionsOf, simTimeOf } from '../game/realtime.js';
 
 const TICKS = REALTIME.ticksPerStardate;
 
 /** One full stardate: the autopilot flies the conn, then the field resolves. */
 const playTurn = (game) => resolveComputerTurns(resolveAutopilotTurn(game).game);
 
-/** Drives a live real-time war sub-tick by sub-tick, resolving each boundary it crosses. */
+/** Drives a live real-time war sub-tick by sub-tick on the round-32 continuum. */
 const drive = (game, subticks) => {
   let current = game;
-  for (let step = 0; step < subticks; step += 1) current = stepRealtime(current, resolveRealtimeBoundary);
+  for (let step = 0; step < subticks; step += 1) current = stepContinuum(current).game;
   return current;
 };
 
@@ -209,19 +209,46 @@ test('a plotted burn arrives early and holds at its destination', () => {
   assert.equal(arrived.y, 10);
 });
 
-test('arrivals collide: two hulls plotted onto one point meet at the boundary', () => {
-  let game = createGame({ seed: 'rt-collide', realtime: true });
-  game = {
+/**
+ * The convergence fixture: fed (the player's manual conn — never avoids) rams
+ * toward (160,160); axis converges on the same point; the rest of the field
+ * parks spread out and far away (a stacked fleet would tractor-slam itself at
+ * the boundary and pollute the log).
+ */
+const convergingWar = (axisChanges = {}) => {
+  const game = createGame({ seed: 'rt-collide', realtime: true });
+  return {
     ...game,
-    ships: game.ships.map((ship) => {
+    ships: game.ships.map((ship, index) => {
       if (ship.id === 'fed-flagship') return { ...ship, x: 150, y: 150, dest: { x: 160, y: 160 } };
-      if (ship.id === 'axis-flagship') return { ...ship, x: 170, y: 170, dest: { x: 160, y: 160 } };
-      return { ...ship, x: 10, y: 10, dest: null };
+      if (ship.id === 'axis-flagship') return { ...ship, x: 170, y: 170, dest: { x: 160, y: 160 }, ...axisChanges };
+      return { ...ship, x: 4 + ((index * 37) % 312), y: 300, dest: null };
     }),
   };
-  game = drive(game, TICKS);
-  assert.match((game.lastRound?.entries ?? []).join(' '), /Collision:/,
-    'the boundary resolves what the arrivals flew into');
+};
+
+const collisionsOf = (game, id) => game.ships.find((ship) => ship.id === id)?.collisions ?? 0;
+
+test('a deliberate ram connects: the mid-tick sweep resolves what the flight meets', () => {
+  // noAvoid = a captain bent on the point whatever is coming — the ram opt-out.
+  const game = drive(convergingWar({ noAvoid: true }), TICKS);
+  assert.ok(collisionsOf(game, 'axis-flagship') >= 1 && collisionsOf(game, 'fed-flagship') >= 1,
+    'the converging pair met and the sweep counted it on both hulls');
+});
+
+test("captains avoid collisions as they pilot: the same convergence is dodged, not met (Matt's round-32 rule)", () => {
+  const game = drive(convergingWar(), TICKS);
+  assert.equal(collisionsOf(game, 'axis-flagship'), 0, 'the axis captain never met the rammer');
+  assert.equal(collisionsOf(game, 'fed-flagship'), 0);
+  const axis = game.ships.find((ship) => ship.id === 'axis-flagship');
+  // The threatened arrival held short of the occupied point instead of snapping
+  // onto it, plot still standing — loitering, not ramming the anchorage.
+  assert.equal(axis.x, 170);
+  assert.equal(axis.y, 170);
+  assert.deepEqual(axis.dest, { x: 160, y: 160 });
+  // Determinism: the dodge replays identically.
+  const twin = drive(convergingWar(), TICKS);
+  assert.deepEqual(twin.ships.find((ship) => ship.id === 'axis-flagship'), axis);
 });
 
 test('volleys cycle on the sim-time cooldown, one per stardate', () => {
@@ -310,4 +337,77 @@ test('a round-30 real-time save without a sim clock resumes at the stardate star
   assert.equal(simTimeOf(legacy), 4);
   const stepped = advanceSubtick(legacy);
   assert.ok(Math.abs(simTimeOf(stepped.game) - 4.125) < 1e-9);
+});
+
+/** The gunnery fixture: command ship and a target 8 units off (inside the 10-unit photon reach), the rest parked far away and spread out. */
+const gunneryWar = (seed = 'rt-torp') => {
+  const game = createGame({ seed, realtime: true });
+  return {
+    ...game,
+    ships: game.ships.map((ship, index) => {
+      if (ship.id === 'fed-flagship') return { ...ship, x: 50, y: 60 };
+      if (ship.id === 'axis-flagship') return { ...ship, x: 58, y: 60 };
+      return { ...ship, x: 4 + ((index * 37) % 312), y: 300, dest: null };
+    }),
+  };
+};
+
+test('a photon enters flight and detonates on the run — rolls at impact, none at launch', () => {
+  const game = gunneryWar();
+  const fired = applyPlayerAction(game, { type: 'photons', targetId: 'axis-flagship' });
+  assert.equal((fired.game.ordnance ?? []).length, 1, 'the warhead is in flight');
+  assert.equal(fired.game.randomStep, game.randomStep, 'the launch consumes no roll');
+  // A 20-unit run at 280/stardate lands inside the first sub-tick.
+  const flown = drive(fired.game, 2);
+  assert.equal((flown.ordnance ?? []).length, 0, 'the warhead detonated');
+  assert.ok(flown.randomStep > fired.game.randomStep, 'the detonation rolled on the main stream');
+  assert.match((flown.log ?? []).join(' '), /photons hit|splash wide|detonates harmlessly/);
+});
+
+test('a target that burns perpendicular lives — dodging is real', () => {
+  let game = gunneryWar('rt-dodge');
+  game = {
+    ...game,
+    ships: game.ships.map((ship) => (ship.id === 'axis-flagship' ? { ...ship, dest: { x: 58, y: 90 } } : ship)),
+  };
+  const shieldsBefore = game.ships.find((ship) => ship.id === 'axis-flagship').shields;
+  const fired = applyPlayerAction(game, { type: 'photons', targetId: 'axis-flagship' });
+  const flown = drive(fired.game, 2);
+  assert.equal((flown.ordnance ?? []).length, 0);
+  assert.match((flown.log ?? []).join(' '), /detonates harmlessly/, 'the warhead splashed the point the target had left');
+  const axis = flown.ships.find((ship) => ship.id === 'axis-flagship');
+  assert.equal(axis.shotsTaken, 0);
+  assert.equal(axis.shields, shieldsBefore, 'the dodge saved every point of shield');
+});
+
+test('a tractor lock hauls smoothly across the sub-ticks — same pull, no teleport', () => {
+  let game = createGame({ seed: 'rt-tow', realtime: true });
+  game = {
+    ...game,
+    ships: game.ships.map((ship, index) => {
+      if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
+      if (ship.id === 'axis-flagship') return { ...ship, x: 115, y: 100 };
+      return { ...ship, x: 4 + ((index * 37) % 312), y: 300, dest: null };
+    }),
+  };
+  const locked = applyPlayerAction(game, { type: 'tractor', targetId: 'axis-flagship' });
+  const victim = locked.game.ships.find((ship) => ship.id === 'axis-flagship');
+  assert.equal(victim.tractorBy, 'fed-flagship');
+  assert.ok(victim.tow, 'the lock schedules a tow');
+  assert.equal(victim.x, 115, 'the lock does not teleport the victim');
+  const pull = victim.tow.remaining;
+  // Seven sub-ticks: seven eighths of the pull, hauled smoothly, rope not yet out.
+  const hauled = drive(locked.game, TICKS - 1);
+  const after = hauled.ships.find((ship) => ship.id === 'axis-flagship');
+  assert.ok(Math.abs((115 - after.x) - (pull * 7) / 8) < 1e-9, `hauled ${(115 - after.x).toFixed(3)} of ${pull}`);
+  assert.ok(after.tow && Math.abs(after.tow.remaining - pull / 8) < 1e-9);
+});
+
+test('a long real-time war replays identically — the whole continuum is deterministic', () => {
+  const run = () => {
+    let current = { ...createGame({ seed: 'rt-long', realtime: true }), autoConn: true };
+    for (let tick = 0; tick < 80; tick += 1) current = stepContinuum(current).game;
+    return current;
+  };
+  assert.deepEqual(run(), run());
 });
