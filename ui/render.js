@@ -98,6 +98,19 @@ const terminalDescription = (event) => {
  */
 const coordOf = (ship) => `${Math.round(ship.x)}, ${Math.round(ship.y)}`;
 
+// Round 33: the six hull classes the concept sheets carry a sprite for
+// (assets/sprites/<alliance>/<class>.png, sliced by scripts/slice-sprites.mjs),
+// keyed off the template className a live ship carries. Drones, merchants, and
+// the starbase have no sheet art and keep their glyphs.
+const SPRITE_SLUGS = new Map([
+  ['Battle cruiser', 'battle-cruiser'],
+  ['Cruiser', 'cruiser'],
+  ['Scout', 'scout'],
+  ['Interceptor', 'interceptor'],
+  ['Artillery', 'artillery'],
+  ['Carrier', 'carrier'],
+]);
+
 export const terminalNarrative = (event) => {
   if (!event) return '';
   return `<li class="terminal-event ${event.faction}"><strong>${terminalHeading(event)}</strong><span>${terminalDescription(event)}</span></li>`;
@@ -652,6 +665,12 @@ export const renderGame = (game, view = {}) => {
     // stay unique to itself.
     const glyph = isDrone(ship) ? 'D' : ship.name[0];
     const drone = isDrone(ship) ? ' drone' : '';
+    // Round 33: ships of the line wear Matt's pixel-art sprites in the modern
+    // view when the art setting says so; drones, merchants, and the starbase
+    // keep their letters until round 34 decides their treatments. The sprite
+    // replaces the disc+letter only — every marker below still stacks on the
+    // button. Classic never asks for sprites (app.js passes 'letters').
+    const useSprite = view.shipArt === 'sprites' && SPRITE_SLUGS.has(ship.className);
     // A non-standard combat stance wears a marker (round 21): a firing hull glows
     // hot, an evasive hull runs cold. It changes how your volleys land, so like the
     // threat ring it is public combat intel, not hidden state.
@@ -674,7 +693,7 @@ export const renderGame = (game, view = {}) => {
     const held = isTractorHeld(game, ship);
     const heldClass = held ? ' held' : '';
     const heldNote = held ? ' — held by a tractor beam' : '';
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}${heldClass}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}<span class="glyph">${glyph}</span>${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}${held ? '<span class="tractor-pip" aria-hidden="true"></span>' : ''}</button>`;
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}${heldClass}${useSprite ? ' has-sprite' : ''}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}${useSprite ? `<img class="sprite" src="assets/sprites/${ship.faction.toLowerCase()}/${SPRITE_SLUGS.get(ship.className)}.png" alt="" aria-hidden="true" draggable="false">` : `<span class="glyph">${glyph}</span>`}${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}${held ? '<span class="tractor-pip" aria-hidden="true"></span>' : ''}</button>`;
   }).join('');
   // Tractor lock lines (Matt's call, 2026-09-25): the beam is physical. A held
   // hull you can see draws its lock back to the source even when a nebula hides

@@ -120,7 +120,14 @@ const CONFIRMATIONS = new Map([
   ['hyperspace', (actor) => ['Hyperspace?', `${actor?.name ?? 'Your ship'} will emerge at a random point in the war zone with its shields weakened by the jump — and the jump itself can burn the ship up.`]],
 ]);
 
-const redraw = () => renderGame(game, { ...view, precision: game?.precision ? precisionSettings : null });
+// Round 33 ship-art preference: sprites ON by default in the modern view, a
+// localStorage setting like the theme — never game state, never a save field.
+// The classic view never reads it (redraw forces 'letters' under body.classic).
+const ART_KEY = 'argonaut-web-ship-art';
+let shipArtPref = 'sprites';
+try { shipArtPref = localStorage.getItem(ART_KEY) || 'sprites'; } catch { /* ignore */ }
+
+const redraw = () => renderGame(game, { ...view, shipArt: document.body.classList.contains('classic') ? 'letters' : shipArtPref, precision: game?.precision ? precisionSettings : null });
 
 /** Whether the star chart is up: a campaign is active and no battle is open. */
 const sectorMode = () => campaign !== null && !campaign.battle;
@@ -1179,8 +1186,20 @@ document.querySelector('#theme-toggle').addEventListener('click', () => {
   theme = theme === 'classic' ? 'modern' : 'classic';
   try { localStorage.setItem(THEME_KEY, theme); } catch { /* ignore */ }
   applyTheme(theme);
+  redraw();
 });
 applyTheme(theme);
+
+const applyArt = (value) => {
+  document.querySelector('#art-toggle').textContent = `Ship art: ${value}`;
+};
+document.querySelector('#art-toggle').addEventListener('click', () => {
+  shipArtPref = shipArtPref === 'sprites' ? 'letters' : 'sprites';
+  try { localStorage.setItem(ART_KEY, shipArtPref); } catch { /* ignore */ }
+  applyArt(shipArtPref);
+  redraw();
+});
+applyArt(shipArtPref);
 
 refresh();
 if (game?.phase === 'computer') { runComputer(); refresh(); }

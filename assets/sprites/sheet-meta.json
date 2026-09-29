@@ -1,0 +1,345 @@
+{
+  "provenance": "Concept sheets are AI-generated art commissioned by Matt (Gemini, 2026-09-25), committed under assets/sprites/concept/ as sources. The derived per-class sprites are this remake’s own expression, sliced and keyed by scripts/slice-sprites.mjs with class mapping and visual review by Matt.",
+  "alliances": {
+    "federation": {
+      "source": "assets/sprites/concept/federation-fleet-sheet.jpeg",
+      "bowDegrees": 0,
+      "sourceBowDegrees": 0,
+      "classes": {
+        "battle-cruiser": {
+          "png": "federation/battle-cruiser.png",
+          "sourceBBox": [
+            48,
+            45,
+            650,
+            631
+          ],
+          "size": [
+            64,
+            62
+          ]
+        },
+        "cruiser": {
+          "png": "federation/cruiser.png",
+          "sourceBBox": [
+            762,
+            198,
+            1299,
+            482
+          ],
+          "size": [
+            64,
+            33
+          ]
+        },
+        "scout": {
+          "png": "federation/scout.png",
+          "sourceBBox": [
+            1550,
+            207,
+            1884,
+            456
+          ],
+          "size": [
+            64,
+            47
+          ]
+        },
+        "interceptor": {
+          "png": "federation/interceptor.png",
+          "sourceBBox": [
+            138,
+            1248,
+            533,
+            1536
+          ],
+          "size": [
+            64,
+            46
+          ]
+        },
+        "artillery": {
+          "png": "federation/artillery.png",
+          "sourceBBox": [
+            715,
+            1238,
+            1336,
+            1593
+          ],
+          "size": [
+            64,
+            36
+          ]
+        },
+        "carrier": {
+          "png": "federation/carrier.png",
+          "sourceBBox": [
+            1392,
+            1248,
+            2012,
+            1593
+          ],
+          "size": [
+            64,
+            35
+          ]
+        }
+      }
+    },
+    "axis": {
+      "source": "assets/sprites/concept/axis-fleet-sheet.jpeg",
+      "bowDegrees": 0,
+      "sourceBowDegrees": 0,
+      "classes": {
+        "battle-cruiser": {
+          "png": "axis/battle-cruiser.png",
+          "sourceBBox": [
+            15,
+            21,
+            1141,
+            673
+          ],
+          "size": [
+            64,
+            37
+          ]
+        },
+        "cruiser": {
+          "png": "axis/cruiser.png",
+          "sourceBBox": [
+            1189,
+            200,
+            2005,
+            574
+          ],
+          "size": [
+            64,
+            29
+          ]
+        },
+        "scout": {
+          "png": "axis/scout.png",
+          "sourceBBox": [
+            162,
+            853,
+            861,
+            1204
+          ],
+          "size": [
+            64,
+            32
+          ]
+        },
+        "interceptor": {
+          "png": "axis/interceptor.png",
+          "sourceBBox": [
+            1323,
+            877,
+            1782,
+            1181
+          ],
+          "size": [
+            64,
+            42
+          ]
+        },
+        "artillery": {
+          "png": "axis/artillery.png",
+          "sourceBBox": [
+            28,
+            1473,
+            989,
+            1874
+          ],
+          "size": [
+            64,
+            26
+          ]
+        },
+        "carrier": {
+          "png": "axis/carrier.png",
+          "sourceBBox": [
+            1046,
+            1389,
+            2018,
+            1869
+          ],
+          "size": [
+            64,
+            31
+          ]
+        }
+      }
+    },
+    "bloc": {
+      "source": "assets/sprites/concept/bloc-fleet-sheet.jpeg",
+      "bowDegrees": 0,
+      "sourceBowDegrees": -90,
+      "classes": {
+        "battle-cruiser": {
+          "png": "bloc/battle-cruiser.png",
+          "sourceBBox": [
+            114,
+            50,
+            825,
+            1109
+          ],
+          "size": [
+            64,
+            43
+          ]
+        },
+        "cruiser": {
+          "png": "bloc/cruiser.png",
+          "sourceBBox": [
+            978,
+            138,
+            1441,
+            877
+          ],
+          "size": [
+            64,
+            40
+          ]
+        },
+        "scout": {
+          "png": "bloc/scout.png",
+          "sourceBBox": [
+            1592,
+            235,
+            1973,
+            683
+          ],
+          "size": [
+            64,
+            54
+          ]
+        },
+        "interceptor": {
+          "png": "bloc/interceptor.png",
+          "sourceBBox": [
+            155,
+            1482,
+            405,
+            1773
+          ],
+          "size": [
+            64,
+            55
+          ]
+        },
+        "artillery": {
+          "png": "bloc/artillery.png",
+          "sourceBBox": [
+            650,
+            1220,
+            1111,
+            1825
+          ],
+          "size": [
+            64,
+            48
+          ]
+        },
+        "carrier": {
+          "png": "bloc/carrier.png",
+          "sourceBBox": [
+            1314,
+            1008,
+            1904,
+            1871
+          ],
+          "size": [
+            64,
+            44
+          ]
+        }
+      }
+    },
+    "cabal": {
+      "source": "assets/sprites/concept/cabal-fleet-sheet.jpeg",
+      "bowDegrees": 0,
+      "sourceBowDegrees": 0,
+      "classes": {
+        "battle-cruiser": {
+          "png": "cabal/battle-cruiser.png",
+          "sourceBBox": [
+            37,
+            54,
+            1083,
+            637
+          ],
+          "size": [
+            64,
+            35
+          ]
+        },
+        "cruiser": {
+          "png": "cabal/cruiser.png",
+          "sourceBBox": [
+            1196,
+            150,
+            2004,
+            624
+          ],
+          "size": [
+            64,
+            37
+          ]
+        },
+        "scout": {
+          "png": "cabal/scout.png",
+          "sourceBBox": [
+            162,
+            859,
+            766,
+            1197
+          ],
+          "size": [
+            64,
+            35
+          ]
+        },
+        "interceptor": {
+          "png": "cabal/interceptor.png",
+          "sourceBBox": [
+            1330,
+            882,
+            1775,
+            1173
+          ],
+          "size": [
+            64,
+            41
+          ]
+        },
+        "artillery": {
+          "png": "cabal/artillery.png",
+          "sourceBBox": [
+            36,
+            1414,
+            994,
+            1919
+          ],
+          "size": [
+            64,
+            34
+          ]
+        },
+        "carrier": {
+          "png": "cabal/carrier.png",
+          "sourceBBox": [
+            1054,
+            1395,
+            2011,
+            1905
+          ],
+          "size": [
+            64,
+            34
+          ]
+        }
+      }
+    }
+  }
+}
