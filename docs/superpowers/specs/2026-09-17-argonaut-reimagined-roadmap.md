@@ -321,8 +321,8 @@ Provisional chunks, to be re-cut by that doc:
 
 | Round | Chunk | Builds | Tested by |
 | --- | --- | --- | --- |
-| 33 | Sprite pipeline | Slice the concept sheets into per-class transparent PNGs at game scale (the committed JPEGs are sources, not shippable art: mixed backgrounds, JPEG artifacts, inconsistent bow orientation); a render seam that swaps glyph → sprite in the modern view only | Every class renders at both zoom extremes and on the minimap; classic view byte-identical glyphs; parity tests green |
-| 34 | Fleet chrome | Heading-true rotation, alliance palettes vs the sprite's own colors, drones/merchants/Xanadu/wreck treatments, stance/threat/pip markers over sprites, legend and guide updates | Manual play-test pass; markers still legible on every hull type |
+| 33 | Sprite pipeline | Slice the concept sheets into per-class transparent PNGs at game scale (the committed JPEGs are sources, not shippable art: mixed backgrounds, JPEG artifacts, inconsistent bow orientation); a render seam that swaps glyph → sprite in the modern view only | Every class renders at both zoom extremes and on the minimap; classic view byte-identical glyphs; parity tests green | ✅ PR #80 |
+| 34 | Fleet chrome | Heading-true rotation, alliance palettes vs the sprite's own colors, drones/merchants/Xanadu/wreck treatments, stance/threat/pip markers over sprites, legend and guide updates | Manual play-test pass; markers still legible on every hull type | in progress |
 
 **Committed sources:** `assets/sprites/concept/` — `federation-fleet-sheet.jpeg`
 (white/blue grid), `axis-fleet-sheet.jpeg` (crimson, numbered 1–6),

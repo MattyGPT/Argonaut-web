@@ -207,7 +207,20 @@ the shipped assets, so every PNG bows right; `sheet-meta.json` records
 ## Round 34 — Fleet chrome
 
 - Heading-true rotation: CSS `rotate()` from `ship.facing` alone — the assets
-  ship bows-right, so no per-alliance offset remains.
+  ship bows-right, so no per-alliance offset remains. **Shipped & measured
+  2026-09-29 (`f58ea57`):** `--rot` set at render and refreshed per frame in
+  `renderFrame`; helm-turn measurement (headless Edge, real-time war):
+  207° → 252° with the computed transform matrix exactly cos/sin(252°).
+  **The sprite IS the heading marker**: sprite buttons shed the needle
+  spoke (it buried itself in the hull art and duplicated the bow cue);
+  glyph buttons — letters preference, classic wars, drones, starbase —
+  keep it unchanged; title/aria heading notes unchanged everywhere.
+- Missing treatments (drones/merchants/Xanadu/wrecks): Matt commissions a
+  second Gemini batch from the prescriptive prompt pack at
+  `docs/superpowers/briefs/2026-09-29-gemini-batch-2-prompt.md` (flat #FF00FF
+  chroma bg, no text, bows right, coarse pixel grid, per-subject palettes
+  sampled from the fleet-sheet style); the slicer grows a chroma-key path
+  and the seam grows the four treatments when the art lands.
 - Alliance palette decision applied as play-test dictates (default: none —
   ring carries identity).
 - Drones/merchants/Xanadu/wreck treatments (keep letters, or dedicated art
@@ -223,8 +236,8 @@ the shipped assets, so every PNG bows right; `sheet-meta.json` records
 
 | Round | Branch | Chunk | PR | Status |
 | --- | --- | --- | --- | --- |
-| 33 | `round-33-sprite-pipeline` | Slicer + assets + render seam | — | in progress |
-| 34 | `round-34-fleet-chrome` | Rotation, palette, markers, legend/guide | — | not started |
+| 33 | `round-33-sprite-pipeline` | Slicer + assets + render seam | #80 | ✅ merged 2026-09-29 |
+| 34 | `round-34-fleet-chrome` | Rotation, palette, markers, legend/guide | — | in progress |
 
 ## Parity & determinism guardrails
 
