@@ -279,6 +279,7 @@ which re-cut the provisional chunks below:
 | 30 | Movement prototype | Continuous position integration with `engineCapacity` re-read as a speed, behind a flag; stardates stay the resolution tick | Fixed-timestep headless sim: the same seed + commands produce the same trajectories; classic/extended stay tick-based (parity) | ✅ PR #76 |
 | 31 | Pause & planning | A pause control that halts integration but keeps the UI live; orders/power/commands issuable while paused; the stardate becomes an elapsed-sim-time interval that still resolves dockyard/objectives/regen | Pausing halts motion but not command; tick resolutions fire on schedule; saves store sim time and resume mid-flight | ✅ PR #77 |
 | 32 | Combat timing | Volleys/tractor/collisions in continuous time (ordnance in flight vs instant beams with travel FX), the AI decision cadence, and the round-replay/FX story. **Matt's addition (2026-09-25): real captains avoid collisions as they pilot — consider collision-avoidance and anticipatory course-correction in the continuous-time collision model.** Adopted: bounded starboard deflection off projected closest approach, hold-short arrivals, player's manual conn and `noAvoid` opt out; dials measured (angle 25° kept). | Combat resolves identically paused and unpaused; replay reconstructs; seeded streams stay valid | ✅ PR #78 |
+| 35 | Collision discipline (play-test follow-up to 34) | Matt's play-test: five collisions in one stardate, "captains seem completely inept". Measured first (250-war attribution): 57% both-movers plotting overlapping endpoints — mostly ALLIED wingmates converging on their doctrine's shared target — 21% mover-into-sitter, drones 3%, tractor 6%; tail max 5/stardate. Shipped: allied arrival deconfliction for every autopilot mover (27c's drone nudge generalized; cross-alliance rams, sit-and-ram, and player rams stay) + post-collision separation in the turn-based pipeline (one meeting, one collision), mode-symmetric per the boundary-equivalence scaffold. The removed rams proved to be a balance valve (Fed 44.8% snowball, reproducing 27c's recorded rejection); four compensations measured and rejected (leader-check bands 4/12, fleet-wide focus cap, Fed-only focus cap) — re-baseline recorded by Matt's call, watch item open. | Collisions 13.51 → 1.33/war; ≥5-collision stardates 6 → 0; classic/extended byte-identical; real-time re-baselined 18.41 with note | ✅ PR #82 |
 
 **PHASE 8 COMPLETE** (30 → PR #76, 31 → PR #77, 32 → PR #78, all merged
 2026-09-25..29). The real-time war is a New-game option implying Reimagined;
@@ -322,7 +323,18 @@ Provisional chunks, to be re-cut by that doc:
 | Round | Chunk | Builds | Tested by |
 | --- | --- | --- | --- |
 | 33 | Sprite pipeline | Slice the concept sheets into per-class transparent PNGs at game scale (the committed JPEGs are sources, not shippable art: mixed backgrounds, JPEG artifacts, inconsistent bow orientation); a render seam that swaps glyph → sprite in the modern view only | Every class renders at both zoom extremes and on the minimap; classic view byte-identical glyphs; parity tests green | ✅ PR #80 |
-| 34 | Fleet chrome | Heading-true rotation, alliance palettes vs the sprite's own colors, drones/merchants/Xanadu/wreck treatments, stance/threat/pip markers over sprites, legend and guide updates | Manual play-test pass; markers still legible on every hull type | in progress |
+| 34 | Fleet chrome | Heading-true rotation, alliance palettes vs the sprite's own colors, drones/merchants/Xanadu/wreck treatments, stance/threat/pip markers over sprites, legend and guide updates | Manual play-test pass; markers still legible on every hull type | ✅ PR #81 |
+
+**PHASE 9 COMPLETE** (33 → PR #80, 34 → PR #81, merged 2026-09-29). The
+modern view is a graphical field: 24 fleet sprites sliced from Matt's
+commissioned sheets plus a second Gemini batch (Xanadu starbase, neutral
+merchant, four faction drones, derelict wreck), heading-true rotation off
+`ship.facing` (the sprite is the heading marker; glyph buttons keep the
+needle), faction ring + minimap dots carrying identity, a localStorage
+ship-art toggle, and a legend that mirrors whichever art the field draws.
+The classic view stays letters and phosphor, byte-identical, parity-guarded.
+Round 35 (collision discipline, PR #82) followed from the round-34
+play-test and re-baselined the Reimagined collision rows — see CALIBRATION.
 
 **Committed sources:** `assets/sprites/concept/` — `federation-fleet-sheet.jpeg`
 (white/blue grid), `axis-fleet-sheet.jpeg` (crimson, numbered 1–6),

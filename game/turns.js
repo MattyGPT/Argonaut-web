@@ -762,6 +762,10 @@ export const resolveAutopilotTurn = (game) => {
     next = collision.game;
     log.push(...collision.messages);
     events.push(...(collision.events ?? []));
+    // Round 35: one meeting is one collision — survivors left inside the
+    // radius separate now (the real-time sweep's own rule, ported), so a pair
+    // cannot re-detonate every stardate while a cluster melee eats itself.
+    if (next.reimagined) next = separateOverlaps(next);
     // Ending the move inside an asteroid field risks a rock strike (15c).
     const strike = resolveAsteroidStrike(next, getShip(next, shipId));
     next = strike.game;
@@ -788,6 +792,13 @@ export const resolveComputerTurns = (initialGame) => {
       game = collision.game;
       log.push(...collision.messages);
       events.push(...(collision.events ?? []));
+      // Round 35: one meeting is one collision — survivors left inside the
+      // radius separate now (the real-time sweep's own rule, ported), so a
+      // pair cannot re-detonate every stardate while a cluster melee eats
+      // itself. Blanket boundary separation was measured and rejected: it
+      // also disarmed the deliberate overlap pressure that thins firing
+      // clusters (27c's recorded Federation snowball, reproduced 2026-09-29).
+      if (game.reimagined) game = separateOverlaps(game);
       // Ending the move inside an asteroid field risks a rock strike (15c), for
       // every alliance's hulls alike — terrain applies symmetrically.
       const strike = resolveAsteroidStrike(game, getShip(game, shipId));
@@ -916,9 +927,10 @@ export const resolveRealtimeBoundary = (initialGame) => {
  * collision radius are nudged apart to just outside it — deterministic, no
  * RNG, a few passes to settle clusters. Without it a crippled pair would
  * re-collide every sub-tick forever; with it a collision happens once, the
- * way the turn-based endpoint check always did.
+ * way the turn-based endpoint check always did. Exported for the round-35
+ * separation test.
  */
-const separateOverlaps = (game) => {
+export const separateOverlaps = (game) => {
   const grid = game.gridSize ?? GRID_SIZE;
   let next = game;
   for (let pass = 0; pass < 3; pass += 1) {

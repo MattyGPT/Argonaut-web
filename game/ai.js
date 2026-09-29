@@ -498,30 +498,45 @@ const chooseAiActionInner = (game, shipId) => {
 };
 
 /**
- * Reimagined arrival avoidance (play-test retune, 2026-09-25): autopilot moves
- * converge on integer points — a drone wing intercepting one threat, escorts
- * re-posting around a moving carrier, a fleet concentrating on a shared target,
- * a clumsy pursuit holding position on top of its quarry — and two hulls that
- * end a stardate within a unit of each other collide and die regardless of
- * alliance. Measured on the harness at the 240-unit field: ~20 collisions per
- * war, 44% of them drones. Widening the field does not help (engine capacity
- * scales with it: 22.1 per war at 320, 22.8 at 400), so the fix lands at the
- * arrival: nudge the autopilot's landing to the nearest free integer point
- * inside its engine capacity. The designed rams are untouched — tractor slams,
- * hyperspace landings, and the player's own maneuvers still collide, and a
+ * Reimagined arrival avoidance (play-test retune, 2026-09-25; generalized
+ * round 35, 2026-09-29): autopilot moves converge on integer points — a drone
+ * wing intercepting one threat, escorts re-posting around a moving carrier, a
+ * fleet concentrating on a shared target, a clumsy pursuit holding position on
+ * top of its quarry — and two hulls that end a stardate within a unit of each
+ * other collide and die regardless of alliance. Originally drone-only (44% of
+ * collisions at the 240 field were drones); round 35's attribution over 250
+ * wars at the 320 field found drones down to 3% and the mechanism now fleet
+ * seamanship — 57% both-movers plotting overlapping endpoints, 21% a mover
+ * dying on a sitting hull — so every autopilot mover deconflicts its arrival,
+ * nudging to the nearest free integer point inside its engine capacity. The
+ * designed rams are untouched — tractor slams, hyperspace landings, the
+ * sit-and-ram zero move, and the player's own maneuvers still collide, and a
  * classic or extended war never reads this.
  */
 export const avoidStackedArrival = (game, actor, dx, dy) => {
   if (!game.reimagined || !actor) return { dx, dy };
+  // Mode-symmetric on purpose: the boundary-equivalence scaffold pins the
+  // real-time and turn-based rules layers to identical ships at every
+  // boundary, so a captain's rule cannot exist in one presentation only.
+  // The continuum therefore re-baselines with the turn-based war (recorded
+  // in CALIBRATION, round 35); its sweep separation already mirrors the
+  // turn-based post-collision separation.
   // A zero move on top of a quarry is the autopilot's deliberate sit-and-ram —
   // clumsy attrition that thins firing clusters; avoiding it lets clusters
   // stay dense enough for last-stand massacres (measured 19.2% 4+-hull blasts).
   if (dx === 0 && dy === 0) return { dx, dy };
-  if (!isDrone(actor)) return { dx, dy };
   const grid = game.gridSize ?? GRID_SIZE;
   const arrival = { x: actor.x + dx, y: actor.y + dy };
+  // Round 35: deconflict against ALLIES only. 27c measured and rejected full
+  // arrival avoidance (collisions 1.3/war but the Federation snowballed to
+  // 44.8% — the accidental rams had been thinning firing clusters, and round
+  // 35's own full-avoidance run reproduced both numbers exactly). Ramming an
+  // ENEMY is combat, not ineptitude: it is the cluster-thinning that keeps the
+  // aggressive doctrines in check. What reads as inept captains is a wing
+  // ramming its own wingmate on the way to a shared target — so allies
+  // deconflict their arrivals, and cross-alliance rams stay in the game.
   const stacked = (point) => game.ships
-    .some((other) => other.id !== actor.id && isActive(other) && distance(point, other) < 1);
+    .some((other) => other.id !== actor.id && other.faction === actor.faction && isActive(other) && distance(point, other) < 1);
   if (!stacked(arrival)) return { dx, dy };
   const capacity = engineCapacity(actor, grid, powerEffect(game, actor, 'engines'));
   for (let radius = 1; radius <= 3; radius += 1) {
