@@ -681,7 +681,11 @@ export const renderGame = (game, view = {}) => {
     // needle pointing where its bow faces, so which arc an exchange would strike
     // is readable off the map. Public combat intel, like the threat outline.
     const heading = game.reimagined && isActive(ship) && hasArcs(game, ship) ? Math.round(facingOf(game, ship)) : null;
-    const headingHtml = heading === null ? '' : `<span class="heading-glyph" style="--heading:${heading}deg" aria-hidden="true"></span>`;
+    // Round 34: a sprite IS the heading marker — the hull art rotates to face
+    // (--rot, refreshed per frame in realtime by app.js), so the needle spoke
+    // only stacks on glyph buttons, where a letter needs it to show its bow.
+    const headingHtml = heading === null || useSprite ? '' : `<span class="heading-glyph" style="--heading:${heading}deg" aria-hidden="true"></span>`;
+    const rotStyle = heading === null || !useSprite ? '' : `;--rot:${heading}deg`;
     const headingNote = heading === null ? '' : ` — heading ${heading}°`;
     // A hull broadcasting distress (round 24) wears a marker: the call is public,
     // and the rescue is the point.
@@ -693,7 +697,7 @@ export const renderGame = (game, view = {}) => {
     const held = isTractorHeld(game, ship);
     const heldClass = held ? ' held' : '';
     const heldNote = held ? ' — held by a tractor beam' : '';
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}${heldClass}${useSprite ? ' has-sprite' : ''}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}${useSprite ? `<img class="sprite" src="assets/sprites/${ship.faction.toLowerCase()}/${SPRITE_SLUGS.get(ship.className)}.png" alt="" aria-hidden="true" draggable="false">` : `<span class="glyph">${glyph}</span>`}${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}${held ? '<span class="tractor-pip" aria-hidden="true"></span>' : ''}</button>`;
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}${heldClass}${useSprite ? ' has-sprite' : ''}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}${rotStyle}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}${useSprite ? `<img class="sprite" src="assets/sprites/${ship.faction.toLowerCase()}/${SPRITE_SLUGS.get(ship.className)}.png" alt="" aria-hidden="true" draggable="false">` : `<span class="glyph">${glyph}</span>`}${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}${held ? '<span class="tractor-pip" aria-hidden="true"></span>' : ''}</button>`;
   }).join('');
   // Tractor lock lines (Matt's call, 2026-09-25): the beam is physical. A held
   // hull you can see draws its lock back to the source even when a nebula hides

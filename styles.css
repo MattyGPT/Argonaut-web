@@ -285,6 +285,10 @@ body.realtime .ship {
   height: auto;
   image-rendering: pixelated;
   filter: drop-shadow(0 0 2px currentColor);
+  /* Round 34: heading-true rotation — the asset bows right, so --rot off
+     ship.facing is the whole transform; app.js refreshes it per frame in a
+     real-time war so the hull swings with its course between renders. */
+  transform: rotate(var(--rot, 0deg));
 }
 
 .ship.vacant .glyph {

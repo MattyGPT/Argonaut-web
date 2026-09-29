@@ -646,6 +646,21 @@ test('the sprite seam keeps the marker layer stacked on the button', () => {
   assert.match(button, /prize-pip/, 'the prize pip still stacks on the sprite button');
 });
 
+test('a sprite wears its heading as rotation and sheds the needle; a glyph keeps the needle', () => {
+  elements.clear();
+  const game = createGame({ seed: 'render-sprite-rot', reimagined: true });
+  renderGame(game, { shipArt: 'sprites' });
+  const field = read('#map-field').innerHTML;
+  const button = field.match(/<button[^>]*data-ship-id="fed-flagship"[^>]*>[\s\S]*?<\/button>/)[0];
+  assert.match(button, /--rot:-?\d+deg/, 'the sprite button carries its heading as --rot');
+  assert.ok(!/heading-glyph/.test(button), 'the hull art is the heading marker; no needle spoke');
+  assert.match(button, /heading \d+°/, 'the heading still reads in the title and aria-label');
+  elements.clear();
+  renderGame(game, { shipArt: 'letters' });
+  assert.match(read('#map-field').innerHTML, /data-ship-id="fed-flagship"[^>]*><span class="heading-glyph"/,
+    'a glyph button keeps the needle');
+});
+
 test('the Launch drones order grows out of a carrier menu alone', () => {
   const staged = withPair(bayGame('render-launch-order', false), 'fed-cruiser-1', { x: 108, y: 100 });
   elements.clear();

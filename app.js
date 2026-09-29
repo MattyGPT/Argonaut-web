@@ -1,6 +1,6 @@
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets, REALTIME_COOLDOWN } from './game/actions.js';
 import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, REALTIME, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
-import { alertLevel, appendLog, createGame, defaultLoadout, distance, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, nebulaHides, normalizeFleetSpec, sensorRange, systemUnits } from './game/state.js';
+import { alertLevel, appendLog, createGame, defaultLoadout, distance, facingOf, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, nebulaHides, normalizeFleetSpec, sensorRange, systemUnits } from './game/state.js';
 import { abandonEngagement, autoResolveNode, buyDockyard, createCampaign, nodeById, resolveNodeBattle, startNodeBattle, travelTo } from './game/campaign.js';
 import { scenarioFor } from './game/scenarios.js';
 import { positionAt, positionsOf, simTimeOf } from './game/realtime.js';
@@ -372,6 +372,14 @@ const renderFrame = () => {
     } else {
       el.style.removeProperty('--dx');
       el.style.removeProperty('--dy');
+    }
+    // Round 34: a sprite rides its heading between renders — the sim steps
+    // facing per sub-tick, so the hull swings with its course every frame.
+    if (el.classList.contains('has-sprite')) {
+      const ship = getShip(game, id);
+      const rot = ship ? facingOf(game, ship) : null;
+      if (rot === null) el.style.removeProperty('--rot');
+      else el.style.setProperty('--rot', `${Math.round(rot)}deg`);
     }
   }
   document.querySelector('#minimap')?.querySelectorAll('.mini-dot[data-ship-id]').forEach((dot) => {
