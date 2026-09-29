@@ -1,18 +1,17 @@
 # Argonaut Reimagined — Phase 8: Real-time movement
 
-Status: **DESIGNED in full with Matt 2026-09-25** — all ten open questions
-answered ("all recs"), plus Matt's confirmation that movement is
-**destination-driven** ("fly here"), and the engine-power question settled:
-**reactor power on the engine sink scales speed**, which is the
-balance-preserving reading, not a new feature (decision 11 below). Round 30
-(movement prototype) **shipped as PR #76** the same day, with two play-test
-retunes in the same PR (in-flight stack declutter; the damaged-radio
-narrative now loses traffic instead of shaving every line). Round 31 (pause
-& planning) **shipped as PR #77** the same day, with three play-test fixes
-in the PR — culminating in the real no-glide bug: `applyHeading` is the
-turn-based mover, and every plot branch teleported its hull; `plotCourse`
-fixed it (see "Shipped & play-tested" below). Round 32 (combat timing) is
-in progress on `round-32-combat-timing`. Format follows the Phase 2–6 specs.
+Status: **PHASE 8 COMPLETE** — designed in full with Matt 2026-09-25 (all ten
+open questions answered "all recs", plus destination-driven movement and
+engine-power-scales-speed), and shipped in three rounds: **30 → PR #76, 31 →
+PR #77, 32 → PR #78** (merged 2026-09-25..29). Each round carried its
+play-test fixes inside its PR — round 30: in-flight stack declutter + the
+radio-narrative retune; round 31: the camera and frame-loop fixes and the
+real no-glide bug (`applyHeading` is the turn-based mover; `plotCourse`
+replaced it in every plot branch); round 32: backward snapshot interpolation
+(the lunge-snap sawtooth — forward prediction cannot agree with a core that
+deflects and holds short) and the measured avoidance retune (`avoidAngle`
+15°→25°, collisions 19.71→18.56/war). Matt's collision-avoidance rule
+shipped as designed. Format follows the Phase 2–6 specs.
 
 ## Purpose
 
@@ -414,6 +413,22 @@ avoidance** — the mid-tick sweep sees convergences the endpoint check never
 did; the avoidance dials (margin 2 / angle 15° / lookahead 2) are the levers,
 flagged for Matt's play-test rather than tuned blind.
 
+**Play-test pass shipped inside PR #78** (Matt: hulls "move, then bounce back
+to their starting position, and move again, four or five times in sequence…
+and they keep on colliding"). The bounce was the display FORWARD-predicting
+(state + velocity × accumulator fraction) against a core that now deflects
+burns and holds short of occupied points — every event/boundary re-render
+snapped glyphs back to the truth. Fixed with **backward snapshot
+interpolation**: the frame loop draws between the last two positions the core
+actually occupied (≤ one sub-tick of display lag), so deflections draw as
+curves, holds draw as stillness, and re-renders snap the baseline instead of
+fighting it. The collision complaint got the measured dial search: margin 3
+→ 21.06/war (worse — bending earlier drives hulls into other traffic),
+lookahead 3 → 19.54 (worse, same reason), **angle 25° → 18.56 (kept)** —
+draws also eased 15% → 11%. Final real-time row in CALIBRATION: median 57,
+volleys/kill 15.9, prizes 9.84, draws 11%, timeouts 3%, winners Fed 36.4 /
+Axis 23.6 / Bloc 19.2 / Cabal 6.8.
+
 ### Round 32 — direction (as settled with Matt, kept for history)
 
 - Photons and spread torpedoes in flight per sub-tick
@@ -449,7 +464,7 @@ flagged for Matt's play-test rather than tuned blind.
 | --- | --- | --- | --- | --- |
 | 30 | Movement prototype | `REALTIME` constants; `realtime` flag (implies Reimagined); `game/realtime.js` fixed-timestep integration (RNG-free); trajectory glue in turns.js; rAF-paced rendering of fractional positions | Trajectory determinism; boundary equivalence with turn-based Reimagined; speed semantics; no RNG consumption; parity green; harness unmoved; old saves load | ✅ PR #76 |
 | 31 | Pause & planning | Fractional `simTime`; pause (Space + button); 1×/2×/4×; command cooldowns; spectator onto the rAF clock; mid-flight saves | Pausing halts motion but not command; boundaries fire on schedule; saves resume mid-flight; determinism | ✅ PR #77 |
-| 32 | Combat timing | In-flight torpedoes; mid-tick collisions; continuous tractor; `simTime` replay timeline; AI cadence stretch; harness `--mode realtime` | Combat identical paused/unpaused; replay reconstructs; streams valid; new baseline measured + recorded | ⏳ in progress |
+| 32 | Combat timing | In-flight torpedoes; mid-tick collisions; continuous tractor; `simTime` replay timeline; AI cadence stretch; harness `--mode realtime` | Combat identical paused/unpaused; replay reconstructs; streams valid; new baseline measured + recorded | ✅ PR #78 |
 
 ## Parity & determinism guardrails
 

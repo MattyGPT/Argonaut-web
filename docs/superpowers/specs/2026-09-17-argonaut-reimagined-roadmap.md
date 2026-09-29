@@ -262,7 +262,7 @@ reproducible seed challenges cheap, so 28 arguably gets easier after 30–32.
 | 28 | Seed challenges + score export | Shareable seed string, stardate score | Reproducible; export/import |
 | 29 | Async PvP / hotseat | Two-sided play off one seed | Both sides act; turn hand-off |
 
-### Phase 8 — Real-time movement *(in progress — design doc 2026-09-25)*
+### Phase 8 — Real-time movement *(COMPLETE — PRs #76/#77/#78, 2026-09-25..29)*
 
 Step away from the turn-based model: ships **move through space continuously**
 at their own speed instead of appearing at their stardate endpoint, and a
@@ -278,7 +278,14 @@ which re-cut the provisional chunks below:
 | --- | --- | --- | --- | --- |
 | 30 | Movement prototype | Continuous position integration with `engineCapacity` re-read as a speed, behind a flag; stardates stay the resolution tick | Fixed-timestep headless sim: the same seed + commands produce the same trajectories; classic/extended stay tick-based (parity) | ✅ PR #76 |
 | 31 | Pause & planning | A pause control that halts integration but keeps the UI live; orders/power/commands issuable while paused; the stardate becomes an elapsed-sim-time interval that still resolves dockyard/objectives/regen | Pausing halts motion but not command; tick resolutions fire on schedule; saves store sim time and resume mid-flight | ✅ PR #77 |
-| 32 | Combat timing | Volleys/tractor/collisions in continuous time (ordnance in flight vs instant beams with travel FX), the AI decision cadence, and the round-replay/FX story. **Matt's addition (2026-09-25): real captains avoid collisions as they pilot — consider collision-avoidance and anticipatory course-correction in the continuous-time collision model.** | Combat resolves identically paused and unpaused; replay reconstructs; seeded streams stay valid | ⏳ in progress |
+| 32 | Combat timing | Volleys/tractor/collisions in continuous time (ordnance in flight vs instant beams with travel FX), the AI decision cadence, and the round-replay/FX story. **Matt's addition (2026-09-25): real captains avoid collisions as they pilot — consider collision-avoidance and anticipatory course-correction in the continuous-time collision model.** Adopted: bounded starboard deflection off projected closest approach, hold-short arrivals, player's manual conn and `noAvoid` opt out; dials measured (angle 25° kept). | Combat resolves identically paused and unpaused; replay reconstructs; seeded streams stay valid | ✅ PR #78 |
+
+**PHASE 8 COMPLETE** (30 → PR #76, 31 → PR #77, 32 → PR #78, all merged
+2026-09-25..29). The real-time war is a New-game option implying Reimagined;
+the turn-based modes are byte-identical and harness-verified digit-for-digit
+alongside a separate measured real-time baseline (CALIBRATION: median 57,
+collisions 18.56/war, draws 11%, Cabal 6.8 — watch items recorded). Phase 9
+is next, unlocked.
 
 Design notes for the doc:
 
@@ -300,7 +307,7 @@ Design notes for the doc:
   prototyped behind a flag early if Matt wants the feel before the rest of the
   roadmap lands.
 
-### Phase 9 — Ship sprites & the graphical modern view *(candidate — Matt's art, 2026-09-25)*
+### Phase 9 — Ship sprites & the graphical modern view *(NEXT — Matt's art; session brief at `docs/superpowers/briefs/2026-09-29-phase-9-ship-sprites.md`)*
 
 Matt has been generating **pixel-art ship sprites** — a top-down sheet per
 alliance, six classes each (battle cruiser, cruiser, scout, interceptor,
