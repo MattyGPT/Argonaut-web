@@ -124,6 +124,11 @@ const CHROMA_SOURCES = [
   // drops to 0.5% here where batch-1 sheets needed 4% to shed labels.
   { alliance: 'neutral', cls: 'merchant', source: 'assets/sprites/concept/batch2/merchant.jpeg', target: 64, defringe: true },
   { alliance: 'federation', cls: 'drone', source: 'assets/sprites/concept/batch2/drone-federation.jpeg', target: 24, defringe: true },
+  { alliance: 'axis', cls: 'drone', source: 'assets/sprites/concept/batch2/drone-axis.jpeg', target: 24, defringe: true },
+  // Bloc drone plumes ARE magenta art (#e83ce8 family): defringe off, or the
+  // green-deficiency test reads the plumes as JPEG ringing and erases them.
+  { alliance: 'bloc', cls: 'drone', source: 'assets/sprites/concept/batch2/drone-bloc.jpeg', target: 24, defringe: false },
+  { alliance: 'cabal', cls: 'drone', source: 'assets/sprites/concept/batch2/drone-cabal.jpeg', target: 24, defringe: true },
 ];
 
 function chanDist(a, b) {

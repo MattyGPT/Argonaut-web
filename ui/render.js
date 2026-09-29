@@ -119,7 +119,9 @@ const SPRITE_SLUGS = new Map([
 
 // Batch-2 drone art lands one faction at a time; a wing whose alliance has no
 // drone sprite yet keeps its D disc rather than referencing a missing file.
-const DRONE_SPRITE_FACTIONS = new Set(['Federation']);
+// All four faction drones landed 2026-09-29; the gate stays as the pattern
+// for any future faction-specific sprite gap.
+const DRONE_SPRITE_FACTIONS = new Set(['Federation', 'Axis', 'Bloc', 'Cabal']);
 
 export const terminalNarrative = (event) => {
   if (!event) return '';

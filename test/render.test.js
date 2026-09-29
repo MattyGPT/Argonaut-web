@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, getShip, isNeutral, spawnEncounter } from '../game/state.js';
+import { createGame, getShip, isNeutral, spawnDrone, spawnEncounter } from '../game/state.js';
 import { createRng } from '../game/rng.js';
 import { launchDrones } from '../game/actions.js';
 import { fanOutOffsets, renderGame, reportFor, terminalNarrative } from '../ui/render.js';
@@ -623,6 +623,21 @@ test('a drone wears its faction drone sprite under sprite art and D under letter
   renderGame(bayGame('render-sprite-drone'), { shipArt: 'letters' });
   assert.match(read('#map-field').innerHTML, /data-ship-id="fed-carrier-drone-1"[^>]*><span class="glyph">D<\/span>/,
     'the letters preference keeps the D disc');
+});
+
+test('each alliance wing wears its own faction drone sprite', () => {
+  elements.clear();
+  // Scenario rosters vary by seed (this one gives Axis no carrier), so the
+  // wing is spawned straight off the Axis flagship — drones ride the ships
+  // array either way.
+  const base = withPair(createGame({ seed: 'render-sprite-drone-axis', reimagined: true }),
+    'fed-flagship', { x: 100, y: 100 },
+    'axis-flagship', { x: 104, y: 100 });
+  const parent = getShip(base, 'axis-flagship');
+  const game = { ...base, ships: [...base.ships, spawnDrone(parent, 1, 104, 100)] };
+  renderGame(game, { shipArt: 'sprites' });
+  assert.match(read('#map-field').innerHTML, /<img class="sprite" src="assets\/sprites\/axis\/drone\.png"/,
+    'an Axis wing draws the Axis drone sprite, not the Federation one');
 });
 
 test('Xanadu wears its commissioned starbase sprite under sprite art', () => {
