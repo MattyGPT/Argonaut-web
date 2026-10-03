@@ -1,8 +1,41 @@
 # Argonaut Web
 
-A fresh browser remake of the 1992 DOS tactical space-war game, originally
-(c) 1988, 1992 by Jim Chen. This remake uses newly written HTML, CSS, and
-JavaScript; the supplied DOS manual was used only as a behavioral reference.
+A browser remake of the 1992 DOS tactical space-war game, originally
+(c) 1988, 1992 by Jim Chen, with calibrated Classic rules and an opt-in
+Reimagined expansion featuring fleet construction, directional shields,
+prize ships, pausable real-time movement, and a sector campaign.
+
+The game uses newly written HTML, CSS, and JavaScript, with no runtime
+dependencies or build step. The supplied DOS manual was used as a
+behavioral reference. The original attribution and rights note are below.
+
+## Choose your game
+
+| Experience | What to expect |
+| --- | --- |
+| **Classic** | The original fleets and calibrated turn-based rules. Leave gameplay expansion options off. |
+| **Extended war** | Standing fleet orders, alliance doctrines, captains, dockyard repairs, and alternative scenarios. |
+| **Argonaut Reimagined** | Extended war plus a larger battlefield, composed fleets, power management, terrain, boarding prizes, new hulls and weapons, and directional shields. |
+| **Real-time movement** | A Reimagined option: continuous movement and ballistic torpedoes, with pause, speed controls, and commands that cycle in simulation time. |
+| **Sector campaign** | A Reimagined option: connected battles, a persistent fleet, credits, repairs, and enemy strategic moves. |
+
+**Planned mode simplification:** Extended is being retired as a separate
+new-game choice. Its fleet orders, doctrines, dockyard, captains, and
+scenarios already exist in Reimagined and will live there exclusively for
+new games. The current build still offers Extended; the
+[consolidation spec](docs/superpowers/specs/2026-10-03-mode-consolidation.md)
+describes the two-ruleset chooser and removal of the standalone mode. No
+legacy Extended mode or save migration is planned.
+
+**Precision fire** is an additional option for adjustable phaser power and
+called subsystem shots. **Classic view** and **Ship art** are presentation
+choices, independent of the rules. A modern-looking war can still use
+Classic rules, and a Reimagined war can use phosphor letters.
+
+For the controls and illustrated reference, open **User guide** in the
+game's top bar. The sections below cover [controls](#controls),
+[Reimagined](#argonaut-reimagined), [real-time play](#real-time-movement),
+[campaigns](#sector-campaign), and [Extended war](#extended-war).
 
 ## Run it
 
@@ -21,6 +54,31 @@ static server (`server.js`), so the only prerequisite is a Node runtime on
 ```sh
 npm test
 ```
+
+The tests use Node's built-in test runner; CI runs on Node 24. To reproduce
+the deterministic whole-war balance checks:
+
+```sh
+npm run sim
+npm run sim -- --mode realtime
+```
+
+See [CALIBRATION.md](CALIBRATION.md) for measured baselines and the
+[player experience roadmap](docs/superpowers/specs/2026-10-03-player-experience-roadmap.md)
+for planned polish. Design drafts describe future work, not shipped features.
+
+## First orders
+
+1. Open **New game** and choose your options. A seed and the same options
+   reproduce the opening position; subsequent orders determine the war.
+2. Find your command ship and its range rings. Click empty map space to
+   maneuver, or click a visible enemy for available weapons and scans.
+3. Issue an order and read **Your recent commands** above the fleet
+   narrative. It keeps your last twelve accepted commands even after all
+   the other captains act. Use **P** to pass in turn-based play.
+4. In real time, use **Pause** to inspect and plan; **Resume** lets ships
+   continue moving. Pause before opening the current user guide if you
+   want the battle to wait while you read.
 
 ## Controls
 
@@ -43,7 +101,9 @@ A command whose hardware is burnt out or whose range does not reach is simply no
 offered, so every button in the menu lands. In an extended war a Federation hull's
 menu also carries its standing orders and its one dockyard refit. `Escape` or a
 click elsewhere on the map puts the menu away, and clicking the same hull again
-toggles it; issuing a command from it spends your stardate as usual.
+toggles it. Time-consuming commands spend a stardate in turn-based play;
+real-time commands use their simulation-time cycle. Information and free
+configuration commands keep their existing costs.
 
 `-`, `=`, and `Escape` ask for confirmation first, because none of them can be
 undone. Hyperspace takes no destination: you commit to the jump and emerge
@@ -56,7 +116,8 @@ the war zone. In an extended war, `F` lists your fleet and its standing orders.
 
 ## The fleets
 
-Each alliance fields a battle cruiser (flagship), three cruisers, and a scout;
+In Classic and Extended, each alliance fields a battle cruiser (flagship),
+three cruisers, and a scout;
 the Federation starbase Xanadu fights alongside you. The rosters use the
 original ship names:
 
@@ -65,8 +126,12 @@ original ship names:
 - **Bloc** — Killjoy, Laserblast, Mephisto, Notorious, Onerous
 - **Cabal** — Pequod, Queen Mab, Ragnarok, Saboteur, Terrorist
 
-A **Reimagined** war fields a bigger navy: beyond the canonical 21, fleets can
-include extra hulls of the new classes — the **interceptor**,
+## Argonaut Reimagined
+
+### Fleets and loadouts
+
+A **Reimagined** war uses configurable fleets, which can include extra
+hulls and three new classes — the **interceptor**,
 the fastest hull afloat, a glass raider of light guns and thin shields that
 wins by speed rather than by trading volleys; its opposite, the **artillery**
 ship, whose six phaser banks throw the hardest volley of any warship, on two
@@ -88,13 +153,17 @@ what you take exceeds your starting fleet by design.
 
 The **New game** panel exposes the replay seed, the regional fleet setup, the
 optional tactical sound, the precision fire mode, the extended war mode, the
-**Argonaut Reimagined** mode, the scenario in an extended war, and the **fleet
-loadout** in a Reimagined one. Use the same seed to reproduce the opening state.
+**Argonaut Reimagined** mode, **Real-time movement**, **Sector campaign**, the
+scenario in an extended war, and the **fleet loadout** in a Reimagined one.
+Use the same seed and options to reproduce the opening state.
 
-**Argonaut Reimagined** is an opt-in expansion mode, under active development, that
+### Battlefield and power
+
+**Argonaut Reimagined** is an opt-in expansion mode that
 carries the extended war and opens the fight on a much wider 320-unit battlefield
-the map becomes a pannable, zoomable viewport into (wheel or `+`/`-` to zoom, arrow
-keys or the minimap to pan, `⌖` to re-center on your flagship). Weapon ranges stay
+the map becomes a pannable, zoomable viewport into (mouse wheel or the on-screen
+**+ / −** buttons to zoom, arrow keys or the minimap to pan, `⌖` to re-center
+on your flagship). The keyboard `-` remains hyperspace. Weapon ranges stay
 at their classic units while engine reach scales with the field, so there is real
 room to screen, flank, and disengage. It also adds the **directed tractor beam**:
 open an enemy's menu in range and choose **Direct tow…** to haul it toward a
@@ -124,8 +193,11 @@ mirrored off Xanadu as capturable objectives: end a stardate inside one — not
 tractor-held — and your alliance holds it, every hull gaining +5 reactor budget
 while it is held, enough to overcharge a sink without starving another.
 Contesting darkens the node and driving the holder off frees it, and a held node
-wears its alliance's ring on the map and minimap. It also fields a **prize
-fleet**: every hull boarded in a Reimagined war is recorded as a prize — its
+wears its alliance's ring on the map and minimap.
+
+### Prizes and drones
+
+Every hull boarded in a Reimagined war is recorded as a **prize** — its
 origin, the stardate taken, and its prize crew read in the fleet report, the
 ship's menu, and a gold pip on the map. Any Federation hull can be ordered to
 **Board…** a derelict and will sail over and beam a prize crew across on its own,
@@ -140,15 +212,21 @@ drones** (`D`) spends the stardate to put a one-time complement of three
 drones** standing order (it looses the bay when an enemy closes), and enemy
 carriers launch on the same trigger. Drones are fast, fragile gunboats with
 nobody aboard — an interceptor's near-speed, a phaser pair, paper shields — drawn
-small with a `D` glyph and named after their carrier (Lexington D1, D2, D3).
+small, with a `D` marker in glyph view, and named after their carrier
+(Lexington D1, D2, D3).
 They **escort their carrier**, intercepting anything that closes on it, and when
 the carrier is destroyed the wing **fights on alone**, hunting the nearest enemy
 until shot down. A drone is never a prize (no crew to kill, no hull to board) and
 counts for nothing in the endgame: an alliance down to drones is out of the war
-and its wing goes dark with its last crewed hull. The bay is never rebuilt — not
-even at the dockyard, which drones never dock at — and a captured carrier keeps
-its complement, the drones flying for whoever flies her. Combat **stances**
-deepen every gunfight: a hull holds one of three postures — standard, **firing**
+and its wing goes dark with its last crewed hull. The bay cannot be rebuilt
+during a battle, and drones never dock for repairs; the campaign dockyard
+can rebuild a spent bay between engagements. A captured carrier keeps its
+complement, the drones flying for whoever flies her.
+
+### Combat options
+
+Combat **stances** deepen every gunfight: a hull holds one of three
+postures — standard, **firing**
 (its own volleys land more often, but it is easier to hit), or **evasive** (harder
 to hit, its own shots go wide) — a free, persistent choice like reactor power that
 rides the one shared accuracy roll alongside asteroid cover and storm jam. Enemy
@@ -171,14 +249,64 @@ can be caught** if they are near the impact (the shooter spares only itself) —
 deliberate counter to tight formations, and a risk in a melee. A salvo that misses
 splashes nothing, and enemy captains loose it only into a clean, clustered splash. Axis last stands are scaled for the wide field as well — the
 self-destruct blast is smaller there, and the trigger needs a captain at 2%
-shields with five enemies stacked close, so one spiteful death no longer
+shields with seven enemies stacked close, so one spiteful death no longer
 deletes a fleet cluster. Volleys are measured too: every Reimagined salvo
 lands at a scaled fraction of its calibrated band — a balance dial, not
 calibration — so wars run long enough for terrain, relay nodes, and prize work
 to decide them rather than the first exchange. It
 never changes how a classic or extended war plays — those keep the calibrated
-100-unit field and the pull-toward-you beam. New Reimagined systems land over time;
-see `docs/superpowers/specs/2026-09-17-argonaut-reimagined-roadmap.md`.
+100-unit field and the pull-toward-you beam.
+
+**Directional shields** divide a Reimagined ship's shields among fore,
+starboard, aft, and port arcs. Aimed hits strike the facing arc first;
+overflow can damage crew and systems before the other arcs are exhausted.
+The bow is strongest and the stern weakest, so heading matters even though
+weapons can fire in any direction. **Helm** turns the ship for free, while
+**Shield focus** directs recovery into a chosen arc. Drones have no arcs.
+The console, ship menu, and reports show the breakdown.
+
+## Real-time movement
+
+Enable **Real-time movement** in New game to play Reimagined with continuous
+flight. A movement order plots a destination; your ship travels there over
+simulation time. Phasers and ion resolve immediately, while photon and
+spread torpedoes fly to their impact point, allowing moving targets to evade.
+Captains and periodic systems still act at stardate boundaries.
+
+Use **Pause / Resume** above the map to plan. Commands remain available
+while paused, subject to readiness: pausing does not refill the shared
+command cycle. The **1× / 2× / 4×** buttons control pace. `Space` toggles
+pause when focus is outside a dialog or control; `,` and `.` step the speed
+when no dialog or form control owns those keys.
+
+Backtick toggles automatic conn: your captain acts at each boundary until
+you take control with a manual burn or volley. Captains avoid predicted
+collisions, but a manually ordered ram remains possible. Continuous
+movement and ballistic combat can produce different outcomes from
+turn-based play. Matching seeds, options, and orders at the same simulation
+times reproduce a real-time run regardless of playback speed.
+
+## Sector campaign
+
+Enable **Sector campaign** in New game for a Reimagined campaign across a
+seeded network of systems. Select a connected destination on the sector
+map, then **Engage** to fight an enemy system yourself or **Auto-resolve**
+to let your captains resolve the battle.
+
+Surviving hulls carry their damage, crews, captains, combat records, prizes,
+and spent drone bays into the next engagement. Tactical settings such as
+power allocation and stance reset. Taking systems earns credits; a prize
+carried out pays its class bounty once. At Xanadu or a captured system,
+the campaign dockyard sells repairs, crew, system overhauls, refits, bay
+rebuilds, and new commissions within the fleet budget. Prizes remain outside
+that starting-hull budget.
+
+Enemy alliances make strategic moves between engagements and can raid your
+systems. Losing Xanadu or the whole carried fleet ends the campaign;
+taking the enemy home system wins it. A draw or abandoned engagement can
+cede the system without ending the entire campaign. Inspect the campaign
+report for battle results, holdings, credits, prizes, and surviving aces.
+Campaign progress autosaves separately from the ordinary-war slot.
 
 ## Mechanics notes
 
@@ -384,7 +512,8 @@ the round replay.
 
 - **User guide** — the top-bar button opens an illustrated in-game guide: how the
   war works, the tactical map, every command and key, combat mechanics, the
-  extended war and precision fire, the comforts, and the game's provenance,
+  extended war, precision fire, Reimagined, real-time movement, the campaign,
+  the comforts, and the game's provenance,
   maintainer, and where to reach out. Its screenshots are regenerated with
   `npm install --no-save puppeteer-core` followed by
   `node scripts/capture-guide-shots.mjs` against a running `npm start`.
@@ -392,6 +521,8 @@ the round replay.
   action and resumes where you left off when you reload. `New game` starts fresh.
 - **Classic view** — the top-bar toggle switches to a black phosphor CRT theme
   with scanlines; your choice persists.
+- **Ship art** — the modern view can show pixel-art fleets in place of letter
+  markers. Classic view retains letters. This changes presentation only.
 - **Sound** — enable tactical sound in `New game` for distinct phaser, photon,
   explosion, and miss effects (WebAudio, no assets). A klaxon sounds on the
   transition into RED alert, not continuously while you sit there.
