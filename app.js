@@ -27,6 +27,7 @@ const SAVE_KEY = 'argonaut-web-save-v1';
 // saves load into single-war mode untouched. A campaign save owns the session
 // when present; starting a new game of either kind retires the other.
 const CAMPAIGN_SAVE_KEY = 'argonaut-web-save-campaign-v1';
+const newGameDialog = document.querySelector('#new-game-dialog');
 const TERMINAL_EVENT_MS = 2500;
 
 const loadSave = () => {
@@ -446,7 +447,7 @@ const simLoop = (now) => {
   requestAnimationFrame(simLoop);
   const dt = lastFrameAt === null ? 0 : Math.min(250, now - lastFrameAt);
   lastFrameAt = now;
-  if (!game?.realtime || game.outcome || sectorMode() || playbackLocked() || help.active || view.paused) return;
+  if (!game?.realtime || game.outcome || sectorMode() || playbackLocked() || help.active || newGameDialog.open || view.paused) return;
   const subtickMs = REALTIME.msPerStardate / REALTIME.ticksPerStardate;
   simAccumulator += dt * (view.speed ?? 1);
   let budget = Math.floor(simAccumulator / subtickMs);
@@ -567,7 +568,7 @@ const spectate = () => {
   if (spectating) return;
   spectating = true;
   const step = async () => {
-    if (help.active) {
+    if (help.active || newGameDialog.open) {
       setTimeout(step, SPECTATOR_TICK_MS);
       return;
     }
@@ -1044,8 +1045,13 @@ document.querySelector('#new-game').addEventListener('click', whenPlaybackUnlock
   document.querySelector('#loadout-xanadu').checked = loadoutDraft.xanadu;
   renderLoadoutPanel();
   syncRulesetAvailability();
-  document.querySelector('#new-game-dialog').showModal();
+  // Setup owns a presentation pause, so a loss/replay cannot begin behind it
+  // and invalidate Begin. Cancel retains the user's previous pause choice.
+  resetSimClock();
+  newGameDialog.showModal();
 }));
+
+newGameDialog.addEventListener('close', resetSimClock);
 
 document.querySelector('#ruleset').addEventListener('change', syncRulesetAvailability);
 
@@ -1075,10 +1081,12 @@ const openingLines = (war) => {
   return lines;
 };
 
-document.querySelector('#new-game-form').addEventListener('submit', whenPlaybackUnlocked(playbackLocked, (event) => {
-  // method="dialog" sets dialog.returnValue only as the default action, after this
-  // handler runs, so read the clicked button instead of the stale returnValue.
-  if (event.submitter?.value !== 'confirm') return;
+document.querySelector('#new-game-form').addEventListener('submit', (event) => {
+  // Own dialog closing: an ignored submit must never look like a successful
+  // new game. Native method=dialog would close even when playback rejects it.
+  event.preventDefault();
+  if (event.submitter?.value === 'cancel') { newGameDialog.close(); return; }
+  if (event.submitter?.value !== 'confirm' || playbackLocked()) return;
   const seedValue = document.querySelector('#new-seed').value || 'xanadu';
   const options = normalizeNewGameOptions({
     ruleset: document.querySelector('#ruleset').value,
@@ -1103,6 +1111,7 @@ document.querySelector('#new-game-form').addEventListener('submit', whenPlayback
     game = null;
     view = { entries: [], camera: null };
     refresh();
+    newGameDialog.close();
     return;
   }
   campaign = null;
@@ -1120,7 +1129,8 @@ document.querySelector('#new-game-form').addEventListener('submit', whenPlayback
   sectorSelection = null;
   view = { entries: openingLines(game), camera: null };
   refresh();
-}));
+  newGameDialog.close();
+});
 
 /**
  * Campaign chrome (round 26c). Abandoning a battle cedes the node through the
