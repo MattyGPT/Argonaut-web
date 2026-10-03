@@ -204,7 +204,7 @@ observations show contents and contextual links are insufficient.
 
 ## G2–G3 delivery evidence — 2026-10-03
 
-Implemented on `codex/compact-console-guide`. The guide now follows player
+Merged in [PR #88](https://github.com/MattyGPT/Argonaut-web/pull/88) (`9b5bed3`). The guide now follows player
 tasks, has separate first-order paths and timing/campaign references, and
 keeps legacy anchors. New-game links open contextual help without changing
 options. Unsupported tractor-release and terminal-skip instructions caught

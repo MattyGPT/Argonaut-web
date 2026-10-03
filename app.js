@@ -19,6 +19,7 @@ import { commandReadiness, fanOutOffsets, primeMoveMemory, renderGame, reportFor
 import { playEffect, playEvent } from './ui/sound.js';
 import { playEffects, replayEffects } from './ui/fx.js';
 import { rememberCommand, restoreCommandHistory } from './ui/command-history.js';
+import { enableBattleRecords } from './game/battle-records.js';
 import { createHelpState } from './ui/help-state.js';
 
 const SAVE_KEY = 'argonaut-web-save-v1';
@@ -81,6 +82,9 @@ let campaign = loadCampaignSave();
 let sectorSelection = null;
 
 let game = campaign ? campaign.battle?.game ?? null : loadSave() ?? createGame({ seed: randomSeed() });
+// Only resumable counters and in-flight causal identities belong in this state.
+// Resolution records remain ephemeral until the knowledge-filtered journal lands.
+if (game) game = enableBattleRecords(game);
 let view = { entries: [], camera: null, paused: false, speed: 1 };
 try {
   const saved = JSON.parse(localStorage.getItem(campaign ? CAMPAIGN_SAVE_KEY : SAVE_KEY));
@@ -1116,7 +1120,7 @@ document.querySelector('#new-game-form').addEventListener('submit', (event) => {
   }
   campaign = null;
   clearCampaignSave();
-  game = createGame({
+  game = enableBattleRecords(createGame({
     seed: seedValue,
     regional: document.querySelector('#regional').checked,
     sound: document.querySelector('#sound').checked,
@@ -1125,7 +1129,7 @@ document.querySelector('#new-game-form').addEventListener('submit', (event) => {
     realtime: wantsRealtime,
     scenario,
     loadout,
-  });
+  }));
   sectorSelection = null;
   view = { entries: openingLines(game), camera: null };
   refresh();
