@@ -7,6 +7,13 @@ repository description. Part of the
 Documentation and explanatory help apply to all modes; new practice
 objectives are Reimagined-only.
 
+The target guide teaches two supported rulesets, Classic and Reimagined.
+Matt has directed the retirement of standalone Extended; its fleet-command
+and scenario instructions move under Reimagined. Follow
+[Mode consolidation](2026-10-03-mode-consolidation.md) and distinguish the
+planned transition from current-build UI. No Extended migration guide or
+legacy onboarding path is needed; there are no saves to preserve.
+
 ## Purpose
 
 Help a new player issue and understand a first order, help a returning
@@ -51,7 +58,7 @@ with a short “First orders” path, then let readers choose tasks rather than
 scrolling a single expansion chapter. Proposed order:
 
 1. First orders: choose a mode, find your ship, move or fire, read the result.
-2. Modes and options: Classic, Extended, Reimagined, real-time movement,
+2. Modes and options: Classic, Reimagined, real-time movement,
    sector campaign, Precision fire, and visual preferences.
 3. Map and targets: navigation, range rings, visibility, ship menus,
    allegiance, threat, vacancy, wrecks, and prizes.
@@ -59,8 +66,8 @@ scrolling a single expansion chapter. Proposed order:
    turn cost, shared cooldown, pause, speed, and automatic conn.
 5. Understanding combat: shields, crew, systems, accuracy, narrative,
    delayed ordnance, terminal events, and replay.
-6. Extended fleet command: standing orders, doctrines, refits, repairs,
-   and the existing scenarios.
+6. Reimagined fleet command: standing orders, doctrines, captains, refits,
+   repairs, and the existing expansion scenarios formerly under Extended.
 7. Reimagined tactics: power, terrain, relay nodes, arcs and facing,
    stances, ion, spread, towing, boarding, drones, and encounters.
 8. Real-time play: plotting versus arriving, paused commands, cooldown,
@@ -73,6 +80,12 @@ Mode selection filters or highlights relevant sections but never makes the
 other rules undiscoverable. Clearly label feature scope at the section or
 command level. Selecting a guide mode changes only the reference view;
 it must not toggle game options or start a new war.
+
+Do not retain Extended as a third onboarding path. Keep the old
+`guide-extended` anchor working as a link to the relocated Reimagined
+fleet-command content. Refresh the mode chooser screenshots after consolidation.
+Until the code change ships, describe Extended as scheduled for retirement
+without instructing players to use controls that do not yet exist.
 
 Each procedural topic follows a small pattern: when to use it, where to
 find it, what it costs, what confirms success, and the common reason it may
@@ -210,8 +223,9 @@ fail or require outside explanation:
 
 - In Classic, identify the command ship, issue a move or shot, pass a turn,
   and recover the action result without using Reimagined instructions.
-- In Extended, give a standing order and explain a dockyard repair and one
-  existing scenario's success condition.
+- In Reimagined, give a standing order and explain a dockyard repair and one
+  existing expansion scenario's success condition. Confirm these tasks
+  are no longer presented as reasons to start a separate Extended war.
 - In Reimagined, explain power allocation, an exposed shield arc, how a
   prize differs from a wreck, and one reason boarding is unavailable.
 - In real time, pause, plot a course, fire when ready, explain a delayed
@@ -219,6 +233,8 @@ fail or require outside explanation:
 - In campaign, travel, enter or auto-resolve a battle, understand carried
   damage, inspect a repair cost, and explain the consequence of a draw.
 - Enter and exit optional practice without altering either saved game.
+- Confirm all former Extended gameplay instructions now belong to
+  Reimagined and no tutorial or reference promotes a third ruleset.
 
 Run at 1366 by 768, 1600 by 1000, narrow width, and 200 percent zoom.
 Check keyboard-only navigation, focus return, readable tables, stable

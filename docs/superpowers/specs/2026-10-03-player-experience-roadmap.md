@@ -19,10 +19,19 @@ changes to gameplay belong in Reimagined. This roadmap does not reopen
 officers and morale, mines, multiplayer, or the earlier faction-balance
 compensation experiments.
 
+Matt's subsequent October 3 decision retires **Extended** as a separate
+new-game mode. **Classic and Reimagined are the two supported rulesets**;
+fleet orders and the rest of Extended's gameplay layer belong to
+Reimagined. Matt confirmed there are no saves to preserve: remove the
+standalone mode without a migration or legacy compatibility path. See
+[Mode consolidation](2026-10-03-mode-consolidation.md) for feature ownership,
+new-game behavior, and retirement of the redundant mode and tests.
+
 ## Scope by proposal and mode
 
-| Proposal | Classic and Extended | Reimagined, including real time | Specification |
+| Proposal | Classic | Reimagined, including real time | Specification |
 | --- | --- | --- | --- |
+| Mode consolidation | Preserve the original rules | Sole supported home for fleet orders and the former Extended additions | [Mode consolidation](2026-10-03-mode-consolidation.md) |
 | 1. Compact combat console | Shared presentation improvement | Includes its additional commands and time controls | [Combat readability](2026-10-03-command-and-combat-readability.md) |
 | 2. Battle narrative by significance | Shared; preserve radio and scanner limits | Includes delayed impacts and automatic conn actions | [Combat readability](2026-10-03-command-and-combat-readability.md) |
 | 3. Targeting feedback | Explain information already available | Explain its power, arcs, and cooldowns within existing intelligence limits | [Combat readability](2026-10-03-command-and-combat-readability.md) |
@@ -38,6 +47,8 @@ war can use phosphor letters; a Classic war can use modern presentation.
 Neither theme selection nor help usage changes the rules. Existing options
 such as Precision fire keep their present semantics; new Reimagined rules
 must not accidentally enter Classic through another feature flag.
+Extended is no longer a peer in this target architecture, including in
+the engine, harness, and ongoing test matrix.
 
 ## Evidence and limits
 
@@ -84,6 +95,7 @@ report improved learning speed or enjoyment without observing players.
 
 | Order | Small reviewable delivery | Exit condition |
 | --- | --- | --- |
+| A0 | Consolidate into Classic and Reimagined | Former Extended features retained in Reimagined; standalone mode, option, and compatibility burden removed |
 | A | Guide accuracy inventory and first-order quick start | Every claim has a mode and code source; obvious stale statements corrected |
 | B | Console layout and command availability | Primary controls usable at laptop sizes; no focus or menu regressions |
 | C | Structured battle journal and significance filters | Own commands and their outcomes remain recoverable after a crowded round |
@@ -93,7 +105,8 @@ report improved learning speed or enjoyment without observing players.
 | G | Campaign service records and debrief | Consequences and veteran identities survive multiple engagements and reload |
 | H | Final guide illustrations and novice walkthrough | Screenshots match the shipped UI and all documented paths work |
 
-Guide accuracy starts immediately during implementation; screenshot
+Mode consolidation precedes the final console and guide structure. Guide
+accuracy starts immediately during implementation; screenshot
 recapture follows the relevant layout change so it does not document an
 obsolete console. Campaign records can follow journal work while mechanics
 experiments proceed independently. Each gameplay change gets its own
@@ -102,10 +115,13 @@ calibration evidence; do not combine an AI adjustment with a large UI diff.
 ## Verification and completion
 
 For shared presentation changes, run the existing Node suite, focused
-browser tasks, and compare all four deterministic simulation summaries
-with the live baseline. For Reimagined rule changes, Classic and Extended
-must remain identical; record both changed Reimagined baselines and paired
-seed evidence in CALIBRATION. A test count alone does not establish parity.
+browser tasks, and compare supported deterministic simulation summaries
+with the live baseline. After consolidation these are Classic and
+Reimagined turn-based and real-time; Extended's rows remain historical
+evidence, not an ongoing parity gate. Consolidation changes none of the
+remaining modes' outcomes. For later Reimagined rule changes, Classic must
+remain identical; record both changed Reimagined baselines and paired seed
+evidence in CALIBRATION. A test count alone does not establish parity.
 
 Use the same acceptance journey across deliveries: start a chosen mode,
 locate a ship, understand an available command, issue it, find its result

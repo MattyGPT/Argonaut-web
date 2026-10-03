@@ -2,8 +2,11 @@
 
 Status: **DESIGN DRAFT, 2026-10-03.** Covers approved proposals 1, 2, 3, 4,
 and 7 in the [player experience roadmap](2026-10-03-player-experience-roadmap.md).
-All work here is presentation and explanation. Classic and Extended rules,
-including optional existing features, remain unchanged.
+All work here is presentation and explanation. Classic rules, including
+optional existing features, remain unchanged. The target rulesets are
+Classic and Reimagined; Extended retires from new-game selection under
+[Mode consolidation](2026-10-03-mode-consolidation.md), without a legacy
+Extended console or compatibility path.
 
 ## Player experience
 
@@ -24,6 +27,9 @@ Power allocation, shield focus, stance, standing orders, and less frequent
 commands occupy labelled expandable sections. Expansion is a view
 preference, retained across redraws. Unavailable features do not appear in
 modes that lack them. Existing shortcuts and context-menu paths remain.
+For supported new games, standing orders and the former Extended fleet
+controls belong only to Reimagined. Do not design a separate Extended
+console tier or move these gameplay controls into Classic.
 
 At 1366 by 768 and 1600 by 1000 CSS pixels at normal browser zoom, the map,
 primary actions, time controls when applicable, and newest own action must

@@ -3,7 +3,10 @@
 Status: **DESIGN DRAFT, 2026-10-03.** Covers proposals 5 and 6 in the
 [player experience roadmap](2026-10-03-player-experience-roadmap.md). New
 navigation rules, exhaustion rules, and practice objectives are explicitly
-Reimagined-only. Classic and Extended keep their current rules and AI.
+Reimagined-only. Classic keeps its current rules and AI. Extended is being
+retired as a new-game mode under
+[Mode consolidation](2026-10-03-mode-consolidation.md), without a legacy
+rules path to maintain.
 
 ## Purpose and relationship to earlier work
 
@@ -125,8 +128,9 @@ vacant reactor-dead prize, a still-crewed target that is not yet boardable,
 simultaneous exhaustion, starbase and civilian exclusions, and an inbound
 torpedo that prevents an early draw. Save/reload preserves any grace count;
 older saves default to zero. Apply the same boundary rule in both
-Reimagined timing modes and retain Classic/Extended parity, including
-Precision fire without Reimagined.
+Reimagined timing modes and retain Classic parity, including Precision
+fire without Reimagined. Extended has no ongoing parity requirement after
+mode consolidation.
 
 These experiments are a proposed mechanical design, not approval of
 unmeasured constants. Record the chosen predicate, evidence, and rejected
@@ -166,7 +170,8 @@ ordinary-war and campaign saves. Entering, failing, retrying, closing the
 browser, and leaving practice must preserve the prior game exactly. No
 practice credits, hulls, prizes, or achievements enter a campaign. Use an
 explicit practice identity and dedicated controller or outcome scope;
-do not overload the existing scenario selector for Classic or Extended.
+do not expose practice objectives in Classic. The
+existing expansion scenarios move under Reimagined with mode consolidation.
 
 The [guide spec](2026-10-03-user-guide-and-onboarding.md) supplies the shared
 first-order walkthrough and contextual explanations. Practice adds new

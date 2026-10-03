@@ -19,6 +19,14 @@ behavioral reference. The original attribution and rights note are below.
 | **Real-time movement** | A Reimagined option: continuous movement and ballistic torpedoes, with pause, speed controls, and commands that cycle in simulation time. |
 | **Sector campaign** | A Reimagined option: connected battles, a persistent fleet, credits, repairs, and enemy strategic moves. |
 
+**Planned mode simplification:** Extended is being retired as a separate
+new-game choice. Its fleet orders, doctrines, dockyard, captains, and
+scenarios already exist in Reimagined and will live there exclusively for
+new games. The current build still offers Extended; the
+[consolidation spec](docs/superpowers/specs/2026-10-03-mode-consolidation.md)
+describes the two-ruleset chooser and removal of the standalone mode. No
+legacy Extended mode or save migration is planned.
+
 **Precision fire** is an additional option for adjustable phaser power and
 called subsystem shots. **Classic view** and **Ship art** are presentation
 choices, independent of the rules. A modern-looking war can still use
