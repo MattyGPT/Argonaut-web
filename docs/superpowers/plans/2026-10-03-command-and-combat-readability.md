@@ -14,21 +14,21 @@ vanilla ESM engine. Existing FX and terminal records remain supported.
 `test/render.test.js`, `test/input.test.js`.
 **Create:** `scripts/check-combat-console.mjs` using optional Playwright.
 
-- [ ] Inventory current console controls, their `data-command` bindings,
+- [x] Inventory current console controls, their `data-command` bindings,
   inputs, focus behavior, and render frequency. Keep existing dispatch and
   target prompts as the command path.
-- [ ] Keep ship identity, condition, movement, primary weapons, pass/hold,
+- [x] Keep ship identity, condition, movement, primary weapons, pass/hold,
   and readiness in the persistent area. Keep pause, speed, and automatic
   conn visible in real time. Put power, helm, shield focus, stance, and
   fleet orders in labelled expandable sections where applicable.
-- [ ] Store section expansion in view preferences, not simulation state.
+- [x] Store section expansion in view preferences, not simulation state.
   Keep focused controls in stable DOM where possible; when a section must
   redraw, restore focus by stable control/ship identity and preserve entered
   values. Do not collapse a focused section or reset reader scroll.
-- [ ] Use labelled bounded scroll regions on desktop and natural stacking
+- [x] Use labelled bounded scroll regions on desktop and natural stacking
   at narrow widths or enlarged text. Do not reduce font size to meet the
   1366×768 and 1600×1000 desktop acceptance targets.
-- [ ] Add browser assertions that primary controls are within the viewport,
+- [x] Add browser assertions that primary controls are within the viewport,
   a ship menu wins hit-testing over the minimap, keyboard traversal reaches
   controls, and a live redraw preserves focus and pending input. Cover
   Classic, Reimagined, real time, and classic view.
@@ -204,3 +204,26 @@ new screenshot-style unit tests for every CSS declaration.
 test/fx.test.js`, full suite, browser regressions, and supported simulations.
 Commit each completed C delivery separately; C2 and C3 may have multiple
 cohesive commits but must share one documented event contract.
+
+## C1 delivery evidence — 2026-10-03
+
+Implemented on `codex/compact-console-guide` from merged PR #87 (`7881c67`).
+C2–C6 remain pending; this delivery does not add causal event attribution.
+The console keeps primary controls and readiness visible, retains native
+control nodes and pending edits, saves expansion as a presentation preference,
+and labels independently scrollable desktop regions. Narrow layouts stack
+naturally without reducing text size.
+
+Validation: full suite 623/623; console browser check covers Classic,
+Reimagined, real time, and classic view at 1366×768 and 1600×1000, with primary
+control geometry/hit testing, minimap overlap, live-boundary focus/scroll,
+pending coordinate input, command transfer, and preference reload. Native
+summary Tab and Space regressions found by independent review were fixed
+and covered in the browser and input tests. Existing mode-selection and
+combat-feedback browser checks pass. Complete 250-seed simulation JSON for
+Classic, Reimagined, and real time matches PR #87; no engine files changed.
+
+Screenshots were inspected at both desktop sizes, 390px narrow width, and
+an 800×500 CSS viewport with device scale 2 (the reflow equivalent of
+200-percent zoom on a 1600×1000 display). Raw evidence remains under the
+local temporary `argonaut-console-guide` directory, outside production assets.

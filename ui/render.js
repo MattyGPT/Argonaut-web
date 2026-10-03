@@ -36,6 +36,8 @@ import {
 } from '../game/state.js';
 
 import { commandHistoryHtml } from './command-history.js';
+import { updateConsole, updateScrolledContent } from './console-state.js';
+import { simTimeOf } from '../game/realtime.js';
 
 const commands = [
   ['computer', 'Computer', '0'],
@@ -78,6 +80,18 @@ const commandList = (game, actor) => {
 };
 
 const cap = (value) => value[0].toUpperCase() + value.slice(1);
+
+export const commandReadiness = (game, view = {}) => {
+  if (game.outcome) return 'War concluded.';
+  if (isSpectator(game)) return 'Observing — command unavailable.';
+  if (view.battlePaused || game.phase !== 'player') return 'Resolving orders — command unavailable.';
+  if (!game.realtime) return 'Ready — choose a command for this stardate.';
+  const remaining = Math.max(0, (game.readyAt?.[game.playerShipId] ?? 0) - simTimeOf(game));
+  return `${remaining > 0 ? `Command cycle: ${remaining.toFixed(1)} stardates remaining.` : 'Command cycle ready.'} Automatic conn: ${game.autoConn ? 'on' : 'off'}.`;
+};
+
+const consoleSection = (key, label, content) => content
+  ? `<details class="console-section" data-console-key="${key}"><summary>${label}</summary>${content}</details>` : '';
 
 const terminalHeading = (event) => event.kind === 'destruction' ? 'SHIP DESTROYED' : 'SHIP SURRENDERED';
 
@@ -777,36 +791,41 @@ export const renderGame = (game, view = {}) => {
   }
 
   const condition = alertLevel(actor);
-  consoleRoot.innerHTML = `
-    <div class="panel-title"><span>Command console</span><span class="alert-${condition.toLowerCase()}">Condition: ${condition}</span></div>
-    <div class="status">
-      <div class="status-row"><span>Command</span><b>${actor.name}</b></div>
+  const availableCommands = commandList(game, actor);
+  const primary = new Set(['move', 'phasers', 'photons', 'spread', 'ion', 'pass', 'autopilot']);
+  const button = ([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || isSpectator(game) || view.battlePaused ? 'disabled' : ''}>${game.realtime && type === 'pass' ? 'Hold position' : game.realtime && type === 'autopilot' ? 'Automatic conn' : label}<kbd>${key}</kbd></button>`;
+  const gridOf = (list) => `<div class="command-grid">${list.map(button).join('')}</div>`;
+  updateConsole(consoleRoot, `
+    <div class="panel-title" data-console-key="title"><span>Command console</span><span class="alert-${condition.toLowerCase()}">Condition: ${condition}</span></div>
+    <div class="status" data-console-key="status">
+      <div class="status-row command-identity"><span>Command</span><b>${actor.name}</b></div>
       <div class="status-row"><span>Location</span><b>${coordOf(actor)}</b></div>
       <div class="status-row"><span>Shields</span><b>${actor.shields}</b></div>
       <div class="status-row"><span>Crew</span><b>${actor.crew}</b></div>
       <div class="status-row"><span>Status</span><b>${actor.status}</b></div>
       ${heldByName ? `<div class="status-row"><span>Tractor lock</span><b class="held-now">held by ${heldByName}</b></div>` : ''}
-      ${game.reimagined ? `<div class="status-row"><span>Stance</span><b class="stance-now ${stanceOf(game, actor)}">${stanceOf(game, actor)}</b></div>` : ''}
-      ${game.reimagined && hasArcs(game, actor) ? `<div class="status-row"><span>Heading</span><b>${Math.round(facingOf(game, actor))}°</b></div>` : ''}
-      ${arcReadout(game, actor) ? `<div class="status-row"><span>Shield arcs</span><b class="arc-readout">${arcReadout(game, actor)}</b></div>` : ''}
     </div>
-    <div class="system-grid">${Object.entries(actor.systems).map(([name, amount]) => `<span>${cap(name)} <b>${amount}</b></span>`).join('')}</div>
-    ${powerBar(game, actor, view)}
-    ${stanceBar(game, actor, view)}
-    ${helmBar(game, actor, view)}
-    <div class="command-grid">${commandList(game, actor).map(([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || isSpectator(game) || view.battlePaused ? 'disabled' : ''}>${label}<kbd>${key}</kbd></button>`).join('')}</div>
+    <p id="command-readiness" class="console-readiness">${commandReadiness(game, view)}</p>
+    <div class="console-primary" data-console-key="primary" role="group" aria-label="Movement and weapons">${gridOf(availableCommands.filter(([type]) => primary.has(type)))}</div>
+    <div class="console-secondary" data-console-key="secondary" role="region" aria-label="Additional command controls" tabindex="0">
+      ${consoleSection('systems', 'Systems and commands', `<div class="system-grid">${Object.entries(actor.systems).map(([name, amount]) => `<span>${cap(name)} <b>${amount}</b></span>`).join('')}</div>${gridOf(availableCommands.filter(([type]) => !primary.has(type) && type !== 'fleet'))}`)}
+      ${consoleSection('power', 'Reactor power', powerBar(game, actor, view))}
+      ${consoleSection('helm', 'Helm and shield focus', `${helmBar(game, actor, view)}${arcReadout(game, actor) ? `<div class="status-row arc-status"><span>Shield arcs</span><b class="arc-readout">${arcReadout(game, actor)}</b></div>` : ''}`)}
+      ${consoleSection('stance', 'Combat stance', stanceBar(game, actor, view))}
+      ${consoleSection('fleet', 'Fleet orders', game.reimagined ? gridOf(availableCommands.filter(([type]) => type === 'fleet')) : '')}
+    </div>
     ${game.commandLost
       ? '<p class="console-note">Federation command is lost. The remaining alliances fight on, and you watch the war from here.</p>'
       : ''}
     ${view.precision && (view.precision.power !== 100 || view.precision.focus)
       ? `<p class="console-note">Phasers set to ${view.precision.power}% power${view.precision.focus ? `, called to ${view.precision.focus}` : ''}.</p>`
-      : ''}`;
+      : ''}`);
 
   const activeReport = view.report ?? {
     title: scenarioFor(game).title,
     lines: [scenarioFor(game).brief, ...scenarioProgress(game)],
   };
-  report.innerHTML = `<h2>${activeReport.title}</h2><ul>${activeReport.lines.map((line) => `<li>${line}</li>`).join('')}</ul>`;
+  updateScrolledContent(report, `<h2>${activeReport.title}</h2><ul>${activeReport.lines.map((line) => `<li>${line}</li>`).join('')}</ul>`);
 
   const entries = view.entries?.length
     ? view.entries
@@ -817,9 +836,9 @@ export const renderGame = (game, view = {}) => {
   const commandLog = document.querySelector('#command-log');
   if (commandHistory && commandLog) {
     commandHistory.hidden = !view.commandHistory?.length;
-    commandLog.innerHTML = commandHistoryHtml(view.commandHistory);
+    updateScrolledContent(commandLog, commandHistoryHtml(view.commandHistory));
   }
-  log.innerHTML = terminalNarrative(view.terminalEvent) + narrated.slice(-150).reverse().map((entry) => `<li>${entry}</li>`).join('');
+  updateScrolledContent(log, terminalNarrative(view.terminalEvent) + narrated.slice(-150).reverse().map((entry) => `<li>${entry}</li>`).join(''));
   document.querySelector('#log-meta').textContent = integrity >= 1
     ? 'Newest first'
     : `Newest first · radio at ${Math.round(integrity * 100)}%, traffic abbreviated`;

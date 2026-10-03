@@ -83,6 +83,14 @@ test('an open dialog owns the keyboard, so Escape dismisses it instead of resign
   assert.deepEqual(dispatched, [], 'no command may fire behind a modal prompt');
 });
 
+test('guide focus makes every gameplay shortcut inert including pass, destructive actions, and reports', () => {
+  openDialog = { id: 'guide-dialog' };
+  const dispatched = bind();
+  for (const key of ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '=', 'Tab', '`', 'Escape', 'd', 'i', 't', 'x', 'p', 'f', 'r', 's', 'l', 'Backspace']) press(key);
+  assert.deepEqual(dispatched, []);
+  openDialog = null;
+});
+
 test('typing in a field never fires a command', () => {
   openDialog = null;
   const dispatched = bind();
@@ -195,6 +203,16 @@ test('Tab traverses instead of passing once focus is on a control', () => {
   document.activeElement = { matches: (selector) => selector.includes('button') };
   press('Tab');
   assert.deepEqual(dispatched, [], 'the command panel must stay reachable by keyboard');
+});
+
+test('Tab on a native console summary navigates without passing a turn', () => {
+  openDialog = null;
+  const dispatched = bind();
+  document.activeElement = { matches: (selector) => selector.split(',').some((part) => part.trim() === 'summary') };
+  let prevented = false;
+  press('Tab', { preventDefault: () => { prevented = true; } });
+  assert.deepEqual(dispatched, []);
+  assert.equal(prevented, false);
 });
 
 test('Shift+Tab always traverses backwards', () => {

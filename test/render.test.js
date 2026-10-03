@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createGame, getShip, isNeutral, spawnDrone, spawnEncounter } from '../game/state.js';
 import { createRng } from '../game/rng.js';
 import { launchDrones } from '../game/actions.js';
-import { fanOutOffsets, renderGame, reportFor, terminalNarrative } from '../ui/render.js';
+import { commandReadiness, fanOutOffsets, renderGame, reportFor, terminalNarrative } from '../ui/render.js';
 
 // render.js only touches the document inside renderGame, so a bare element stub
 // is enough to exercise it under node --test, keeping the suite dependency-free.
@@ -33,6 +33,47 @@ const withPair = (game, firstId, first, secondId, second) => ({
 });
 
 const TRAFFIC = 'Firebreather fires phasers at Bonhomme for 32 damage.';
+
+test('compact console keeps every command and puts frequent commands before labelled expanders', () => {
+  elements.clear();
+  const game = createGame({ seed: 'compact-inventory', reimagined: true });
+  renderGame(game);
+  const html = read('#console').innerHTML;
+  const persistent = html.slice(0, html.indexOf('class="console-secondary"'));
+  for (const command of ['move', 'phasers', 'photons', 'spread', 'pass', 'autopilot']) {
+    assert.match(persistent, new RegExp(`data-command="${command}"`));
+  }
+  const all = [...html.matchAll(/data-command="([^"]+)"/g)].map((match) => match[1]);
+  assert.equal(new Set(all).size, all.length, 'each command is offered exactly once');
+  for (const command of ['computer', 'shields', 'tractor', 'scan', 'map', 'transport', 'radio', 'hyperspace', 'self-destruct', 'resign', 'rollcall', 'shots', 'statistics', 'fullmap', 'fleet', 'disengage']) {
+    assert.ok(all.includes(command), `${command} remains reachable`);
+  }
+  for (const label of ['Systems and commands', 'Reactor power', 'Helm and shield focus', 'Combat stance', 'Fleet orders']) {
+    assert.ok(html.includes(`<summary>${label}</summary>`));
+  }
+  assert.match(html, /role="region" aria-label="Additional command controls" tabindex="0"/);
+  elements.clear();
+  renderGame(createGame({ seed: 'compact-classic' }));
+  assert.doesNotMatch(read('#console').innerHTML, /<summary>(Reactor power|Helm and shield focus|Combat stance|Fleet orders)<\/summary>/);
+});
+
+test('readiness distinguishes simulation cooldown, playback, and automatic conn without blocking paused commands', () => {
+  const base = createGame({ seed: 'compact-ready', realtime: true });
+  const game = { ...base, simTime: 2.25, readyAt: { [base.playerShipId]: 3 }, autoConn: true };
+  assert.equal(commandReadiness(game, { paused: true }), 'Command cycle: 0.8 stardates remaining. Automatic conn: on.');
+  assert.equal(commandReadiness({ ...game, simTime: 3, autoConn: false }), 'Command cycle ready. Automatic conn: off.');
+  assert.match(commandReadiness(game, { battlePaused: true }), /Resolving orders/);
+  assert.match(commandReadiness({ ...game, realtime: false }), /Ready — choose a command/);
+});
+
+test('narrative and own command reader scroll survive changed content on redraw', () => {
+  elements.clear();
+  elements.set('#log', { innerHTML: '', scrollTop: 340, scrollLeft: 0 });
+  elements.set('#command-log', { innerHTML: '', scrollTop: 95, scrollLeft: 0 });
+  renderGame(createGame({ seed: 'compact-reader' }), { commandHistory: [{ turn: 1, shipName: 'Argo', messages: ['Holding.'] }] });
+  assert.equal(elements.get('#log').scrollTop, 340);
+  assert.equal(elements.get('#command-log').scrollTop, 95);
+});
 
 test('recent commands remain separate and unabridged under fleet traffic and radio damage', () => {
   elements.clear();

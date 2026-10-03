@@ -48,26 +48,26 @@ M4 and already accurately describes the supported modes.
 **Modify:** `index.html`, `styles.css`, `README.md`; optionally extract
 small reusable help-link helpers in `ui/input.js` without a content build step.
 
-- [ ] Implement the spec's contents order: First orders; modes/options; map
+- [x] Implement the spec's contents order: First orders; modes/options; map
   and targets; commands/time; combat; Reimagined fleet command; Reimagined
   tactics; real time; campaign; practice/accessibility/troubleshooting.
-- [ ] Move all useful Extended instructions under Reimagined. Preserve the
+- [x] Move all useful Extended instructions under Reimagined. Preserve the
   old `guide-extended` anchor as a link to that content, not a third-mode
   reference. Do not create an Extended migration guide.
-- [ ] Label scope near each procedure. Keep Classic rules distinct from
+- [x] Label scope near each procedure. Keep Classic rules distinct from
   classic view, and real-time/campaign choices subordinate to Reimagined.
   Guide filtering or navigation must never mutate selected game rules.
-- [ ] Rewrite long paragraphs as short task instructions: when to use the
+- [x] Rewrite long paragraphs as short task instructions: when to use the
   command, where it is, what it costs, what confirms success, and why it
   may be unavailable. Separate tactical advice from hard eligibility rules.
-- [ ] Add a short first-order path for each timing model that works even
+- [x] Add a short first-order path for each timing model that works even
   without an enemy in range. Refer to accepted movement or a valid shot,
   then point to the confirmed result in the command journal.
-- [ ] Correct deterministic claims: seed/options determine the opening;
+- [x] Correct deterministic claims: seed/options determine the opening;
   commands and simulation-time timing determine subsequent outcomes.
   Explain paid campaign repairs versus in-battle docking and delayed
   ballistic impact versus an instant beam.
-- [ ] Keep the README as the shorter repository entry point. Update its
+- [x] Keep the README as the shorter repository entry point. Update its
   planned-mode note only when M4 ships; link to current guide concepts and
   keep draft features out of current capability claims.
 
@@ -84,23 +84,23 @@ pause controls, dialog close), `index.html`, `styles.css`, and input tests.
 extracting pause ownership makes the behavior independently testable;
 `scripts/check-guide.mjs` for actual browser interactions.
 
-- [ ] Treat help as a presentation pause reason separate from a terminal
+- [x] Treat help as a presentation pause reason separate from a terminal
   playback/replay lock and the user's own pause. Opening help must never
   advance a turn, execute a queued command, or release someone else's lock.
-- [ ] Display “Paused for help” in real time. On close, leave the battle
+- [x] Display “Paused for help” in real time. On close, leave the battle
   paused with Resume available. Reset or exclude help elapsed time from
   the frame accumulator so close cannot trigger a catch-up burst.
-- [ ] Keep turn-based state fixed and handle sector/no-active-battle help
+- [x] Keep turn-based state fixed and handle sector/no-active-battle help
   without inventing a battle to pause. Preserve this behavior when practice
   sessions replace the active view.
-- [ ] Route contextual help links to a stable section anchor, remember the
+- [x] Route contextual help links to a stable section anchor, remember the
   invoking control, and restore focus on close. Escape closes help without
   invoking resign. Gameplay shortcuts must remain inert while help owns focus.
-- [ ] Test opening from running and already-paused states, nested dialogs,
+- [x] Test opening from running and already-paused states, nested dialogs,
   terminal/replay ownership, battle completion, and close/reopen. If the
   current UI blocks guide opening during playback, retain that constraint
   until a tested ownership design explicitly supports it.
-- [ ] Browser-check actual simulation time before/after a long help interval
+- [x] Browser-check actual simulation time before/after a long help interval
   and the first resumed frame, as well as keyboard focus return. Fake timing
   alone cannot prove the animation loop ignores wall time behind the dialog.
 
@@ -201,3 +201,28 @@ and image, the guide's procedures work in the shipped UI, optional learning
 paths are usable without replacing a save, and all remaining human-review
 gaps are reported honestly. Search UI remains optional unless lookup
 observations show contents and contextual links are insufficient.
+
+## G2–G3 delivery evidence — 2026-10-03
+
+Implemented on `codex/compact-console-guide`. The guide now follows player
+tasks, has separate first-order paths and timing/campaign references, and
+keeps legacy anchors. New-game links open contextual help without changing
+options. Unsupported tractor-release and terminal-skip instructions caught
+during independent review were removed. Five retained illustrations have
+qualified captions and verified dimensions; final replacement captures are G5.
+
+`check-guide-content.mjs` verifies local anchors, image files/alt/dimensions,
+31 command types and their ruleset/timing scope, real-time cooldown membership,
+and documented constants. It runs in PR and deployment CI. Full suite: 623
+passing. `check-guide.mjs` reads the actual module-owned simulation clock
+through test-only browser instrumentation: time remained 0.125 during eight
+seconds of help, after close, and on the first resumed frame; the next ordinary
+tick was 0.25. It covers already-paused, nested contextual links, focus return,
+Escape/shortcuts, turn-based, completed, sector, and playback-lock states.
+
+Desktop/narrow/200-percent-equivalent guide checks run with images unavailable
+and reduced motion. Screenshot review caught an inner grid-width clipping
+issue at 390px; the corrected inner-content bounds now have a regression
+assertion and the recaptured narrow guide was inspected. G4 walkthrough,
+practice integration, final G5 captures, and G6 novice/cross-feature acceptance
+remain pending. No unfamiliar player participated in this delivery.
