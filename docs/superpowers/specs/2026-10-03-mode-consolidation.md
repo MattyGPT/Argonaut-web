@@ -1,5 +1,7 @@
 # Argonaut mode consolidation
 
+Implementation plan: [Mode consolidation tasks](../plans/2026-10-03-mode-consolidation.md).
+
 Status: **DESIGN DRAFT, 2026-10-03.** Matt's direction is to deprecate
 Extended as a separate play mode and make Reimagined the sole home for its
 gameplay additions. This specifies that transition; the current build

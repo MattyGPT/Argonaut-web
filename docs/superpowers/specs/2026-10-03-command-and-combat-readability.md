@@ -1,5 +1,7 @@
 # Argonaut command and combat readability
 
+Implementation plan: [Console and combat readability tasks](../plans/2026-10-03-command-and-combat-readability.md).
+
 Status: **DESIGN DRAFT, 2026-10-03.** Covers approved proposals 1, 2, 3, 4,
 and 7 in the [player experience roadmap](2026-10-03-player-experience-roadmap.md).
 All work here is presentation and explanation. Classic rules, including

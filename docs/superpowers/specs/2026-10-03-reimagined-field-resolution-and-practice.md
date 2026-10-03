@@ -1,5 +1,7 @@
 # Reimagined field resolution and guided practice
 
+Implementation plan: [Field resolution and practice tasks](../plans/2026-10-03-reimagined-field-resolution-and-practice.md).
+
 Status: **DESIGN DRAFT, 2026-10-03.** Covers proposals 5 and 6 in the
 [player experience roadmap](2026-10-03-player-experience-roadmap.md). New
 navigation rules, exhaustion rules, and practice objectives are explicitly
