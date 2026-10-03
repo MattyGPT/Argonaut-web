@@ -1,6 +1,6 @@
 # Mode consolidation implementation plan
 
-**Status:** Implemented and locally verified on `codex/two-mode-consolidation`; awaiting implementation PR review.
+**Status:** Complete. [PR #87](https://github.com/MattyGPT/Argonaut-web/pull/87) merged as `7881c67` on 2026-10-03; CI passed.
 
 **Spec:** [Mode consolidation](../specs/2026-10-03-mode-consolidation.md).
 **Goal:** Support Classic and Reimagined only, retaining all expansion

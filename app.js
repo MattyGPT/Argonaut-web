@@ -15,10 +15,11 @@ import {
   whenPlaybackUnlocked,
   withPlaybackLock,
 } from './ui/battle-events.js';
-import { fanOutOffsets, primeMoveMemory, renderGame, reportFor } from './ui/render.js';
+import { commandReadiness, fanOutOffsets, primeMoveMemory, renderGame, reportFor } from './ui/render.js';
 import { playEffect, playEvent } from './ui/sound.js';
 import { playEffects, replayEffects } from './ui/fx.js';
 import { rememberCommand, restoreCommandHistory } from './ui/command-history.js';
+import { createHelpState } from './ui/help-state.js';
 
 const SAVE_KEY = 'argonaut-web-save-v1';
 // The sector campaign (round 26c) saves under its own key beside the untouched
@@ -430,6 +431,8 @@ const renderFrame = () => {
   // grey button before the click, not as a refusal after it.
   const baseline = game.phase !== 'player' || game.outcome || isSpectator(game) || view.battlePaused;
   const cycling = (game.readyAt?.[game.playerShipId] ?? 0) > simTimeOf(game);
+  const readiness = document.querySelector('#command-readiness');
+  if (readiness) readiness.textContent = commandReadiness(game, view);
   document.querySelectorAll('[data-command]').forEach((button) => {
     if (REALTIME_COOLDOWN.has(button.dataset.command)) button.disabled = baseline || cycling;
   });
@@ -443,7 +446,7 @@ const simLoop = (now) => {
   requestAnimationFrame(simLoop);
   const dt = lastFrameAt === null ? 0 : Math.min(250, now - lastFrameAt);
   lastFrameAt = now;
-  if (!game?.realtime || game.outcome || sectorMode() || playbackLocked() || view.paused) return;
+  if (!game?.realtime || game.outcome || sectorMode() || playbackLocked() || help.active || view.paused) return;
   const subtickMs = REALTIME.msPerStardate / REALTIME.ticksPerStardate;
   simAccumulator += dt * (view.speed ?? 1);
   let budget = Math.floor(simAccumulator / subtickMs);
@@ -494,14 +497,45 @@ const syncTimeControls = () => {
   const controls = document.querySelector('#time-controls');
   if (controls) controls.hidden = !game?.realtime || sectorMode();
   const pause = document.querySelector('#pause-button');
-  if (pause) pause.textContent = view.paused ? 'Resume' : 'Pause';
+  if (pause) {
+    pause.textContent = help.pausesBattle || view.paused ? 'Resume' : 'Pause';
+    pause.disabled = help.active || Boolean(game?.outcome);
+  }
+  for (const selector of ['#time-pause-status', '#help-pause-status']) {
+    const status = document.querySelector(selector);
+    if (!status) continue;
+    const readingHelp = help.pausesBattle;
+    status.textContent = readingHelp ? 'Paused for help' : view.paused ? 'Paused' : '';
+    status.hidden = selector === '#help-pause-status' ? !readingHelp : !status.textContent;
+  }
   for (const step of REALTIME.speedSteps) {
     const button = document.querySelector(`#speed-${step}`);
     if (button) button.setAttribute('aria-pressed', String((view.speed ?? 1) === step));
   }
 };
-const setPaused = (paused) => { view = { ...view, paused }; syncTimeControls(); };
+const resetSimClock = () => {
+  simAccumulator = 0;
+  lastFrameAt = null;
+  prevPositions = null;
+  prevOrdnance = null;
+};
+const setPaused = (paused) => {
+  if (help.active) return;
+  view = { ...view, paused };
+  resetSimClock();
+  syncTimeControls();
+};
 const setSpeed = (speed) => { view = { ...view, speed }; syncTimeControls(); };
+
+const help = createHelpState({
+  dialog: document.querySelector('#guide-dialog'),
+  getBattle: () => sectorMode() ? null : game,
+  isBlocked: playbackLocked,
+  pauseBattle: () => { view = { ...view, paused: true }; },
+  resetClock: resetSimClock,
+  sync: syncTimeControls,
+  fallbackInvoker: document.querySelector('#user-guide'),
+});
 
 document.querySelector('#pause-button').addEventListener('click', () => setPaused(!view.paused));
 for (const step of REALTIME.speedSteps) {
@@ -512,7 +546,7 @@ for (const step of REALTIME.speedSteps) {
 // dialog owns the keyboard or focus sits on a control Space should activate.
 document.addEventListener('keydown', (event) => {
   if (!game?.realtime || sectorMode() || document.querySelector('dialog[open]')) return;
-  if (event.target.matches?.('input,select,textarea,button')) return;
+  if (event.target.matches?.('input,select,textarea,button,summary,a[href]')) return;
   if (event.key === ' ') {
     event.preventDefault();
     setPaused(!view.paused);
@@ -533,6 +567,10 @@ const spectate = () => {
   if (spectating) return;
   spectating = true;
   const step = async () => {
+    if (help.active) {
+      setTimeout(step, SPECTATOR_TICK_MS);
+      return;
+    }
     if (!game || !isSpectator(game) || game.outcome || game.phase !== 'player') {
       spectating = false;
       return;
@@ -553,7 +591,7 @@ const dispatch = async (action) => {
   // Automated turns and replay mutate the current presentation asynchronously,
   // and the star chart has no war to command. A real-time spectator war takes
   // no commands at all — the autopilot conn flies it on the sim clock.
-  if (!game || spectating || playbackLocked() || (game.realtime && isSpectator(game))) return;
+  if (!game || spectating || playbackLocked() || help.active || (game.realtime && isSpectator(game))) return;
   if (action.type === 'map-select') {
     const ship = game.ships.find((entry) => entry.id === action.targetId);
     if (!ship || ship.status === 'destroyed') return;
@@ -973,9 +1011,13 @@ document.querySelector('#loadout-reset').addEventListener('click', () => {
   syncXanaduScenarioGate();
 });
 
-document.querySelector('#user-guide').addEventListener('click', whenPlaybackUnlocked(playbackLocked, () => {
-  document.querySelector('#guide-dialog').showModal();
-}));
+document.addEventListener('click', (event) => {
+  const control = event.target.closest('#user-guide, [data-guide-section], a[href^="#guide-"]');
+  if (!control || control.closest('#guide-dialog')) return;
+  event.preventDefault();
+  event.stopPropagation();
+  help.open({ control, anchor: control.dataset.guideSection || control.getAttribute('href') });
+}, true);
 
 document.querySelector('#new-game').addEventListener('click', whenPlaybackUnlocked(playbackLocked, () => {
   document.querySelector('#new-seed').value = randomSeed();

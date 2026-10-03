@@ -53,7 +53,7 @@ const keys = Object.freeze({
 });
 
 /** Whether focus currently sits on something Tab is supposed to reach. */
-const isFocusable = (element) => Boolean(element?.matches?.('button, input, select, textarea, a[href], [tabindex]'));
+const isFocusable = (element) => Boolean(element?.matches?.('button, input, select, textarea, summary, a[href], [tabindex]'));
 
 export const bindInput = (root, dispatch, getCamera = () => ({ minX: 0, minY: 0, size: GRID_SIZE })) => {
   root.addEventListener('click', (event) => {

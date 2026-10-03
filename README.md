@@ -49,9 +49,12 @@ static server (`server.js`), so the only prerequisite is a Node runtime on
 
 ```sh
 npm test
+node scripts/check-guide-content.mjs
 ```
 
-The tests use Node's built-in test runner; CI runs on Node 24. To reproduce
+The tests use Node's built-in test runner; CI runs on Node 24 and checks
+guide links, illustrations, command coverage, and documented rule values.
+To reproduce
 the deterministic whole-war balance checks:
 
 ```sh
@@ -73,8 +76,8 @@ for planned polish. Design drafts describe future work, not shipped features.
    narrative. It keeps your last twelve accepted commands even after all
    the other captains act. Use **P** to pass in turn-based play.
 4. In real time, use **Pause** to inspect and plan; **Resume** lets ships
-   continue moving. Pause before opening the current user guide if you
-   want the battle to wait while you read.
+   continue moving. **User guide** pauses a real-time battle while you read
+   and leaves it paused when closed; choose **Resume** when ready.
 
 ## Controls
 
@@ -83,6 +86,14 @@ for planned polish. Design drafts describe future work, not shipped features.
 only when no button has focus — swallowing it outright trapped keyboard users on
 the first control they reached, and the command panel has twenty of them. Every
 command has a button as well.
+
+The compact console keeps movement, primary weapons, pass/hold, and
+automatic conn close to the map. Expand **Systems and commands** for the
+other commands and hardware readout. Reimagined adds **Reactor power**,
+**Helm and shield focus**, **Combat stance**, and **Fleet orders** sections.
+Sections retain their expansion preference; opening one does not spend a
+turn. The in-game guide has separate first-order paths for turn-based and
+real-time play, followed by task-based reference sections.
 
 You can also **click empty space on the tactical map** to maneuver. The click
 becomes an engine order toward that point, clamped to the engine ring already drawn
@@ -94,12 +105,14 @@ command your command ship can actually perform on that hull: fire phasers, fire
 photons, and lock a tractor beam inside their ranges; scan inside sensor reach;
 beam crew to a friendly hull — or board a vacant one — inside transporter reach.
 A command whose hardware is burnt out or whose range does not reach is simply not
-offered, so every button in the menu lands. In Reimagined a Federation hull's
+offered. A real-time target may move before confirmation, and the shared
+command cycle still applies. In Reimagined a Federation hull's
 menu also carries its standing orders and its one dockyard refit. `Escape` or a
 click elsewhere on the map puts the menu away, and clicking the same hull again
 toggles it. Time-consuming commands spend a stardate in turn-based play;
-real-time commands use their simulation-time cycle. Information and free
-configuration commands keep their existing costs.
+real-time combat commands use their simulation-time cycle. Scanning and
+other information commands are free. Plotting a real-time course or holding
+position is also free; movement takes simulation time.
 
 `-`, `=`, and `Escape` ask for confirmation first, because none of them can be
 undone. Hyperspace takes no destination: you commit to the jump and emerge

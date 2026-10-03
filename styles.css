@@ -995,6 +995,42 @@ body.classic .legend-swatch.stance-evasive { background: #40e0ff; box-shadow: no
   padding-bottom: .75rem;
 }
 
+/* Frequent actions stay in place while only the labelled secondary region
+   scrolls. Native details retain expansion and keyboard access across redraws. */
+#console { display: flex; flex-direction: column; min-height: 0; }
+#console > .panel-title, .console-primary, .console-readiness, #console > .status { flex: 0 0 auto; }
+#console > .status { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem .65rem; padding: .65rem .75rem; }
+#console .command-identity { grid-column: 1 / -1; }
+#console .status-row { gap: .4rem; padding-bottom: .2rem; }
+.console-readiness { padding: .35rem .75rem .55rem; font-size: .8rem; line-height: 1.4; color: var(--cyan); }
+.console-primary .command-grid { padding: .6rem .75rem; }
+.console-secondary { min-height: 0; overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid var(--line); }
+.console-section { border-bottom: 1px solid var(--line); }
+.console-section summary { padding: .55rem .75rem; font-size: .8rem; color: #d8efff; cursor: pointer; }
+.console-section summary:hover, .console-section summary:focus-visible { background: #1b4b69; outline: 2px solid var(--cyan); outline-offset: -2px; }
+.console-section .power-bar, .console-section .stance-bar { border-top: 0; }
+.console-section .arc-status { margin: 0 .75rem .65rem; font-size: .8rem; }
+#console > .console-note { padding: 0 .75rem; flex: 0 0 auto; }
+body.classic .console-section summary { color: inherit; }
+
+@media (min-width: 1101px) and (min-height: 620px) {
+  #game-root { height: calc(100dvh - 6.2rem); padding-bottom: 1rem; grid-template-rows: minmax(0, 1fr) minmax(6rem, .2fr); }
+  .map-panel { display: flex; flex-direction: column; min-height: 0; }
+  .map-panel > .panel-title, .map-legend { flex: 0 0 auto; }
+  #map { flex: 1 1 auto; min-height: 0; aspect-ratio: auto; }
+  #report { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+}
+
+@media (max-width: 1100px), (max-height: 619px) {
+  .topbar { flex-wrap: wrap; }
+  .top-actions { flex-wrap: wrap; }
+  #game-root { grid-template-columns: minmax(0, 1fr); grid-template-areas: "map" "console" "report" "log"; }
+  .console-secondary { overflow: visible; }
+  #game-root .log-scroll, #game-root #log { position: static; }
+  #game-root #command-log, #game-root #log { max-height: none; overflow: visible; }
+  #map { min-height: 300px; }
+}
+
 .status {
   padding: .8rem;
   display: grid;
@@ -1218,6 +1254,9 @@ body.classic .legend-swatch.stance-evasive { background: #40e0ff; box-shadow: no
   flex-direction: column;
   min-height: 0;
 }
+
+.log-panel > .panel-title { gap: .75rem; }
+#time-pause-status { margin-inline-end: .4rem; }
 
 /* Your own decisions stay above the fleet traffic, with independent scrolling.
    Fixed bounds keep long command histories from shrinking the tactical map. */

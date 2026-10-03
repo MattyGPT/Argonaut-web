@@ -1,0 +1,126 @@
+/* Task reference only: keep this separate from the game console layout. */
+.guide-shell,
+.guide-body,
+.guide-body section {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.guide-body p,
+.guide-body li,
+.guide-body h3,
+.guide-body h4,
+.guide-keys caption {
+  overflow-wrap: anywhere;
+}
+
+.guide-body h4 {
+  margin: .25rem 0 0;
+  color: var(--cyan);
+  font-size: .88rem;
+  line-height: 1.4;
+}
+
+.guide-body ol {
+  margin: 0;
+  padding-left: 1.5rem;
+  display: grid;
+  gap: .5rem;
+}
+
+.guide-body a {
+  color: var(--cyan);
+  text-underline-offset: .15em;
+}
+
+.guide-table-wrap {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.guide-keys {
+  table-layout: fixed;
+}
+
+.guide-keys caption {
+  padding: .5rem;
+  text-align: left;
+  color: var(--cyan);
+  line-height: 1.5;
+}
+
+.guide-keys th {
+  padding: .4rem .5rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--cyan);
+  text-align: left;
+  line-height: 1.4;
+}
+
+.guide-keys th:first-child,
+.guide-keys td:first-child {
+  width: 25%;
+  white-space: normal;
+}
+
+.guide-keys th:last-child {
+  width: 23%;
+}
+
+.guide-keys td {
+  overflow-wrap: anywhere;
+}
+
+.guide-figure img {
+  height: auto;
+}
+
+.guide-body section:target,
+.guide-body h3:target,
+#guide-extended:target {
+  outline: 1px solid var(--cyan);
+  outline-offset: .25rem;
+}
+
+#help-pause-status {
+  margin: .4rem 0 0;
+  color: var(--cyan);
+  font-size: .8rem;
+}
+
+@media (max-width: 600px) {
+  .guide-head {
+    gap: .5rem;
+    padding: .7rem;
+  }
+
+  .guide-head h2 {
+    font-size: 1rem;
+  }
+
+  .guide-nav {
+    max-height: 22vh;
+    overflow-y: auto;
+    padding: .5rem .7rem;
+    gap: .5rem .8rem;
+  }
+
+  .guide-body {
+    padding: .8rem;
+  }
+
+  .guide-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .guide-keys th,
+  .guide-keys td {
+    padding: .35rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-body {
+    scroll-behavior: auto;
+  }
+}

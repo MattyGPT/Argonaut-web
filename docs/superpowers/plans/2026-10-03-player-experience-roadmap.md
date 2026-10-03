@@ -1,9 +1,10 @@
 # Player experience implementation plan
 
 **Status:** Implementation started after merging PR #86 (`dc63b81`). P0 and
-M1–M4 are complete with local validation; G1 inventory is complete. The first
-delivery is on `codex/two-mode-consolidation`, pending PR review. C/F/H and
-G2–G6 remain unimplemented; P2 cross-feature acceptance is still pending.
+M1–M4 and G1 shipped in [PR #87](https://github.com/MattyGPT/Argonaut-web/pull/87),
+merged as `7881c67`. C1 and G2–G3 are implemented and locally verified on
+`codex/compact-console-guide`, pending implementation PR review. C2–C6, F/H,
+G4–G6, and P2 cross-feature acceptance remain pending.
 **Spec:** [Player experience roadmap](../specs/2026-10-03-player-experience-roadmap.md).
 **Goal:** Deliver all six October 3 specifications in small, verifiable
 changes, preserving Classic while making Reimagined the sole expansion.

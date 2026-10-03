@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#08111f">
     <title>Argonaut Web</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="ui/guide.css">
   </head>
   <body>
     <p id="sr-status" class="visually-hidden" role="status" aria-live="polite"></p>
@@ -34,6 +35,7 @@
           <span>Tactical map</span>
           <span class="panel-meta">
             <span id="time-controls" hidden>
+              <span id="time-pause-status" role="status" hidden></span>
               <button id="pause-button" class="secondary tiny" type="button" title="Pause or resume time (Space)">Pause</button>
               <button id="speed-1" class="secondary tiny" type="button" title="Normal time (, and . step the speed)" aria-pressed="true">1×</button>
               <button id="speed-2" class="secondary tiny" type="button" title="Double time" aria-pressed="false">2×</button>
@@ -62,7 +64,7 @@
         </div>
       </section>
       <aside id="console" class="panel" aria-label="Command console"></aside>
-      <section id="report" class="panel report"></section>
+      <section id="report" class="panel report" tabindex="0" aria-label="Mission and command reports"></section>
       <section class="panel log-panel">
         <div class="panel-title">
           <span>Battle narrative</span>
@@ -76,7 +78,7 @@
           <ol id="command-log" tabindex="0" aria-label="Your last 12 commands, newest first"></ol>
         </section>
         <div class="log-scroll">
-          <ol id="log"></ol>
+          <ol id="log" tabindex="0" aria-label="Battle narrative, newest first"></ol>
         </div>
       </section>
     </main>
@@ -220,6 +222,7 @@
           </select>
         </label>
         <p class="dialog-note" id="ruleset-note">Classic preserves the calibrated original game. Reimagined adds fleet orders, scenarios, and a wider battlefield with new combat systems.</p>
+        <p class="dialog-note"><a href="#guide-start">Ruleset and option help</a> · <a href="#guide-precision">Precision fire help</a></p>
         <fieldset id="reimagined-options" class="ruleset-options" hidden disabled>
           <legend>Reimagined options</legend>
           <label class="check">
@@ -238,6 +241,7 @@
               <option value="hunt-the-vendetta">Hunt the hunter</option>
             </select>
           </label>
+          <p class="dialog-note"><a href="#guide-fleet">Fleet and scenario help</a> · <a href="#guide-realtime">Real-time help</a> · <a href="#guide-campaign">Campaign help</a></p>
           <div class="loadout" id="loadout-section" hidden>
             <p class="menu-sub">Fleet loadout — every alliance spends a points budget on its ships of the line. Compose your Federation fleet and set each alliance's budget; enemy captains draw seeded fleets within theirs, leaning to their doctrines. Prizes taken in the war are won, not budgeted.</p>
             <p class="menu-sub">Alliances at war — the Federation always fights; pick at least one enemy</p>
@@ -267,216 +271,263 @@
           <div>
             <p class="eyebrow">FEDERATION TACTICAL COMMAND</p>
             <h2>Argonaut Web — user guide</h2>
+            <p id="help-pause-status" role="status" hidden></p>
           </div>
           <form method="dialog" class="guide-close">
             <button value="close" class="secondary">Close</button>
           </form>
         </header>
         <nav class="guide-nav" aria-label="Guide sections">
-          <a href="#guide-war">The war</a>
-          <a href="#guide-start">Starting up</a>
-          <a href="#guide-map">Tactical map</a>
-          <a href="#guide-commands">Commands</a>
+          <a href="#guide-first-orders">First orders</a>
+          <a href="#guide-start">Modes and options</a>
+          <a href="#guide-map">Map and targets</a>
+          <a href="#guide-commands">Commands and time</a>
           <a href="#guide-combat">Combat</a>
-          <a href="#guide-extended">Reimagined fleet command</a>
-          <a href="#guide-precision">Precision fire</a>
-          <a href="#guide-reimagined">Reimagined</a>
-          <a href="#guide-comfort">Comforts</a>
+          <a href="#guide-fleet">Fleet command</a>
+          <a href="#guide-reimagined">Reimagined tactics</a>
+          <a href="#guide-realtime">Real-time play</a>
+          <a href="#guide-campaign">Sector campaign</a>
+          <a href="#guide-comfort">Accessibility</a>
+          <a href="#guide-save">Save and resume</a>
+          <a href="#guide-troubleshooting">Troubleshooting</a>
           <a href="#guide-about">Provenance</a>
         </nav>
         <div class="guide-body">
-          <section id="guide-war">
-            <h3>The war at a glance</h3>
-            <p>Argonaut Web is a turn-based fleet battle in deep space. You command the Federation flagship <b>Argo</b> — and through it the whole Federation — against three enemy alliances. Every stardate you issue one command; then every other captain in the war zone acts at once. The war ends when one side is annihilated, when every survivor is stranded beyond reach of anything, or when you resign and let the autopilots finish what you started.</p>
-            <ul>
-              <li>Four alliances field five hulls each — a battle cruiser, three cruisers, and a scout — plus the Federation starbase <b>Xanadu</b>, which fights at your side.</li>
-              <li>One command spends one stardate. Information commands, fleet orders, and refits are free.</li>
-              <li>The war autosaves after every action; reload the page and resume where you left off.</li>
-              <li>The seed shown in the top bar fixes the opening disposition. Same seed, same war.</li>
-            </ul>
-            <figure class="guide-figure">
-              <img src="assets/guide/overview.png" alt="The full Argonaut Web interface: battle narrative on the left, tactical map in the centre, command console on the right, and a roll call report below." loading="lazy">
-              <figcaption>Federation tactical command: the battle narrative (left) logs every action newest-first, the tactical map (centre) is where the war is fought, and the command console (right) carries your ship's condition and every command.</figcaption>
-            </figure>
+          <section id="guide-war" aria-labelledby="guide-first-orders">
+            <h3 id="guide-first-orders">First orders</h3>
+            <p>You command the Federation ship named in the command console, initially <b>Argo</b>. Choose <a href="#guide-start">Classic or Reimagined</a> in <b>New game</b>. Classic is turn-based; Reimagined offers turn-based battles, pausable real-time movement, and a sector campaign. These contents links change only the reference you are reading.</p>
+            <h4>Start a turn-based battle — either ruleset</h4>
+            <ol>
+              <li>Find your command ship on the map and check its name, shields, crew, and status in the console.</li>
+              <li>Click a clear point inside the cyan engine ring, away from other hulls, to move. Or choose <b>Engines</b> (<kbd>2</kbd>) and enter a small ΔX / ΔY displacement. Working engines and freedom from a tractor lock are required.</li>
+              <li>After an accepted maneuver, other captains act and the stardate advances. Read <b>Your recent commands</b> for your result, then the battle narrative for fleet events.</li>
+              <li>Use <b>Pass turn</b> (<kbd>P</kbd>) when you want to hold position and let the next stardate resolve. If an enemy is in range, click its hull and choose <b>Fire phasers</b> instead of moving.</li>
+            </ol>
+            <p>A target is not guaranteed to be in weapon range at the opening. Movement is enough for your first order. A rejected command explains its refusal; canceling a prompt or issuing an invalid order does not spend a turn.</p>
+            <h4>Start a real-time battle — Reimagined</h4>
+            <ol>
+              <li>Press <b>Pause</b> above the map before planning. Identify your command ship in the console.</li>
+              <li>Click clear space to plot a course. <b>Your recent commands</b> confirms the destination; plotting it does not mean you have arrived.</li>
+              <li>Press <b>Resume</b> to let the drive fly there. Pause again to inspect targets, range, or damage. Fire an available weapon when the shared command cycle is ready.</li>
+              <li>Read your accepted command result and the later battle narrative separately: a launched torpedo may still be traveling. See <a href="#guide-realtime">real-time play</a> for readiness and automatic conn.</li>
+            </ol>
           </section>
           <section id="guide-start">
-            <h3>Starting a war</h3>
-            <p><b>New game</b> in the top bar opens the war panel. Name a seed or take the one offered, choose <b>Classic</b> or <b>Reimagined</b>, and tick the options you want. Classic is the default; with its optional boxes unticked it plays exactly by the original 1992 rules. Real-time movement, sector campaign, fleet loadout, and expansion scenarios appear under Reimagined.</p>
+            <h3>Modes and options</h3>
+            <p><b>New game</b> opens the setup panel. Choose a seed, <b>Ruleset</b>, and options, then <b>Begin</b>. Starting a new war or campaign replaces the current saved session. <b>Cancel</b> keeps it.</p>
             <ul>
-              <li><b>Regional enemy formations</b> starts the enemy fleets clustered by alliance instead of scattered.</li>
-              <li><b>Tactical sound</b> adds phaser, photon, explosion, and miss effects, plus a klaxon on the way into RED alert.</li>
-              <li><b>Precision fire</b> gives your phaser volleys a power dial and called subsystem shots.</li>
-              <li><b>Reimagined</b> adds standing orders for your fleet, alliance doctrines, the Xanadu dockyard, named captains, and three scenarios, alongside a wider 320-unit battlefield with a pan/zoom camera, reactor power management, the directed tractor beam, and a living battlefield of nebulae, asteroid fields, and ion storms. See <a href="#guide-extended">Reimagined fleet command</a> and <a href="#guide-reimagined">Argonaut Reimagined</a> below.</li>
+              <li><b>Classic</b> preserves the calibrated original rules and fixed fleets. With optional settings unticked, it is the original turn-based experience.</li>
+              <li><b>Reimagined</b> adds composed fleets, <a href="#guide-fleet">standing orders, doctrines, captains, repairs, and scenarios</a>, plus <a href="#guide-reimagined">terrain, power, prizes, and new weapons</a>. Choose participating alliances, their budgets, your Federation loadout, and whether Xanadu is present. The Federation and at least one enemy are required; the flagship is required. Prizes won later do not consume the starting loadout budget.</li>
+              <li><b>Real-time movement</b> and <b>Sector campaign</b> are Reimagined options. Choose one: current campaign engagements use turn-based battles.</li>
+              <li><b>Regional enemy formations</b> clusters enemy fleets by alliance. <b>Tactical sound</b> enables combat sounds and the RED alert klaxon.</li>
+              <li><b>Precision fire</b> is an optional phaser setting for either ruleset. See <a href="#guide-precision">called shots and power</a>.</li>
+              <li><b>Classic view</b> changes the visual theme; <b>Ship art</b> changes modern map artwork. Neither selects Classic rules. See <a href="#guide-comfort">accessibility and appearance</a>.</li>
             </ul>
-
+            <p>The same seed and options reproduce the opening. Later outcomes depend on your action sequence and, in real time, when you issue orders in simulation time. Matching only the seed does not guarantee the same result.</p>
           </section>
           <section id="guide-map">
-            <h3>Reading the tactical map</h3>
-            <p><b>Your recent commands</b> stays above the battle narrative: your last twelve accepted commands, labelled by ship and stardate, with their full results. Scroll it independently of fleet traffic; it is saved with the battle.</p>
+            <h3>Map and targets</h3>
+            <p>Use the <b>legend under the map</b> to match alliance colors, range rings, threats, and status markers. Modern <b>Ship art</b> shows hull sprites; glyph view shows initials, with <b>+</b> for a destroyed wreck and <b>D</b> for a drone. A vacant hull has a surviving frame without a crew; it can be boarded. A wreck cannot. A captured Reimagined prize wears a gold pip.</p>
             <ul>
-              <li>Every hull is a circle bearing its initial, coloured by alliance; a wreck is a <b>+</b>. A dashed border means vacant or surrendered.</li>
-              <li>Dashed rings around your ship mark phaser (red), photon (yellow), and engine (cyan) reach. In a Reimagined war the green ring around Xanadu is the dockyard.</li>
-              <li>A red outline marks an enemy that can reach <i>you</i> this stardate.</li>
-              <li>The <b>legend under the map</b> is the color key for everything drawn on it — alliances, your range rings, threats, wrecks — and it grows with the war mode: the orders pip, ace star, dockyard ring, terrain hues (nebula, asteroids, ion storm, relay nodes), and prize pip in Reimagined.</li>
-              <li>The map is limited by your mapper — fog of war. <kbd>Backspace</kbd> shows the whole war zone; <kbd>7</kbd> lists exact local positions.</li>
-              <li><b>Click empty space</b> to steer your ship toward that point, clamped to your engine ring. <b>Click a hull</b> for its context menu: every command your ship can actually perform on it, and nothing else. <kbd>Escape</kbd> puts the menu away.</li>
+              <li><b>Range rings:</b> red is phaser reach, yellow photon reach, cyan engine reach. The green ring at Xanadu marks the Reimagined battle dockyard. Engine reach is movement, not weapon reach.</li>
+              <li><b>Red threat outline:</b> that enemy can threaten your ship. It does not promise your own weapon can fire back or that a shot will hit.</li>
+              <li><b>Click a hull</b> to inspect its menu. Target commands depend on the target's state, working hardware, and range; Reimagined storm jamming can remove weapon choices. A displayed choice may still refuse if readiness or crew requirements fail. <kbd>Escape</kbd> closes the menu.</li>
+              <li><b>Click empty space</b> to move. Turn-based clicks beyond the engine ring are clamped to current reach. Real-time clicks set a destination that may take several stardates to reach.</li>
+              <li><b>Local information:</b> the tactical map uses mapper reach and visibility. <b>Scanner</b> (<kbd>6</kbd>) inspects one reachable hull; <b>Mapper</b> (<kbd>7</kbd>) lists local positions; <b>Radio</b> (<kbd>9</kbd>) reports reachable traffic. Damage and Reimagined terrain can limit these systems.</li>
+              <li><b>War zone</b> (<kbd>Backspace</kbd>) is the original full-map report: it lists all non-destroyed hulls and their coordinates, including contacts outside your tactical mapper. It is a separate report, not a sensor upgrade.</li>
             </ul>
+            <h4>Navigate the wider Reimagined field</h4>
+            <p>Wheel zooms toward the cursor; arrow keys pan. Drag the minimap to recenter the viewport. The camera follows your command ship until you pan or zoom; <b>⌖</b> restores following. The on-screen <b>+</b> and <b>−</b> buttons zoom. The keyboard <kbd>-</kbd> key opens <b>Hyperspace</b>, so use the displayed zoom buttons for zooming.</p>
             <div class="guide-cols">
               <figure class="guide-figure">
-                <img src="assets/guide/map.png" alt="The tactical map with ships of four alliances, range rings around the player ship, and red outlines on enemies in phaser reach." loading="lazy">
-                <figcaption>A skirmish taking shape: enemies outlined in red can reach you; your own rings show what you can reach.</figcaption>
+                <img src="assets/guide/map.png" width="1460" height="1288" alt="Glyph map example: alliance-colored ships surround the command ship's dashed movement and weapon rings; some enemies have red threat outlines." loading="lazy">
+                <figcaption>Glyph map example. Your rings measure your reach; an enemy's red outline describes its threat to you. Sprite view uses hull artwork for the same contacts.</figcaption>
               </figure>
               <figure class="guide-figure">
-                <img src="assets/guide/ship-menu.png" alt="A ship context menu grown out of an enemy hull, offering Fire phasers, Tractor beam, and Scan." loading="lazy">
-                <figcaption>The context menu grows out of the hull you clicked and only offers commands whose hardware works and whose range reaches.</figcaption>
+                <img src="assets/guide/ship-menu.png" width="1460" height="1288" alt="An enemy hull menu offers Fire phasers, Tractor beam, and Scan for this example's range and hardware." loading="lazy">
+                <figcaption>Clicking a contact opens its target menu. This example's choices are situational; your current hull may offer different commands.</figcaption>
               </figure>
             </div>
           </section>
           <section id="guide-commands">
-            <h3>Commands and keys</h3>
-            <p>Every command has a console button and a key. The numbered commands spend your stardate; the information commands at the bottom are free and print into the mission panel.</p>
-            <table class="guide-keys">
-              <tbody>
-                <tr><td><kbd>1</kbd> Shields</td><td>Flush engine power into shields. Needs working engines.</td></tr>
-                <tr><td><kbd>2</kbd> Engines</td><td>Maneuver by exact ΔX / ΔY, or click the map instead.</td></tr>
-                <tr><td><kbd>3</kbd> Phasers</td><td>Energy volley at a hull in range; scales with live phaser units.</td></tr>
-                <tr><td><kbd>4</kbd> Photons</td><td>Torpedo at close range; heavier damage, smaller reach.</td></tr>
-                <tr><td><kbd>5</kbd> Tractor</td><td>Lock a beam and drag the target toward you.</td></tr>
-                <tr><td><kbd>6</kbd> Scanner</td><td>Scan a hull. In a Reimagined war, reveals who captains it.</td></tr>
-                <tr><td><kbd>8</kbd> Transport</td><td>Beam crew to a friendly hull — or board a vacant one.</td></tr>
-                <tr><td><kbd>-</kbd> Hyperspace</td><td>Blind jump to a random point, shields weakened on arrival. Shakes off a tractor lock; can burn the ship up.</td></tr>
-                <tr><td><kbd>=</kbd> Self-destruct</td><td>Destroys everything in blast radius, shrapnel beyond. Xanadu's blast is especially large.</td></tr>
-                <tr><td><kbd>P</kbd> / <kbd>Tab</kbd> Pass</td><td>Hold position and end the stardate.</td></tr>
-                <tr><td><kbd>`</kbd> Autopilot</td><td>Your ship fights one turn like an enemy captain — ruthless, but clumsy.</td></tr>
-                <tr><td><kbd>Esc</kbd> Resign</td><td>Hand the whole Federation to the autopilot and watch the war play out. Final.</td></tr>
-                <tr><td><kbd>0</kbd> Computer</td><td>Free: the computer's read on the war.</td></tr>
-                <tr><td><kbd>7</kbd> Mapper · <kbd>9</kbd> Radio</td><td>Free: exact local positions; radio traffic report.</td></tr>
-                <tr><td><kbd>R</kbd> · <kbd>S</kbd> · <kbd>L</kbd> · <kbd>Bksp</kbd></td><td>Free: roll call, shot distribution, alliance statistics, full war-zone map.</td></tr>
-                <tr><td><kbd>F</kbd> Fleet</td><td>Reimagined only: your fleet and its standing orders.</td></tr>
-              </tbody>
-            </table>
-            <p class="dialog-note">Hyperspace, self-destruct, and resign ask for confirmation first — none of them can be undone. While any dialog is open it owns the keyboard, so game keys never fire behind a prompt.</p>
-            <div class="guide-cols">
-              <figure class="guide-figure">
-                <img src="assets/guide/console.png" alt="The command console: condition, location, shields, crew, status, the eight subsystem unit counts, and the grid of command buttons with their keys." loading="lazy">
-                <figcaption>The command console: your hull's condition and subsystem units above, every command and its key below.</figcaption>
-              </figure>
-              <figure class="guide-figure">
-                <img src="assets/guide/report.png" alt="The mission panel showing a roll call of every hull in the war with position, status, shields, and crew." loading="lazy">
-                <figcaption>The mission panel carries the free information reports — here the roll call of every hull in the war.</figcaption>
-              </figure>
+            <h3>Commands and time</h3>
+            <p>The console keeps movement, primary weapons, passing or holding, and autopilot close at hand. Expand <b>Systems and commands</b> for the complete command set. Keyboard shortcuts work during play; dialogs own the keyboard. Menu commands can preselect the hull you clicked.</p>
+            <p><b>Turn-based cost:</b> an accepted action marked “Turn” completes your turn, then other captains act. “Free” reports and configuration keep the current stardate. <b>Real-time cost:</b> “Cycle” commands share a readiness timer measured in simulation time; course changes, reports, and configuration do not spend that timer. A paused clock cannot recharge it.</p>
+            <div class="guide-table-wrap">
+              <table class="guide-keys" data-guide-scope="classic reimagined">
+                <caption>Commands in both rulesets; the real-time column applies only to Reimagined real-time battles.</caption>
+                <thead><tr><th scope="col">Control / key</th><th scope="col">Use and requirements</th><th scope="col">Turn-based / real time</th></tr></thead>
+                <tbody>
+                  <tr data-guide-command="computer"><td>Computer <kbd>0</kbd></td><td>Read the computer's assessment of local contacts and the war.</td><td>Free / Free</td></tr>
+                  <tr data-guide-command="shields"><td>Shields <kbd>1</kbd></td><td>Flush engine power into shields. Requires working engines and missing shields.</td><td>Turn / Cycle</td></tr>
+                  <tr data-guide-command="move"><td>Engines <kbd>2</kbd></td><td>Enter ΔX / ΔY or click clear map space. Requires engines; a tractor-held ship cannot maneuver.</td><td>Turn / Free course change</td></tr>
+                  <tr data-guide-command="phasers"><td>Phasers <kbd>3</kbd></td><td>Fire an energy volley at an active enemy in phaser range. Live phaser units affect damage.</td><td>Turn / Cycle</td></tr>
+                  <tr data-guide-command="photons"><td>Photons <kbd>4</kbd></td><td>Fire a heavier, shorter-range torpedo. Requires live photon units and an active enemy in range.</td><td>Turn / Cycle</td></tr>
+                  <tr data-guide-command="tractor tractor-direct"><td>Tractor <kbd>5</kbd></td><td>Pull a movable active enemy in tractor range. Reimagined also offers Direct tow… and towing a friendly distress hull. Tractor-held hulls cannot maneuver or dock.</td><td>Turn / Cycle</td></tr>
+                  <tr data-guide-command="scan"><td>Scanner <kbd>6</kbd></td><td>Inspect a hull within working scanner reach and visibility. Reimagined scans reveal captain details.</td><td>Free / Free</td></tr>
+                  <tr data-guide-command="map"><td>Mapper <kbd>7</kbd></td><td>Read exact local positions. Requires working mapper hardware.</td><td>Free / Free</td></tr>
+                  <tr data-guide-command="transport"><td>Transport <kbd>8</kbd></td><td>Reinforce a friendly ship or board a vacant hull. Requires transporter reach and enough crew to leave people aboard your ship. See boarding below.</td><td>Turn / Cycle</td></tr>
+                  <tr data-guide-command="radio"><td>Radio <kbd>9</kbd></td><td>Read reachable radio traffic. Requires working radio; storm cores jam it in Reimagined.</td><td>Free / Free</td></tr>
+                  <tr data-guide-command="hyperspace"><td>Hyperspace <kbd>-</kbd></td><td>Confirm a blind jump. Weakens shields, escapes a tractor lock, and risks burning up or colliding on arrival.</td><td>Turn / Cycle</td></tr>
+                  <tr data-guide-command="self-destruct"><td>Self-destruct <kbd>=</kbd></td><td>Confirm destruction of your hull with a blast and shrapnel that can hit other ships. Xanadu has an especially large blast.</td><td>Turn / Cycle</td></tr>
+                  <tr data-guide-command="pass"><td>Pass turn <kbd>P</kbd></td><td>Hold position. In real time, Hold position cancels your course; it does not advance the paused clock.</td><td>Turn / Free hold</td></tr>
+                  <tr data-guide-command="autopilot"><td>Autopilot <kbd>`</kbd></td><td>Let your captain act for one turn; in real time toggle automatic conn, the control of your ship.</td><td>Turn / Free toggle</td></tr>
+                  <tr data-guide-command="resign"><td>Resign <kbd>Esc</kbd></td><td>Confirm handing Federation command to autopilot and watch the rest of the war. This is final.</td><td>Ends player command</td></tr>
+                  <tr data-guide-command="rollcall"><td>Roll call <kbd>R</kbd></td><td>List the hulls and their condition.</td><td>Free / Free</td></tr>
+                  <tr data-guide-command="shots"><td>Shots <kbd>S</kbd></td><td>Read shot distribution.</td><td>Free / Free</td></tr>
+                  <tr data-guide-command="statistics"><td>Statistics <kbd>L</kbd></td><td>Read alliance statistics.</td><td>Free / Free</td></tr>
+                  <tr data-guide-command="fullmap"><td>War zone <kbd>Backspace</kbd></td><td>Read the full map report described above.</td><td>Free / Free</td></tr>
+                </tbody>
+              </table>
             </div>
+            <div class="guide-table-wrap">
+              <table class="guide-keys" data-guide-scope="reimagined">
+                <caption>Reimagined commands and configuration.</caption>
+                <thead><tr><th scope="col">Control / key</th><th scope="col">Use and requirements</th><th scope="col">Turn-based / real time</th></tr></thead>
+                <tbody>
+                  <tr data-guide-command="fleet"><td>Fleet orders <kbd>F</kbd></td><td>Read the fleet's standing orders, prizes, captains, and condition.</td><td>Free / Free</td></tr>
+                  <tr data-guide-command="launch"><td>Launch drones <kbd>D</kbd></td><td>Open the command carrier's unspent bay. Other carriers can receive a launch standing order.</td><td>Turn / Cycle</td></tr>
+                  <tr data-guide-command="ion"><td>Ion <kbd>I</kbd></td><td>Fire a shield and subsystem suppression beam. Requires an ion emitter and target in range.</td><td>Turn / Cycle</td></tr>
+                  <tr data-guide-command="spread"><td>Spread <kbd>T</kbd></td><td>Fire an area torpedo salvo. Requires spread tubes and target in range; nearby allies risk splash.</td><td>Turn / Cycle</td></tr>
+                  <tr data-guide-command="disengage"><td>Disengage <kbd>X</kbd></td><td>Burn away from the nearest enemy. Requires engines, an enemy, and freedom from a tractor lock.</td><td>Turn / Free course change</td></tr>
+                  <tr data-guide-command="orders"><td>Friendly hull menu</td><td>Assign a standing order; targeted orders ask for a ward or target.</td><td>Free / Free</td></tr>
+                  <tr data-guide-command="refit"><td>Refit in friendly hull menu</td><td>Choose one refit per hull per battle inside an allied dockyard ring.</td><td>Free / Free</td></tr>
+                  <tr data-guide-command="power"><td>Reactor power</td><td>Adjust console sink pips within the current reactor budget.</td><td>Free / Free</td></tr>
+                  <tr data-guide-command="stance"><td>Combat stance</td><td>Set Standard, Firing, or Evasive in the console or a friendly hull menu.</td><td>Free / Free</td></tr>
+                  <tr data-guide-command="facing arcFocus"><td>Helm and shield focus</td><td>Turn the hull or choose the arc recovered first; also available in friendly hull menus.</td><td>Free / Free</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p><kbd>Tab</kbd> passes only when focus is away from interactive controls; on a button, link, or form it navigates normally. Use <kbd>P</kbd> for a deliberate pass. Hyperspace, self-destruct, and resign require confirmation. <b>Cancel</b> closes a prompt without accepting an action.</p>
+            <p><b>Your recent commands</b> keeps accepted orders and their results with the battle save. The battle narrative records events from the wider fleet. Information reports appear in the mission panel. Use the command result to confirm your own order before interpreting enemy traffic.</p>
+            <figure class="guide-figure">
+              <img src="assets/guide/report.png" width="2174" height="938" alt="A roll call report lists hull names with positions, distance, status, shields, and crew." loading="lazy">
+              <figcaption>Roll call example. Read the status alongside crew and shields to distinguish an active hull, a vacant frame, and a destroyed wreck.</figcaption>
+            </figure>
           </section>
           <section id="guide-combat">
-            <h3>Combat and survival</h3>
+            <h3>Understanding combat</h3>
+            <p>A valid shot can miss. Damage varies with the weapon, surviving units, and ruleset; Reimagined power, stance, terrain, and crew condition also matter. Read the result for hit or miss and damage rather than treating range or readiness as a hit prediction.</p>
             <ul>
-              <li><b>Battles are attritional.</b> Hulls carry double the shields and crew the gunnery table was tuned against: a kill takes some fourteen volleys, a war about twenty-five stardates. The guns themselves are unchanged from the original.</li>
-              <li>Shots miss — yours and the enemy's alike — and every volley rolls its own damage band.</li>
-              <li>Damage past your shields knocks out subsystems, shortening scanner, mapper, transporter, and radio reach. Lose all crew and the hull sits vacant, boardable by your transporter — command included.</li>
-              <li>Tractor locks pull both ways and end only when the holding ship dies; hyperspace also shakes one off. A held hull wears a <b>cyan pip</b> and the console names the holder — or says <b>an unseen hull</b> when a nebula hides it, since the beam is felt even when the ship casting it cannot be seen. The beam's dashed line is drawn back to its source regardless: a nebula hides the hull, not the physics of the pull.</li>
-              <li>Two hulls on the same point collide: one is destroyed, the other crippled. This applies to your moves, the autopilots', tractor tows, and hyperspace arrivals.</li>
-              <li>Lose your command ship or resign and command shifts to another Federation hull; the war goes on without you.</li>
-              <li>Enemy fleets concentrate fire on a shared target in a classic war; the vendetta ship breaks formation to hunt you personally.</li>
+              <li><b>Shields and systems:</b> damage past shields can kill crew and disable hardware. Fewer live units reduce the affected system's performance. Zero crew can leave a vacant frame; destruction leaves an unboardable wreck.</li>
+              <li><b>Command loss:</b> losing your command ship transfers command to a surviving Federation hull where possible. With no Federation command left, you watch other alliances finish. Resigning hands play to autopilot.</li>
+              <li><b>Tractor lock:</b> a held ship cannot maneuver or dock. Its cyan pip and console identify the hold; a hidden source may read “an unseen hull.” Hyperspace or destruction of the holder ends the lock. A tow can cause a collision.</li>
+              <li><b>Collisions:</b> overlapping hulls can destroy one and cripple the other. Ordered rams, tractor slams, and hyperspace arrivals are dangerous even when guns are not involved.</li>
+              <li><b>Endings:</b> standard wars resolve surviving alliances, surrender, and stranded-fleet draws. Reimagined objectives can also decide the war. A battle outcome is distinct from a campaign outcome.</li>
+              <li><b>Playback:</b> terminal destruction or surrender pauses for its event display, then continues automatically. <b>Replay round</b> in the battle narrative replays a recorded computer phase when available; commands stay locked until playback finishes.</li>
             </ul>
+            <p><b>Classic tactics:</b> enemy fleets concentrate on a shared target; a vendetta ship hunts you personally. Concentrating your own fire and preserving usable engines are useful responses. These are tactical choices, not requirements for a legal command.</p>
+            <section id="guide-precision">
+              <h4>Precision fire — optional in either ruleset</h4>
+              <p>Enable <b>Precision fire</b> in New game. The phaser prompt adds <b>Called system</b> and <b>Phaser power</b>. Standard targeting damages normally. A called shot trades general damage for damage to the selected subsystem without crew casualties; shields still protect the target. Lower power can leave a surviving frame rather than destroying it. The enemy continues using standard volleys.</p>
+            <p>With Precision fire or Reimagined rules, a crewed hull stripped of engines, phasers, and photons can strike its colors at the stardate boundary and become vacant. Starbases, neutral merchants, and your command ship while you retain command are exempt. Confirm vacant status before trying to board.</p>
+              <figure class="guide-figure">
+                <img src="assets/guide/precision.png" width="708" height="672" alt="Phaser prompt with Called system set to Standard targeting and Phaser power set to full; these controls allow a called subsystem shot or reduced power." loading="lazy">
+                <figcaption>The optional phaser controls. This example is still set to Standard targeting at full power; selecting a subsystem changes the shot.</figcaption>
+              </figure>
+            </section>
           </section>
-          <section id="guide-extended">
+          <section id="guide-fleet">
             <h3>Reimagined fleet command</h3>
-            <p>Reimagined fleet command adds an admiral's layer: standing orders for your fleet, a dockyard at Xanadu, alliance doctrines, named captains, and three scenarios. Orders are free and persist until changed; they travel by radio, so a hull out of contact acknowledges one stardate late.</p>
+            <p id="guide-extended">The former fleet-command reference is now part of <a href="#guide-fleet">Reimagined fleet command</a>. Choose Reimagined in New game to use these systems.</p>
+            <h4>Give a standing order</h4>
+            <p>Click a friendly active hull and choose <b>Focus with fleet</b>, <b>Hold position</b>, <b>Withdraw</b>, <b>Escort…</b>, <b>Screen…</b>, or <b>Intercept…</b>. Escort follows a friendly ward; Screen protects one against nearby threats; Intercept pursues a named enemy. Board and Launch drones are available for suitable targets or carriers. Targeted choices ask for the target.</p>
+            <p>Orders are free and persist until changed. In radio contact, the hull acknowledges immediately; out of contact, the result says the order will arrive next stardate. Check <b>Fleet orders</b> (<kbd>F</kbd>) for pending or current orders. Your own hull follows its standing order when autopilot has the conn. Without Xanadu, Withdraw heads toward the fleet rather than a base.</p>
+            <h4>Repair and refit during a battle</h4>
+            <p>Bring an active friendly ship inside an allied Xanadu dockyard ring and let a stardate boundary resolve. Docking gradually recovers shields and crew, and repairs a unit of its worst-damaged subsystem. Confirm recovery in the narrative and condition report. Starbases, drones, and tractor-held ships do not dock. The base must be active, friendly, and have at least <span data-guide-percent="DOCKING.minBaseCondition">50%</span> of its shield capacity; a heavily damaged base cannot provide repairs or refits.</p>
+            <p>Inside the ring, the friendly hull menu offers a free refit once per hull per battle: <b>Re-arm</b>, <b>Overcharge</b>, <b>Tune drive</b>, <b>Deep sensors</b>, or <b>Reactor upgrade</b>, subject to hardware limits. The result confirms the added units. This differs from <a href="#guide-campaign">paid between-battle campaign services</a>.</p>
+            <h4>Read captains and doctrines</h4>
+            <p>Scan hulls to learn their captains. Kills can make a captain an ace, marked by a star; an experienced vendetta hunter becomes more dangerous. Enemy alliances have distinct doctrines: Axis closes aggressively, Bloc favors phaser distance, and Cabal favors tractor tactics. The fleet report helps you follow your own captains and orders.</p>
+            <h4>Choose a scenario</h4>
             <ul>
-              <li><b>Focus with fleet</b> (original behavior), <b>Hold</b>, <b>Withdraw</b> toward Xanadu, <b>Escort</b> a friendly hull, <b>Screen</b> a ward against the nearest threat, <b>Intercept</b> one named enemy.</li>
-              <li><b>Xanadu is a dockyard.</b> A hull ending the stardate inside the green ring recovers shields, crew, and one unit of its worst-damaged subsystem — and may take one refit per war: an extra photon bay, overcharged phasers, a tuned drive, or deeper sensors.</li>
-              <li><b>Each alliance fights its own way</b> — Axis swarms and detonates rather than die, Bloc works the phaser edge and executes the weakest hull it can hit, Cabal tractors you into collisions, Federation concentrates fire with damage discipline.</li>
-              <li><b>Earn the captains' names.</b> A named captain has sworn to hunt you; scanning hulls reveals who commands what. Two kills make a captain an ace (★ on the map), and every third kill your hunter scores makes its volleys against you bite harder.</li>
-              <li><b>Replay the round</b> from the battle narrative header to watch the whole computer phase play back on the map; replay is also available in Classic.</li>
-              <li><b>Three scenarios:</b> cease hostilities (the original), hold Xanadu to stardate 30, or hunt the hunter — identify your vendetta captain by scanning before the war kills them first.</li>
+              <li><b>Cease hostilities — annihilation:</b> the standard surviving-alliance war.</li>
+              <li><b>Hold Xanadu:</b> keep the base standing until stardate <span data-guide-constant="SCENARIOS.defend-xanadu.stardates">30</span>. Losing the base fails the objective. This choice requires Xanadu in the loadout.</li>
+              <li><b>Hunt the hunter:</b> scan the hull commanded by your named hunter before it leaves the fight, then end the vendetta by destruction, surrender, or capture. If it leaves before you identify it, the opportunity is lost.</li>
             </ul>
-            <figure class="guide-figure">
-              <img src="assets/guide/fleet-orders.png" alt="A Federation hull's context menu in a Reimagined war, showing Scan and Transport crew plus the six standing orders." loading="lazy">
-              <figcaption>A friendly hull's menu in a Reimagined war: standing orders are free, persist until changed, and outrank the captain's own instincts.</figcaption>
-            </figure>
-          </section>
-          <section id="guide-precision">
-            <h3>Precision fire</h3>
-            <p>With the flag on, every phaser prompt carries two dials. A <b>called system</b> spends 40% of the rolled volley on one subsystem with no crew casualties — strip shields with standard fire first, then burn out engines or guns and leave the hull intact. The <b>power dial</b> throttles the volley: a measured finish never carries the overkill that shatters a hull, so it leaves a boardable prize instead of wreckage.</p>
-            <p>A hull with crew left but no engines, phasers, or photons strikes its colors at stardate end — crew away in escape pods, hull adrift for your transporter. The enemy still fires standard volleys either way.</p>
-            <div class="guide-cols">
-              <figure class="guide-figure">
-                <img src="assets/guide/precision.png" alt="The phaser target dialog with a called-system select and a phaser power slider set to full." loading="lazy">
-                <figcaption>The precision phaser prompt: called system, power dial, and the damage band you are about to roll.</figcaption>
-              </figure>
-              <figure class="guide-figure">
-                <img src="assets/guide/combat.png" alt="The tactical map mid-volley with a phaser beam drawn from the player ship to an enemy hull." loading="lazy">
-                <figcaption>A volley in flight. Called shots draw as a thinner, coherent beam — here and in the round replay.</figcaption>
-              </figure>
-            </div>
+            <p>The mission panel shows objective progress. Standard war endings can resolve before the scenario objective, so protect the fleet as well as the objective.</p>
           </section>
           <section id="guide-reimagined">
-            <h3>Argonaut Reimagined</h3>
-            <p><b>Argonaut Reimagined</b> is the expansion ruleset, chosen in the <b>New game</b> panel and still under active development. It includes <a href="#guide-extended">fleet command</a> — fleet orders, alliance doctrines, the Xanadu dockyard, named captains, and scenarios — alongside the systems below. Classic preserves the calibrated 1992 game. More systems land over time.</p>
-            <p><b>A wider battlefield.</b> A Reimagined war opens on a 320-unit field instead of 100, so there is room to screen, flank, and disengage. Weapon ranges stay at their classic units while engine reach scales with the field, so a hull crosses the wider map in about the same number of stardates but its guns cover a smaller fraction of it. Hulls that would end a move stacked on the same point as another hull — drone wings above all — fan out to the nearest free point, while tractor slams, hyperspace landings, and rams you order yourself still collide; and hulls sharing a point draw fanned apart so every glyph stays seeable and clickable.</p>
+            <h3>Reimagined tactics</h3>
+            <h4>Allocate reactor power</h4>
+            <p>Expand <b>Reactor power</b> in the console. The spent / budget readout limits your allocation across <b>shields, weapons, engines, sensors, and tractor</b>; use each sink's minus and plus pips. Setting power is free and saved. Lower another allocation if the reactor cannot spare the power. Reactor damage reduces the budget; docking and Reactor upgrade can restore or increase it.</p>
+            <p>Weapons power scales damage, engines scale movement, sensors scale scanner/mapper/radio/transporter reach, and tractor scales pull. Surplus shield allocation regenerates shields at stardate boundaries. The live effectiveness readout shows the trade you are making; allocating beyond a sink's useful ceiling gives no further benefit.</p>
+            <h4>Use stance, heading, and shield arcs</h4>
+            <p>Expand <b>Combat stance</b>: Standard is neutral; Firing improves your accuracy while making you easier to hit; Evasive protects you at the expense of your accuracy. Stance is free and persistent, and friendly hull menus can set it too.</p>
+            <p>Expand <b>Helm and shield focus</b> to turn without moving or prioritize shield recovery. Crewed ships have fore, starboard, aft, and port arcs; the bow is strongest and stern weakest. Aimed primary weapon hits burn the struck arc first, with some overflow bleeding to other arcs and the rest reaching crew and systems. Low shields on an exposed arc can admit damage despite shields elsewhere. Blasts, ion, collisions, rocks, and secondary spread splash distribute damage across arcs. Weapons can fire in every direction; heading affects protection.</p>
+            <p>Moving sets your heading. Free Helm turns can change the exposed arc without spending your action. Shield focus routes regeneration, engine flushes, and docking recovery into the chosen arc first; Auto restores the weakest first. Drones have no shield arcs.</p>
+            <h4>Route through terrain and hold relays</h4>
             <ul>
-              <li>The map is a <b>viewport</b> into that field: <b>wheel</b> zooms toward the cursor, <b>arrow keys</b> pan, and the <b>minimap</b> (bottom-right) shows the whole war zone with your viewport rectangle — drag it to re-center.</li>
-              <li>The camera <b>follows your flagship</b> until you pan or zoom; the <b>⌖</b> button snaps back onto it, and <b>+</b> / <b>−</b> zoom in and out.</li>
+              <li><b>Nebula:</b> a hull inside can be hidden from outside mapper, scanner, and radio beyond short sensor reveal reach. Sharing the nebula restores sight. Terrain geography remains visible beyond mapper range.</li>
+              <li><b>Asteroids:</b> fire crossing a field is less accurate. Ending movement or a tow inside can cause a shield-damaging rock strike; passing through does not trigger that arrival hazard.</li>
+              <li><b>Ion storm:</b> the core jams weapons and radio; the outer ring worsens firing accuracy and reduces radio reach. Engines and tractor still allow an escape.</li>
+              <li><b>Relay:</b> an eligible hull inside at stardate end holds the node for its alliance, increasing its reactor budgets. Tractor-held hulls cannot claim it. Competing alliances contest the node; leaving relinquishes it. The colored ownership ring is public information.</li>
             </ul>
-            <p><b>Reactor power.</b> Every Reimagined hull runs a damageable <b>reactor</b> whose live units set a power budget you distribute across five sinks — <b>shields, weapons, engines, sensors,</b> and <b>tractor</b> — from the <b>power bar</b> in the command console. Each row shows its allocation, a live effectiveness multiplier, and <b>−/+</b> pips; the header reads <i>spent / budget</i>.</p>
-            <ul>
-              <li>Setting power is <b>free</b> (it costs no stardate) and <b>persists</b> across the autosave. Each sink runs at its calibrated level (<b>1.00×</b>) by default.</li>
-              <li><b>Overcharge one sink and you must starve another</b> — the budget is fixed and a sink saturates at 1.5×, so it is a real trade, not a free boost. Weapons scale volley damage, engines scale movement reach, sensors scale scanner/mapper/radio/transporter range, tractor scales beam pull, and surplus shield power <b>regenerates shields</b> each stardate.</li>
-              <li>The reactor is damageable: a precision <b>called shot</b> can knock it out, shrinking that hull's budget and everything it powers. The <b>dockyard</b> repairs reactor damage, and a one-time <b>Reactor upgrade</b> refit adds a unit, raising the budget.</li>
-              <li>Enemy captains run <b>doctrine power profiles</b> — Axis biases guns and speed, Bloc guns and sensors (and never tractors), Cabal speed and tractor, Federation a balanced shields lean. Your own command ship stays neutral until you move the bar.</li>
-            </ul>
-            <p><b>Directed tractor beam.</b> Open an enemy inside tractor range and choose <b>Direct tow…</b> to aim the beam at a coordinate or another hull instead of reeling the target straight toward you. The victim is hauled along that vector for the same pull budget — <i>you choose the direction, not the distance</i> — so towing an enemy into another hull is a deliberate tractor-ram.</p>
-            <p><b>A living battlefield.</b> Each war seeds <b>terrain</b> across the wide field — violet <b>nebulae</b>, slate <b>asteroid fields</b>, and amber <b>ion storms</b> — drawn as translucent overlays on the tactical map and the minimap. Terrain is known geography: it renders crisp while your mapper can reach it and faint beyond, so you can always route by the field's shape.</p>
-            <ul>
-              <li>A hull lurking <b>inside a nebula</b> is hidden from an outside mapper, scanner, and radio — however far your sensors reach — beyond a short reveal range at the nebula's edge. Sharing the nebula sees it plainly.</li>
-              <li>The reveal range scales with your <b>sensors effectiveness</b>: overcharging the sensors sink pierces deeper into a nebula, at the cost of whatever you starve to do it — the counter to nebula camping.</li>
-              <li>Radio into a nebula degrades the same way, so a hull camped inside one also misses orders until they travel late.</li>
-              <li><b>Asteroid fields</b> give cover: any volley — yours or the enemy's — whose shot line crosses a field can splash on a rock instead of hitting. Firing from inside the field is no safer than firing across it.</li>
-              <li>A hull that <b>ends a move or a tractor tow</b> inside an asteroid field risks a <b>rock strike</b> that rakes its shields; passing straight through at speed is safe. That makes a <b>directed tow</b> into the rocks a deliberate weapon — and gives the engines sink a defensive use, since outrunning the field means never parking inside it.</li>
-              <li><b>Ion storms</b> jam constantly, in two zones. In the <b>core</b> a hull's weapons and radio are offline for the stardate: it cannot fire — the command simply refuses — and it neither sends nor hears radio, so orders to it arrive late. Engines, sensors, and tractor work throughout, so a caught hull can flee or be towed out.</li>
-              <li>In a storm's <b>outer ring</b> the jam is only partial: volleys fired from inside miss more often, and radio reach halves. Predictable to plan around — you can fight at a penalty, or skim a message through.</li>
-              <li>Two <b>relay nodes</b> sit mirrored off Xanadu as capturable objectives, drawn as small hard-ringed markers. A hull that <b>ends a stardate</b> inside one — and is not tractor-held — <b>holds</b> it for its alliance: every hull of that alliance gains <b>+5 reactor budget</b> while the node is held, enough to overcharge a sink without starving another.</li>
-              <li>Contesting a node (two alliances inside at stardate end) darkens it, and driving the holder off frees it. A held node wears its alliance's <b>colored ring</b> on the map and its colors on the minimap — ownership is public knowledge, so the nodes are where the war gets decided.</li>
-            </ul>
-            <p><b>A prize fleet.</b> A hull whose crew dies but whose frame survives is a <b>prize</b> waiting to be taken, and in a Reimagined war every capture is recorded: the <b>Fleet orders</b> report and the ship's menu tell you where the hull came from, when it was taken, and how many hands are aboard, and a prize on the map wears a <b>gold pip</b>.</p>
-            <ul>
-              <li>Any Federation hull can be ordered to <b>Board…</b> a derelict: it sails to within transporter range and beams a prize crew over on its own. Your command ship's transporter (<b>8</b>) still boards directly.</li>
-              <li>A freshly taken prize is <b>under-manned</b> — below a quarter of its complement its engines and guns run at half effectiveness — and it automatically <b>withdraws</b> toward Xanadu. Dock it, or beam crew across, to bring it up to strength before ordering it into the line.</li>
-              <li>Enemy captains take prizes too: with no shot to fire, any captain near a derelict puts a prize crew aboard. Knocking a hull out precisely is now a race — disable it, or someone else will.</li>
-              <li>A prize whose own crew dies goes dark again and can be retaken by anyone, including its original alliance. Boarding an alliance's <b>last</b> hull ends that alliance's war.</li>
-            </ul>
-            <p><b>New hull classes.</b> A Reimagined war fields a bigger navy than the canonical 21: fleets can include three classes beyond the classic five. The <b>interceptor</b> is the fastest hull on the field (seven engine units), with light guns, thin shields, and a skeleton complement; a glass raider that wins by speed, screening and running down derelicts and being somewhere else when the volleys land. The <b>artillery</b> ship is its opposite: two engine units that hold the phaser edge rather than chase, and six phaser banks throwing the hardest volley of any warship — sturdy but unquick, a sitting duck for anything faster that gets inside its guns. And the <b>carrier</b> is a slow, sturdy tender built for the prize fleet: the longest boarding arm of any hull that moves (forty units), a starbase's tow for hauling prizes and wreck-rams, modest guns of its own, and the biggest crew pool afloat after Xanadu to man the prizes it takes — plus the drone bay below.</p>
-            <p><b>Fighter drones.</b> A carrier carries one complement of <b>three fighter drones</b> for the whole war. Flying the carrier, <b>Launch drones</b> (<kbd>D</kbd>) spends the stardate to put the wing on the field; any carrier can instead take the <b>Launch drones</b> standing order, which looses the bay automatically when an enemy closes — and enemy carriers launch on the same trigger. The wing is drawn small on the map, always glyphed <b>D</b>, and named after its carrier (Lexington D1, D2, D3).</p>
-            <ul>
-              <li>Drones are <b>fast, light gunboats with nobody aboard</b>: an interceptor's near-speed, a phaser pair, paper shields. They <b>escort their carrier</b>, intercepting anything that closes on it, and can be given standing orders of their own like any Federation hull.</li>
-              <li>A drone is <b>never a prize</b> — there is no crew to kill and no hull to board — and no crew can be beamed onto one. When its carrier is destroyed the wing <b>fights on alone</b>, hunting the nearest enemy until shot down.</li>
-              <li>Drones count for nothing in the endgame: an alliance down to drones is <b>out of the war</b>, and its wing goes dark with its last crewed hull. The bay is never rebuilt — not even at the Xanadu dockyard, which drones never dock at. A captured carrier keeps its complement, and the drones fly for whoever flies her.</li>
-            </ul>
-            <p><b>Combat stances.</b> Every Reimagined hull holds one of three stances — a free, persistent choice like reactor power. Set your command ship's from the console <b>Combat stance</b> control, or any Federation hull's from its menu. <b>Standard</b> is neutral. <b>Firing</b> steadies the guns: your volleys are more accurate, but you are not maneuvering, so incoming fire finds you more easily. <b>Evasive</b> weaves: incoming fire misses more often, but your own shots are thrown off. The stance shows as a colored halo on the map (warm for firing, cold for evasive), in the fleet report, and on an enemy's menu, and it stacks with asteroid cover and ion-storm static on the one shared accuracy roll. Enemy captains hold a stance by doctrine — the Axis swarm and the Bloc artillery line fire, Cabal tricksters evade — and any hull beaten low weaves as it breaks off.</p>
-            <p><b>Disengage.</b> The <b>Disengage</b> command (<kbd>X</kbd>) is the pilot's escape lever: a full engine burn straight away from the nearest threat, computed for you rather than clicked. It is your maneuver for the stardate — it spends the turn like any move and can still collide or take a rock strike on arrival — so pair it with the evasive stance (set evasive for free, then disengage) to break off under fire.</p>
-            <p><b>Ion / EMP.</b> Some hulls — artillery and interceptors — carry an <b>ion emitter</b> (<kbd>I</kbd>, or <b>Fire ion</b> from an enemy's menu), a long-range suppression beam that outranges the phasers. It <b>disables rather than destroys</b>: the target's shields absorb the charge first, and whatever punches through <b>burns out subsystem units without killing a single crewman</b>. Gut a hull's engines and guns and it <b>strikes its colors</b> at the stardate's end, left a vacant derelict for anyone to board — so ion is a hunter's tool that feeds the prize race instead of sending hulls to wreckage. It rides the same accuracy roll as the guns (stances and terrain apply), scales with the weapons power sink, and the dockyard rebuilds what it burns out.</p>
-            <p><b>Spread torpedoes.</b> The heaviest hulls — battle cruisers and carriers — carry <b>spread torpedo tubes</b> (<kbd>T</kbd>, or <b>Fire spread</b> from an enemy's menu), a short-range area salvo. The target you name takes the full blast, and <b>every hull near the impact</b> takes a share that falls off with distance. The splash is indiscriminate — <b>your own wingmen can be caught</b> if they are near the impact (the shooter spares only itself) — so it is a deliberate counter to tight formations and a risk in a melee, exactly the clustering a last-stand blast punishes. A salvo that misses splashes nothing. It rides the same accuracy roll as the guns, and enemy captains loose it only into a clean, clustered splash. The impact draws a ring the true size of the splash.</p>
-            <p><b>Directional shields.</b> A Reimagined ship of the line carries its shields across four weighted arcs — <b>fore, starboard, aft, port</b>; the bow is the thickest and the stern the thinnest — and a <b>heading</b>, drawn as a needle on the map. An aimed volley (phasers, photons, a spread salvo's primary hit) burns <b>the arc it strikes</b> first; part of the overflow bleeds into the other arcs, and the rest reaches crew and systems at once — so a gutted flank lets the enemy through early, fighting bow-on matters, disengaging exposes your weak aft to pursuers, and crossing behind a runner is a killing angle. Any engine burn sets the heading; the <b>Helm</b> control (console, or any Federation hull's menu) turns 45° either way <i>for free</i>, without spending the stardate, and enemy captains keep their bows on you by doctrine. Blasts, collisions, rock strikes, ion bursts, and spread splash on secondary hulls are positional — they burn every arc in proportion. <b>Shield focus</b> (also free) routes recovery — reactor regen, the dockyard, an engine flush — into one arc first; left on auto, the weakest arc refills first. The arc breakdown reads on the console, in every hull's menu, in the scan report, and in the fleet report. Drones are too small for arcs, and weapons stay all-directional.</p>
-            <p><b>Fleet loadout.</b> A Reimagined war's fleets are composed, not fixed. Tick Reimagined in the <b>New game</b> panel and the <b>fleet loadout</b> appears: spend your points budget (24 by default) on ships of the line — the flagship battle cruiser is required, and carriers, artillery, cruisers, interceptors, and scouts cost 4 / 3 / 2 / 2 / 1, up to eight hulls. You also set <b>every alliance's budget</b>: enemy captains draw seeded fleets within theirs, leaning to their doctrines — Axis gunboat swarms, Bloc artillery lines, Cabal carriers — so the same seed replays the same war, and a new seed fields new navies. Prizes taken in the war are won, not budgeted.</p>
-            <p><b>Force customization.</b> The same panel chooses <b>who fights</b> — any two to four alliances, though the Federation always flies and at least one enemy must — and whether <b>Xanadu spawns</b>. Without the starbase there is no dockyard, no radio relay, and withdraw runs to the fleet centroid; the computer report simply says the distance to Xanadu is unknown, and the relay nodes still sit mirrored around where the base would have stood. <b>Hold Xanadu</b> needs its base, so that scenario is unavailable with the starbase off — and the rules force it back on if the war somehow starts that way.</p>
-            <p><b>Random encounters.</b> The war's back half is not an empty field. Most stardates are quiet, but now and then something arrives from outside the battlefield, at least 40 units from any hull: a <b>derelict</b> — a ghost ship of some alliance, dark, degraded, and vacant, which anyone can board for a prize (enemy captains race you to them); a <b>distress call</b> — a stranded Federation hull with its engines burnt out, marked by a slow amber blinker, which you can tow home to the dockyard (or transfer crew to) to return it to the fight; or a <b>neutral merchant</b> — an unarmed civilian hull in gray that runs from any warship that closes and jumps out after a bounded visit. A merchant is no one's enemy: captains ignore them, they never count toward victory or surrender, and a relay node cannot be held by one. But a transporter party across <b>seizes it whole</b> — hull, cargo, and crew, as a prize of war. You can also simply shoot one down; nothing prices that yet.</p>
-            <p><b>The sector campaign.</b> Choose <b>Reimagined</b> and tick <b>Sector campaign</b> in the New game panel and the war becomes a campaign across a star map: a seeded corridor of systems from Xanadu to the enemy home, five columns deep, with two or three routes per hop. On the <b>sector screen</b> you click a system to read it and travel along the bright routes; at an enemy system you choose <b>Engage</b> to fight the battle yourself or <b>Auto-resolve</b> to let your captains fight it headless. Every node battle is a full Reimagined war — the garrison is drawn within the system's budget, deeper columns fight harder — and what survives carries out: wounds, subsystem burns, prizes, captains, and aces all persist, while orders, power, and stances reset for the next engagement. Winning takes the system and pays credits; a captured hull pays a one-time class <b>bounty</b> when it is carried out; and between battles, at Xanadu or any captured system, the <b>dockyard</b> spends credits on shield and crew repairs, system overhauls, re-purchasable refits, drone-bay rebuilds, and new commissions against the loadout's point budget — carried prizes never count against it. A hopeless draw or an <b>Abandon engagement</b> cedes a system and lets you move on; losing every hull ends the campaign, and taking the enemy home system wins it. The enemy alliances make their own moves as the campaign turns: they contest each other's systems, seize empty ones, and raid yours — a raid that reaches the system your fleet holds (or Xanadu itself, which recalls the fleet) becomes a defensive battle you play or auto-resolve, and losing Xanadu ends the campaign, while raids elsewhere are beaten off (or not) by the garrison headless. The side panel's <b>campaign report</b> grades the run as it goes — battles by outcome, systems held, the credit ledger, prizes, bounties, and aces. The campaign autosaves under its own slot, and the same seed replays the same sector, the same battles, and the same outcome.</p>
-            <p><b>Real-time movement.</b> Tick <b>Real-time movement</b> in the New game panel (it carries Reimagined) and the war steps off the teleport: hulls <b>fly continuously through space</b> between stardates at their own speed — engine reach re-read as velocity, with reactor power on the engine sink still scaling it, so an overcharged drive arrives earlier in the stardate and a gutted one crawls. The stardate stays the resolution tick: captains still decide once per stardate, and the dockyard, relay nodes, regen, encounters, and every other boundary rule fire exactly as before — the field just moves like space between them. <b>Time is yours:</b> <b>Space</b> (or the Pause button over the map) halts the war but never your commands — plot burns, work the power board, call shots while everything holds — and <b>,</b> / <b>.</b> (or the 1× / 2× / 4× buttons) step the pacing. The war never waits for you: a burn order plots a destination the drive then flies, across as many stardates as it needs, and guns that spent a stardate now cycle one stardate of sim time between volleys. The backtick autopilot becomes a conn toggle — it flies your ship at each boundary until a manual burn or volley takes it back. <b>Combat is continuous too:</b> photon and spread torpedoes <b>fly ballistically</b> — hot dots crossing the field at about three times hull speed — and detonate where they arrive, so a target that burns perpendicular lives and a warhead that finds nothing splashes vacuum; phasers and ion stay instant beams. Captains <b>avoid collisions as they pilot</b>, bending their burns around anticipated overlaps and holding short of occupied points — but a ram <i>you</i> order is a ram you get, and tractor tows now haul smoothly over the stardate instead of snapping. A war plays out identically whether you watch it fly, pause through it, or run it headless: the same seed and the same commands trace the same trajectories, always.</p>
-            <p class="dialog-note">Reimagined is balanced by whole-war simulation as it matures, not calibrated against the 1992 original, so enemy strength and war length can differ from a classic war. The build roadmap lives in the repository under <code>docs/superpowers/specs</code>.</p>
+            <h4>Tow, board, and reinforce</h4>
+            <p>Choose <b>Direct tow…</b> from an eligible enemy's menu to aim your tractor pull at coordinates or another hull. You choose direction, not extra pulling distance. It costs the normal tractor action or real-time cycle. Immovable hulls, broken tractor hardware, and range can prevent the order. A friendly distress hull can also be towed home.</p>
+            <p>Use <b>Transport</b> (<kbd>8</kbd>), <b>Board ship</b> on a vacant hull, or <b>Transport crew</b> on a friendly one. The transporter must work and reach the target; send a positive whole crew amount while leaving crew on your source ship. A live enemy cannot be boarded directly, except a neutral merchant that can be seized. Wrecks and drones cannot be occupied.</p>
+            <p>For autonomous boarding, give a friendly hull <b>Board…</b> with a valid vacant target. It approaches and sends its own party when eligible. In Reimagined a captured prize receives a captain and Withdraw order; the fleet report and gold pip identify it. A skeleton crew weakens engines and weapons until you reinforce or dock it. If its crew is lost, the frame can become vacant and be captured again. Enemy captains also race for prizes.</p>
+            <h4>Use new hulls and weapons</h4>
+            <p>Interceptors favor speed; artillery favors powerful long-range fire; carriers provide crew, towing, and a drone bay. Hardware determines which weapons appear. <b>Ion</b> (<kbd>I</kbd>) consumes shields and burns subsystem units without killing crew; a disabled hull may become a prize. <b>Spread</b> (<kbd>T</kbd>) hits its primary target and splashes nearby hulls with damage decreasing by distance. The shooter is spared, but its allies are not. A missed salvo produces no splash. In real time, spread damage waits for the ballistic impact.</p>
+            <p>Flying a carrier, <b>Launch drones</b> (<kbd>D</kbd>) spends an action or cycle to release its wing. A carrier's Launch drones standing order waits until an enemy closes. The wing escorts its carrier and engages threats; you can give drones standing orders. Drones are uncrewed, unboardable, and excluded from victory counts. They can fight after losing the carrier, but go dark when their alliance has no crewed hull left.</p>
+            <p>A carrier launches one complement during a battle; the battle dockyard cannot refill it. A captured carrier brings its existing wing. Campaign dockyards can sell a bay rebuild <em>between battles</em>.</p>
+            <h4>Respond to encounters</h4>
+            <p>Derelicts offer vacant frames to board. A friendly distress hull can be towed toward home or helped by transferring crew; remember that a tractor-held hull cannot receive docking recovery. Leave it too long and its crew abandons it. Neutral merchants avoid warships and depart after a limited visit. They do not count toward victory or relay control; a transporter party can seize one as a prize.</p>
+          </section>
+          <section id="guide-realtime">
+            <h3>Real-time play — Reimagined</h3>
+            <h4>Pause, plan, and resume</h4>
+            <p>Use <b>Pause / Resume</b> above the map, or <kbd>Space</kbd> while focus is away from controls. Commands remain available while paused, subject to readiness. Use the speed buttons or <kbd>,</kbd> / <kbd>.</kbd> to change pacing; speed changes how quickly simulation time passes, not weapon damage.</p>
+            <p>Opening the user guide suspends a live real-time battle with <b>Paused for help</b>. Close or <kbd>Escape</kbd> returns you to the controls with the battle still paused. Press <b>Resume</b> when ready. Gameplay shortcuts remain inactive while the guide owns focus.</p>
+            <h4>Plotting is different from arriving</h4>
+            <p>An engine order sets a destination; the drive flies there continuously at its current engine effectiveness. You can replace the course freely, even while paused. <b>Hold position</b> (<kbd>P</kbd>) clears it. <b>Disengage</b> plots a burn away from the nearest threat. The cyan ring shows one stardate's engine reach; it does not limit a distant destination.</p>
+            <h4>Read the shared command cycle</h4>
+            <p>Weapons, shields, tractor, hyperspace, transport, drone launch, and self-destruct share one simulation-time cycle. Once accepted, the next of these must wait until readiness recovers. Reports, settings, and course changes remain free. While paused, simulation time and cooldown recovery stop; Resume lets them progress. Canceling or receiving a refusal does not consume readiness.</p>
+            <h4>Wait for ballistic impacts</h4>
+            <p>Photons and spread torpedoes travel through space before detonating. A launched shot is not a confirmed hit: a moving target can evade, and a warhead can arrive in empty space. Check later impact events in the battle narrative. Phasers and ion resolve as instant beams. Tractor tows move smoothly; a tow or ordered ram can collide during travel.</p>
+            <h4>Take back the conn</h4>
+            <p><b>Autopilot</b> (<kbd>`</kbd>) toggles automatic conn: the captain chooses your ship's orders at stardate boundaries. A manual burn or volley takes control back. Other captains, docking, regeneration, relay ownership, and encounters still resolve at boundaries while hulls move between them.</p>
+          </section>
+          <section id="guide-campaign">
+            <h3>Sector campaign — Reimagined</h3>
+            <h4>Travel and enter a battle</h4>
+            <p>Choose <b>Sector campaign</b> in New game. On the sector screen, click a system to inspect it and follow connected bright routes using <b>Travel</b>. At an enemy system choose <b>Engage</b> to command the turn-based battle yourself or <b>Auto-resolve</b> to let your captains fight it. Auto-resolve applies real losses and gains to your campaign fleet. Travel can be blocked by an engagement or defensive raid awaiting resolution.</p>
+            <h4>Understand what carries forward</h4>
+            <p>After a finished engagement, return with the displayed sector control. Surviving fleet hulls carry shields, crew, damaged systems, prizes, captains, kills, and spent drone bays forward. Orders, power allocations, stance, facing, and positions reset for the next engagement. Read the veteran fleet condition and campaign report before fighting again.</p>
+            <p>Capturing an enemy system earns credits; carrying out a new prize earns its one-time class bounty. Capturing the enemy home objective wins the campaign. Losing the entire carried fleet or losing Xanadu in a defense ends it.</p>
+            <h4>Buy dockyard services</h4>
+            <p>At Xanadu or another Federation-held system, inspect <b>Dockyard</b> offers between engagements. Each lists its credit cost: shield repair, crew replenishment, system overhaul, refits, spent drone-bay rebuilds, and new commissions. Select an affordable eligible offer and check the changed credit balance and hull condition. Refits can be purchased again within hardware limits; commissions are limited by the purchase point budget, while prizes do not spend it. Paid services do not consume a battle stardate.</p>
+            <h4>Draws, abandonment, and raids</h4>
+            <p>A draw or retreat at an enemy system leaves that system in enemy hands and carries out surviving hulls in their end condition. <b>Abandon engagement</b> confirms leaving the battle; abandoning a defense cedes the friendly node to its attacker. A drawn or stalled defense holds the friendly node if the fleet survives; losing or abandoning Xanadu's defense ends the campaign.</p>
+            <p>Enemy alliances also contest systems, occupy empty ones, and raid yours as campaign turns advance. A raid at your fleet's system becomes a defensive engagement; a strike on Xanadu recalls the fleet home. Resolve that defense before traveling. Garrisons resolve raids elsewhere. The <b>campaign report</b> tracks outcomes, holdings, credits, prizes, and aces.</p>
           </section>
           <section id="guide-comfort">
-            <h3>Comforts and access</h3>
+            <h3>Accessibility and appearance</h3>
             <ul>
-              <li><b>Classic view</b> in the top bar switches to the black phosphor CRT theme with scanlines; your choice persists between visits.</li>
-              <li><b>Ship art</b> in the top bar swaps the modern view's letter glyphs for commissioned pixel-art sprites — four alliance fleet sheets plus a second batch (Xanadu, merchants, drones, wrecks) generated for this remake and sliced to game scale by its own pipeline. Your choice persists between visits; the classic view always keeps its letters, and a wreck reads as a hulk under sprites or a <b>+</b> under letters.</li>
-              <li><b>Save / resume</b> — the war lives in your browser's local storage and resumes on reload. <b>New game</b> starts fresh.</li>
-              <li>Motion and impact effects honor <b>prefers-reduced-motion</b>; ships glide between stardates and leave fading trails otherwise.</li>
-              <li>A single concise status line serves screen readers instead of announcing the whole board on every keystroke.</li>
+              <li><b>Classic view</b> switches to a black phosphor theme with glyphs. <b>Ship art</b> selects hull sprites in modern view. Both preferences persist; the ruleset stays selected separately in New game.</li>
+              <li>Keyboard controls are listed above. Use Tab to reach controls and links; focused buttons activate normally. Escape closes help or a menu before returning to gameplay.</li>
+              <li>Motion and impact effects honor <b>prefers-reduced-motion</b>. A concise status line supports screen readers.</li>
+              <li>These written procedures contain the essential instructions; images are optional examples. Use <a href="#guide-first-orders">First orders</a> as a short introduction, then follow the contents to the task you need.</li>
             </ul>
             <figure class="guide-figure">
-              <img src="assets/guide/classic.png" alt="The same battle rendered in the classic green phosphor CRT theme with scanlines." loading="lazy">
-              <figcaption>The classic CRT view — the same war in 1992 phosphor.</figcaption>
+              <img src="assets/guide/classic.png" width="2880" height="2840" alt="A battle in the black and green phosphor theme uses letter glyphs for ships and the same map, narrative, and controls." loading="lazy">
+              <figcaption>Classic view is an appearance preference. It can display either ruleset in phosphor and glyphs.</figcaption>
             </figure>
+          </section>
+          <section id="guide-save">
+            <h3>Save and resume</h3>
+            <p>The game autosaves in this browser's local storage. Reload to resume the saved war or campaign; accepted-command history is saved alongside it. Starting a new war or campaign retires the other session. A different browser, browser profile, or cleared site storage will not contain that save. Keep the current session if you want to preserve its progress.</p>
+          </section>
+          <section id="guide-troubleshooting">
+            <h3>Find why an order is unavailable</h3>
+            <ul>
+              <li><b>No target command:</b> check the command ship's hardware, target status, distance, and Reimagined storm jamming. A red enemy outline describes its threat to you, not your firing eligibility.</li>
+              <li><b>No movement:</b> check engines and tractor hold. Turn-based exact displacements must fit current reach and remain on the map; real-time courses wait for Resume to fly.</li>
+              <li><b>No boarding:</b> the target may still have hostile crew, be a wreck or drone, lie outside transporter reach, or require more crew than your source can spare.</li>
+              <li><b>Commands locked:</b> close or submit an open dialog, or wait for a terminal-event display or replay to finish automatically. In real time also check the shared command cycle. A completed battle cannot accept new orders.</li>
+              <li><b>No docking or purchase:</b> battle recovery needs a friendly base with enough shields, a ship within range that is not tractor-held, and a stardate boundary; paid campaign services need a friendly system, an eligible offer, and enough credits.</li>
+              <li><b>A command seems lost:</b> read Your recent commands for acceptance or the refusal message for rejection. A plotted course and a launched torpedo can have consequences later than their accepted order.</li>
+            </ul>
+            <p>If an instruction still fails, <a href="https://github.com/MattyGPT/Argonaut-web/issues" target="_blank" rel="noopener">report an issue</a> with the seed, ruleset, options, command, and observed result. Those details make an opening reproducible; real-time reports also need the simulation timing of the order.</p>
           </section>
           <section id="guide-about">
             <h3>Provenance, maintenance, and contact</h3>
