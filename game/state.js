@@ -52,7 +52,7 @@ const SHIP_ROSTER = Object.freeze([
  * and the AI draws all produce legal specs, but `createGame` never trusts its
  * input: counts floor to whole numbers, the budget binds in class order (the
  * later a class sits in `LOADOUT.classOrder`, the sooner it is trimmed), and
- * the hull cap is absolute. A classic or extended war reads none of this and
+ * the hull cap is absolute. A classic war reads none of this and
  * keeps the fixed 21-hull roster byte-identical; a composed Reimagined fleet's
  * placement draws ride the main stream, which parity never bound.
  */
@@ -184,7 +184,7 @@ const resolveLoadout = (seed, loadout, factions) => {
 
 const createShip = ({ id, name, faction, kind, x, y, reimagined }) => {
   const template = SHIP_TEMPLATES[kind];
-  // A Reimagined hull carries a reactor subsystem; a classic or extended one does
+  // A Reimagined hull carries a reactor subsystem; a classic one does
   // not, so their damage lottery — and every calibrated figure — is untouched. The
   // ion/EMP emitter (round 22a) and the spread torpedo tubes (round 22c) are
   // Reimagined-only too, and only the classes in `ION.carry` / `SPREAD.carry` field
@@ -202,7 +202,7 @@ const createShip = ({ id, name, faction, kind, x, y, reimagined }) => {
     : { ...template.systems };
   // Directional shields (round 23): a Reimagined ship of the line carries the
   // weighted arc breakdown of its pool — drones are too small for arcs and keep
-  // the single pool. A classic or extended hull never gains the fields, so its
+  // the single pool. A classic hull never gains the fields, so its
   // serialized shape and every reader of `shields` stay byte-identical.
   const arcs = reimagined && kind !== 'drone' ? arcSplit(template.shields) : null;
 
@@ -366,7 +366,7 @@ export const spawnEncounter = (game, type, x, y, rng) => {
 const randomPosition = (rng, faction, regional, occupied, gridSize) => {
   // Regional formations are pinned in 100-unit space; scale them onto the actual
   // field so a Reimagined war spreads them across the wider map. At gridSize 100
-  // the scale is 1, so a classic or extended war places every hull exactly as before.
+  // the scale is 1, so a classic war places every hull exactly as before.
   const scale = gridSize / GRID_SIZE;
   const bounds = regional
     ? {
@@ -536,15 +536,12 @@ const generateTerrain = (seed, gridSize, xanadu) => {
   return [...features, ...placeRelays(rng, gridSize, xanadu, features)];
 };
 
-export const createGame = ({ seed = 'xanadu', regional = false, sound = false, extended = false, scenario = 'annihilation', precision = false, reimagined = false, realtime = false, loadout = null } = {}) => {
+export const createGame = ({ seed = 'xanadu', regional = false, sound = false, scenario = 'annihilation', precision = false, reimagined = false, realtime = false, loadout = null } = {}) => {
   const normalizedSeed = String(seed);
-  // Argonaut Reimagined builds on the extended layer — orders, doctrine, the
-  // dockyard, and the scenarios are the substrate the Reimagined systems need — so
-  // the flag implies it, and opens the war on a wider tactical field. Real-time
-  // movement (Phase 8, round 30) rides on top of Reimagined and implies it too.
+  // Reimagined owns fleet command, doctrine, dockyards, and expansion scenarios.
+  // Real-time movement uses the same ruleset and implies Reimagined.
   const isRealtime = Boolean(realtime);
   const isReimagined = Boolean(reimagined) || isRealtime;
-  const isExtended = Boolean(extended) || isReimagined;
   const gridSize = isReimagined ? REIMAGINED_GRID_SIZE : GRID_SIZE;
   const rng = createRng(normalizedSeed);
   const xanaduPosition = {
@@ -552,12 +549,12 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     y: Math.round(XANADU_POSITION.y * (gridSize / GRID_SIZE)),
   };
   const occupied = new Set([`${xanaduPosition.x},${xanaduPosition.y}`]);
-  // A scenario is an extended-war option; a classic war always fights to annihilation.
-  const scenarioId = isExtended && SCENARIO_IDS.includes(scenario) ? scenario : 'annihilation';
+  // A scenario is a Reimagined option; a classic war always fights to annihilation.
+  const scenarioId = isReimagined && SCENARIO_IDS.includes(scenario) ? scenario : 'annihilation';
   // Force customization (round 19b): a Reimagined war picks which alliances fight
   // — the Federation always, plus at least one enemy — and whether Xanadu spawns.
   // Hold Xanadu needs its base, so that scenario forces the starbase on. A classic
-  // or extended war reads neither option and keeps its fixed four-alliance,
+  // war reads neither option and keeps its fixed four-alliance,
   // 21-hull, starbase-defended shape byte-identical.
   const factions = isReimagined ? resolveFactions(loadout?.factions) : Object.values(FACTIONS);
   const spawnXanadu = !isReimagined || loadout?.xanadu !== false || scenarioId === 'defend-xanadu';
@@ -572,8 +569,8 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     : null;
   // The fleet loadout (round 19): a Reimagined war's alliances are composed from
   // their budgets — the Federation from the panel's spec (or the round-18
-  // default), the AI alliances drawn on their own seeded sub-stream. A classic or
-  // extended war resolves none of it and fields the fixed roster.
+  // default), the AI alliances drawn on their own seeded sub-stream. A classic
+  // war resolves none of it and fields the fixed roster.
   const drawnLoadout = isReimagined ? resolveLoadout(normalizedSeed, loadout, factions) : null;
   const resolvedLoadout = drawnLoadout
     ? {
@@ -606,7 +603,7 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
   const roster = xanadu ? [...fleets, xanadu] : fleets;
   // Directional shields (round 23): every Reimagined hull opens facing its nearest
   // foe at placement — deterministic off the seeded positions, no RNG draw. A
-  // classic or extended roster is left exactly as created.
+  // classic roster is left exactly as created.
   const oriented = isReimagined
     ? roster.map((ship) => {
       const foe = roster
@@ -629,10 +626,7 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     seed: normalizedSeed,
     regional: Boolean(regional),
     sound: Boolean(sound),
-    extended: isExtended,
-    // Argonaut Reimagined: the opt-in expansion mode. Implies `extended`, widens the
-    // battlefield to `gridSize`, and gates every Reimagined system. Off by default,
-    // so a classic or extended war reads none of it and plays exactly as calibrated.
+    // Reimagined owns expansion systems and the wider tactical field.
     reimagined: isReimagined,
     // Real-time movement (Phase 8, round 30): hulls integrate through space on a
     // fixed sub-timestep between stardate boundaries instead of appearing at their
@@ -645,7 +639,7 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     // and in round-30 saves, so readers default: `simTime` to `turn − 1`,
     // cooldowns to ready-now.
     ...(isRealtime ? { simTime: 0, readyAt: {} } : {}),
-    // The tactical field, in map units. 100 for a classic or extended war; wider for
+    // The tactical field, in map units. 100 for a classic war; wider for
     // a Reimagined one. Absent in old saves, so every reader defaults to GRID_SIZE.
     gridSize,
     // Precision fire: called phaser shots and the power dial, for the player's
@@ -684,7 +678,7 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     // and old saves tolerate the field's absence.
     arcFocus: {},
     // The living battlefield: seeded terrain features ({ id, type, x, y, radius, v? }),
-    // Reimagined only. A classic or extended war carries an empty list, and old saves
+    // Reimagined only. A classic war carries an empty list, and old saves
     // may lack the field entirely, so every reader defaults to [].
     terrain: isReimagined ? generateTerrain(normalizedSeed, gridSize, xanaduPosition) : [],
     // Which alliance holds each relay node (relayId -> faction), Reimagined only.
@@ -701,7 +695,7 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, e
     // old saves, so every reader defaults to {}.
     prizesTaken: {},
     // The composed forces this war fights with (round 19): per-faction budgets
-    // and fleet specs, Reimagined only — null in a classic or extended war, and
+    // and fleet specs, Reimagined only — null in a classic war, and
     // absent in old saves, so the New game panel pre-fill defaults safely.
     loadout: resolvedLoadout,
     outcome: null,
@@ -733,7 +727,7 @@ export const distance = (first, second) => Math.hypot(first.x - second.x, first.
 
 /**
  * The terrain feature containing a point, or null. Terrain helpers are pure data
- * reads: a classic or extended war carries `terrain: []` (and an old save may lack
+ * reads: a classic war carries `terrain: []` (and an old save may lack
  * the field), so they answer null/false there without ever checking the mode flag.
  * Overlapping features resolve to the first match in generation order.
  */
@@ -798,8 +792,8 @@ export const engineCapacity = (ship, gridSize = GRID_SIZE, enginesEff = 1) => sy
  * Self-destruct blast radius; the Xanadu starbase's is doubled. A Reimagined
  * war scales every blast by `REIMAGINED_SELF_DESTRUCT_SCALE` (balance pass):
  * the manual's radius was tuned for 21 hulls on a 100-unit field, and on the
- * wide field one last stand was deleting whole fleet clusters. A classic or
- * extended war keeps the manual figure exactly, so the calibrated blast — and
+ * wide field one last stand was deleting whole fleet clusters. A classic
+ * war keeps the manual figure exactly, so the calibrated blast — and
  * every hopeless-draw reach that reads it — stands untouched there.
  */
 export const blastRadius = (ship, game = null) => {
@@ -907,10 +901,10 @@ export const inRadioContact = (game, from, to) => {
 };
 
 /** The standing order a ship is acting on, or null when it follows fleet default. */
-export const orderFor = (game, shipId) => (game.extended ? game.orders?.[shipId] ?? null : null);
+export const orderFor = (game, shipId) => (game.reimagined ? game.orders?.[shipId] ?? null : null);
 
 /** The order still travelling to a ship out of radio contact, if any. */
-export const pendingOrderFor = (game, shipId) => (game.extended ? game.pendingOrders?.[shipId] ?? null : null);
+export const pendingOrderFor = (game, shipId) => (game.reimagined ? game.pendingOrders?.[shipId] ?? null : null);
 
 /** Whether a captain has enough credited kills to be called an ace. */
 export const isAce = (ship) => (ship?.kills ?? 0) >= ACE_KILLS;
@@ -920,7 +914,7 @@ export const isAce = (ship) => (ship?.kills ?? 0) >= ACE_KILLS;
  * Zero for everyone else, and always zero in a classic war.
  */
 export const vendettaGrudge = (game, shooter, target) => {
-  if (!game.extended || !game.vendettaShipId) return 0;
+  if (!game.reimagined || !game.vendettaShipId) return 0;
   if (shooter?.id !== game.vendettaShipId || target?.id !== game.playerShipId) return 0;
   return Math.floor((shooter.kills ?? 0) / VENDETTA.killsPerStep);
 };
@@ -929,7 +923,7 @@ export const vendettaGrudge = (game, shooter, target) => {
 export const templateSystems = (ship) => {
   const base = { ...(templateFor(ship)?.systems ?? {}) };
   // A Reimagined hull's reactor is part of its complement, so the dockyard repairs it
-  // and a refit cap would see it; a classic or extended hull has none, so its
+  // and a refit cap would see it; a classic hull has none, so its
   // complement is exactly the template's and its calibration is untouched.
   if (ship?.systems && 'reactor' in ship.systems) base.reactor = POWER.reactor[ship.className] ?? 0;
   // Ion/EMP is Reimagined-only the same way (round 22a): the dockyard rebuilds an
@@ -979,7 +973,7 @@ export const clampPowerAllocation = (allocation, ship, game = null) => clampAllo
 /**
  * The allocation a hull is running: its stored one if the player set it, otherwise an
  * AI hull in a Reimagined war runs its alliance's doctrine profile, and anything else
- * (the player's command ship, or a classic/extended war) runs the flat per-class
+ * (the player's command ship, or a classic war) runs the flat per-class
  * default — each sink at its need, so an untouched hull runs every sink at 1.0x. The
  * result is always clamped to the hull's live reactor budget, so damage shrinks it.
  */
@@ -996,7 +990,7 @@ export const powerAllocation = (game, ship) => {
 
 /**
  * A sink's effectiveness multiplier: `allocated / need`, clamped to `[0, overcharge]`.
- * Always 1 outside a Reimagined war, so a classic or extended hull performs exactly as
+ * Always 1 outside a Reimagined war, so a classic hull performs exactly as
  * calibrated; at the default allocation a Reimagined hull is also 1.0x.
  */
 export const powerEffect = (game, ship, sink) => {
@@ -1027,8 +1021,8 @@ export const manningEffect = (game, ship, sink) => {
 /**
  * Sensor reach under power management: the hardware range scaled by the sensors sink.
  * Identical to `systemRange` outside a Reimagined war (where `powerEffect` is 1), so
- * fog of war, scans, radio, and transporter reach are unchanged for a classic or
- * extended war. Every sensor consumer reads this rather than `systemRange` so the
+ * fog of war, scans, radio, and transporter reach are unchanged for a classic
+ * war. Every sensor consumer reads this rather than `systemRange` so the
  * mapper fog and the `7`/`9`/scan reports never disagree.
  */
 export const sensorRange = (game, ship, system) => systemRange(ship, system) * powerEffect(game, ship, 'sensors');
@@ -1103,9 +1097,9 @@ const doctrineStance = (game, ship) => {
  * The combat stance a hull is holding (round 21), mirroring `powerAllocation`: the
  * player's stored choice if one is set, otherwise an AI hull in a Reimagined war
  * runs its doctrine stance, and anything else — the player's own command ship
- * before the dial is moved, or any classic or extended war — holds neutral
+ * before the dial is moved, or any classic war — holds neutral
  * `standard`. The stance biases the shared `volleyMissChance` roll; `standard`
- * contributes nothing, so a classic or extended war keeps the calibrated accuracy.
+ * contributes nothing, so a classic war keeps the calibrated accuracy.
  */
 export const stanceOf = (game, ship) => {
   if (!game?.reimagined || !ship) return 'standard';
@@ -1122,8 +1116,8 @@ export const stanceOf = (game, ship) => {
  * terms — the shooter's stance biases its own accuracy and the target's stance
  * biases how hard it is to hit. Shared by the player's volleys and the autopilots'.
  * Every added term is 0 outside a Reimagined war (terrain is [], stances are all
- * `standard`), and the clamp is an identity at the calibrated base, so a classic or
- * extended volley keeps its exact miss chance — parity holds. Clamped to
+ * `standard`), and the clamp is an identity at the calibrated base, so a classic
+ * volley keeps its exact miss chance — parity holds. Clamped to
  * `[STANCE.missFloor, STANCE.missCeil]` so no pairing is a certain hit or miss.
  */
 export const volleyMissChance = (game, shooter, target) => {
@@ -1246,7 +1240,7 @@ export const grownArcs = (game, ship, newShields) => {
 /**
  * Whether a hull fights with arcs at all: Reimagined ships of the line only.
  * Drones are too small for directional shielding (they keep the single pool), and
- * a classic or extended hull never carries the breakdown, so every damage path
+ * a classic hull never carries the breakdown, so every damage path
  * there keeps its single-pool behavior byte-identically.
  */
 export const hasArcs = (game, ship) => Boolean(game?.reimagined) && Boolean(ship) && !isDrone(ship);
@@ -1293,7 +1287,7 @@ export const struckArc = (game, shooter, target) => {
  * tow — points the bow along the direction of travel and returns the moved hull.
  * A zero-displacement move never overwrites the facing (a hull that goes nowhere
  * keeps its last heading), drones are exempt, and outside a Reimagined war the
- * hull is moved exactly as before, so a classic or extended move stays
+ * hull is moved exactly as before, so a classic move stays
  * byte-identical.
  */
 export const applyHeading = (game, ship, x, y) => {

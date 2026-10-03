@@ -14,18 +14,14 @@ behavioral reference. The original attribution and rights note are below.
 | Experience | What to expect |
 | --- | --- |
 | **Classic** | The original fleets and calibrated turn-based rules. Leave gameplay expansion options off. |
-| **Extended war** | Standing fleet orders, alliance doctrines, captains, dockyard repairs, and alternative scenarios. |
-| **Argonaut Reimagined** | Extended war plus a larger battlefield, composed fleets, power management, terrain, boarding prizes, new hulls and weapons, and directional shields. |
+| **Argonaut Reimagined** | Fleet orders, alliance doctrines, captains, dockyard repairs, alternative scenarios, a larger battlefield, composed fleets, power management, terrain, boarding prizes, new hulls and weapons, and directional shields. |
 | **Real-time movement** | A Reimagined option: continuous movement and ballistic torpedoes, with pause, speed controls, and commands that cycle in simulation time. |
 | **Sector campaign** | A Reimagined option: connected battles, a persistent fleet, credits, repairs, and enemy strategic moves. |
 
-**Planned mode simplification:** Extended is being retired as a separate
-new-game choice. Its fleet orders, doctrines, dockyard, captains, and
-scenarios already exist in Reimagined and will live there exclusively for
-new games. The current build still offers Extended; the
-[consolidation spec](docs/superpowers/specs/2026-10-03-mode-consolidation.md)
-describes the two-ruleset chooser and removal of the standalone mode. No
-legacy Extended mode or save migration is planned.
+Choose **Classic** or **Reimagined** in New game. Real-time movement and
+sector campaign are options within Reimagined. The former Extended mode
+has been retired; its fleet orders, doctrines, dockyard, captains, and
+scenarios are part of Reimagined.
 
 **Precision fire** is an additional option for adjustable phaser power and
 called subsystem shots. **Classic view** and **Ship art** are presentation
@@ -35,7 +31,7 @@ Classic rules, and a Reimagined war can use phosphor letters.
 For the controls and illustrated reference, open **User guide** in the
 game's top bar. The sections below cover [controls](#controls),
 [Reimagined](#argonaut-reimagined), [real-time play](#real-time-movement),
-[campaigns](#sector-campaign), and [Extended war](#extended-war).
+[campaigns](#sector-campaign), and [fleet command](#reimagined-fleet-command).
 
 ## Run it
 
@@ -98,7 +94,7 @@ command your command ship can actually perform on that hull: fire phasers, fire
 photons, and lock a tractor beam inside their ranges; scan inside sensor reach;
 beam crew to a friendly hull — or board a vacant one — inside transporter reach.
 A command whose hardware is burnt out or whose range does not reach is simply not
-offered, so every button in the menu lands. In an extended war a Federation hull's
+offered, so every button in the menu lands. In Reimagined a Federation hull's
 menu also carries its standing orders and its one dockyard refit. `Escape` or a
 click elsewhere on the map puts the menu away, and clicking the same hull again
 toggles it. Time-consuming commands spend a stardate in turn-based play;
@@ -112,11 +108,11 @@ of a fight you are losing rather than a way to get somewhere in particular.
 
 The original also had "hidden" information commands, kept here: `R` roll call,
 `S` shot distribution, `L` alliance statistics, and `Backspace` a full map of
-the war zone. In an extended war, `F` lists your fleet and its standing orders.
+the war zone. In Reimagined, `F` lists your fleet and its standing orders.
 
 ## The fleets
 
-In Classic and Extended, each alliance fields a battle cruiser (flagship),
+In Classic, each alliance fields a battle cruiser (flagship),
 three cruisers, and a scout;
 the Federation starbase Xanadu fights alongside you. The rosters use the
 original ship names:
@@ -152,15 +148,15 @@ radio relay, and withdraw runs to the fleet. Prizes are won, not budgeted:
 what you take exceeds your starting fleet by design.
 
 The **New game** panel exposes the replay seed, the regional fleet setup, the
-optional tactical sound, the precision fire mode, the extended war mode, the
-**Argonaut Reimagined** mode, **Real-time movement**, **Sector campaign**, the
-scenario in an extended war, and the **fleet loadout** in a Reimagined one.
+optional tactical sound, precision fire, and the **Classic / Reimagined**
+ruleset choice. Reimagined also exposes **Real-time movement**, **Sector
+campaign**, the scenario, and the **fleet loadout**.
 Use the same seed and options to reproduce the opening state.
 
 ### Battlefield and power
 
 **Argonaut Reimagined** is an opt-in expansion mode that
-carries the extended war and opens the fight on a much wider 320-unit battlefield
+includes fleet command and opens the fight on a much wider 320-unit battlefield
 the map becomes a pannable, zoomable viewport into (mouse wheel or the on-screen
 **+ / −** buttons to zoom, arrow keys or the minimap to pan, `⌖` to re-center
 on your flagship). The keyboard `-` remains hyperspace. Weapon ranges stay
@@ -254,8 +250,8 @@ deletes a fleet cluster. Volleys are measured too: every Reimagined salvo
 lands at a scaled fraction of its calibrated band — a balance dial, not
 calibration — so wars run long enough for terrain, relay nodes, and prize work
 to decide them rather than the first exchange. It
-never changes how a classic or extended war plays — those keep the calibrated
-100-unit field and the pull-toward-you beam.
+never changes how Classic plays — it keeps the calibrated 100-unit field
+and the pull-toward-you beam.
 
 **Directional shields** divide a Reimagined ship's shields among fore,
 starboard, aft, and port arcs. Aimed hits strike the facing arc first;
@@ -351,17 +347,19 @@ original executable:
   Jason ends when he resigns or dies — or when you board the vendetta ship.
 - Enemy fleets concentrate their fire on a shared target (formation), while the
   vendetta ship breaks formation to hunt your command ship. That is the classic
-  war; an extended war gives each alliance its own doctrine instead.
+  war; Reimagined gives each alliance its own doctrine instead.
 - An autopilot reduced to its last ships and badly outmatched will surrender
   ("has surrendered to") rather than fight to annihilation.
 
-## Extended war
+<a id="extended-war"></a>
+
+## Reimagined fleet command
 
 The original gave you one hull and left the rest of the Federation to the same
-autopilot as your enemies. An **extended war** — off by default, chosen in the
-**New game** panel — keeps every original rule and adds an admiral's layer on
-top. A classic war is untouched: the flag alone changes no ship's behavior until
-you issue an order.
+autopilot as your enemies. **Reimagined** gives you standing fleet orders,
+alliance doctrines, captains, and a dockyard alongside its other expansion
+systems. These features belong to Reimagined; Classic keeps its original
+commands and calibrated behavior.
 
 - Open a Federation hull's ship menu by clicking it on the tactical map (or press
   `F` for the fleet report) to give it standing orders. Orders are free — they
@@ -396,9 +394,9 @@ you issue an order.
   the top gun of any alliance, the hull that absorbed the most punishment, the
   clumsiest captain by collisions, and your own record as Captain Jason.
 - **Each alliance fights its own way.** In the original every autopilot ran the
-  same doctrine. In an extended war: **Axis** swarms the nearest hull and refuses
+  same doctrine. In Reimagined: **Axis** swarms the nearest hull and refuses
   to give ground, refits late, and — only as a last stand when all but destroyed
-  (2% shields) with at least five enemy ships, more enemies than friends, stacked
+  (2% shields) with at least seven enemy ships, more enemies than friends, stacked
   inside its blast — detonates rather than be destroyed (the vendetta captain never
   does, and keeps hunting);
   **Bloc** works the phaser edge, backs off anything that closes to point-blank,
@@ -412,7 +410,7 @@ you issue an order.
   comes for Captain Jason through any amount of fire.
 - Doctrine applies only to hulls you have not ordered — your orders always
   outrank your own captains' instincts.
-- **Every hull has a captain, and you have to earn their names.** A new extended
+- **Every hull has a captain, and you have to earn their names.** A new Reimagined
   war tells you that a captain — by name — has sworn to hunt you down, but not
   which ship they command. Scanning a hull reveals who captains it, so finding
   your hunter means getting inside scanner range of the enemy fleet. That is what
@@ -433,9 +431,8 @@ you issue an order.
   - *Cease hostilities* — the original objective. Destroy the opposing fleets
     before they destroy Federation command.
   - *Hold Xanadu* — the base must still be standing at stardate 30. Lose it and
-    the war is lost, whatever else survives. On autopilot, screening the base with
-    your whole fleet holds it about 20 wars in 60; leaving the fleet to its own
-    doctrine holds only 11. The dockyard is what makes it possible.
+    the war is lost, whatever else survives. Use standing orders to screen
+    the base and bring damaged ships back for dockyard repairs.
   - *Hunt the hunter* — the captain hunting you is named at the outset; their hull
     is not. Scan the enemy fleet to identify them, then end them. If the war kills
     your hunter before you have identified them, you lose: you never learned who
@@ -512,7 +509,7 @@ the round replay.
 
 - **User guide** — the top-bar button opens an illustrated in-game guide: how the
   war works, the tactical map, every command and key, combat mechanics, the
-  extended war, precision fire, Reimagined, real-time movement, the campaign,
+  fleet command, precision fire, Reimagined, real-time movement, the campaign,
   the comforts, and the game's provenance,
   maintainer, and where to reach out. Its screenshots are regenerated with
   `npm install --no-save puppeteer-core` followed by

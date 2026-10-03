@@ -60,14 +60,14 @@ const commands = [
 ];
 
 /**
- * Fleet orders only exist in an extended war, so the button appears only there.
+ * Fleet orders only exist in a Reimagined war, so the button appears only there.
  * The bay command (round 20) appears only while the conn is on a Reimagined
  * carrier whose drones are still aboard; the spread tubes (round 22c) and ion
  * emitter (round 22a) only on a hull that carries them; and Disengage (round 21)
  * in any Reimagined war — a command that could not land never gets a button.
  */
 const commandList = (game, actor) => {
-  let list = game.extended ? [...commands, ['fleet', 'Fleet orders', 'F']] : commands;
+  let list = game.reimagined ? [...commands, ['fleet', 'Fleet orders', 'F']] : commands;
   if (canLaunchDrones(game, actor)) list = [...list, ['launch', 'Launch drones', 'D']];
   if (game.reimagined) {
     if ((actor?.systems?.spread ?? 0) > 0) list = [...list, ['spread', 'Spread', 'T']];
@@ -167,7 +167,7 @@ const ARC_LABELS = { fore: 'Fore', starboard: 'Stbd', aft: 'Aft', port: 'Port' }
 /**
  * The one-line arc breakdown the console, menus, and reports read (round 23):
  * "F 60 · S 50 · A 40 · P 50". Null for a hull that does not fight with arcs, so
- * a classic or extended display never grows the line.
+ * a Classic display never grows the line.
  */
 const arcReadout = (game, ship) => {
   const arcs = arcsOf(game, ship);
@@ -177,14 +177,14 @@ const arcReadout = (game, ship) => {
 
 /**
  * The context menu that grows out of a clicked hull: what your command ship can
- * actually do to it, plus — in an extended war — the standing orders and dockyard
+ * actually do to it, plus — in a Reimagined war — the standing orders and dockyard
  * refits a Federation hull can be given. Commands whose hardware is dead or whose
  * range does not reach are simply absent, so every button in the menu lands.
  */
 const shipMenu = (game, actor, ship) => {
   const disabled = game.phase !== 'player' ? ' disabled' : '';
   const own = ship.id === actor?.id;
-  const captain = game.extended && game.scanned?.[ship.id] ? ship.captain : null;
+  const captain = game.reimagined && game.scanned?.[ship.id] ? ship.captain : null;
   const lines = [
     `${ship.faction} ${ship.className.toLowerCase()} · ${ship.status}`,
     `${own ? 'your command ship' : `${distance(actor, ship).toFixed(1)} away`} · shields ${ship.shields} · crew ${ship.crew}`,
@@ -222,7 +222,7 @@ const shipMenu = (game, actor, ship) => {
     .map(({ type, label }) => `<button data-ship-command="${type}" data-ship-target="${ship.id}"${disabled}>${label}</button>`)
     .join('');
   let orders = '';
-  const canOrder = game.extended && game.phase === 'player' && isActive(ship) && ship.faction === actor?.faction;
+  const canOrder = game.reimagined && game.phase === 'player' && isActive(ship) && ship.faction === actor?.faction;
   if (canOrder) {
     const standing = orderFor(game, ship.id);
     const pending = pendingOrderFor(game, ship.id);
@@ -408,7 +408,7 @@ export const fanOutOffsets = (entries) => {
  * a rectangle for the camera's current window. Dragging it (wired in app.js) re-centers
  * the view; once the field is wider than the screen it is the only whole-war picture,
  * so it stands in for the Backspace report's sense of the battlefield. Hidden in a
- * classic or extended war, where the whole field already fits on screen.
+ * Classic war, where the whole field already fits on screen.
  */
 const renderMinimap = (game, win, isVisible) => {
   const minimap = document.querySelector('#minimap');
@@ -522,8 +522,8 @@ const legendEntry = (swatch, label, content = '') => `<span class="legend-entry"
 /**
  * The map legend (play-test balance pass): a full color key for everything the
  * tactical display draws, filtered by war mode — alliance colors, range rings,
- * threats, and wrecks always; the orders pip, ace star, and dockyard ring in an
- * extended war; the terrain hues and the prize pip in a Reimagined one. The
+ * threats, and wrecks always; orders, aces, dockyards, terrain, and prizes in
+ * Reimagined. The
  * living battlefield used to be unreadable without memorizing the guide; now
  * every color on the map appears here, and the chips mirror the real thing
  * (rings dashed, pips glowing, terrain translucent).
@@ -545,12 +545,10 @@ const renderMapLegend = (game, shipArt) => {
     legendEntry('pip-tractor', 'tractor-held'),
     legendEntry('lock-tractor', 'tractor beam'),
     legendEntry('wreck', 'wreck', spritesOn ? legendImg('assets/sprites/neutral/wreck.png') : '+'),
-    ...(game.extended ? [
+    ...(game.reimagined ? [
       legendEntry('pip-order', 'under orders'),
       legendEntry('star-ace', 'scanned ace', '★'),
       legendEntry('ring-dock', 'dockyard'),
-    ] : []),
-    ...(game.reimagined ? [
       legendEntry('terrain-nebula', 'nebula'),
       legendEntry('terrain-asteroids', 'asteroids'),
       legendEntry('terrain-ion', 'ion storm'),
@@ -591,9 +589,7 @@ export const renderGame = (game, view = {}) => {
   const win = cameraWindow(grid, view.camera);
   document.querySelector('#mode-readout').textContent = game.reimagined
     ? (scenarioFor(game).id === 'annihilation' ? 'REIMAGINED WAR' : `REIMAGINED · ${scenarioFor(game).title.toUpperCase()}`)
-    : game.extended
-      ? (scenarioFor(game).id === 'annihilation' ? 'EXTENDED WAR' : `EXTENDED · ${scenarioFor(game).title.toUpperCase()}`)
-      : '';
+    : '';
   renderMapLegend(game, view.shipArt);
 
   const actorActive = Boolean(actor) && actor.status === 'active';
@@ -629,9 +625,9 @@ export const renderGame = (game, view = {}) => {
     const engineReach = engineCapacity(actor, grid, powerEffect(game, actor, 'engines'));
     if (engineReach > 0) rings.push({ r: engineReach, kind: 'engines', x: actor.x, y: actor.y });
   }
-  // In an extended war the dockyard at Xanadu repairs anything inside its ring.
+  // In a Reimagined war the dockyard at Xanadu repairs anything inside its ring.
   const xanadu = getShip(game, 'xanadu');
-  if (game.extended && xanadu?.status === 'active' && xanadu.faction === actor?.faction) {
+  if (game.reimagined && xanadu?.status === 'active' && xanadu.faction === actor?.faction) {
     rings.push({ r: DOCKING.range, kind: 'dock', x: xanadu.x, y: xanadu.y });
   }
   const ringHtml = rings.map(({ r, kind, x, y }) => `<div class="range-ring ${kind}" style="--x:${pct(x)};--y:${pct(y)};--d:${pct(2 * r)}%" aria-hidden="true"></div>`).join('');
@@ -679,7 +675,7 @@ export const renderGame = (game, view = {}) => {
     const duty = standing && standing.type !== 'focus' ? describeOrder(game, standing) : null;
     // A captain's name is intelligence: scanning reveals it, which is how you work
     // out which hull has sworn to hunt you.
-    const captain = game.extended && game.scanned?.[ship.id] ? ship.captain : null;
+    const captain = game.reimagined && game.scanned?.[ship.id] ? ship.captain : null;
     const ace = captain && isAce(ship) ? ' ace' : '';
     // A hull taken as a prize wears a gold pip (round 17), opposite the white
     // under-orders pip; the capture was narrated, so this is public knowledge.
@@ -960,13 +956,13 @@ export const reportFor = (game, type) => {
     // A drone has no captain to credit (round 20): the hull form reads for it,
     // so the report never names "Captain undefined".
     const gunner = topGun?.kills
-      ? `Top gun: ${game.extended && topGun.captain ? `Captain ${topGun.captain} of the ${topGun.name}` : `${topGun.name} of the ${topGun.faction}`}, ${topGun.kills} credited kills.`
+      ? `Top gun: ${game.reimagined && topGun.captain ? `Captain ${topGun.captain} of the ${topGun.name}` : `${topGun.name} of the ${topGun.faction}`}, ${topGun.kills} credited kills.`
       : 'No ship scored a kill.';
     // Prizes (round 17): taken counts every capture your side ever made (the
     // cumulative ledger — the per-ship record only remembers the last one), and
     // lost counts those hulls no longer flying your colors: retaken or destroyed.
     // A dark prize still in your allegiance is not lost — it can be re-manned.
-    // Absent without the ledger, so a classic or extended report is unchanged.
+    // Absent without the ledger, so a Classic report is unchanged.
     const prizesTaken = game.prizesTaken?.[FACTIONS.FEDERATION] ?? 0;
     const prizesHeld = game.ships.filter((ship) => ship.prize?.byFaction === FACTIONS.FEDERATION
       && ship.faction === FACTIONS.FEDERATION && ship.status !== 'destroyed').length;

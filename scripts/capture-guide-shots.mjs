@@ -130,8 +130,8 @@ await page.evaluate(() => {
 });
 await shot('combat', '.map-panel');
 
-// 9. Extended war fleet orders — click a friendly hull to show standing orders.
-await stage({ seed: 'guide-orders', extended: true }, skirmish);
+// 9. Reimagined fleet orders — click a friendly hull to show standing orders.
+await stage({ seed: 'guide-orders', reimagined: true }, skirmish);
 await new Promise((r) => setTimeout(r, 900));
 await page.evaluate(() => {
   const friendlies = [...document.querySelectorAll('.ship.Federation')];

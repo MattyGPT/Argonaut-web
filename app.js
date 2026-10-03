@@ -5,7 +5,7 @@ import { abandonEngagement, autoResolveNode, buyDockyard, createCampaign, nodeBy
 import { scenarioFor } from './game/scenarios.js';
 import { positionAt, positionsOf, simTimeOf } from './game/realtime.js';
 import { resolveAutopilotTurn, resolveComputerTurns, stepContinuum } from './game/turns.js';
-import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget, promptForTowDestination } from './ui/input.js';
+import { bindInput, normalizeNewGameOptions, promptForConfirmation, promptForCoordinates, promptForTarget, promptForTowDestination } from './ui/input.js';
 import { cameraWindow, centerOn, clampCamera, fieldTransform, makeCamera, panBy, zoomAt } from './ui/camera.js';
 import { renderSectorScreen } from './ui/sector.js';
 import {
@@ -651,7 +651,7 @@ const dispatch = async (action) => {
 
   // The bay command (round 20), disengage (round 21), and the ion emitter (22a) and
   // spread tubes (22c) are Reimagined-only, and all are bound to a key. Their keys do
-  // nothing in a classic or extended war, so a stray keystroke never draws a refusal.
+  // nothing in a Classic war, so a stray keystroke never draws a refusal.
   if ((action.type === 'launch' || action.type === 'disengage' || action.type === 'ion' || action.type === 'spread') && !game.reimagined) return;
 
   // Transport needs a crew count even when the ship menu has already named the
@@ -830,13 +830,19 @@ document.querySelector('#zoom-in').addEventListener('click', () => zoomBy(1.25))
 document.querySelector('#zoom-out').addEventListener('click', () => zoomBy(1 / 1.25));
 document.querySelector('#camera-center').addEventListener('click', () => recenter());
 
-/** Scenarios are an extended-war option, so the picker is only live in that mode. */
-const syncScenarioAvailability = () => {
-  const scenario = document.querySelector('#scenario');
-  // Reimagined builds on the extended layer, so it enables scenarios too.
-  const extended = document.querySelector('#extended').checked || document.querySelector('#reimagined').checked;
-  scenario.disabled = !extended;
-  if (!extended) scenario.value = 'annihilation';
+/** The ruleset owns every expansion option, including hidden form values. */
+const isReimaginedSelected = () => document.querySelector('#ruleset').value === 'reimagined';
+const syncRulesetAvailability = () => {
+  const reimagined = isReimaginedSelected();
+  const options = document.querySelector('#reimagined-options');
+  options.hidden = !reimagined;
+  options.disabled = !reimagined;
+  if (!reimagined) {
+    document.querySelector('#campaign').checked = false;
+    document.querySelector('#realtime').checked = false;
+    document.querySelector('#scenario').value = 'annihilation';
+  }
+  syncLoadoutAvailability();
 };
 
 /**
@@ -909,7 +915,7 @@ const nudgeClass = (kind, delta) => {
  * offer a dead choice.
  */
 const syncXanaduScenarioGate = () => {
-  const off = document.querySelector('#reimagined').checked && !loadoutDraft.xanadu;
+  const off = isReimaginedSelected() && !loadoutDraft.xanadu;
   const option = document.querySelector('#scenario option[value="defend-xanadu"]');
   if (option) option.disabled = off;
   const select = document.querySelector('#scenario');
@@ -918,7 +924,7 @@ const syncXanaduScenarioGate = () => {
 
 /** The loadout is a Reimagined option; the section shows only in that mode. */
 const syncLoadoutAvailability = () => {
-  document.querySelector('#loadout-section').hidden = !document.querySelector('#reimagined').checked;
+  document.querySelector('#loadout-section').hidden = !isReimaginedSelected();
   syncXanaduScenarioGate();
 };
 
@@ -976,12 +982,10 @@ document.querySelector('#new-game').addEventListener('click', whenPlaybackUnlock
   document.querySelector('#regional').checked = game?.regional ?? false;
   document.querySelector('#sound').checked = game?.sound ?? false;
   document.querySelector('#precision').checked = game?.precision ?? false;
-  document.querySelector('#extended').checked = game?.extended ?? false;
-  document.querySelector('#reimagined').checked = campaign !== null || (game?.reimagined ?? false);
+  document.querySelector('#ruleset').value = campaign !== null || game?.reimagined ? 'reimagined' : 'classic';
   document.querySelector('#campaign').checked = campaign !== null;
   document.querySelector('#realtime').checked = campaign === null && (game?.realtime ?? false);
   document.querySelector('#scenario').value = game?.scenario ?? 'annihilation';
-  syncScenarioAvailability();
   // The panel pre-fills from the war being left, so "same as last time" is one
   // click away; an old save without a loadout gets the defaults.
   loadoutDraft = game?.loadout
@@ -997,62 +1001,32 @@ document.querySelector('#new-game').addEventListener('click', whenPlaybackUnlock
   }
   document.querySelector('#loadout-xanadu').checked = loadoutDraft.xanadu;
   renderLoadoutPanel();
-  syncLoadoutAvailability();
+  syncRulesetAvailability();
   document.querySelector('#new-game-dialog').showModal();
 }));
 
-document.querySelector('#extended').addEventListener('change', syncScenarioAvailability);
+document.querySelector('#ruleset').addEventListener('change', syncRulesetAvailability);
 
-// Argonaut Reimagined carries the extended layer with it, so ticking it ticks
-// extended too and live-enables the scenario picker — and the fleet loadout.
-document.querySelector('#reimagined').addEventListener('change', (event) => {
-  if (event.target.checked) document.querySelector('#extended').checked = true;
-  else {
-    // The sector campaign and real-time movement both carry Reimagined, so
-    // unticking it unticks them.
-    document.querySelector('#campaign').checked = false;
-    document.querySelector('#realtime').checked = false;
-  }
-  syncScenarioAvailability();
-  syncLoadoutAvailability();
-});
-
-// The sector campaign (round 26c) is a game-start option that carries Argonaut
-// Reimagined — ticking it ticks Reimagined (and extended) and shows the loadout.
-document.querySelector('#campaign').addEventListener('change', (event) => {
-  if (event.target.checked) {
-    document.querySelector('#reimagined').checked = true;
-    document.querySelector('#extended').checked = true;
-    // Campaign battles stay turn-based in round 30; the real-time flag joins the
-    // campaign container in round 31.
-    document.querySelector('#realtime').checked = false;
-  }
-  syncScenarioAvailability();
-  syncLoadoutAvailability();
-});
-
-// Real-time movement (Phase 8, round 30) is a game-start option that carries
-// Argonaut Reimagined — ticking it ticks Reimagined (and extended) and shows
-// the loadout, exactly like the campaign does.
-document.querySelector('#realtime').addEventListener('change', (event) => {
-  if (event.target.checked) {
-    document.querySelector('#reimagined').checked = true;
-    document.querySelector('#extended').checked = true;
-    document.querySelector('#campaign').checked = false;
-  }
-  syncScenarioAvailability();
-  syncLoadoutAvailability();
-});
+// Campaign and real-time are mutually exclusive Reimagined options.
+for (const [id, other] of [['campaign', 'realtime'], ['realtime', 'campaign']]) {
+  document.querySelector(`#${id}`).addEventListener('change', (event) => {
+    if (event.target.checked) {
+      document.querySelector('#ruleset').value = 'reimagined';
+      document.querySelector(`#${other}`).checked = false;
+    }
+    syncRulesetAvailability();
+  });
+}
 
 /**
- * The opening narrative. An extended war names the captain who has sworn to hunt
+ * The opening narrative. A Reimagined war names the captain who has sworn to hunt
  * you — but not the hull they command, which is what makes scanning worth doing.
  */
 const openingLines = (war) => {
   const scenario = scenarioFor(war);
   const lines = [`New war initialized with seed ${war.seed}.`];
-  if (war.extended && scenario.id !== 'annihilation') lines.push(`${scenario.title}: ${scenario.brief}`);
-  if (war.extended) {
+  if (war.reimagined && scenario.id !== 'annihilation') lines.push(`${scenario.title}: ${scenario.brief}`);
+  if (war.reimagined) {
     const hunter = getShip(war, war.vendettaShipId);
     lines.push(`Intelligence: a captain called ${hunter?.captain ?? 'an unnamed officer'} has sworn to hunt you down. Scan the enemy fleet to learn which hull they command.`);
   }
@@ -1064,21 +1038,19 @@ document.querySelector('#new-game-form').addEventListener('submit', whenPlayback
   // handler runs, so read the clicked button instead of the stale returnValue.
   if (event.submitter?.value !== 'confirm') return;
   const seedValue = document.querySelector('#new-seed').value || 'xanadu';
-  const wantsCampaign = document.querySelector('#campaign').checked;
-  // Real-time movement (Phase 8, round 30) carries Argonaut Reimagined, whatever
-  // the box reads; a campaign stays turn-based this round, so it never reads it.
-  const wantsRealtime = !wantsCampaign && document.querySelector('#realtime').checked;
-  // A sector campaign carries Argonaut Reimagined, whatever the box reads.
-  const reimagined = wantsCampaign || wantsRealtime || document.querySelector('#reimagined').checked;
-  // The composed forces (rounds 19 + 19b): ignored unless the war is Reimagined.
-  const loadout = reimagined
-    ? {
+  const options = normalizeNewGameOptions({
+    ruleset: document.querySelector('#ruleset').value,
+    campaign: document.querySelector('#campaign').checked,
+    realtime: document.querySelector('#realtime').checked,
+    scenario: document.querySelector('#scenario').value,
+    loadout: {
       budgets: loadoutDraft.budgets,
       fleets: { Federation: loadoutDraft.fleet },
       factions: loadoutDraft.factions,
       xanadu: loadoutDraft.xanadu,
-    }
-    : null;
+    },
+  });
+  const { campaign: wantsCampaign, realtime: wantsRealtime, reimagined, scenario, loadout } = options;
   precisionSettings = { power: 100, focus: null };
   if (wantsCampaign) {
     // One active game at a time: starting a campaign retires the single-war
@@ -1098,10 +1070,9 @@ document.querySelector('#new-game-form').addEventListener('submit', whenPlayback
     regional: document.querySelector('#regional').checked,
     sound: document.querySelector('#sound').checked,
     precision: document.querySelector('#precision').checked,
-    extended: document.querySelector('#extended').checked,
     reimagined,
     realtime: wantsRealtime,
-    scenario: document.querySelector('#scenario').value,
+    scenario,
     loadout,
   });
   sectorSelection = null;

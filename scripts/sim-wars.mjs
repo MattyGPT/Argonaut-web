@@ -8,11 +8,11 @@
  * self-destruct last stands and their blast sizes, and (Reimagined) prizes.
  *
  * Usage:
- *   npm run sim                                  # all three modes, 250 seeds
+ *   npm run sim                                  # both turn-based modes, 250 seeds
  *   npm run sim -- --mode reimagined --seeds 60  # one mode, fewer seeds
- *   npm run sim -- --mode extended --precision --json
+ *   npm run sim -- --mode classic --precision --json
  *
- * Flags: --mode classic|extended|reimagined|all (default all), --seeds N
+ * Flags: --mode classic|reimagined|realtime|all (default all), --seeds N
  * (default 250, named sim-0..sim-N-1 so runs are comparable across commits),
  * --precision, --regional, --max-stardates N (default 600), --json.
  *
@@ -36,13 +36,13 @@ export const DEFAULTS = Object.freeze({ mode: 'all', seeds: 250, precision: fals
  * core: the conn hull flies on the autopilot toggle (`autoConn`), captains
  * plot burns at each boundary, torpedoes fly ballistically, collisions and
  * avoidance happen mid-tick. It is a SEPARATE baseline — 'all' stays the
- * three turn-based modes so cross-commit comparisons keep their meaning.
+ * two turn-based modes so cross-commit comparisons keep their meaning.
  */
-export const runWar = (index, { mode = 'extended', precision = false, regional = false, maxStardates = DEFAULTS.maxStardates } = {}) => {
+export const runWar = (index, { mode = 'classic', precision = false, regional = false, maxStardates = DEFAULTS.maxStardates } = {}) => {
+  if (!['classic', 'reimagined', 'realtime'].includes(mode)) throw new Error(`Unsupported mode: ${mode}. Choose classic, reimagined, or realtime.`);
   const realtime = mode === 'realtime';
   const reimagined = mode === 'reimagined' || realtime;
-  const extended = mode === 'extended' || reimagined;
-  let game = createGame({ seed: `sim-${index}`, extended, reimagined, realtime, precision, regional });
+  let game = createGame({ seed: `sim-${index}`, reimagined, realtime, precision, regional });
   if (realtime) game = { ...game, autoConn: true };
 
   // Self-destruct tracking off the terminal events: a detonation's own card has
@@ -190,16 +190,19 @@ const printReport = (report) => {
   console.log('');
 };
 
-// 'all' stays the three TURN-BASED modes so cross-commit baseline comparisons
+// 'all' stays the two TURN-BASED modes so cross-commit baseline comparisons
 // keep their meaning; the real-time baseline is measured with --mode realtime.
-const MODES = ['classic', 'extended', 'reimagined'];
+const MODES = ['classic', 'reimagined'];
 
 const parseArgs = (argv) => {
   const args = { ...DEFAULTS };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const next = argv[index + 1];
-    if (flag === '--mode' && (MODES.includes(next) || next === 'realtime' || next === 'all')) { args.mode = next; index += 1; } else if (flag === '--seeds' && Number.isFinite(Number(next))) { args.seeds = Number(next); index += 1; } else if (flag === '--max-stardates' && Number.isFinite(Number(next))) { args.maxStardates = Number(next); index += 1; } else if (flag === '--precision') args.precision = true;
+    if (flag === '--mode') {
+      if (!(MODES.includes(next) || next === 'realtime' || next === 'all')) throw new Error(`Unsupported mode: ${next}. Choose classic, reimagined, realtime, or all.`);
+      args.mode = next; index += 1;
+    } else if (flag === '--seeds' && Number.isFinite(Number(next))) { args.seeds = Number(next); index += 1; } else if (flag === '--max-stardates' && Number.isFinite(Number(next))) { args.maxStardates = Number(next); index += 1; } else if (flag === '--precision') args.precision = true;
     else if (flag === '--regional') args.regional = true;
     else if (flag === '--json') args.json = true;
   }

@@ -212,46 +212,49 @@
           <input id="precision" type="checkbox">
           Precision fire — called shots and phaser power
         </label>
-        <label class="check">
-          <input id="extended" type="checkbox">
-          Extended war — fleet orders
-        </label>
-        <label class="check">
-          <input id="reimagined" type="checkbox">
-          Argonaut Reimagined — the expansion mode (wider battlefield; carries Extended war)
-        </label>
-        <label class="check">
-          <input id="campaign" type="checkbox">
-          Sector campaign — fight across a star map, carrying your fleet between battles (carries Argonaut Reimagined)
-        </label>
-        <label class="check">
-          <input id="realtime" type="checkbox">
-          Real-time movement — hulls fly continuously through space between stardates (carries Argonaut Reimagined)
-        </label>
         <label>
-          Scenario
-          <select id="scenario" disabled>
-            <option value="annihilation">Cease hostilities — annihilation</option>
-            <option value="defend-xanadu">Hold Xanadu</option>
-            <option value="hunt-the-vendetta">Hunt the hunter</option>
+          Ruleset
+          <select id="ruleset" aria-describedby="ruleset-note">
+            <option value="classic">Classic</option>
+            <option value="reimagined">Reimagined</option>
           </select>
         </label>
-        <div class="loadout" id="loadout-section" hidden>
-          <p class="menu-sub">Fleet loadout — every alliance spends a points budget on its ships of the line. Compose your Federation fleet and set each alliance's budget; enemy captains draw seeded fleets within theirs, leaning to their doctrines. Prizes taken in the war are won, not budgeted.</p>
-          <p class="menu-sub">Alliances at war — the Federation always fights; pick at least one enemy</p>
-          <div class="loadout-factions">
-            <label class="check"><input id="faction-Federation" type="checkbox" checked disabled> Federation (you)</label>
-            <label class="check"><input id="faction-Axis" type="checkbox" checked> Axis</label>
-            <label class="check"><input id="faction-Bloc" type="checkbox" checked> Bloc</label>
-            <label class="check"><input id="faction-Cabal" type="checkbox" checked> Cabal</label>
+        <p class="dialog-note" id="ruleset-note">Classic preserves the calibrated original game. Reimagined adds fleet orders, scenarios, and a wider battlefield with new combat systems.</p>
+        <fieldset id="reimagined-options" class="ruleset-options" hidden disabled>
+          <legend>Reimagined options</legend>
+          <label class="check">
+            <input id="campaign" type="checkbox">
+            Sector campaign — fight across a star map, carrying your fleet between battles
+          </label>
+          <label class="check">
+            <input id="realtime" type="checkbox">
+            Real-time movement — hulls fly continuously through space between stardates
+          </label>
+          <label>
+            Scenario
+            <select id="scenario">
+              <option value="annihilation">Cease hostilities — annihilation</option>
+              <option value="defend-xanadu">Hold Xanadu</option>
+              <option value="hunt-the-vendetta">Hunt the hunter</option>
+            </select>
+          </label>
+          <div class="loadout" id="loadout-section" hidden>
+            <p class="menu-sub">Fleet loadout — every alliance spends a points budget on its ships of the line. Compose your Federation fleet and set each alliance's budget; enemy captains draw seeded fleets within theirs, leaning to their doctrines. Prizes taken in the war are won, not budgeted.</p>
+            <p class="menu-sub">Alliances at war — the Federation always fights; pick at least one enemy</p>
+            <div class="loadout-factions">
+              <label class="check"><input id="faction-Federation" type="checkbox" checked disabled> Federation (you)</label>
+              <label class="check"><input id="faction-Axis" type="checkbox" checked> Axis</label>
+              <label class="check"><input id="faction-Bloc" type="checkbox" checked> Bloc</label>
+              <label class="check"><input id="faction-Cabal" type="checkbox" checked> Cabal</label>
+            </div>
+            <label class="check"><input id="loadout-xanadu" type="checkbox" checked> Federation starbase Xanadu — the dockyard, a radio relay, and where withdraw runs to. Hold Xanadu needs it.</label>
+            <div id="loadout-budgets"></div>
+            <div id="loadout-fleet"></div>
+            <p class="console-note" id="loadout-summary"></p>
+            <button type="button" class="secondary tiny" id="loadout-reset">Reset to default</button>
           </div>
-          <label class="check"><input id="loadout-xanadu" type="checkbox" checked> Federation starbase Xanadu — the dockyard, a radio relay, and where withdraw runs to. Hold Xanadu needs it.</label>
-          <div id="loadout-budgets"></div>
-          <div id="loadout-fleet"></div>
-          <p class="console-note" id="loadout-summary"></p>
-          <button type="button" class="secondary tiny" id="loadout-reset">Reset to default</button>
-        </div>
-        <p class="dialog-note">The same seed reproduces the initial war. Precision fire gives your phaser volleys a power dial and called subsystem shots, and lets a hull burnt out of engines and guns strike its colors; the enemy still fires standard volleys. An extended war keeps every original rule and adds standing orders for the rest of your fleet, alliance doctrines, and the scenarios; a classic war plays exactly as calibrated. <b>Argonaut Reimagined</b> is an opt-in expansion that carries the extended war and opens on a wider tactical field; it is the home for new systems being built out over time, and never changes how a classic or extended war plays. A <b>sector campaign</b> carries Argonaut Reimagined and turns it into a war across a star map: the same seed charts the same corridor of systems, each battle is a full seeded war, and your fleet carries its wounds, prizes, and captains from node to node. Starting a new war of either kind retires the other save.</p>
+        </fieldset>
+        <p class="dialog-note">The same seed reproduces the initial war within the chosen ruleset. Precision fire gives your phaser volleys a power dial and called subsystem shots, and lets a hull burnt out of engines and guns strike its colors; the enemy still fires standard volleys. Reimagined includes standing orders, alliance doctrines, the Xanadu dockyard, named captains, and expansion scenarios. Real-time movement and sector campaign are Reimagined options. A sector campaign carries fleet wounds, prizes, and captains between seeded battles. Starting a new war or campaign retires the other save.</p>
         <div class="dialog-actions">
           <button value="cancel" class="secondary">Cancel</button>
           <button value="confirm">Begin</button>
@@ -275,7 +278,7 @@
           <a href="#guide-map">Tactical map</a>
           <a href="#guide-commands">Commands</a>
           <a href="#guide-combat">Combat</a>
-          <a href="#guide-extended">Extended war</a>
+          <a href="#guide-extended">Reimagined fleet command</a>
           <a href="#guide-precision">Precision fire</a>
           <a href="#guide-reimagined">Reimagined</a>
           <a href="#guide-comfort">Comforts</a>
@@ -298,27 +301,23 @@
           </section>
           <section id="guide-start">
             <h3>Starting a war</h3>
-            <p><b>New game</b> in the top bar opens the war panel. Name a seed or take the one offered; tick the options you want. A classic war with every box unticked plays exactly by the original 1992 rules — the flags only add.</p>
+            <p><b>New game</b> in the top bar opens the war panel. Name a seed or take the one offered, choose <b>Classic</b> or <b>Reimagined</b>, and tick the options you want. Classic is the default; with its optional boxes unticked it plays exactly by the original 1992 rules. Real-time movement, sector campaign, fleet loadout, and expansion scenarios appear under Reimagined.</p>
             <ul>
               <li><b>Regional enemy formations</b> starts the enemy fleets clustered by alliance instead of scattered.</li>
               <li><b>Tactical sound</b> adds phaser, photon, explosion, and miss effects, plus a klaxon on the way into RED alert.</li>
               <li><b>Precision fire</b> gives your phaser volleys a power dial and called subsystem shots.</li>
-              <li><b>Extended war</b> adds standing orders for your fleet, alliance doctrines, the Xanadu dockyard, and three scenarios.</li>
-              <li><b>Argonaut Reimagined</b> is an expansion mode under active development — it carries the extended war and adds a wider 320-unit battlefield with a pan/zoom camera, reactor power management, the directed tractor beam, and a living battlefield of nebulae, asteroid fields, and ion storms. See <a href="#guide-reimagined">Argonaut Reimagined</a> below. A classic or extended war is untouched.</li>
+              <li><b>Reimagined</b> adds standing orders for your fleet, alliance doctrines, the Xanadu dockyard, named captains, and three scenarios, alongside a wider 320-unit battlefield with a pan/zoom camera, reactor power management, the directed tractor beam, and a living battlefield of nebulae, asteroid fields, and ion storms. See <a href="#guide-extended">Reimagined fleet command</a> and <a href="#guide-reimagined">Argonaut Reimagined</a> below.</li>
             </ul>
-            <figure class="guide-figure">
-              <img src="assets/guide/new-game.png" alt="The New game dialog with fields for seed, regional formations, tactical sound, precision fire, extended war, and scenario." loading="lazy">
-              <figcaption>The war panel. The scenario picker only comes alive in an extended war.</figcaption>
-            </figure>
+
           </section>
           <section id="guide-map">
             <h3>Reading the tactical map</h3>
             <p><b>Your recent commands</b> stays above the battle narrative: your last twelve accepted commands, labelled by ship and stardate, with their full results. Scroll it independently of fleet traffic; it is saved with the battle.</p>
             <ul>
               <li>Every hull is a circle bearing its initial, coloured by alliance; a wreck is a <b>+</b>. A dashed border means vacant or surrendered.</li>
-              <li>Dashed rings around your ship mark phaser (red), photon (yellow), and engine (cyan) reach. In an extended war the green ring around Xanadu is the dockyard.</li>
+              <li>Dashed rings around your ship mark phaser (red), photon (yellow), and engine (cyan) reach. In a Reimagined war the green ring around Xanadu is the dockyard.</li>
               <li>A red outline marks an enemy that can reach <i>you</i> this stardate.</li>
-              <li>The <b>legend under the map</b> is the color key for everything drawn on it — alliances, your range rings, threats, wrecks — and it grows with the war mode: the orders pip, ace star, and dockyard ring in an extended war; the terrain hues (nebula, asteroids, ion storm, relay nodes) and the prize pip in a Reimagined one.</li>
+              <li>The <b>legend under the map</b> is the color key for everything drawn on it — alliances, your range rings, threats, wrecks — and it grows with the war mode: the orders pip, ace star, dockyard ring, terrain hues (nebula, asteroids, ion storm, relay nodes), and prize pip in Reimagined.</li>
               <li>The map is limited by your mapper — fog of war. <kbd>Backspace</kbd> shows the whole war zone; <kbd>7</kbd> lists exact local positions.</li>
               <li><b>Click empty space</b> to steer your ship toward that point, clamped to your engine ring. <b>Click a hull</b> for its context menu: every command your ship can actually perform on it, and nothing else. <kbd>Escape</kbd> puts the menu away.</li>
             </ul>
@@ -343,7 +342,7 @@
                 <tr><td><kbd>3</kbd> Phasers</td><td>Energy volley at a hull in range; scales with live phaser units.</td></tr>
                 <tr><td><kbd>4</kbd> Photons</td><td>Torpedo at close range; heavier damage, smaller reach.</td></tr>
                 <tr><td><kbd>5</kbd> Tractor</td><td>Lock a beam and drag the target toward you.</td></tr>
-                <tr><td><kbd>6</kbd> Scanner</td><td>Scan a hull. In an extended war, reveals who captains it.</td></tr>
+                <tr><td><kbd>6</kbd> Scanner</td><td>Scan a hull. In a Reimagined war, reveals who captains it.</td></tr>
                 <tr><td><kbd>8</kbd> Transport</td><td>Beam crew to a friendly hull — or board a vacant one.</td></tr>
                 <tr><td><kbd>-</kbd> Hyperspace</td><td>Blind jump to a random point, shields weakened on arrival. Shakes off a tractor lock; can burn the ship up.</td></tr>
                 <tr><td><kbd>=</kbd> Self-destruct</td><td>Destroys everything in blast radius, shrapnel beyond. Xanadu's blast is especially large.</td></tr>
@@ -353,7 +352,7 @@
                 <tr><td><kbd>0</kbd> Computer</td><td>Free: the computer's read on the war.</td></tr>
                 <tr><td><kbd>7</kbd> Mapper · <kbd>9</kbd> Radio</td><td>Free: exact local positions; radio traffic report.</td></tr>
                 <tr><td><kbd>R</kbd> · <kbd>S</kbd> · <kbd>L</kbd> · <kbd>Bksp</kbd></td><td>Free: roll call, shot distribution, alliance statistics, full war-zone map.</td></tr>
-                <tr><td><kbd>F</kbd> Fleet</td><td>Extended war only: your fleet and its standing orders.</td></tr>
+                <tr><td><kbd>F</kbd> Fleet</td><td>Reimagined only: your fleet and its standing orders.</td></tr>
               </tbody>
             </table>
             <p class="dialog-note">Hyperspace, self-destruct, and resign ask for confirmation first — none of them can be undone. While any dialog is open it owns the keyboard, so game keys never fire behind a prompt.</p>
@@ -381,19 +380,19 @@
             </ul>
           </section>
           <section id="guide-extended">
-            <h3>The extended war</h3>
-            <p>An extended war keeps every original rule and adds an admiral's layer: standing orders for your fleet, a dockyard at Xanadu, alliance doctrines, named captains, and three scenarios. Orders are free and persist until changed; they travel by radio, so a hull out of contact acknowledges one stardate late.</p>
+            <h3>Reimagined fleet command</h3>
+            <p>Reimagined fleet command adds an admiral's layer: standing orders for your fleet, a dockyard at Xanadu, alliance doctrines, named captains, and three scenarios. Orders are free and persist until changed; they travel by radio, so a hull out of contact acknowledges one stardate late.</p>
             <ul>
               <li><b>Focus with fleet</b> (original behavior), <b>Hold</b>, <b>Withdraw</b> toward Xanadu, <b>Escort</b> a friendly hull, <b>Screen</b> a ward against the nearest threat, <b>Intercept</b> one named enemy.</li>
               <li><b>Xanadu is a dockyard.</b> A hull ending the stardate inside the green ring recovers shields, crew, and one unit of its worst-damaged subsystem — and may take one refit per war: an extra photon bay, overcharged phasers, a tuned drive, or deeper sensors.</li>
               <li><b>Each alliance fights its own way</b> — Axis swarms and detonates rather than die, Bloc works the phaser edge and executes the weakest hull it can hit, Cabal tractors you into collisions, Federation concentrates fire with damage discipline.</li>
               <li><b>Earn the captains' names.</b> A named captain has sworn to hunt you; scanning hulls reveals who commands what. Two kills make a captain an ace (★ on the map), and every third kill your hunter scores makes its volleys against you bite harder.</li>
-              <li><b>Replay the round</b> from the battle narrative header to watch the whole computer phase play back on the map.</li>
+              <li><b>Replay the round</b> from the battle narrative header to watch the whole computer phase play back on the map; replay is also available in Classic.</li>
               <li><b>Three scenarios:</b> cease hostilities (the original), hold Xanadu to stardate 30, or hunt the hunter — identify your vendetta captain by scanning before the war kills them first.</li>
             </ul>
             <figure class="guide-figure">
-              <img src="assets/guide/fleet-orders.png" alt="A Federation hull's context menu in an extended war, showing Scan and Transport crew plus the six standing orders." loading="lazy">
-              <figcaption>A friendly hull's menu in an extended war: standing orders are free, persist until changed, and outrank the captain's own instincts.</figcaption>
+              <img src="assets/guide/fleet-orders.png" alt="A Federation hull's context menu in a Reimagined war, showing Scan and Transport crew plus the six standing orders." loading="lazy">
+              <figcaption>A friendly hull's menu in a Reimagined war: standing orders are free, persist until changed, and outrank the captain's own instincts.</figcaption>
             </figure>
           </section>
           <section id="guide-precision">
@@ -413,7 +412,7 @@
           </section>
           <section id="guide-reimagined">
             <h3>Argonaut Reimagined</h3>
-            <p><b>Argonaut Reimagined</b> is an opt-in expansion mode, chosen in the <b>New game</b> panel and still under active development. It carries the whole extended war — fleet orders, alliance doctrines, the Xanadu dockyard, named captains, and the scenarios — and layers original systems on top. A classic or extended war is untouched: every Reimagined addition is read only when the flag is on, so the calibrated 1992 game is preserved exactly. More systems land over time.</p>
+            <p><b>Argonaut Reimagined</b> is the expansion ruleset, chosen in the <b>New game</b> panel and still under active development. It includes <a href="#guide-extended">fleet command</a> — fleet orders, alliance doctrines, the Xanadu dockyard, named captains, and scenarios — alongside the systems below. Classic preserves the calibrated 1992 game. More systems land over time.</p>
             <p><b>A wider battlefield.</b> A Reimagined war opens on a 320-unit field instead of 100, so there is room to screen, flank, and disengage. Weapon ranges stay at their classic units while engine reach scales with the field, so a hull crosses the wider map in about the same number of stardates but its guns cover a smaller fraction of it. Hulls that would end a move stacked on the same point as another hull — drone wings above all — fan out to the nearest free point, while tractor slams, hyperspace landings, and rams you order yourself still collide; and hulls sharing a point draw fanned apart so every glyph stays seeable and clickable.</p>
             <ul>
               <li>The map is a <b>viewport</b> into that field: <b>wheel</b> zooms toward the cursor, <b>arrow keys</b> pan, and the <b>minimap</b> (bottom-right) shows the whole war zone with your viewport rectangle — drag it to re-center.</li>
@@ -461,7 +460,7 @@
             <p><b>Fleet loadout.</b> A Reimagined war's fleets are composed, not fixed. Tick Reimagined in the <b>New game</b> panel and the <b>fleet loadout</b> appears: spend your points budget (24 by default) on ships of the line — the flagship battle cruiser is required, and carriers, artillery, cruisers, interceptors, and scouts cost 4 / 3 / 2 / 2 / 1, up to eight hulls. You also set <b>every alliance's budget</b>: enemy captains draw seeded fleets within theirs, leaning to their doctrines — Axis gunboat swarms, Bloc artillery lines, Cabal carriers — so the same seed replays the same war, and a new seed fields new navies. Prizes taken in the war are won, not budgeted.</p>
             <p><b>Force customization.</b> The same panel chooses <b>who fights</b> — any two to four alliances, though the Federation always flies and at least one enemy must — and whether <b>Xanadu spawns</b>. Without the starbase there is no dockyard, no radio relay, and withdraw runs to the fleet centroid; the computer report simply says the distance to Xanadu is unknown, and the relay nodes still sit mirrored around where the base would have stood. <b>Hold Xanadu</b> needs its base, so that scenario is unavailable with the starbase off — and the rules force it back on if the war somehow starts that way.</p>
             <p><b>Random encounters.</b> The war's back half is not an empty field. Most stardates are quiet, but now and then something arrives from outside the battlefield, at least 40 units from any hull: a <b>derelict</b> — a ghost ship of some alliance, dark, degraded, and vacant, which anyone can board for a prize (enemy captains race you to them); a <b>distress call</b> — a stranded Federation hull with its engines burnt out, marked by a slow amber blinker, which you can tow home to the dockyard (or transfer crew to) to return it to the fight; or a <b>neutral merchant</b> — an unarmed civilian hull in gray that runs from any warship that closes and jumps out after a bounded visit. A merchant is no one's enemy: captains ignore them, they never count toward victory or surrender, and a relay node cannot be held by one. But a transporter party across <b>seizes it whole</b> — hull, cargo, and crew, as a prize of war. You can also simply shoot one down; nothing prices that yet.</p>
-            <p><b>The sector campaign.</b> Tick <b>Sector campaign</b> in the New game panel (it carries Reimagined) and the war becomes a campaign across a star map: a seeded corridor of systems from Xanadu to the enemy home, five columns deep, with two or three routes per hop. On the <b>sector screen</b> you click a system to read it and travel along the bright routes; at an enemy system you choose <b>Engage</b> to fight the battle yourself or <b>Auto-resolve</b> to let your captains fight it headless. Every node battle is a full Reimagined war — the garrison is drawn within the system's budget, deeper columns fight harder — and what survives carries out: wounds, subsystem burns, prizes, captains, and aces all persist, while orders, power, and stances reset for the next engagement. Winning takes the system and pays credits; a captured hull pays a one-time class <b>bounty</b> when it is carried out; and between battles, at Xanadu or any captured system, the <b>dockyard</b> spends credits on shield and crew repairs, system overhauls, re-purchasable refits, drone-bay rebuilds, and new commissions against the loadout's point budget — carried prizes never count against it. A hopeless draw or an <b>Abandon engagement</b> cedes a system and lets you move on; losing every hull ends the campaign, and taking the enemy home system wins it. The enemy alliances make their own moves as the campaign turns: they contest each other's systems, seize empty ones, and raid yours — a raid that reaches the system your fleet holds (or Xanadu itself, which recalls the fleet) becomes a defensive battle you play or auto-resolve, and losing Xanadu ends the campaign, while raids elsewhere are beaten off (or not) by the garrison headless. The side panel's <b>campaign report</b> grades the run as it goes — battles by outcome, systems held, the credit ledger, prizes, bounties, and aces. The campaign autosaves under its own slot, and the same seed replays the same sector, the same battles, and the same outcome.</p>
+            <p><b>The sector campaign.</b> Choose <b>Reimagined</b> and tick <b>Sector campaign</b> in the New game panel and the war becomes a campaign across a star map: a seeded corridor of systems from Xanadu to the enemy home, five columns deep, with two or three routes per hop. On the <b>sector screen</b> you click a system to read it and travel along the bright routes; at an enemy system you choose <b>Engage</b> to fight the battle yourself or <b>Auto-resolve</b> to let your captains fight it headless. Every node battle is a full Reimagined war — the garrison is drawn within the system's budget, deeper columns fight harder — and what survives carries out: wounds, subsystem burns, prizes, captains, and aces all persist, while orders, power, and stances reset for the next engagement. Winning takes the system and pays credits; a captured hull pays a one-time class <b>bounty</b> when it is carried out; and between battles, at Xanadu or any captured system, the <b>dockyard</b> spends credits on shield and crew repairs, system overhauls, re-purchasable refits, drone-bay rebuilds, and new commissions against the loadout's point budget — carried prizes never count against it. A hopeless draw or an <b>Abandon engagement</b> cedes a system and lets you move on; losing every hull ends the campaign, and taking the enemy home system wins it. The enemy alliances make their own moves as the campaign turns: they contest each other's systems, seize empty ones, and raid yours — a raid that reaches the system your fleet holds (or Xanadu itself, which recalls the fleet) becomes a defensive battle you play or auto-resolve, and losing Xanadu ends the campaign, while raids elsewhere are beaten off (or not) by the garrison headless. The side panel's <b>campaign report</b> grades the run as it goes — battles by outcome, systems held, the credit ledger, prizes, bounties, and aces. The campaign autosaves under its own slot, and the same seed replays the same sector, the same battles, and the same outcome.</p>
             <p><b>Real-time movement.</b> Tick <b>Real-time movement</b> in the New game panel (it carries Reimagined) and the war steps off the teleport: hulls <b>fly continuously through space</b> between stardates at their own speed — engine reach re-read as velocity, with reactor power on the engine sink still scaling it, so an overcharged drive arrives earlier in the stardate and a gutted one crawls. The stardate stays the resolution tick: captains still decide once per stardate, and the dockyard, relay nodes, regen, encounters, and every other boundary rule fire exactly as before — the field just moves like space between them. <b>Time is yours:</b> <b>Space</b> (or the Pause button over the map) halts the war but never your commands — plot burns, work the power board, call shots while everything holds — and <b>,</b> / <b>.</b> (or the 1× / 2× / 4× buttons) step the pacing. The war never waits for you: a burn order plots a destination the drive then flies, across as many stardates as it needs, and guns that spent a stardate now cycle one stardate of sim time between volleys. The backtick autopilot becomes a conn toggle — it flies your ship at each boundary until a manual burn or volley takes it back. <b>Combat is continuous too:</b> photon and spread torpedoes <b>fly ballistically</b> — hot dots crossing the field at about three times hull speed — and detonate where they arrive, so a target that burns perpendicular lives and a warhead that finds nothing splashes vacuum; phasers and ion stay instant beams. Captains <b>avoid collisions as they pilot</b>, bending their burns around anticipated overlaps and holding short of occupied points — but a ram <i>you</i> order is a ram you get, and tractor tows now haul smoothly over the stardate instead of snapping. A war plays out identically whether you watch it fly, pause through it, or run it headless: the same seed and the same commands trace the same trajectories, always.</p>
             <p class="dialog-note">Reimagined is balanced by whole-war simulation as it matures, not calibrated against the 1992 original, so enemy strength and war length can differ from a classic war. The build roadmap lives in the repository under <code>docs/superpowers/specs</code>.</p>
           </section>
@@ -481,7 +480,7 @@
           </section>
           <section id="guide-about">
             <h3>Provenance, maintenance, and contact</h3>
-            <p>The original <b>Argonaut</b> is a tactical space-war game for DOS, released in 1992 and originally (c) 1988, 1992 by <b>Jim Chen</b>. This web remake is newly written HTML, CSS, and JavaScript; the supplied DOS manual was used only as a behavioral reference, and the program includes no original <code>.COM</code>, screenshots, or other original assets. Captain names, fleet orders, alliance doctrines, the Xanadu dockyard, the scenarios, and the extended-war narrative are original to this remake.</p>
+            <p>The original <b>Argonaut</b> is a tactical space-war game for DOS, released in 1992 and originally (c) 1988, 1992 by <b>Jim Chen</b>. This web remake is newly written HTML, CSS, and JavaScript; the supplied DOS manual was used only as a behavioral reference, and the program includes no original <code>.COM</code>, screenshots, or other original assets. Captain names, fleet orders, alliance doctrines, the Xanadu dockyard, the scenarios, and the Reimagined narrative are original to this remake.</p>
             <p>The remake is maintained today by <b>MattyGPT</b> as an open-source project. The full source, issue tracker, and release history live in the public repository, and the game you are playing is deployed straight from it:</p>
             <ul class="guide-links">
               <li><a href="https://github.com/MattyGPT/Argonaut-web" target="_blank" rel="noopener">github.com/MattyGPT/Argonaut-web</a> — source, history, and deployment.</li>

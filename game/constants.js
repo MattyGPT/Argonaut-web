@@ -2,7 +2,7 @@ export const GRID_SIZE = 100;
 
 /**
  * The tactical field a Reimagined war opens on, in the same map units as
- * `GRID_SIZE`. Classic and extended wars stay at `GRID_SIZE`, so the calibrated
+ * `GRID_SIZE`. Classic wars stay at `GRID_SIZE`, so the calibrated
  * opening disposition and every absolute range figure are unchanged; only a
  * Reimagined war widens the battlefield.
  *
@@ -98,7 +98,7 @@ export const SHIP_TEMPLATES = Object.freeze({
    * fastest hull afloat, light guns, thin shields, and a skeleton complement, so
    * it wins by speed (screening, running down derelicts, being somewhere else
    * when the volleys land) rather than by trading fire. Reimagined rosters only;
-   * a classic or extended war never fields one, so nothing calibrated reads it.
+   * a classic war never fields one, so nothing calibrated reads it.
    * Every figure is a balance dial for the Reimagined simulation harness.
    */
   interceptor: Object.freeze({
@@ -287,8 +287,8 @@ export const SHIELD_PER_ENGINE = 5;
 
 /**
  * Power management (Argonaut Reimagined, Phase 1). Every Reimagined hull runs a
- * reactor — a damageable subsystem, present only on Reimagined ships so a classic or
- * extended war's damage lottery is untouched — whose live units set the power budget
+ * reactor — a damageable subsystem, present only on Reimagined ships so a classic
+ * war's damage lottery is untouched — whose live units set the power budget
  * the hull distributes across five sinks. Knocking the reactor out with a called shot
  * shrinks the budget and every system that draws on it.
  *
@@ -344,7 +344,7 @@ export const POWER_SINKS = Object.freeze(['shields', 'weapons', 'engines', 'sens
  * The living battlefield (Argonaut Reimagined, Phase 2). A Reimagined war seeds
  * `game.terrain`: a list of typed circular features — nebulae to hide in, asteroid
  * fields to wreck a hull on, ion storms that jam a fleet — placed on their own
- * seeded stream so ship placement is untouched. A classic or extended war carries
+ * seeded stream so ship placement is untouched. A classic war carries
  * an empty list and reads none of this, so calibration is untouched.
  *
  * Only the placement and rendering dials are live in 15a (counts, radii, margins,
@@ -529,7 +529,7 @@ export const ENCOUNTERS = Object.freeze({
  * other stream shifts. Prizes are WON, not budgeted — they exceed the starting
  * budget by design and it is never re-checked mid-war. Settled with Matt,
  * 2026-09-19; every number is a balance dial, not a calibrated value. A classic
- * or extended war reads none of it and keeps the fixed 21-hull roster.
+ * war reads none of it and keeps the fixed 21-hull roster.
  */
 export const LOADOUT = Object.freeze({
   /** Default points per alliance; the player may adjust each faction's budget. */
@@ -607,7 +607,7 @@ export const WEAPONS = Object.freeze({
 export const ION = Object.freeze({
   /**
    * Ion subsystem units per hull class, keyed by className — added to Reimagined
-   * hulls in `createShip` the same way the reactor is, so a classic or extended
+   * hulls in `createShip` the same way the reactor is, so a classic
    * war never carries the system and its damage lottery is untouched. A class not
    * listed fields no ion. Balance dial: which hulls carry suppression, and how much.
    */
@@ -631,7 +631,7 @@ export const SPREAD = Object.freeze({
   splashRadius: 12,
   /**
    * Spread subsystem units per hull class, keyed by className — added to Reimagined
-   * hulls in `createShip` like the reactor and ion, so a classic or extended war
+   * hulls in `createShip` like the reactor and ion, so a classic war
    * never carries the tubes. The heavy hulls field the salvo. Balance dial.
    */
   carry: Object.freeze({ 'Battle cruiser': 2, Carrier: 1 }),
@@ -667,7 +667,7 @@ export const TRACTOR_PULL_PER_UNIT = 5;
  * redistributes damage between crew and subsystems, so a hull absorbs the same total
  * and war length is roughly held (a classic attrition war runs a little shorter
  * because hulls stay armed and resolve decisively instead of lingering as toothless
- * hulks; an extended war is unchanged).
+ * hulks; a Reimagined war is unchanged).
  *
  * OVERKILL_DESTROY_MARGIN decouples destruction from that race. The volley stops the
  * instant the last crewman falls; the hull is then a vacant prize UNLESS the damage
@@ -707,7 +707,7 @@ export const STARBASE_BLAST_RADIUS = 40;
  * them again, clusters survived to the last-stand trigger once more (0.39/war,
  * 4+-hull blasts in 35.6%, worst 15 — Matt: "way too high"), so the scale drops
  * to 0.45 (blast 9, starbase 18; the shrapnel ring rides the scaled blast). A
- * classic or extended war keeps the manual figure byte-identical, since the
+ * classic war keeps the manual figure byte-identical, since the
  * radius there is recovered behavior, not a balance dial. Measured with
  * `npm run sim`.
  *
@@ -721,15 +721,15 @@ export const REIMAGINED_SELF_DESTRUCT_SCALE = 0.35;
 
 /**
  * Reimagined-only last-stand gate (play-test retune 2026-09-25): the Axis
- * doctrine dial `suicideMinEnemies` (5) stays for classic/extended wars, but a
- * Reimagined war — denser since arrival avoidance ended accidental rams —
- * demands strictly more enemies inside the blast before a captain detonates.
+ * legacy doctrine dial `suicideMinEnemies` (5) records the earlier tuning.
+ * The supported expansion — denser since arrival avoidance ended accidental
+ * rams — uses this stricter count before a captain detonates.
  */
 export const REIMAGINED_SUICIDE_MIN_ENEMIES = 7;
 
 /**
  * Reimagined volley-damage scale (play-test balance pass, 2026-09-19). The
- * gunnery table is calibrated, so a classic or extended war keeps every figure
+ * gunnery table is calibrated, so a classic war keeps every figure
  * byte-identical — but on the 33-hull Reimagined field wars were over before
  * the living battlefield got its turn: a median of 40–43 stardates at ~12
  * volleys per kill, with terrain, objectives, and prize ops decorative in a
@@ -817,7 +817,7 @@ export const REALTIME = Object.freeze({
 });
 
 /**
- * Fleet orders, available only in an extended war. `focus` is the original's
+ * Fleet orders, available only in a Reimagined war. `focus` is the original's
  * behavior — concentrate with the fleet — so it is also the default. The targeted
  * orders need a second ship named alongside them. `launch` (round 20) names no
  * target: it tells a carrier to loose its drones when the enemy closes, and like
@@ -827,7 +827,7 @@ export const ORDER_TYPES = Object.freeze(['focus', 'hold', 'withdraw', 'escort',
 /**
  * The targeted orders. `board` (round 17) is the odd one out: it names a
  * *vacant* hull rather than an active ship, and it is Reimagined-only — `setOrder`
- * refuses it elsewhere, so a classic or extended war never sees a boarding party.
+ * refuses it elsewhere, so a classic war never sees a boarding party.
  */
 export const TARGETED_ORDERS = Object.freeze(['escort', 'intercept', 'screen', 'board']);
 
@@ -844,7 +844,7 @@ export const FLEET_ORDER_TUNING = Object.freeze({
 });
 
 /**
- * Dockyard support at a friendly starbase, in an extended war: how close a ship
+ * Dockyard support at a friendly starbase, in a Reimagined war: how close a ship
  * must sit, what it recovers per stardate, and how healthy the base must be to
  * spare it. The rates are deliberately slow — a gutted cruiser needs a dozen
  * quiet stardates to refit, which is long enough that turtling loses.
@@ -880,7 +880,7 @@ export const STANCES = Object.freeze(['standard', 'firing', 'evasive']);
  * **Evasive** — the hull weaves: incoming fire misses more (`evasiveIncomingMiss`,
  * positive on the defender), but its own shots are thrown off (`evasiveSelfMiss`,
  * positive). **Standard** is neutral and the default, and is exactly the
- * calibrated `MISS_CHANCE` — a classic or extended war never leaves it, so the
+ * calibrated `MISS_CHANCE` — a classic war never leaves it, so the
  * calibrated accuracy stands untouched (parity).
  *
  * The roll is clamped to `[missFloor, missCeil]` so the most aggressive pairing
@@ -924,7 +924,7 @@ export const ARCS = Object.freeze(['fore', 'starboard', 'aft', 'port']);
  * and the aft is the weakest arc, which is what makes Disengage — and any
  * retreat — expose a runner's thin skin to pursuers. Drones are too small for
  * arcs: they keep the single calibrated pool. Every figure is a harness dial,
- * not a calibrated value; a classic or extended war reads none of it.
+ * not a calibrated value; a classic war reads none of it.
  */
 export const ARC = Object.freeze({
   /** Weighted share of the shield pool each arc holds; the shares sum to 4. */
@@ -944,7 +944,7 @@ export const ARC = Object.freeze({
 });
 
 /**
- * How each alliance's captains fight, in an extended war. The original ran every
+ * How each alliance's captains fight, in a Reimagined war. The original ran every
  * autopilot on one doctrine — pursue the fleet's target, fire, and never mind your
  * own skin — so shields only ever went down and no captain ever ran.
  *
@@ -1039,7 +1039,7 @@ export const ACE_KILLS = 2;
 export const VENDETTA = Object.freeze({ killsPerStep: 3, damagePerStep: 0.25 });
 
 /**
- * Objectives an extended war can be fought for. `annihilation` is the original's
+ * Objectives a Reimagined war can be fought for. `annihilation` is the original's
  * only condition — the conflict ends when a side is wiped out — so it is the default
  * and the only one a classic war ever uses. The scenario logic lives in
  * `game/scenarios.js`; this is the data half.
@@ -1078,7 +1078,7 @@ export const SCENARIO_IDS = Object.freeze(Object.keys(SCENARIOS));
 export const LOG_LIMIT = 400;
 
 /**
- * One-time refit choices at the dockyard, in an extended war. Each adds system units
+ * One-time refit choices at the dockyard, in a Reimagined war. Each adds system units
  * rather than touching hull capacity, so nothing downstream needs a capacity
  * override; a hull may take one refit per war.
  */
@@ -1088,7 +1088,7 @@ export const REFITS = Object.freeze({
   engines: Object.freeze({ label: 'Tune drive', systems: Object.freeze({ engines: 1 }) }),
   sensors: Object.freeze({ label: 'Deep sensors', systems: Object.freeze({ scanner: 1, mapper: 1 }) }),
   // Reimagined only: a bigger reactor raises the power budget. Gated out of the
-  // dockyard menu and refused by setRefit in a classic or extended war, where hulls
+  // dockyard menu and refused by setRefit in a classic war, where hulls
   // carry no reactor subsystem.
   reactor: Object.freeze({ label: 'Reactor upgrade', systems: Object.freeze({ reactor: 1 }) }),
 });

@@ -42,7 +42,14 @@ dump of that table in `ARGONAUT.COM`.
 | Vendetta | One enemy ship hunts Captain Jason until he resigns or dies | Watch the vendetta ship; then board it with the transporter | It breaks formation to target the command ship, and the vendetta ends on resignation, death, or capture. The marker can never turn a ship against its own alliance or against itself |
 | Surrender | The autopilot may surrender if conditions collapse | Reduce a fleet to its last ships | A fleet down to 2 ships at <=15% of opposing strength capitulates |
 
-## Extended war (opt-in divergence)
+## Extended war (retired historical mode)
+
+**Retired 2026-10-03:** Classic and Reimagined are now the supported
+rulesets. Extended's fleet systems remain in Reimagined; there is no
+standalone Extended mode, harness target, or compatibility path. The
+description and measurements below document the former mode and are
+preserved as historical evidence, not current new-game instructions.
+Mode consolidation changes none of the supported modes' gameplay tuning.
 
 An extended war is chosen in the **New game** panel and recorded on the game
 state, so a save resumes in the mode it started in. Everything in the table above

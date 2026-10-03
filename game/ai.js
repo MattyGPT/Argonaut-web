@@ -126,7 +126,7 @@ const withdrawTo = (game, actor) => {
   const xanadu = getShip(game, 'xanadu');
   // Reimagined-only generalization (round 17): a prize withdraws toward a base its
   // OWN alliance holds — only the Federation ever has one — else toward its fleet,
-  // so an Axis prize no longer limps at the enemy starbase. A classic or extended
+  // so an Axis prize no longer limps at the enemy starbase. A classic
   // war keeps the original resolution byte-identical.
   if (xanadu && isActive(xanadu) && (!game.reimagined || xanadu.faction === actor.faction)) return xanadu;
   const friends = game.ships.filter((ship) => isActive(ship) && ship.faction === actor.faction && ship.id !== actor.id);
@@ -445,7 +445,7 @@ const chooseAiActionInner = (game, shipId) => {
   // out, and takes neither orders nor doctrine.
   if (isNeutral(actor)) return merchantAction(game, actor);
 
-  // Standing orders only exist in an extended war; a classic war never sees one,
+  // Standing orders only exist in a Reimagined war; a classic war never sees one,
   // so the pursuit below stays exactly the original autopilot.
   const order = orderFor(game, shipId);
   if (order && order.type !== 'focus') {
@@ -468,7 +468,7 @@ const chooseAiActionInner = (game, shipId) => {
   const board = prizeOpportunity(game, actor);
   if (board) return board;
 
-  if (game.extended) {
+  if (game.reimagined) {
     const doctrine = doctrineAction(game, actor);
     if (doctrine) return doctrine;
   }
@@ -511,7 +511,7 @@ const chooseAiActionInner = (game, shipId) => {
  * nudging to the nearest free integer point inside its engine capacity. The
  * designed rams are untouched — tractor slams, hyperspace landings, the
  * sit-and-ram zero move, and the player's own maneuvers still collide, and a
- * classic or extended war never reads this.
+ * classic war never reads this.
  */
 export const avoidStackedArrival = (game, actor, dx, dy) => {
   if (!game.reimagined || !actor) return { dx, dy };

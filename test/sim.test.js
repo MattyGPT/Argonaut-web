@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { runWar, simulate } from '../scripts/sim-wars.mjs';
 
 // Smoke coverage for the whole-war harness itself (scripts/sim-wars.mjs). The
@@ -15,6 +17,24 @@ test('the harness plays a classic war to a terminal outcome', () => {
   assert.notEqual(war.winner, undefined);
 });
 
+test('an omitted runWar mode uses Classic', () => {
+  assert.deepEqual(runWar(0), runWar(0, { mode: 'classic' }));
+});
+
+test('the CLI all mode contains exactly Classic and Reimagined', () => {
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/sim-wars.mjs', import.meta.url)), '--mode', 'all', '--seeds', '1', '--max-stardates', '4', '--json'], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout).map((report) => report.mode), ['classic', 'reimagined']);
+});
+
+test('the retired harness mode is rejected by both API and CLI', () => {
+  assert.throws(() => runWar(0, { mode: 'extended' }), /Unsupported mode: extended/);
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/sim-wars.mjs', import.meta.url)), '--mode', 'extended', '--seeds', '1', '--json'], { encoding: 'utf8' });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Unsupported mode: extended\. Choose classic, reimagined, realtime, or all\./);
+  assert.equal(result.stdout, '');
+});
+
 test('the harness plays a Reimagined war and reports prize metrics', () => {
   const war = runWar(0, { mode: 'reimagined' });
   assert.notEqual(war.outcome, 'timeout');
@@ -27,8 +47,8 @@ test('the harness plays a Reimagined war and reports prize metrics', () => {
 });
 
 test('the harness is deterministic: the same seed replays the same war', () => {
-  const first = runWar(3, { mode: 'extended' });
-  const second = runWar(3, { mode: 'extended' });
+  const first = runWar(3, { mode: 'reimagined' });
+  const second = runWar(3, { mode: 'reimagined' });
   assert.deepEqual(first, second);
 });
 
