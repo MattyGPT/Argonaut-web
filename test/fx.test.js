@@ -16,6 +16,64 @@ const svgNode = (name) => {
   };
 };
 
+test('beams track displayed hulls through movement, stack offsets and camera changes without mutating events', () => {
+  const previous = { document: globalThis.document, setTimeout: globalThis.setTimeout, requestAnimationFrame: globalThis.requestAnimationFrame };
+  const timers = [];
+  const frames = [];
+  let targetRect = { left: 590, top: 240, width: 20, height: 20 };
+  const map = {
+    children: [],
+    querySelector: () => null,
+    querySelectorAll: () => [
+      { dataset: { shipId: 'player' }, getBoundingClientRect: () => ({ left: 190, top: 140, width: 20, height: 20 }) },
+      { dataset: { shipId: 'enemy' }, getBoundingClientRect: () => targetRect },
+    ],
+    appendChild(child) { this.children.push(child); },
+  };
+  globalThis.document = { createElementNS: (_namespace, name) => ({
+    ...svgNode(name), getBoundingClientRect: () => ({ left: 100, top: 50, width: 1000, height: 500 }),
+  }) };
+  globalThis.setTimeout = (callback) => { timers.push(callback); };
+  globalThis.requestAnimationFrame = (callback) => { frames.push(callback); };
+  const event = Object.freeze({ kind: 'phasers', fromId: 'player', toId: 'enemy', x1: 0, y1: 0, x2: 1, y2: 1, hit: true });
+  try {
+    playEffects([event], map, 'player', { minX: 40, minY: 60, size: 200 });
+    timers.shift()();
+    const svg = map.children[0];
+    const [line, flash] = svg.children;
+    assert.equal(line.getAttribute('x1'), '60');
+    assert.equal(line.getAttribute('y1'), '100');
+    assert.equal(line.getAttribute('x2'), '140');
+    assert.equal(line.getAttribute('y2'), '140');
+    targetRect = { left: 690, top: 290, width: 20, height: 20 };
+    svg.setAttribute('viewBox', '0 0 100 100');
+    frames.shift()();
+    assert.equal(line.getAttribute('x2'), '60');
+    assert.equal(line.getAttribute('y2'), '50');
+    assert.equal(flash.getAttribute('cx'), '60');
+    assert.equal(flash.getAttribute('cy'), '50');
+    assert.equal(event.x2, 1);
+  } finally { Object.assign(globalThis, previous); }
+});
+
+test('replayed beams retain recorded coordinates when hulls are absent and misses stay misses', () => {
+  const previous = { document: globalThis.document, setTimeout: globalThis.setTimeout };
+  const timers = [];
+  const map = { children: [], querySelector: () => null, appendChild(child) { this.children.push(child); } };
+  globalThis.document = { createElementNS: (_namespace, name) => svgNode(name) };
+  globalThis.setTimeout = (callback) => { timers.push(callback); };
+  try {
+    replayEffects([{ kind: 'phasers', x1: 10, y1: 20, x2: 30, y2: 20, hit: false }], map);
+    timers.shift()();
+    const line = map.children[0].children[0];
+    assert.equal(line.getAttribute('x1'), '10');
+    assert.equal(line.getAttribute('x2'), '30');
+    assert.equal(line.getAttribute('y2'), '24');
+    assert.equal(line.getAttribute('class'), 'fx-phaser miss');
+    assert.equal(map.children[0].children.length, 1, 'a miss has no impact flash');
+  } finally { Object.assign(globalThis, previous); }
+});
+
 test('shows terminal markers for unrelated destroyed and surrendered ships', () => {
   const previousDocument = globalThis.document;
   const previousSetTimeout = globalThis.setTimeout;

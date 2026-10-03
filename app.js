@@ -18,6 +18,7 @@ import {
 import { fanOutOffsets, primeMoveMemory, renderGame, reportFor } from './ui/render.js';
 import { playEffect, playEvent } from './ui/sound.js';
 import { playEffects, replayEffects } from './ui/fx.js';
+import { rememberCommand, restoreCommandHistory } from './ui/command-history.js';
 
 const SAVE_KEY = 'argonaut-web-save-v1';
 // The sector campaign (round 26c) saves under its own key beside the untouched
@@ -62,8 +63,9 @@ const clearCampaignSave = () => {
 
 const save = () => {
   try {
-    if (campaign) localStorage.setItem(CAMPAIGN_SAVE_KEY, JSON.stringify({ version: 1, campaign }));
-    else localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 1, game }));
+    const commandHistory = { seed: game?.seed, entries: view.commandHistory ?? [] };
+    if (campaign) localStorage.setItem(CAMPAIGN_SAVE_KEY, JSON.stringify({ version: 1, campaign, commandHistory }));
+    else localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 1, game, commandHistory }));
   } catch {
     /* storage unavailable */
   }
@@ -77,7 +79,11 @@ let campaign = loadCampaignSave();
 let sectorSelection = null;
 
 let game = campaign ? campaign.battle?.game ?? null : loadSave() ?? createGame({ seed: randomSeed() });
-let view = { entries: game ? ['Tactical systems online. Choose a command.'] : [], camera: null, paused: false, speed: 1 };
+let view = { entries: [], camera: null, paused: false, speed: 1 };
+try {
+  const saved = JSON.parse(localStorage.getItem(campaign ? CAMPAIGN_SAVE_KEY : SAVE_KEY));
+  view.commandHistory = restoreCommandHistory(saved?.commandHistory, game?.seed);
+} catch { /* Old saves or unavailable storage start with an empty command record. */ }
 
 /** The war's field, defaulting safely for an old save that predates `gridSize`. */
 const field = () => game?.gridSize ?? GRID_SIZE;
@@ -713,6 +719,7 @@ const dispatch = async (action) => {
 
   if (action.type === 'autopilot' && !game.realtime) {
     const auto = resolveAutopilotTurn(game);
+    view = { ...view, commandHistory: rememberCommand(view.commandHistory, game, action.type, auto) };
     game = { ...auto.game, log: appendLog(game.log, auto.messages) };
     view = { ...view, contextShipId: null, entries: [] };
     showEvents(auto.events);
@@ -731,6 +738,7 @@ const dispatch = async (action) => {
   // boundaries except a resolution, which clears it.
   if (game.realtime && !game.preTurn) game = { ...game, preTurn: positionsOf(game) };
   const outcome = applyPlayerAction(game, action);
+  view = { ...view, commandHistory: rememberCommand(view.commandHistory, game, action.type, outcome) };
   const acted = outcome.game !== game;
   game = acted
     ? { ...outcome.game, log: appendLog(outcome.game.log ?? game.log, outcome.messages) }

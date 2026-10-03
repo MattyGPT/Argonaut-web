@@ -369,10 +369,16 @@ the round replay.
   the autopilots'. A damaged radio abbreviates what comes back — the panel
   header reports how much traffic you are still receiving — while your own
   ship's lines stay intact.
+- **Your recent commands** stays above that traffic: the last twelve accepted
+  commands, with the issuing ship, stardate, and full result. It scrolls
+  independently and resumes with your save, so the fleet's turn cannot bury
+  your last shot. A new battle starts a fresh command record.
 - Condition reads RED, YELLOW, or GREEN against your own shield capacity, so a
   scout and a starbase are judged by the same standard.
 - Phaser fire draws a beam, photon torpedoes a traveling spark, and kills a
   burst — for shots you fire and shots fired at you.
+  Phaser and ion beams follow the displayed hulls during movement and stack
+  separation; their visual endpoints never change the combat result.
 
 ## Quality of life
 

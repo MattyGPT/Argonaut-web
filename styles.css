@@ -584,7 +584,8 @@ body.realtime .ship {
    render.js beside the ship, so it can flip sides and clamp to the map edge. */
 #ship-menu {
   position: absolute;
-  z-index: 3;
+  /* A command menu must own its clicks even when it overlaps the minimap. */
+  z-index: 5;
   min-width: 10.5rem;
   max-width: 16rem;
   padding: .55rem .6rem .6rem;
@@ -1217,6 +1218,46 @@ body.classic .legend-swatch.stance-evasive { background: #40e0ff; box-shadow: no
   flex-direction: column;
   min-height: 0;
 }
+
+/* Your own decisions stay above the fleet traffic, with independent scrolling.
+   Fixed bounds keep long command histories from shrinking the tactical map. */
+#command-history {
+  flex: 0 0 auto;
+  border-bottom: 2px solid var(--line);
+  background: #102b3c;
+}
+
+#command-history h2 {
+  padding: .6rem .75rem .35rem;
+  font-size: .75rem;
+  color: var(--cyan);
+}
+
+#command-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 15rem;
+  overflow-y: auto;
+}
+
+#command-log li {
+  padding: .5rem .75rem;
+  border-bottom: 1px solid var(--line);
+  font-size: .77rem;
+  line-height: 1.45;
+  color: #effaff;
+}
+
+.command-stamp {
+  display: block;
+  margin-bottom: .25rem;
+  color: var(--cyan);
+  font-size: .68rem;
+}
+
+body.classic #command-history { background: #001a00; }
+body.classic #command-log li { color: inherit; }
 
 /* The out-of-flow list keeps the narrative's height out of grid track sizing;
    in flow, every new entry stretched the rows and pushed the report down. */
