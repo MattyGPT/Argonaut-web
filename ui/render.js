@@ -35,6 +35,8 @@ import {
   systemUnits,
 } from '../game/state.js';
 
+import { commandHistoryHtml } from './command-history.js';
+
 const commands = [
   ['computer', 'Computer', '0'],
   ['shields', 'Shields', '1'],
@@ -670,7 +672,7 @@ export const renderGame = (game, view = {}) => {
       const wreckMark = view.shipArt === 'sprites'
         ? '<img class="wreck-sprite" src="assets/sprites/neutral/wreck.png" alt="" aria-hidden="true">'
         : '+';
-      return `<span class="wreck" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" title="${ship.name}: destroyed" aria-hidden="true">${wreckMark}</span>`;
+      return `<span class="wreck" data-ship-id="${ship.id}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" title="${ship.name}: destroyed" aria-hidden="true">${wreckMark}</span>`;
     }
     const threat = threats.has(ship.id) ? ' threat' : '';
     const standing = orderFor(game, ship.id) ?? pendingOrderFor(game, ship.id);
@@ -815,6 +817,12 @@ export const renderGame = (game, view = {}) => {
     : game.log?.length ? game.log : ['Tactical systems online. Choose a command.'];
   const integrity = radioIntegrity(actor);
   const narrated = abbreviateNarrative(entries, integrity, actor.name);
+  const commandHistory = document.querySelector('#command-history');
+  const commandLog = document.querySelector('#command-log');
+  if (commandHistory && commandLog) {
+    commandHistory.hidden = !view.commandHistory?.length;
+    commandLog.innerHTML = commandHistoryHtml(view.commandHistory);
+  }
   log.innerHTML = terminalNarrative(view.terminalEvent) + narrated.slice(-150).reverse().map((entry) => `<li>${entry}</li>`).join('');
   document.querySelector('#log-meta').textContent = integrity >= 1
     ? 'Newest first'

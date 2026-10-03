@@ -34,6 +34,20 @@ const withPair = (game, firstId, first, secondId, second) => ({
 
 const TRAFFIC = 'Firebreather fires phasers at Bonhomme for 32 damage.';
 
+test('recent commands remain separate and unabridged under fleet traffic and radio damage', () => {
+  elements.clear();
+  const base = createGame({ seed: 'render-commands' });
+  const game = withFlagship({ ...base, log: Array(200).fill(TRAFFIC) }, {
+    systems: { ...base.ships.find((ship) => ship.id === 'fed-flagship').systems, radio: 0 },
+  });
+  renderGame(game, { commandHistory: [{ turn: 1, shipName: 'Argo', messages: ['Argo fires phasers at Iscariot for 32 damage.'] }] });
+  assert.equal(elements.get('#command-history').hidden, false);
+  assert.match(read('#command-log').innerHTML, /Argo fires phasers at Iscariot for 32 damage\./);
+  assert.doesNotMatch(read('#command-log').innerHTML, /Firebreather/);
+  renderGame(base);
+  assert.equal(elements.get('#command-history').hidden, true);
+});
+
 test('a healthy command ship reports GREEN on the console', () => {
   elements.clear();
   renderGame(createGame({ seed: 'render-green' }));

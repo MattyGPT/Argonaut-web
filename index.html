@@ -71,6 +71,10 @@
             <span id="log-meta">Newest first</span>
           </span>
         </div>
+        <section id="command-history" aria-labelledby="command-history-title" hidden>
+          <h2 id="command-history-title">Your recent commands</h2>
+          <ol id="command-log" tabindex="0" aria-label="Your last 12 commands, newest first"></ol>
+        </section>
         <div class="log-scroll">
           <ol id="log"></ol>
         </div>
@@ -309,6 +313,7 @@
           </section>
           <section id="guide-map">
             <h3>Reading the tactical map</h3>
+            <p><b>Your recent commands</b> stays above the battle narrative: your last twelve accepted commands, labelled by ship and stardate, with their full results. Scroll it independently of fleet traffic; it is saved with the battle.</p>
             <ul>
               <li>Every hull is a circle bearing its initial, coloured by alliance; a wreck is a <b>+</b>. A dashed border means vacant or surrendered.</li>
               <li>Dashed rings around your ship mark phaser (red), photon (yellow), and engine (cyan) reach. In an extended war the green ring around Xanadu is the dockyard.</li>

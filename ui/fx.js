@@ -31,20 +31,52 @@ const endpoint = (e) => {
   return { x: e.x2 + (-dy / len) * off, y: e.y2 + (dx / len) * off };
 };
 
-const drawBeam = (svg, e) => {
-  const to = endpoint(e);
+/**
+ * Beam anchors belong to the displayed hull, including its glide/interpolation
+ * and stack offset. Event coordinates remain the fallback for off-screen or
+ * missing hulls; never change the event itself or the combat calculation.
+ * preserveAspectRatio="none" makes this screen-to-SVG mapping exact even on
+ * a rectangular map, while the live SVG box also accounts for camera/shake.
+ */
+const displayedPoint = (map, svg, id, fallback) => {
+  const hull = [...(map?.querySelectorAll?.('.ship[data-ship-id], .wreck[data-ship-id]') ?? [])]
+    .find((el) => el.dataset.shipId === id);
+  const rect = hull?.getBoundingClientRect?.();
+  const box = svg.getBoundingClientRect?.();
+  if (!rect?.width || !rect.height || !box?.width || !box.height) return fallback;
+  const [x, y, width, height] = svg.getAttribute('viewBox').split(/\s+/).map(Number);
+  return {
+    x: x + ((rect.left + rect.width / 2 - box.left) / box.width) * width,
+    y: y + ((rect.top + rect.height / 2 - box.top) / box.height) * height,
+  };
+};
+
+const drawBeam = (svg, e, map) => {
   const line = document.createElementNS(SVG_NS, 'line');
-  line.setAttribute('x1', e.x1);
-  line.setAttribute('y1', e.y1);
-  line.setAttribute('x2', to.x);
-  line.setAttribute('y2', to.y);
   // Ion/EMP (round 22a) draws as its own arc-colored beam; phasers keep theirs.
   const beam = e.kind === 'ion' ? 'fx-ion' : 'fx-phaser';
   line.setAttribute('class', `${beam}${e.focus ? ' focused' : ''}${e.hit ? '' : ' miss'}`);
   line.setAttribute('vector-effect', 'non-scaling-stroke');
   svg.appendChild(line);
   setTimeout(() => line.remove(), 420);
-  if (e.hit) drawImpact(svg, to);
+  const flash = e.hit ? drawImpact(svg, { x: e.x2, y: e.y2 }) : null;
+  const started = performance.now();
+  const anchor = () => {
+    const from = displayedPoint(map, svg, e.fromId, { x: e.x1, y: e.y1 });
+    const target = displayedPoint(map, svg, e.toId, { x: e.x2, y: e.y2 });
+    const to = endpoint({ ...e, x1: from.x, y1: from.y, x2: target.x, y2: target.y });
+    line.setAttribute('x1', from.x);
+    line.setAttribute('y1', from.y);
+    line.setAttribute('x2', to.x);
+    line.setAttribute('y2', to.y);
+    if (flash) {
+      flash.setAttribute('cx', to.x);
+      flash.setAttribute('cy', to.y);
+    }
+    if (line.isConnected !== false && performance.now() - started < 420
+      && typeof requestAnimationFrame === 'function') requestAnimationFrame(anchor);
+  };
+  anchor();
 };
 
 /** A short ring where a phaser landed, so hits read as impacts and not just lines. */
@@ -55,6 +87,7 @@ const drawImpact = (svg, at) => {
   flash.setAttribute('class', 'fx-impact');
   svg.appendChild(flash);
   setTimeout(() => flash.remove(), 340);
+  return flash;
 };
 
 const drawTorpedo = (svg, e) => {
@@ -152,8 +185,8 @@ const drawTerminal = (svg, event) => {
   setTimeout(() => marker.remove(), TERMINAL_EFFECT_MS);
 };
 
-const draw = (svg, e) => {
-  if (e.kind === 'phasers' || e.kind === 'ion') drawBeam(svg, e);
+const draw = (svg, e, map) => {
+  if (e.kind === 'phasers' || e.kind === 'ion') drawBeam(svg, e, map);
   else if (e.kind === 'photons') drawTorpedo(svg, e);
   else if (e.kind === 'spread') drawSpread(svg, e);
   else if (e.kind === 'explosion') drawExplosion(svg, e);
@@ -167,8 +200,8 @@ export const playEffects = (events, map, playerId, win = FULL_FIELD) => {
   if (!relevant.length) return;
   const svg = layer(map, win);
   relevant.forEach((e, i) => {
-    if (isTerminalEvent(e)) draw(svg, e);
-    else setTimeout(() => draw(svg, e), i * 160);
+    if (isTerminalEvent(e)) draw(svg, e, map);
+    else setTimeout(() => draw(svg, e, map), i * 160);
   });
 };
 
@@ -202,7 +235,7 @@ export const replayEffects = (events, map, stepMs = 420, win = FULL_FIELD) => {
   const svg = layer(map, win);
   svg.innerHTML = '';
   if (!events.every((e) => e.simTime != null)) {
-    events.forEach((e, i) => setTimeout(() => draw(svg, e), i * stepMs));
+    events.forEach((e, i) => setTimeout(() => draw(svg, e, map), i * stepMs));
     return events.length * stepMs;
   }
   let at = 0;
@@ -211,7 +244,7 @@ export const replayEffects = (events, map, stepMs = 420, win = FULL_FIELD) => {
       at += Math.max(60, Math.min(2400, (e.simTime - events[i - 1].simTime) * REALTIME.msPerStardate));
     }
     const fire = at;
-    setTimeout(() => draw(svg, e), fire);
+    setTimeout(() => draw(svg, e, map), fire);
   });
   return at + stepMs;
 };
