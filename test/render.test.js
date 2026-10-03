@@ -139,7 +139,7 @@ test('a terminal card uses a cause-only narrative when no attacker is known', ()
 
 test('a paused battle disables command and ship-selection controls and hides the ship menu', () => {
   elements.clear();
-  renderGame(createGame({ seed: 'terminal-paused', extended: true }), {
+  renderGame(createGame({ seed: 'terminal-paused', reimagined: true }), {
     battlePaused: true,
     contextShipId: 'fed-cruiser-1',
   });
@@ -163,9 +163,9 @@ test('the map overlay uses the shared weapon and engine ranges', () => {
   assert.match(field, /range-ring engines/);
 });
 
-test('an extended war shows an order picker for a selected Federation ship', () => {
+test('a Reimagined war shows an order picker for a selected Federation ship', () => {
   elements.clear();
-  const game = withPair(createGame({ seed: 'order-panel', extended: true }),
+  const game = withPair(createGame({ seed: 'order-panel', reimagined: true }),
     'fed-flagship', { x: 10, y: 10 }, 'fed-cruiser-1', { x: 14, y: 10 });
   renderGame(game, { contextShipId: 'fed-cruiser-1' });
   const menu = read('#ship-menu').innerHTML;
@@ -184,7 +184,7 @@ test('a classic war offers no order picker', () => {
 
 test('selecting an enemy hull never opens an order picker', () => {
   elements.clear();
-  const game = withPair(createGame({ seed: 'order-panel-enemy', extended: true }),
+  const game = withPair(createGame({ seed: 'order-panel-enemy', reimagined: true }),
     'fed-flagship', { x: 10, y: 10 }, 'axis-flagship', { x: 16, y: 10 });
   renderGame(game, { contextShipId: 'axis-flagship' });
   const menu = read('#ship-menu').innerHTML;
@@ -230,10 +230,10 @@ test('a vacant hull offers boarding, not weapons', () => {
   assert.ok(!/data-ship-command="phasers"/.test(menu), 'weapons cannot fire on a vacant hull');
 });
 
-test('the top bar and legend mark an extended war', () => {
+test('the top bar and legend mark a Reimagined war', () => {
   elements.clear();
-  renderGame(createGame({ seed: 'mode-badge', extended: true }));
-  assert.equal(read('#mode-readout').textContent, 'EXTENDED WAR');
+  renderGame(createGame({ seed: 'mode-badge', reimagined: true }));
+  assert.equal(read('#mode-readout').textContent, 'REIMAGINED WAR');
   assert.match(read('#legend-note').textContent, /click a ship for its commands/);
   elements.clear();
   renderGame(createGame({ seed: 'mode-badge-classic' }));
@@ -274,16 +274,16 @@ test('the console carries a reactor power bar in a Reimagined war, and none in a
 test('a ship under orders wears a pip on the map', () => {
   elements.clear();
   const game = {
-    ...createGame({ seed: 'order-pip', extended: true }),
+    ...createGame({ seed: 'order-pip', reimagined: true }),
     orders: { 'fed-flagship': { type: 'hold', targetId: null } },
   };
   renderGame(game);
   assert.match(read('#map-field').innerHTML, /class="ship Federation active has-order"/);
 });
 
-test('the fleet orders button only appears in an extended war', () => {
+test('the fleet orders button only appears in a Reimagined war', () => {
   elements.clear();
-  renderGame(createGame({ seed: 'fleet-button', extended: true }));
+  renderGame(createGame({ seed: 'fleet-button', reimagined: true }));
   assert.match(read('#console').innerHTML, /data-command="fleet"/);
   elements.clear();
   renderGame(createGame({ seed: 'fleet-button-classic' }));
@@ -291,12 +291,12 @@ test('the fleet orders button only appears in an extended war', () => {
   assert.match(read('#console').innerHTML, /data-command="shots"/, 'every command has a button');
 });
 
-test('an extended war draws the dockyard ring around Xanadu', () => {
+test('a Reimagined war draws the dockyard ring around Xanadu', () => {
   elements.clear();
-  renderGame(createGame({ seed: 'dock-ring', extended: true }));
+  renderGame(createGame({ seed: 'dock-ring', reimagined: true }));
   const field = read('#map-field').innerHTML;
   assert.match(field, /range-ring dock/);
-  assert.match(field, /--x:50;--y:50;--d:16%/);
+  assert.match(field, /--x:50;--y:50;--d:5%/);
 });
 
 test('a classic war draws no dockyard ring', () => {
@@ -320,7 +320,7 @@ test('the war concluded panel carries a battle report and roll call', () => {
 });
 
 test('a scanned ace wears a star; an unscanned one does not', () => {
-  const base = createGame({ seed: 'ace-mark', extended: true });
+  const base = createGame({ seed: 'ace-mark', reimagined: true });
   const aced = {
     ...base,
     ships: base.ships.map((ship) => (ship.id === 'fed-flagship' ? { ...ship, kills: 3 } : ship)),
@@ -382,11 +382,11 @@ test('the replay button stays hidden until a round has been fought', () => {
 
 test('the mission panel carries the scenario brief and progress', () => {
   elements.clear();
-  renderGame(createGame({ seed: 'mission', extended: true, scenario: 'defend-xanadu' }));
+  renderGame(createGame({ seed: 'mission', reimagined: true, scenario: 'defend-xanadu' }));
   const panel = read('#report').innerHTML;
   assert.match(panel, /Hold Xanadu/);
   assert.match(panel, /Hold until stardate \d+/);
-  assert.match(panel, /Xanadu: active at 50, 50/);
+  assert.match(panel, /Xanadu: active at 160, 160/);
 });
 
 test('a classic war shows the original mission text', () => {
@@ -399,11 +399,11 @@ test('a classic war shows the original mission text', () => {
 
 test('the top bar names the scenario being fought', () => {
   elements.clear();
-  renderGame(createGame({ seed: 'scenario-badge', extended: true, scenario: 'hunt-the-vendetta' }));
-  assert.equal(read('#mode-readout').textContent, 'EXTENDED · HUNT THE HUNTER');
+  renderGame(createGame({ seed: 'scenario-badge', reimagined: true, scenario: 'hunt-the-vendetta' }));
+  assert.equal(read('#mode-readout').textContent, 'REIMAGINED · HUNT THE HUNTER');
   elements.clear();
-  renderGame(createGame({ seed: 'scenario-badge-plain', extended: true }));
-  assert.equal(read('#mode-readout').textContent, 'EXTENDED WAR');
+  renderGame(createGame({ seed: 'scenario-badge-plain', reimagined: true }));
+  assert.equal(read('#mode-readout').textContent, 'REIMAGINED WAR');
 });
 
 // --- Round 15a: terrain overlays on the map and the minimap (Reimagined) ---
@@ -448,13 +448,11 @@ test('terrain is crisp within mapper reach and faint beyond it', () => {
   assert.match(field, /class="terrain ion-storm" style="[^"]*--o:0\.45"/, 'an unmapped one fades to faintOpacity');
 });
 
-test('a classic or extended war draws no terrain anywhere', () => {
-  for (const opts of [{}, { extended: true }]) {
-    elements.clear();
-    renderGame(createGame({ seed: 'render-terrain-off', ...opts }));
-    assert.ok(!/class="terrain/.test(read('#map-field').innerHTML), 'the world layer carries no blobs');
-    assert.equal(read('#minimap').innerHTML, '', 'and the minimap stays dark');
-  }
+test('a Classic war draws no terrain anywhere', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'render-terrain-off' }));
+  assert.ok(!/class="terrain/.test(read('#map-field').innerHTML), 'the world layer carries no blobs');
+  assert.equal(read('#minimap').innerHTML, '', 'and the minimap stays dark');
 });
 
 // --- Round 15b: nebula sensor denial on the map ---
@@ -531,18 +529,12 @@ test('a prize of war wears a pip on the map and tells its story in the menu', ()
   assert.match(menu, /Prize of war — taken from the Axis at stardate 3; prize crew 10\/140 — under-manned, engines and guns degraded/);
 });
 
-test('the Reimagined order picker offers Board…; an extended war does not', () => {
+test('the Reimagined order picker offers Board… alongside fleet orders', () => {
   elements.clear();
   renderGame(withPair(createGame({ seed: 'order-board', reimagined: true }),
     'fed-flagship', { x: 10, y: 10 }, 'fed-cruiser-1', { x: 14, y: 10 }), { contextShipId: 'fed-cruiser-1' });
   assert.match(read('#ship-menu').innerHTML, /data-order="board"/);
-
-  elements.clear();
-  renderGame(withPair(createGame({ seed: 'order-board-off', extended: true }),
-    'fed-flagship', { x: 10, y: 10 }, 'fed-cruiser-1', { x: 14, y: 10 }), { contextShipId: 'fed-cruiser-1' });
-  const menu = read('#ship-menu').innerHTML;
-  assert.match(menu, /data-order="hold"/, 'the extended order picker is unchanged');
-  assert.ok(!/data-order="board"/.test(menu), 'boarding parties are Reimagined-only');
+  assert.match(read('#ship-menu').innerHTML, /data-order="hold"/);
 });
 
 // --- Play-test balance pass: the battlefield legend ---
@@ -572,17 +564,7 @@ test('a classic legend keys only what a classic map draws', () => {
   assert.match(legend, /legend-swatch wreck/);
   assert.match(legend, /legend-swatch ring-phasers/);
   assert.ok(!/terrain-/.test(legend), 'no terrain in a classic war');
-  assert.ok(!/pip-prize|pip-order|star-ace|ring-dock|drone-glyph|stance-/.test(legend), 'no extended or Reimagined markers');
-});
-
-test('an extended legend adds the admiralty markers but no terrain', () => {
-  elements.clear();
-  renderGame(createGame({ seed: 'legend-extended', extended: true }));
-  const legend = read('#map-legend').innerHTML;
-  assert.match(legend, /legend-swatch pip-order/);
-  assert.match(legend, /legend-swatch star-ace/);
-  assert.match(legend, /legend-swatch ring-dock/);
-  assert.ok(!/terrain-|pip-prize|drone-glyph|stance-/.test(legend), 'terrain and prizes are Reimagined-only');
+  assert.ok(!/pip-prize|pip-order|star-ace|ring-dock|drone-glyph|stance-/.test(legend), 'no Reimagined markers');
 });
 
 // --- Round 20: the carrier's bay on the map, in the menus, and in the console ---
@@ -742,12 +724,6 @@ test('the Launch drones order grows out of a carrier menu alone', () => {
   elements.clear();
   renderGame(bayGame('render-launch-spent'), { contextShipId: 'fed-carrier' });
   assert.ok(!/data-order="launch"/.test(read('#ship-menu').innerHTML), 'a spent bay offers nothing');
-
-  elements.clear();
-  const extended = withPair(createGame({ seed: 'render-launch-extended', extended: true }),
-    'fed-flagship', { x: 100, y: 100 }, 'fed-cruiser-1', { x: 104, y: 100 });
-  renderGame(extended, { contextShipId: 'fed-cruiser-1' });
-  assert.ok(!/data-order="launch"/.test(read('#ship-menu').innerHTML), 'drones are Reimagined-only');
 });
 
 test('the console carries Launch drones only while flying a carrier with a full bay', () => {

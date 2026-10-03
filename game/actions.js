@@ -105,11 +105,11 @@ export const weaponDamage = (type, shooter, rng, grudge = 0, powerEff = 1, durab
 
 /**
  * What the narrative adds when a volley destroys a hull. Captains are named only in
- * an extended war, so a classic war's log stays exactly as calibrated. `shooter`
+ * a Reimagined war, so a classic war's log stays exactly as calibrated. `shooter`
  * still carries its pre-kill tally here.
  */
 export const killLines = (game, shooter, victim) => {
-  if (!game.extended) return [];
+  if (!game.reimagined) return [];
   const credited = (shooter.kills ?? 0) + 1;
   // A hull whose crew is killed but whose subsystems survive goes dark rather than
   // breaking up: it is a vacant prize the winner can board, not wreckage.
@@ -229,7 +229,7 @@ export const damageShip = (ship, amount, rng = createRng('damage'), options = {}
   // enemy through sooner — its own pool is gone and there is less left to spill
   // into — so presenting the wrong arc genuinely hurts. Any other hit on a hull
   // with arcs is positional: the total absorbs as always and the arcs burn down
-  // proportionally. A hull without arcs (classic, extended, a drone, an old save)
+  // proportionally. A hull without arcs (classic, a drone, an old save)
   // keeps the single-pool math byte-identically, which is how parity holds.
   const arc = options.arc && ship.arcs ? options.arc : null;
   let arcs = ship.arcs;
@@ -537,7 +537,7 @@ const computerReport = (game, actor) => {
 
 /**
  * The directional-shield intel a scan earns (round 23): the arc breakdown and
- * the heading of a hull that fights with arcs. Empty in a classic or extended
+ * the heading of a hull that fights with arcs. Empty in a classic
  * war, for a drone, and for an old save — `arcsOf` returns null there, so the
  * line reads exactly as it always did.
  */
@@ -552,10 +552,10 @@ const scanReport = (game, target) => ({
   lines: [
     `Class: ${target.className}`,
     `Affiliation: ${target.faction}`,
-    // Scanning is how you learn who is aboard — in an extended war that is the only
+    // Scanning is how you learn who is aboard — in a Reimagined war that is the only
     // way to work out which hull has sworn to hunt Captain Jason. A drone has
     // nobody aboard (round 20), and must never read as "Captain undefined".
-    ...(game.extended
+    ...(game.reimagined
       ? (isDrone(target)
         ? ['Command: none — an unmanned fighter drone.']
         : [`Captain: ${target.captain}${isAce(target) ? ` — an ace, ${target.kills} kills` : ''}`])
@@ -919,7 +919,7 @@ export const resolveCollision = (game, actor) => {
  * absorbs rocks once a hull is already dark, and collisions remain the killing blow
  * a tow into the field sets up. Narrated and drawn as an impact burst. Terrain is
  * [] outside a Reimagined war, so this never fires there and no roll is consumed —
- * a classic or extended war keeps its exact seeded sequence (parity).
+ * a classic war keeps its exact seeded sequence (parity).
  */
 export const resolveAsteroidStrike = (game, ship) => {
   const current = getShip(game, ship?.id);
@@ -1034,7 +1034,7 @@ const tractorAction = (game, action, actor) => {
   if (distance(actor, found.target) > RANGES.tractor) return invalid(game, `${found.target.name} is out of tractor range.`);
   if (isImmovable(found.target)) return invalid(game, `${found.target.name} is far too massive for the tractor beam to move.`);
   const grid = game.gridSize ?? GRID_SIZE;
-  // A directed tow is Reimagined-only; a classic or extended war ignores the fields
+  // A directed tow is Reimagined-only; a classic war ignores the fields
   // and pulls toward the caster exactly as calibrated.
   const destination = game.reimagined ? towDestination(game, action, grid) : null;
   const { pull, position } = tractorLock(actor, found.target, grid, destination, powerEffect(game, actor, 'tractor'));
@@ -1356,7 +1356,7 @@ export const flushShields = (actor, game = null) => {
  * the next stardate.
  */
 const setOrder = (game, action, actor) => {
-  if (!game.extended) return invalid(game, 'Fleet orders are only issued in an extended war.');
+  if (!game.reimagined) return invalid(game, 'Fleet orders are only issued in a Reimagined war.');
   const ship = getShip(game, action.shipId);
   if (!ship) return invalid(game, 'No such ship.');
   if (ship.faction !== actor.faction) return invalid(game, 'Only Federation ships take your orders.');
@@ -1367,7 +1367,7 @@ const setOrder = (game, action, actor) => {
   const order = { type, targetId: null };
   if (type === 'board') {
     // The one targeted order whose subject is a derelict rather than an active
-    // ship — and a Reimagined-war order only, so a classic or extended war never
+    // ship — and a Reimagined-war order only, so a classic war never
     // musters a boarding party (round 17).
     if (!game.reimagined) return invalid(game, 'Boarding parties are only mustered in a Reimagined war.');
     const target = getShip(game, action.targetId);
@@ -1407,7 +1407,7 @@ const setOrder = (game, action, actor) => {
  * treadmill.
  */
 const setRefit = (game, action, actor) => {
-  if (!game.extended) return invalid(game, 'Refits are an extended-war option.');
+  if (!game.reimagined) return invalid(game, 'Refits are a Reimagined option.');
   const ship = getShip(game, action.shipId);
   if (!ship || ship.faction !== actor.faction || !isActive(ship)) return invalid(game, 'That hull cannot be refitted.');
   if (game.refits?.[ship.id]) return invalid(game, `${ship.name} has already taken its refit this war.`);

@@ -458,52 +458,31 @@ test('a lethal computer weapon hit records truthful destruction attribution for 
 });
 
 test('computer self-destruction keeps every destruction event', () => {
-  const game = withShips(createGame({ seed: 'axis-suicide-events', extended: true }), (ship) => {
+  const victims = [
+    ['fed-flagship', 'Argo', 56, 50],
+    ['fed-cruiser-1', 'Bonhomme', 55, 50],
+    ['fed-cruiser-2', 'Crusader', 50, 55],
+    ['fed-cruiser-3', 'Defender', 45, 50],
+    ['fed-scout', 'Empyreal', 50, 45],
+    ['fed-interceptor', 'Vanguard', 47, 47],
+    ['fed-artillery', 'Yeoman', 53, 53],
+  ];
+  const game = withShips({ ...createGame({ seed: 'axis-suicide-events', reimagined: true, loadout: defaultLoadout() }), terrain: [] }, (ship) => {
     if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 2 };
-    if (ship.id === 'fed-flagship') return { ...ship, x: 58, y: 50, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0 } };
-    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 55, y: 50, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0 } };
-    if (ship.id === 'fed-cruiser-2') return { ...ship, x: 50, y: 55, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0 } };
-    if (ship.id === 'fed-cruiser-3') return { ...ship, x: 45, y: 50, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0 } };
-    if (ship.id === 'fed-scout') return { ...ship, x: 50, y: 45, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0 } };
-    if (ship.faction !== 'Federation') return { ...ship, status: 'destroyed' };
-    return { ...ship, x: 95, y: 95 };
+    const victim = victims.find(([id]) => id === ship.id);
+    if (victim) return { ...ship, x: victim[2], y: victim[3], systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0, tractor: 0, ion: 0 } };
+    return { ...ship, status: 'destroyed' };
   });
   const result = resolveComputerTurns({ ...game, phase: 'computer' });
   const destructions = result.events.filter((event) => event.kind === 'destruction' && event.cause === 'self-destruct');
   assert.deepEqual(destructions, [
-    {
-      kind: 'destruction', shipId: 'fed-flagship', shipName: 'Argo', faction: 'Federation',
-      x: 58, y: 50, cause: 'self-destruct',
+    ...victims.map(([shipId, shipName, x, y]) => ({
+      kind: 'destruction', shipId, shipName, faction: 'Federation', x, y, cause: 'self-destruct',
       attackerId: 'axis-cruiser-1', attackerName: 'Grendel', attackerFaction: 'Axis',
-    },
-    {
-      kind: 'destruction', shipId: 'fed-cruiser-1', shipName: 'Bonhomme', faction: 'Federation',
-      x: 55, y: 50, cause: 'self-destruct',
-      attackerId: 'axis-cruiser-1', attackerName: 'Grendel', attackerFaction: 'Axis',
-    },
-    {
-      kind: 'destruction', shipId: 'fed-cruiser-2', shipName: 'Crusader', faction: 'Federation',
-      x: 50, y: 55, cause: 'self-destruct',
-      attackerId: 'axis-cruiser-1', attackerName: 'Grendel', attackerFaction: 'Axis',
-    },
-    {
-      kind: 'destruction', shipId: 'fed-cruiser-3', shipName: 'Defender', faction: 'Federation',
-      x: 45, y: 50, cause: 'self-destruct',
-      attackerId: 'axis-cruiser-1', attackerName: 'Grendel', attackerFaction: 'Axis',
-    },
-    {
-      kind: 'destruction', shipId: 'fed-scout', shipName: 'Empyreal', faction: 'Federation',
-      x: 50, y: 45, cause: 'self-destruct',
-      attackerId: 'axis-cruiser-1', attackerName: 'Grendel', attackerFaction: 'Axis',
-    },
-    {
-      kind: 'destruction', shipId: 'axis-cruiser-1', shipName: 'Grendel', faction: 'Axis',
-      x: 50, y: 50, cause: 'self-destruct',
-    },
+    })),
+    { kind: 'destruction', shipId: 'axis-cruiser-1', shipName: 'Grendel', faction: 'Axis', x: 50, y: 50, cause: 'self-destruct' },
   ]);
-  // Grendel took five Federation hulls with it; the autopilot detonator is credited
-  // with each enemy kill exactly as the player's `=` would be.
-  assert.equal(getShip(result, 'axis-cruiser-1').kills, 5);
+  assert.equal(getShip(result, 'axis-cruiser-1').kills, 7, 'every enemy destroyed by the autopilot blast is credited');
 });
 
 test('the resigned Federation autopilot surrenders when collapsed', () => {
@@ -616,7 +595,7 @@ const CORNERS = {
   Cabal: { x: 95, y: 95 },
 };
 
-const cornered = (seed, update) => withShips(createGame({ seed }), (ship) => ({
+const cornered = (seed, update, options = {}) => withShips(createGame({ seed, ...options }), (ship) => ({
   ...ship,
   ...CORNERS[ship.faction],
   ...(update ? update(ship) : {}),
@@ -645,10 +624,9 @@ test('working engines mean the war is never hopeless', () => {
 test('a fleet holding station that nothing can reach is a hopeless draw', () => {
   const cornerGame = cornered('hold-stalemate', (ship) => ({
     systems: { ...ship.systems, engines: ship.faction === 'Federation' ? 5 : 0 },
-  }));
+  }), { reimagined: true, loadout: defaultLoadout() });
   const game = {
     ...cornerGame,
-    extended: true,
     orders: Object.fromEntries(cornerGame.ships
       .filter((ship) => ship.faction === 'Federation')
       .map((ship) => [ship.id, { type: 'hold', targetId: null }])),
@@ -976,20 +954,23 @@ test('resigning twice does not hand the successor over as well', () => {
   assert.equal(twice.game.playerShipId, once.game.playerShipId);
 });
 
-// --- Extended war: fleet orders -------------------------------------------------
+// --- Reimagined war: fleet orders -------------------------------------------------
 
-const extended = (seed, update) => withShips(createGame({ seed, extended: true }), update);
+// Fleet-command fixtures place Xanadu explicitly and isolate terrain from the rule under test.
+const fleetWar = (seed, update) => withShips({
+  ...createGame({ seed, reimagined: true, loadout: defaultLoadout() }), terrain: [],
+}, (ship) => update(ship.id === 'xanadu' ? { ...ship, x: 50, y: 50 } : ship));
 
-test('an extended war starts with the flag set and no orders issued', () => {
-  const game = createGame({ seed: 'extended-fresh', extended: true });
-  assert.equal(game.extended, true);
+test('a Reimagined war starts with the flag set and no orders issued', () => {
+  const game = createGame({ seed: 'fleet-fresh', reimagined: true, loadout: defaultLoadout() });
+  assert.equal(game.reimagined, true);
   assert.deepEqual(game.orders, {});
   assert.deepEqual(game.pendingOrders, {});
-  assert.equal(createGame({ seed: 'extended-fresh' }).extended, false);
+  assert.equal(createGame({ seed: 'fleet-fresh' }).reimagined, false);
 });
 
-test('an extended war gives captains a survival instinct a classic war lacks', () => {
-  const setup = (extended) => withShips(createGame({ seed: 'doctrine-flush', extended }), (ship) => {
+test('a Reimagined war gives captains a survival instinct a classic war lacks', () => {
+  const setup = (reimagined) => withShips(createGame({ seed: 'doctrine-flush', reimagined, loadout: defaultLoadout() }), (ship) => {
     if (ship.id === 'axis-cruiser-1') return { ...ship, x: 10, y: 10, shields: 5 };
     if (ship.faction === 'Federation') return { ...ship, x: 90, y: 90 };
     return { ...ship, x: 95, y: 5 };
@@ -1002,19 +983,23 @@ test('a classic war takes no fleet orders', () => {
   const result = applyPlayerAction(createGame({ seed: 'classic-orders' }), {
     type: 'orders', shipId: 'fed-scout', order: { type: 'hold' },
   });
-  assert.match(result.messages.join(' '), /extended war/);
+  assert.match(result.messages.join(' '), /Reimagined/);
   assert.deepEqual(result.game, createGame({ seed: 'classic-orders' }));
 });
 
 test('issuing an order costs no turn', () => {
-  const game = createGame({ seed: 'free-order', extended: true });
+  const game = fleetWar('free-order', (ship) => {
+    if (ship.id === 'fed-flagship') return { ...ship, x: 50, y: 50 };
+    if (ship.id === 'fed-scout') return { ...ship, x: 52, y: 50 };
+    return ship;
+  });
   const result = applyPlayerAction(game, { type: 'orders', shipId: 'fed-scout', order: { type: 'hold' } });
   assert.equal(result.game.phase, 'player', 'the captain still has an action this stardate');
   assert.deepEqual(result.game.orders['fed-scout'], { type: 'hold', targetId: null });
 });
 
 test('orders validate the ship they name', () => {
-  const game = createGame({ seed: 'order-validation', extended: true });
+  const game = createGame({ seed: 'order-validation', reimagined: true, loadout: defaultLoadout() });
   const interceptFriendly = applyPlayerAction(game, {
     type: 'orders', shipId: 'fed-scout', order: { type: 'intercept' }, targetId: 'fed-cruiser-1',
   });
@@ -1030,7 +1015,7 @@ test('orders validate the ship they name', () => {
 });
 
 test('order targets are friendlies to protect and enemies to intercept', () => {
-  const game = createGame({ seed: 'order-targets', extended: true });
+  const game = createGame({ seed: 'order-targets', reimagined: true, loadout: defaultLoadout() });
   const escort = orderTargets(game, 'fed-scout', 'escort');
   assert.ok(escort.every((ship) => ship.faction === 'Federation'));
   assert.ok(escort.some((ship) => ship.id === 'xanadu'));
@@ -1041,7 +1026,7 @@ test('order targets are friendlies to protect and enemies to intercept', () => {
 });
 
 test('Xanadu relays an order your own radio cannot reach', () => {
-  const game = extended('relay', (ship) => {
+  const game = fleetWar('relay', (ship) => {
     if (ship.id === 'fed-flagship') return { ...ship, x: 5, y: 5 };
     if (ship.id === 'fed-scout') return { ...ship, x: 95, y: 95 };
     return ship;
@@ -1052,7 +1037,7 @@ test('Xanadu relays an order your own radio cannot reach', () => {
 });
 
 test('an order out of radio contact waits one stardate', () => {
-  const game = extended('radio-lag', (ship) => {
+  const game = fleetWar('radio-lag', (ship) => {
     if (ship.id === 'fed-flagship') return { ...ship, x: 5, y: 5 };
     if (ship.id === 'fed-scout') return { ...ship, x: 95, y: 95 };
     if (ship.id === 'xanadu') return { ...ship, systems: { ...ship.systems, radio: 0 } };
@@ -1070,7 +1055,7 @@ test('an order out of radio contact waits one stardate', () => {
 });
 
 test('a ship ordered to hold stays put instead of pursuing', () => {
-  const game = extended('hold', (ship) => {
+  const game = fleetWar('hold', (ship) => {
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 10, y: 10 };
     if (ship.faction === 'Federation') return { ...ship, x: 10, y: 14 };
     return { ...ship, x: 90, y: 90 };
@@ -1081,7 +1066,7 @@ test('a ship ordered to hold stays put instead of pursuing', () => {
 });
 
 test('a ship ordered to hold still fires at what comes to it', () => {
-  const game = extended('hold-fire', (ship) => {
+  const game = fleetWar('hold-fire', (ship) => {
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 10, y: 10 };
     if (ship.id === 'axis-flagship') return { ...ship, x: 30, y: 10 };
     if (ship.faction === 'Federation') return ship;
@@ -1094,7 +1079,7 @@ test('a ship ordered to hold still fires at what comes to it', () => {
 });
 
 test('an intercept order engages the named ship over a nearer enemy', () => {
-  const setup = (isExtended) => withShips(createGame({ seed: 'intercept', extended: isExtended }), (ship) => {
+  const setup = (isReimagined) => withShips(createGame({ seed: 'intercept', reimagined: isReimagined, loadout: defaultLoadout() }), (ship) => {
     if (ship.id === 'fed-flagship') return { ...ship, x: 10, y: 10 };
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 10, y: 12 };
     if (ship.id === 'axis-flagship') return { ...ship, x: 18, y: 12 };
@@ -1111,7 +1096,7 @@ test('an intercept order engages the named ship over a nearer enemy', () => {
 });
 
 test('a withdraw order runs for Xanadu', () => {
-  const game = extended('withdraw', (ship) => {
+  const game = fleetWar('withdraw', (ship) => {
     if (ship.id === 'fed-scout') return { ...ship, x: 80, y: 50 };
     if (ship.faction === 'Federation') return ship;
     return { ...ship, x: 80, y: 95 }; // every enemy past tractor reach, so nothing to shoot at
@@ -1124,7 +1109,7 @@ test('a withdraw order runs for Xanadu', () => {
 });
 
 test('a withdrawing ship still shoots at what is already in range', () => {
-  const game = extended('withdraw-fire', (ship) => {
+  const game = fleetWar('withdraw-fire', (ship) => {
     if (ship.id === 'fed-scout') return { ...ship, x: 80, y: 50 };
     if (ship.id === 'axis-flagship') return { ...ship, x: 88, y: 50 };
     if (ship.faction === 'Federation') return ship;
@@ -1135,7 +1120,7 @@ test('a withdrawing ship still shoots at what is already in range', () => {
 });
 
 test('a screening ship posts itself between its ward and the threat', () => {
-  const game = extended('screen', (ship) => {
+  const game = fleetWar('screen', (ship) => {
     if (ship.id === 'xanadu') return ship;
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 10, y: 10 };
     if (ship.id === 'axis-flagship') return { ...ship, x: 90, y: 50 };
@@ -1148,7 +1133,7 @@ test('a screening ship posts itself between its ward and the threat', () => {
 });
 
 test('an escort closes on its ward when nothing threatens it', () => {
-  const game = extended('escort', (ship) => {
+  const game = fleetWar('escort', (ship) => {
     if (ship.id === 'xanadu') return ship;
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 10, y: 10 };
     if (ship.id === 'fed-scout') return { ...ship, x: 60, y: 60 };
@@ -1161,7 +1146,7 @@ test('an escort closes on its ward when nothing threatens it', () => {
 });
 
 test('an order whose ship is gone falls back to fleet behavior', () => {
-  const game = extended('stale-order', (ship) => (ship.id === 'axis-flagship'
+  const game = fleetWar('stale-order', (ship) => (ship.id === 'axis-flagship'
     ? { ...ship, status: 'destroyed' }
     : ship));
   const ordered = { ...game, orders: { 'fed-cruiser-1': { type: 'intercept', targetId: 'axis-flagship' } } };
@@ -1170,7 +1155,7 @@ test('an order whose ship is gone falls back to fleet behavior', () => {
 
 test('the fleet report lists every hull with its standing orders', () => {
   const game = {
-    ...createGame({ seed: 'fleet-report', extended: true }),
+    ...createGame({ seed: 'fleet-report', reimagined: true, loadout: defaultLoadout() }),
     orders: { 'fed-scout': { type: 'hold', targetId: null } },
   };
   const report = reportFor(game, 'fleet');
@@ -1180,8 +1165,8 @@ test('the fleet report lists every hull with its standing orders', () => {
   assert.ok(!report.lines.some((line) => /Firebreather/.test(line)), 'only your own fleet takes orders');
 });
 
-test('an extended war played out under standing orders still resolves', () => {
-  let game = createGame({ seed: 'extended-full-war', extended: true });
+test('a Reimagined war played out under standing orders still resolves', () => {
+  let game = createGame({ seed: 'fleet-full-war', reimagined: true, loadout: defaultLoadout() });
   game = {
     ...game,
     orders: {
@@ -1198,12 +1183,12 @@ test('an extended war played out under standing orders still resolves', () => {
   assert.ok(game.turn > 1, 'and it must have taken more than one stardate');
 });
 
-// --- Extended war: dockyard support and the battle report ----------------------
+// --- Reimagined war: dockyard support and the battle report ----------------------
 
 const crippled = (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 54, y: 50, shields: 10 } : ship);
 
-test('a damaged ship beside Xanadu repairs in an extended war', () => {
-  const game = extended('dock-repair', (ship) => (ship.id === 'fed-cruiser-1'
+test('a damaged ship beside Xanadu repairs in a Reimagined war', () => {
+  const game = fleetWar('dock-repair', (ship) => (ship.id === 'fed-cruiser-1'
     ? { ...ship, x: 54, y: 50, shields: 10, crew: 30 }
     : ship));
   const { game: after, messages } = resolveDocking(game);
@@ -1220,21 +1205,21 @@ test('a classic war has no dockyard support', () => {
 });
 
 test('docking needs the ship inside the dockyard ring', () => {
-  const game = extended('dock-far', (ship) => (ship.id === 'fed-cruiser-1'
+  const game = fleetWar('dock-far', (ship) => (ship.id === 'fed-cruiser-1'
     ? { ...ship, x: 50 + DOCKING.range + 1, y: 50, shields: 10 }
     : ship));
   assert.equal(getShip(resolveDocking(game).game, 'fed-cruiser-1').shields, 10);
 });
 
 test('a ship held by a tractor beam cannot dock', () => {
-  const game = extended('dock-held', (ship) => (ship.id === 'fed-cruiser-1'
+  const game = fleetWar('dock-held', (ship) => (ship.id === 'fed-cruiser-1'
     ? { ...ship, x: 54, y: 50, shields: 10, tractorBy: 'axis-flagship' }
     : ship));
   assert.equal(getShip(resolveDocking(game).game, 'fed-cruiser-1').shields, 10);
 });
 
 test('a crippled starbase cannot support the fleet', () => {
-  const game = extended('dock-crippled', (ship) => {
+  const game = fleetWar('dock-crippled', (ship) => {
     if (ship.id === 'xanadu') return { ...ship, shields: 10 };
     return crippled(ship);
   });
@@ -1242,7 +1227,7 @@ test('a crippled starbase cannot support the fleet', () => {
 });
 
 test('the dockyard rebuilds one damaged subsystem per stardate, worst first', () => {
-  const game = extended('dock-systems', (ship) => (ship.id === 'fed-cruiser-1'
+  const game = fleetWar('dock-systems', (ship) => (ship.id === 'fed-cruiser-1'
     ? { ...ship, x: 54, y: 50, shields: 10, systems: { ...ship.systems, mapper: 0, radio: 0 } }
     : ship));
   const first = getShip(resolveDocking(game).game, 'fed-cruiser-1');
@@ -1257,7 +1242,7 @@ test('the dockyard rebuilds one damaged subsystem per stardate, worst first', ()
 });
 
 test('docking stops at full shields and crew', () => {
-  const game = extended('dock-full', (ship) => (ship.id === 'fed-cruiser-1'
+  const game = fleetWar('dock-full', (ship) => (ship.id === 'fed-cruiser-1'
     ? { ...ship, x: 54, y: 50, shields: 139, crew: 139 }
     : ship));
   const { game: after, messages } = resolveDocking(game);
@@ -1268,7 +1253,7 @@ test('docking stops at full shields and crew', () => {
 });
 
 test('a docked hull may take one refit, and only one', () => {
-  const game = extended('refit-once', (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 54, y: 50 } : ship));
+  const game = fleetWar('refit-once', (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 54, y: 50 } : ship));
   const first = applyPlayerAction(game, { type: 'refit', shipId: 'fed-cruiser-1', kind: 'photons' });
   assert.equal(getShip(first.game, 'fed-cruiser-1').systems.photons, 3, 'the cruiser template carries 2 photon bays');
   assert.equal(first.game.refits['fed-cruiser-1'], 'photons');
@@ -1280,14 +1265,14 @@ test('a docked hull may take one refit, and only one', () => {
 });
 
 test('a refit needs the dockyard ring', () => {
-  const game = extended('refit-afloat', (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 20, y: 20 } : ship));
+  const game = fleetWar('refit-afloat', (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 20, y: 20 } : ship));
   const result = applyPlayerAction(game, { type: 'refit', shipId: 'fed-cruiser-1', kind: 'engines' });
   assert.match(result.messages.join(' '), /inside the dockyard ring/);
   assert.equal(getShip(result.game, 'fed-cruiser-1').systems.engines, 4);
 });
 
 test('a refit cannot push a system past its cap', () => {
-  const game = extended('refit-cap', (ship) => (ship.id === 'fed-cruiser-1'
+  const game = fleetWar('refit-cap', (ship) => (ship.id === 'fed-cruiser-1'
     ? { ...ship, x: 54, y: 50, systems: { ...ship.systems, photons: 4 } }
     : ship));
   const result = applyPlayerAction(game, { type: 'refit', shipId: 'fed-cruiser-1', kind: 'photons' });
@@ -1295,19 +1280,20 @@ test('a refit cannot push a system past its cap', () => {
   assert.equal(getShip(result.game, 'fed-cruiser-1').systems.photons, 4);
 });
 
-test('refits are an extended-war option', () => {
+test('refits are an Reimagined option', () => {
   const game = withShips(createGame({ seed: 'refit-classic' }), (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 54, y: 50 } : ship));
   const result = applyPlayerAction(game, { type: 'refit', shipId: 'fed-cruiser-1', kind: 'photons' });
-  assert.match(result.messages.join(' '), /extended-war option/);
+  assert.match(result.messages.join(' '), /Reimagined option/);
 });
 
 test('docking resolves during the computer phase and reaches the narrative', () => {
-  const game = extended('dock-in-round', (ship) => {
+  const game = fleetWar('dock-in-round', (ship) => {
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 52, y: 50, shields: 20 };
     if (ship.faction === 'Federation') return ship;
     return { ...ship, status: 'destroyed' };
   });
-  const resolved = resolveComputerTurns(game);
+  // Route no reactor power to shields so the narrative gain is solely dockyard repair.
+  const resolved = resolveComputerTurns({ ...game, power: { 'fed-cruiser-1': { ...POWER.need, shields: 0 } } });
   assert.ok(resolved.log.some((line) => /Bonhomme docks at Xanadu: shields \+12\./.test(line)));
   assert.equal(getShip(resolved, 'fed-cruiser-1').shields, 32);
 });
@@ -1417,39 +1403,39 @@ test('a ship cannot end its move overlapping another live hull', () => {
   assert.deepEqual(stillOverlapping, [], 'every overlap the actor is party to resolves');
 });
 
-// --- Extended war: alliance doctrines ------------------------------------------
+// --- Reimagined war: alliance doctrines ------------------------------------------
 
 test('a gutted Axis captain takes the enemy fleet with it', () => {
-  const setup = (isExtended) => withShips(createGame({ seed: 'axis-suicide', extended: isExtended }), (ship) => {
+  const setup = (isReimagined) => withShips(createGame({ seed: 'axis-suicide', reimagined: isReimagined, loadout: defaultLoadout() }), (ship) => {
     if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 2 };
-    if (ship.id === 'fed-flagship') return { ...ship, x: 58, y: 50 };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 56, y: 50 };
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 55, y: 50 };
     if (ship.id === 'fed-cruiser-2') return { ...ship, x: 50, y: 55 };
     if (ship.id === 'fed-cruiser-3') return { ...ship, x: 45, y: 50 };
     if (ship.id === 'fed-scout') return { ...ship, x: 50, y: 45 };
+    if (ship.id === 'fed-interceptor') return { ...ship, x: 47, y: 47 };
+    if (ship.id === 'fed-artillery') return { ...ship, x: 53, y: 53 };
     if (ship.faction === 'Axis') return { ...ship, x: 5, y: 5 };
     return { ...ship, x: 95, y: 95 };
   });
   assert.equal(chooseAiAction(setup(true), 'axis-cruiser-1').type, 'self-destruct',
-    'five enemies inside the blast and none of its own');
+    'seven enemies inside the blast and none of its own');
   assert.notEqual(chooseAiAction(setup(false), 'axis-cruiser-1').type, 'self-destruct',
     'a classic autopilot never gives up its hull');
 });
 
 test('an Axis captain will not detonate over its own fleet', () => {
-  // A Reimagined staging, so there are enough Axis hulls afloat to stack five of
-  // them inside the blast beside five enemies: at five-and-five the enemy count
-  // clears the trigger, and only the friendly-fire guard (enemies > friends) says
-  // no. In an extended war just four consorts exist, and the count gate would
-  // mask the guard being tested.
+  // Seven enemies clear the detonation count gate; seven friends alone prevent it.
   const game = withShips(createGame({ seed: 'axis-restraint', reimagined: true, loadout: defaultLoadout() }), (ship) => {
     if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 2 };
-    if (ship.id === 'fed-flagship') return { ...ship, x: 58, y: 50 };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 56, y: 50 };
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 55, y: 50 };
     if (ship.id === 'fed-cruiser-2') return { ...ship, x: 50, y: 55 };
     if (ship.id === 'fed-cruiser-3') return { ...ship, x: 45, y: 50 };
     if (ship.id === 'fed-scout') return { ...ship, x: 50, y: 45 };
-    if (['axis-cruiser-2', 'axis-cruiser-3', 'axis-scout', 'axis-interceptor', 'axis-artillery'].includes(ship.id)) return { ...ship, x: 52, y: 52 }; // five of its own inside the blast
+    if (ship.id === 'fed-interceptor') return { ...ship, x: 47, y: 47 };
+    if (ship.id === 'fed-artillery') return { ...ship, x: 53, y: 53 };
+    if (['axis-flagship', 'axis-cruiser-2', 'axis-cruiser-3', 'axis-scout', 'axis-interceptor', 'axis-artillery', 'axis-carrier'].includes(ship.id)) return { ...ship, x: 52, y: 52 }; // seven of its own inside the blast
     if (ship.faction === 'Axis') return { ...ship, x: 5, y: 5 };
     return { ...ship, x: 230, y: 230 };
   });
@@ -1457,55 +1443,61 @@ test('an Axis captain will not detonate over its own fleet', () => {
 });
 
 test('an Axis captain with nothing in range closes to contact', () => {
-  const game = extended('axis-ram', (ship) => {
+  const game = fleetWar('axis-ram', (ship) => {
     if (ship.id === 'axis-cruiser-1') return { ...ship, x: 10, y: 10, systems: { ...ship.systems, phasers: 0, photons: 0, tractor: 0 } };
     if (ship.faction === 'Federation') return { ...ship, x: 60, y: 10 };
     return { ...ship, x: 90, y: 90 };
   });
   const action = chooseAiAction(game, 'axis-cruiser-1');
   assert.equal(action.type, 'move');
-  assert.equal(action.dx, 40, 'a full burn at a hull 50 away: Axis fights from 5 units, not from range');
+  assert.equal(action.dx, 44, 'at 50 units the Axis closes to its six-unit doctrine standoff on the wider field');
   assert.equal(action.dy, 0);
 });
 
 test('an Axis captain no longer detonates at 8% — it waits until nearly destroyed', () => {
   // ~6% shields (9 of 140) sat inside the old 8% trigger; at the 2% bar the captain
   // keeps fighting instead of ending the exchange — and often the war — on a blast.
-  // Five enemies sit inside the blast, so only the shield gate can be what refuses.
-  const game = extended('axis-no-early-blast', (ship) => {
+  // Seven enemies sit inside the blast, so only the shield gate can be what refuses.
+  const game = fleetWar('axis-no-early-blast', (ship) => {
     if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 9 };
-    if (ship.id === 'fed-flagship') return { ...ship, x: 58, y: 50 };
+    if (ship.id === 'fed-flagship') return { ...ship, x: 56, y: 50 };
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 55, y: 50 };
     if (ship.id === 'fed-cruiser-2') return { ...ship, x: 50, y: 55 };
     if (ship.id === 'fed-cruiser-3') return { ...ship, x: 45, y: 50 };
     if (ship.id === 'fed-scout') return { ...ship, x: 50, y: 45 };
+    if (ship.id === 'fed-interceptor') return { ...ship, x: 47, y: 47 };
+    if (ship.id === 'fed-artillery') return { ...ship, x: 53, y: 53 };
     if (ship.faction === 'Axis') return { ...ship, x: 5, y: 5 };
     return { ...ship, x: 95, y: 95 };
   });
   assert.notEqual(chooseAiAction(game, 'axis-cruiser-1').type, 'self-destruct',
-    'five enemies point-blank is no longer enough at 6% shields');
+    'seven enemies point-blank is no longer enough at 6% shields');
 });
 
 test("the vendetta captain never detonates, even cornered at death's door", () => {
   const game = {
-    ...extended('vendetta-no-suicide', (ship) => {
+    ...fleetWar('vendetta-no-suicide', (ship) => {
       if (ship.id === 'axis-cruiser-1') return { ...ship, x: 50, y: 50, shields: 2 };
-      if (ship.id === 'fed-flagship') return { ...ship, x: 58, y: 50 };
+      if (ship.id === 'fed-flagship') return { ...ship, x: 56, y: 50 };
       if (ship.id === 'fed-cruiser-1') return { ...ship, x: 55, y: 50 };
       if (ship.id === 'fed-cruiser-2') return { ...ship, x: 50, y: 55 };
       if (ship.id === 'fed-cruiser-3') return { ...ship, x: 45, y: 50 };
       if (ship.id === 'fed-scout') return { ...ship, x: 50, y: 45 };
+      if (ship.id === 'fed-interceptor') return { ...ship, x: 47, y: 47 };
+      if (ship.id === 'fed-artillery') return { ...ship, x: 53, y: 53 };
       if (ship.faction === 'Axis') return { ...ship, x: 5, y: 5 };
       return { ...ship, x: 95, y: 95 };
     }),
     vendettaShipId: 'axis-cruiser-1',
   };
+  assert.equal(chooseAiAction({ ...game, vendettaShipId: 'bloc-flagship' }, 'axis-cruiser-1').type, 'self-destruct',
+    'without the hunter exemption the same seven-enemy setup meets every detonation gate');
   assert.notEqual(chooseAiAction(game, 'axis-cruiser-1').type, 'self-destruct',
     'the hunter keeps hunting rather than trading itself away — every other gate is passed');
 });
 
 test('a Bloc gunner backs off anything inside its minimum range', () => {
-  const game = extended('bloc-kite', (ship) => {
+  const game = fleetWar('bloc-kite', (ship) => {
     if (ship.id === 'bloc-cruiser-1') return { ...ship, x: 50, y: 50 };
     if (ship.id === 'fed-flagship') return { ...ship, x: 53, y: 50, shields: 1, crew: 1 };
     return { ...ship, x: 95, y: 95 };
@@ -1516,7 +1508,7 @@ test('a Bloc gunner backs off anything inside its minimum range', () => {
 });
 
 test('a Bloc gunner will not tow a target it cannot shoot', () => {
-  const game = extended('bloc-notractor', (ship) => {
+  const game = fleetWar('bloc-notractor', (ship) => {
     if (ship.id === 'bloc-cruiser-1') return { ...ship, x: 10, y: 10, systems: { ...ship.systems, phasers: 0, photons: 0 } };
     if (ship.id === 'fed-scout') return { ...ship, x: 42, y: 10, shields: 1, crew: 1 };
     return { ...ship, x: 95, y: 95 };
@@ -1526,7 +1518,7 @@ test('a Bloc gunner will not tow a target it cannot shoot', () => {
 });
 
 test('a Bloc gunner executes the wounded it can hit, not one across the map', () => {
-  const game = extended('bloc-focus', (ship) => {
+  const game = fleetWar('bloc-focus', (ship) => {
     if (ship.id === 'bloc-cruiser-1') return { ...ship, x: 10, y: 10 };
     if (ship.id === 'fed-flagship') return { ...ship, x: 30, y: 10, shields: 40 };
     if (ship.id === 'fed-scout') return { ...ship, x: 90, y: 90, shields: 1, crew: 1 };
@@ -1539,21 +1531,21 @@ test('a Bloc gunner executes the wounded it can hit, not one across the map', ()
 });
 
 test('a Cabal trickster tows a target into another enemy rather than shooting it', () => {
-  const game = extended('cabal-tow', (ship) => {
+  const game = fleetWar('cabal-tow', (ship) => {
     if (ship.id === 'cabal-cruiser-1') return { ...ship, x: 10, y: 10 };
     if (ship.id === 'cabal-flagship') return { ...ship, x: 26, y: 10 };
     if (ship.id === 'fed-flagship') return { ...ship, x: 25, y: 10 };
-    if (ship.id === 'bloc-scout') return { ...ship, x: 15, y: 10 }; // where the tow lands
+    if (ship.id === 'bloc-scout') return { ...ship, x: 10, y: 10 }; // the overcharged Cabal tractor reels Argo fully to the caster
     if (ship.faction === 'Cabal') return ship;
     return { ...ship, x: 95, y: 95 };
   });
   const action = chooseAiAction(game, 'cabal-cruiser-1');
-  assert.equal(action.type, 'tractor', 'a 10 unit tow puts the Argo on top of a Bloc scout');
+  assert.equal(action.type, 'tractor', 'the Cabal reactor profile overcharges the tow onto the Bloc scout');
   assert.equal(action.targetId, 'fed-flagship');
 });
 
 test('a Cabal trickster will not tow a target onto its own hull', () => {
-  const game = extended('cabal-no-own-goal', (ship) => {
+  const game = fleetWar('cabal-no-own-goal', (ship) => {
     if (ship.id === 'cabal-cruiser-1') return { ...ship, x: 10, y: 10 };
     if (ship.id === 'cabal-flagship') return { ...ship, x: 12, y: 10 };
     if (ship.id === 'fed-flagship') return { ...ship, x: 15, y: 10 };
@@ -1566,7 +1558,7 @@ test('a Cabal trickster will not tow a target onto its own hull', () => {
 });
 
 test('a Cabal trickster shoots when a tow would hit nothing', () => {
-  const game = extended('cabal-shoot', (ship) => {
+  const game = fleetWar('cabal-shoot', (ship) => {
     if (ship.id === 'cabal-cruiser-1') return { ...ship, x: 10, y: 10 };
     if (ship.id === 'cabal-flagship') return { ...ship, x: 20, y: 20 };
     if (ship.id === 'fed-flagship') return { ...ship, x: 30, y: 10 };
@@ -1578,7 +1570,7 @@ test('a Cabal trickster shoots when a tow would hit nothing', () => {
 });
 
 test('a Federation captain concentrates with the fleet and refits when hurt', () => {
-  const game = extended('fed-doctrine', (ship) => {
+  const game = fleetWar('fed-doctrine', (ship) => {
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 40, y: 50, shields: 20 };
     if (ship.id === 'fed-flagship') return { ...ship, x: 50, y: 50 };
     if (ship.id === 'axis-scout') return { ...ship, x: 52, y: 50 };
@@ -1595,7 +1587,7 @@ test('a Federation captain concentrates with the fleet and refits when hurt', ()
 });
 
 test('the vendetta ship neither refits nor runs', () => {
-  const base = extended('vendetta-doctrine', (ship) => {
+  const base = fleetWar('vendetta-doctrine', (ship) => {
     if (ship.id === 'fed-flagship') return { ...ship, x: 10, y: 10 };
     if (ship.id === 'axis-cruiser-1' || ship.id === 'axis-cruiser-2') return { ...ship, x: 60, y: 60, shields: 3 };
     return { ...ship, x: 95, y: 95 };
@@ -1606,7 +1598,7 @@ test('the vendetta ship neither refits nor runs', () => {
   assert.equal(chooseAiAction(plain, 'axis-cruiser-2').type, 'shields', 'an ordinary Axis captain refits first');
 });
 
-// --- Extended war: captains, aces, and the escalating vendetta ------------------
+// --- Reimagined war: captains, aces, and the escalating vendetta ------------------
 
 test('every hull has a captain, dealt from the name list without repeats', () => {
   const names = createGame({ seed: 'captains' }).ships.map((ship) => ship.captain);
@@ -1633,7 +1625,7 @@ test('two credited kills make an ace', () => {
 });
 
 test('the grudge only sharpens the vendetta hull’s volleys against your command ship', () => {
-  const base = createGame({ seed: 'grudge', extended: true });
+  const base = createGame({ seed: 'grudge', reimagined: true, loadout: defaultLoadout() });
   const hunter = { ...getShip(base, base.vendettaShipId), kills: 7 };
   const jason = getShip(base, base.playerShipId);
   assert.equal(vendettaGrudge(base, hunter, jason), Math.floor(7 / VENDETTA.killsPerStep));
@@ -1658,8 +1650,8 @@ test('a deeper grudge means a heavier volley, and none leaves the mean alone', (
   assert.ok(mean(2) > mean(0) * 1.4, 'two steps of grudge bites at least 40% harder');
 });
 
-test('scanning records the hull and names its captain in an extended war', () => {
-  const setup = (isExtended) => withShips(createGame({ seed: 'scan-captain', extended: isExtended }), (ship) => {
+test('scanning records the hull and names its captain in a Reimagined war', () => {
+  const setup = (isReimagined) => withShips(createGame({ seed: 'scan-captain', reimagined: isReimagined, loadout: defaultLoadout() }), (ship) => {
     if (ship.id === 'fed-flagship') return { ...ship, x: 10, y: 10 };
     if (ship.id === 'axis-flagship') return { ...ship, x: 15, y: 10 };
     return ship;
@@ -1673,20 +1665,20 @@ test('scanning records the hull and names its captain in an extended war', () =>
     'a classic scan reports only what the manual lists');
 });
 
-test('kill lines name captains only in an extended war', () => {
+test('kill lines name captains only in a Reimagined war', () => {
   const classic = createGame({ seed: 'kill-lines' });
   const shooter = getShip(classic, 'axis-flagship');
   const victim = getShip(classic, 'fed-cruiser-1');
   assert.deepEqual(killLines(classic, shooter, victim), [], 'a classic narrative is unchanged');
 
-  const war = createGame({ seed: 'kill-lines', extended: true });
+  const war = createGame({ seed: 'kill-lines', reimagined: true, loadout: defaultLoadout() });
   const lines = killLines(war, getShip(war, 'axis-flagship'), victim);
   assert.equal(lines[0], 'Bonhomme is destroyed.');
-  assert.equal(lines[1], `Captain ${shooter.captain} of the Firebreather is credited with 1 kill.`);
+  assert.equal(lines[1], `Captain ${getShip(war, 'axis-flagship').captain} of the Firebreather is credited with 1 kill.`);
 });
 
 test('a second kill makes an ace and every third deepens the vendetta', () => {
-  const game = createGame({ seed: 'kill-escalation', extended: true });
+  const game = createGame({ seed: 'kill-escalation', reimagined: true, loadout: defaultLoadout() });
   const hunter = getShip(game, game.vendettaShipId);
   const victim = getShip(game, 'fed-cruiser-1');
 
@@ -1704,18 +1696,18 @@ test('a completed round is kept for replay', () => {
   assert.ok(resolved.lastRound.entries.length > 0, 'the round narrative is kept beside the events');
 });
 
-// --- Extended war: scenarios ----------------------------------------------------
+// --- Reimagined war: scenarios ----------------------------------------------------
 
 test('a classic war always fights to annihilation', () => {
   assert.equal(createGame({ seed: 'scenario-classic', scenario: 'defend-xanadu' }).scenario, 'annihilation',
-    'a scenario is an extended-war option');
-  assert.equal(createGame({ seed: 'scenario-ext', extended: true, scenario: 'defend-xanadu' }).scenario, 'defend-xanadu');
-  assert.equal(createGame({ seed: 'scenario-junk', extended: true, scenario: 'nonsense' }).scenario, 'annihilation');
+    'a scenario is an Reimagined option');
+  assert.equal(createGame({ seed: 'scenario-ext', reimagined: true, loadout: defaultLoadout(), scenario: 'defend-xanadu' }).scenario, 'defend-xanadu');
+  assert.equal(createGame({ seed: 'scenario-junk', reimagined: true, loadout: defaultLoadout(), scenario: 'nonsense' }).scenario, 'annihilation');
 });
 
 test('hold Xanadu is lost the moment the base falls', () => {
   const game = withShips(
-    createGame({ seed: 'defend-lost', extended: true, scenario: 'defend-xanadu' }),
+    createGame({ seed: 'defend-lost', reimagined: true, loadout: defaultLoadout(), scenario: 'defend-xanadu' }),
     (ship) => (ship.id === 'xanadu' ? { ...ship, status: 'destroyed' } : ship),
   );
   const outcome = evaluateOutcome(game);
@@ -1725,7 +1717,7 @@ test('hold Xanadu is lost the moment the base falls', () => {
 
 test('hold Xanadu is won by outlasting the target stardate', () => {
   const game = {
-    ...createGame({ seed: 'defend-won', extended: true, scenario: 'defend-xanadu' }),
+    ...createGame({ seed: 'defend-won', reimagined: true, loadout: defaultLoadout(), scenario: 'defend-xanadu' }),
     turn: SCENARIOS['defend-xanadu'].stardates,
   };
   const outcome = evaluateOutcome(game);
@@ -1735,13 +1727,13 @@ test('hold Xanadu is won by outlasting the target stardate', () => {
 });
 
 test('wiping out the enemy still wins outright under a scenario', () => {
-  const game = createGame({ seed: 'defend-outright', extended: true, scenario: 'defend-xanadu' });
+  const game = createGame({ seed: 'defend-outright', reimagined: true, loadout: defaultLoadout(), scenario: 'defend-xanadu' });
   const wiped = withShips(game, (ship) => (ship.faction === 'Federation' ? ship : { ...ship, status: 'destroyed' }));
   assert.equal(evaluateOutcome(wiped).kind, 'federation-win');
 });
 
 test('the hunt is lost if the hunter dies unidentified, won once you know them', () => {
-  const base = createGame({ seed: 'hunt', extended: true, scenario: 'hunt-the-vendetta' });
+  const base = createGame({ seed: 'hunt', reimagined: true, loadout: defaultLoadout(), scenario: 'hunt-the-vendetta' });
   const hunterId = base.objectiveShipId;
   assert.equal(hunterId, base.vendettaShipId, 'the objective is the hull hunting Captain Jason');
 
@@ -1755,7 +1747,7 @@ test('the hunt is lost if the hunter dies unidentified, won once you know them',
 });
 
 test('boarding the hunter wins the hunt even though the hull survives', () => {
-  const base = createGame({ seed: 'hunt-boarded', extended: true, scenario: 'hunt-the-vendetta' });
+  const base = createGame({ seed: 'hunt-boarded', reimagined: true, loadout: defaultLoadout(), scenario: 'hunt-the-vendetta' });
   const hunterId = base.objectiveShipId;
   const boarded = {
     ...withShips(base, (ship) => (ship.id === hunterId ? { ...ship, faction: 'Federation' } : ship)),
@@ -1766,14 +1758,14 @@ test('boarding the hunter wins the hunt even though the hull survives', () => {
 });
 
 test('the hunt remembers its target after the vendetta is cleared', () => {
-  const base = createGame({ seed: 'hunt-cleared', extended: true, scenario: 'hunt-the-vendetta' });
+  const base = createGame({ seed: 'hunt-cleared', reimagined: true, loadout: defaultLoadout(), scenario: 'hunt-the-vendetta' });
   const game = { ...base, vendettaShipId: null };
   assert.equal(game.objectiveShipId, base.objectiveShipId, 'boarding clears the vendetta, not the objective');
   assert.equal(evaluateOutcome(game).kind, 'active');
 });
 
 test('the mission panel names the hunter but not their hull until you scan', () => {
-  const base = createGame({ seed: 'hunt-progress', extended: true, scenario: 'hunt-the-vendetta' });
+  const base = createGame({ seed: 'hunt-progress', reimagined: true, loadout: defaultLoadout(), scenario: 'hunt-the-vendetta' });
   const hunter = getShip(base, base.objectiveShipId);
   const hidden = scenarioProgress(base).join(' ');
   assert.ok(hidden.includes(hunter.captain), 'the captain is named');
@@ -1784,9 +1776,9 @@ test('the mission panel names the hunter but not their hull until you scan', () 
 });
 
 test('hold Xanadu reports its progress against the target stardate', () => {
-  const game = { ...createGame({ seed: 'defend-progress', extended: true, scenario: 'defend-xanadu' }), turn: 7 };
+  const game = { ...createGame({ seed: 'defend-progress', reimagined: true, loadout: defaultLoadout(), scenario: 'defend-xanadu' }), turn: 7 };
   const lines = scenarioProgress(game).join(' ');
-  assert.match(lines, /Xanadu: active at 50, 50/);
+  assert.match(lines, /Xanadu: active at 160, 160/);
   assert.ok(lines.includes(`Hold until stardate ${SCENARIOS['defend-xanadu'].stardates}.  Now stardate 7.`), lines);
 });
 
@@ -2021,13 +2013,13 @@ test('a hull that struck its colors is a prize your transporter can board', () =
 
 // --- Argonaut Reimagined, Phase 0: the mode flag and the wider battlefield ---
 
-test('Reimagined is a war option that carries the extended layer, off by default', () => {
+test('Reimagined is a war option that carries the fleet command systems, off by default', () => {
   const classic = createGame({ seed: 'reimagined-flag' });
   assert.equal(classic.reimagined, false);
   assert.equal(classic.gridSize, GRID_SIZE, 'a classic war keeps the calibrated 100-unit field');
   const reimagined = createGame({ seed: 'reimagined-flag', reimagined: true });
   assert.equal(reimagined.reimagined, true);
-  assert.equal(reimagined.extended, true, 'Reimagined builds on the extended war');
+  assert.deepEqual(reimagined.orders, {});
   assert.equal(reimagined.gridSize, REIMAGINED_GRID_SIZE);
 });
 
@@ -2045,12 +2037,10 @@ test('a Reimagined war opens wider, every hull in bounds, Xanadu at the center',
     'Xanadu anchors the center of the wider field');
 });
 
-test('the Reimagined scaffold leaves a classic or extended war untouched', () => {
+test('the Reimagined scaffold leaves a classic war untouched', () => {
   // The flag defaults off and the field stays 100 units, so the opening disposition
   // is byte-identical to a war created without the option at all.
   assert.deepEqual(createGame({ seed: 'parity' }), createGame({ seed: 'parity', reimagined: false }));
-  assert.equal(createGame({ seed: 'parity', extended: true }).gridSize, GRID_SIZE);
-  assert.equal(createGame({ seed: 'parity', extended: true }).reimagined, false);
 });
 
 test('a Reimagined war maneuvers past the classic 100-unit edge, but not off the field', () => {
@@ -2144,12 +2134,11 @@ test('the ship menu offers a directed tow only in a Reimagined war', () => {
 
 // --- Round 14a: the reactor subsystem and power allocation (Reimagined) ---
 
-test('a Reimagined hull carries a reactor; a classic or extended one does not', () => {
+test('a Reimagined hull carries a reactor; a classic one does not', () => {
   const reim = getShip(createGame({ seed: 'reactor', reimagined: true }), 'fed-flagship');
   assert.equal(reim.systems.reactor, POWER.reactor['Battle cruiser']);
   assert.equal('reactor' in getShip(createGame({ seed: 'reactor' }), 'fed-flagship').systems, false,
     'a classic hull has no reactor, so its damage lottery is unchanged');
-  assert.equal('reactor' in getShip(createGame({ seed: 'reactor', extended: true }), 'fed-flagship').systems, false);
 });
 
 test('the dockyard complement includes the reactor only for a Reimagined hull', () => {
@@ -2350,9 +2339,9 @@ test("the player's command ship runs the flat default, not a doctrine profile", 
   assert.ok(powerEffect(game, getShip(game, 'fed-cruiser-1'), 'shields') > 1);
 });
 
-test('doctrine power profiles never touch a classic or extended war', () => {
-  for (const opts of [{}, { extended: true }]) {
-    const game = createGame({ seed: 'profile-parity', ...opts });
+test('doctrine power profiles never touch a classic war', () => {
+  {
+    const game = createGame({ seed: 'profile-parity' });
     assert.equal(powerEffect(game, getShip(game, 'axis-flagship'), 'weapons'), 1,
       'a non-Reimagined enemy runs at calibrated 1.0x');
   }
@@ -2369,7 +2358,7 @@ test('a docked hull may take a reactor upgrade in a Reimagined war', () => {
 });
 
 test('a reactor upgrade is refused outside a Reimagined war', () => {
-  const game = withShips(createGame({ seed: 'reactor-refit-ext', extended: true }), (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 54, y: 50 } : ship));
+  const game = withShips(createGame({ seed: 'reactor-refit-classic' }), (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 54, y: 50 } : ship));
   const out = applyPlayerAction(game, { type: 'refit', shipId: 'fed-cruiser-1', kind: 'reactor' });
   assert.match(out.messages.join(' '), /Reimagined/i);
   assert.deepEqual(out.game, game);
@@ -2449,9 +2438,8 @@ test('every feature is in bounds, sized in its range, and clear of Xanadu', () =
   }
 });
 
-test('a classic or extended war carries no terrain, and the parity scaffold holds', () => {
+test('a classic war carries no terrain, and the parity scaffold holds', () => {
   assert.deepEqual(createGame({ seed: 'terrain-classic' }).terrain, []);
-  assert.deepEqual(createGame({ seed: 'terrain-extended', extended: true }).terrain, []);
   // The standing parity guard: the terrain layer changes nothing a classic war reads.
   assert.deepEqual(createGame({ seed: 'terrain-parity' }), createGame({ seed: 'terrain-parity', reimagined: false }));
 });
@@ -2580,9 +2568,9 @@ test('radio reaches a nebula-docked hull from just outside, within the reveal ra
     '7 units is inside the base reveal of 8');
 });
 
-test('the nebula rule never touches a classic or extended war', () => {
-  for (const opts of [{}, { extended: true }]) {
-    const game = createGame({ seed: 'nebula-parity', ...opts });
+test('the nebula rule never touches a classic war', () => {
+  {
+    const game = createGame({ seed: 'nebula-parity' });
     assert.deepEqual(game.terrain, []);
     const actor = getShip(game, 'fed-flagship');
     assert.equal(nebulaHides(game, actor, getShip(game, 'axis-flagship')), false, 'no terrain, nothing hidden');
@@ -2732,9 +2720,9 @@ test('the rock strike reads the hull as it stands after the tow resolves', () =>
   assert.deepEqual(outside.events, []);
 });
 
-test('rock strikes never touch a classic or extended war, nor its seeded sequence', () => {
-  for (const opts of [{}, { extended: true }]) {
-    const game = createGame({ seed: 'asteroid-parity', ...opts });
+test('rock strikes never touch a classic war, nor its seeded sequence', () => {
+  {
+    const game = createGame({ seed: 'asteroid-parity' });
     const out = resolveAsteroidStrike(game, getShip(game, 'fed-flagship'));
     assert.equal(out.game, game, 'no terrain, no strike, no state change');
     assert.deepEqual(out.messages, []);
@@ -2902,9 +2890,9 @@ test('engines, sensors, and tractor work throughout the storm', () => {
   assert.equal(getShip(move.game, 'fed-flagship').y, 158, 'and the engines still run');
 });
 
-test('the ion storm never touches a classic or extended war', () => {
-  for (const opts of [{}, { extended: true }]) {
-    const game = createGame({ seed: 'storm-parity', ...opts });
+test('the ion storm never touches a classic war', () => {
+  {
+    const game = createGame({ seed: 'storm-parity' });
     const actor = getShip(game, 'fed-flagship');
     const target = getShip(game, 'axis-flagship');
     assert.equal(ionStormZone(game, actor), null);
@@ -3035,9 +3023,9 @@ test('the relay resolves in the computer phase, like the dockyard', () => {
   assert.ok(out.log.some((entry) => /holds the relay node/.test(entry)), 'and the narrative says so');
 });
 
-test('relay objectives never touch a classic or extended war, and tolerate old saves', () => {
-  for (const opts of [{}, { extended: true }]) {
-    const game = createGame({ seed: 'relay-parity', ...opts });
+test('relay objectives never touch a classic war, and tolerate old saves', () => {
+  {
+    const game = createGame({ seed: 'relay-parity' });
     assert.deepEqual(game.held, {}, 'the field exists and is empty, like orders and power');
     const out = resolveObjectives(game);
     assert.equal(out.game, game, 'no nodes, no state change');
@@ -3246,9 +3234,9 @@ test('a hunter taken by a third alliance ends the hunt', () => {
   assert.match(win.message, new RegExp(`flies ${third} colours`));
 });
 
-test('the prize layer never touches a classic or extended war', () => {
-  for (const opts of [{}, { extended: true }]) {
-    const game = withShips(createGame({ seed: 'prize-parity', ...opts }), (ship) => {
+test('the prize layer never touches a classic war', () => {
+  {
+    const game = withShips(createGame({ seed: 'prize-parity' }), (ship) => {
       if (ship.id === 'fed-flagship') return { ...ship, x: 10, y: 10 };
       if (ship.id === 'axis-cruiser-1') return { ...ship, status: 'vacant', crew: 0, x: 12, y: 10 };
       if (ship.id === 'axis-cruiser-2') return { ...ship, x: 14, y: 10 };
@@ -3258,7 +3246,7 @@ test('the prize layer never touches a classic or extended war', () => {
     assert.notEqual(chooseAiAction(game, 'axis-cruiser-2').type, 'board');
     // A board order is refused — fleet orders themselves are refused in a classic war.
     const refused = applyPlayerAction(game, { type: 'orders', shipId: 'fed-cruiser-1', order: { type: 'board' }, targetId: 'axis-cruiser-1' });
-    assert.match(refused.messages.join(' '), opts.extended ? /Reimagined/ : /extended war/);
+    assert.match(refused.messages.join(' '), /Reimagined/);
     // Player capture stays the calibrated occupation, message for message.
     const captured = applyPlayerAction(game, { type: 'transport', targetId: 'axis-cruiser-1', amount: 10 });
     const hull = getShip(captured.game, 'axis-cruiser-1');
@@ -3272,14 +3260,6 @@ test('the prize layer never touches a classic or extended war', () => {
   }
 });
 
-test('an extended war with a derelict adrift plays out without a single prize', () => {
-  let war = withShips(createGame({ seed: 'prize-parity-war', extended: true }), (ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, status: 'vacant', crew: 0 } : ship));
-  for (let round = 0; round < 30 && !war.outcome; round += 1) {
-    war = resolveComputerTurns({ ...war, phase: 'computer' });
-  }
-  assert.ok(war.ships.every((ship) => ship.prize === undefined));
-  assert.ok(!(war.log ?? []).some((line) => /prize/i.test(line)));
-});
 
 test('old saves tolerate the absent prize fields', () => {
   const captured = applyPlayerAction(prizeWar('prize-old-save'), { type: 'transport', targetId: 'axis-cruiser-1', amount: 10 });
@@ -3337,9 +3317,9 @@ test('a Reimagined interceptor runs a reactor the dockyard can repair', () => {
   assert.equal(templateSystems(ship).reactor, POWER.reactor.Interceptor, 'the class is in the dockyard complement');
 });
 
-test('classic and extended wars never field the interceptor and stay 21 hulls', () => {
-  for (const opts of [{}, { extended: true }]) {
-    const game = createGame({ seed: 'interceptor-parity', ...opts });
+test('classic wars never field the interceptor and stay 21 hulls', () => {
+  {
+    const game = createGame({ seed: 'interceptor-parity' });
     assert.equal(game.ships.length, 21);
     assert.ok(game.ships.every((ship) => ship.className !== 'Interceptor'));
     assert.ok(!game.ships.some((ship) => ship.id.endsWith('-interceptor')));
@@ -3421,9 +3401,9 @@ test('a Reimagined artillery ship runs a reactor the dockyard can repair', () =>
   assert.equal(templateSystems(ship).reactor, POWER.reactor.Artillery, 'the class is in the dockyard complement');
 });
 
-test('classic and extended wars never field the artillery and stay 21 hulls', () => {
-  for (const opts of [{}, { extended: true }]) {
-    const game = createGame({ seed: 'artillery-parity', ...opts });
+test('classic wars never field the artillery and stay 21 hulls', () => {
+  {
+    const game = createGame({ seed: 'artillery-parity' });
     assert.equal(game.ships.length, 21);
     assert.ok(game.ships.every((ship) => ship.className !== 'Artillery'));
     assert.ok(!game.ships.some((ship) => ship.id.endsWith('-artillery')));
@@ -3484,9 +3464,9 @@ test('a Reimagined carrier runs a reactor the dockyard can repair', () => {
   assert.equal(templateSystems(ship).reactor, POWER.reactor.Carrier, 'the class is in the dockyard complement');
 });
 
-test('classic and extended wars never field the carrier and stay 21 hulls', () => {
-  for (const opts of [{}, { extended: true }]) {
-    const game = createGame({ seed: 'carrier-parity', ...opts });
+test('classic wars never field the carrier and stay 21 hulls', () => {
+  {
+    const game = createGame({ seed: 'carrier-parity' });
     assert.equal(game.ships.length, 21);
     assert.ok(game.ships.every((ship) => ship.className !== 'Carrier'));
     assert.ok(!game.ships.some((ship) => ship.id.endsWith('-carrier')));
@@ -3519,8 +3499,6 @@ test('the self-destruct blast scales only in a Reimagined war', () => {
   const ship = getShip(game, 'fed-cruiser-1');
   const starbase = getShip(game, 'xanadu');
   assert.equal(blastRadius(ship), RANGES.selfDestruct, 'the manual figure');
-  assert.equal(blastRadius(ship, createGame({ seed: 'blast-scale', extended: true })), RANGES.selfDestruct,
-    'an extended war keeps the calibrated blast');
   const reimagined = createGame({ seed: 'blast-scale', reimagined: true });
   assert.equal(blastRadius(ship, reimagined), Math.round(RANGES.selfDestruct * REIMAGINED_SELF_DESTRUCT_SCALE));
   assert.equal(blastRadius(starbase, reimagined), Math.round(40 * REIMAGINED_SELF_DESTRUCT_SCALE),
@@ -3681,11 +3659,11 @@ test('a custom Federation loadout fields exactly the chosen hulls, ids, and name
   assert.deepEqual(fed.map((ship) => ship.className), ['Battle cruiser', 'Cruiser', 'Interceptor', 'Interceptor', 'Interceptor']);
 });
 
-test('classic and extended wars ignore the loadout entirely', () => {
+test('classic wars ignore the loadout entirely', () => {
   const weird = { budgets: { Federation: 5 }, fleets: { Federation: { 'battle-cruiser': 1 } } };
-  for (const opts of [{}, { extended: true }]) {
-    const game = createGame({ seed: 'loadout-parity', ...opts, loadout: weird });
-    assert.deepEqual(game, createGame({ seed: 'loadout-parity', ...opts }));
+  {
+    const game = createGame({ seed: 'loadout-parity', loadout: weird });
+    assert.deepEqual(game, createGame({ seed: 'loadout-parity' }));
     assert.equal(game.ships.length, 21);
     assert.equal(game.loadout, null);
   }
@@ -3773,11 +3751,11 @@ test('a two-alliance war without Xanadu resolves', () => {
   assert.ok(['federation-win', 'alliance-win', 'hopeless-draw', 'draw'].includes(war.outcome.kind));
 });
 
-test('classic and extended wars ignore force customization entirely', () => {
+test('classic wars ignore force customization entirely', () => {
   const custom = { factions: ['Federation', 'Cabal'], xanadu: false };
-  for (const opts of [{}, { extended: true }]) {
-    const game = createGame({ seed: 'force-parity', ...opts, loadout: custom });
-    assert.deepEqual(game, createGame({ seed: 'force-parity', ...opts }));
+  {
+    const game = createGame({ seed: 'force-parity', loadout: custom });
+    assert.deepEqual(game, createGame({ seed: 'force-parity' }));
     assert.equal(game.ships.length, 21);
     assert.ok(getShip(game, 'xanadu'));
     assert.equal(game.loadout, null);
@@ -3865,8 +3843,8 @@ test('only a Reimagined carrier with drones aboard can launch', () => {
   const out = applyPlayerAction(flagship, { type: 'launch' });
   assert.equal(out.game.phase, 'player', 'a refusal costs no turn');
   assert.match(out.messages.join(' '), /carries no drone bay/);
-  for (const opts of [{}, { extended: true }]) {
-    const refused = applyPlayerAction(createGame({ seed: 'drone-refused', ...opts }), { type: 'launch' });
+  {
+    const refused = applyPlayerAction(createGame({ seed: 'drone-refused' }), { type: 'launch' });
     assert.match(refused.messages.join(' '), /Reimagined/);
     assert.equal(refused.game.phase, 'player');
   }
@@ -3924,9 +3902,9 @@ test('the launch order is Reimagined, carrier-only, and fires on the same trigge
   assert.match(ordered.messages.join(' '), /launch its drones when the enemy closes/);
   const wrongHull = applyPlayerAction(game, { type: 'orders', shipId: 'fed-flagship', order: { type: 'launch' } });
   assert.match(wrongHull.messages.join(' '), /carries no drone bay/);
-  const extended = applyPlayerAction(createGame({ seed: 'drone-order-off', extended: true }),
+  const classic = applyPlayerAction(createGame({ seed: 'drone-order-off' }),
     { type: 'orders', shipId: 'fed-flagship', order: { type: 'launch' } });
-  assert.match(extended.messages.join(' '), /Reimagined/);
+  assert.match(classic.messages.join(' '), /Reimagined/);
   // Far field: the carrier behaves normally. Closing enemy: it launches.
   assert.notEqual(chooseAiAction(ordered.game, 'fed-carrier').type, 'launch');
   const closing = withShips(ordered.game, (ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, x: 140, y: 100 } : ship));
@@ -4101,15 +4079,15 @@ test('the computer phase launches bays, flies the wing, and darkens orphans', ()
 });
 
 test('drones are Reimagined-only, and the parity scaffold holds', () => {
-  for (const opts of [{}, { extended: true }]) {
-    const game = createGame({ seed: 'drone-parity-war', ...opts });
+  {
+    const game = createGame({ seed: 'drone-parity-war' });
     assert.ok(game.ships.every((ship) => !isDrone(ship)));
   }
   assert.deepEqual(createGame({ seed: 'drone-parity-war' }), createGame({ seed: 'drone-parity-war', reimagined: false }),
     'the standing parity scaffold still holds');
   assert.ok(!('drone' in LOADOUT.costs), 'the bay is not a loadout class — drones are won in the field, never budgeted');
-  // A whole extended war plays out without a whiff of drone.
-  let war = createGame({ seed: 'drone-extended-war', extended: true });
+  // A whole classic war plays out without a whiff of drone.
+  let war = createGame({ seed: 'drone-classic-war' });
   for (let round = 0; round < 30 && !war.outcome; round += 1) {
     war = resolveComputerTurns({ ...war, phase: 'computer' });
   }
@@ -4180,8 +4158,8 @@ test('combat stances bend the one shared accuracy roll, and only in a Reimagined
   const bothFiring = miss({ 'fed-flagship': 'firing', 'axis-flagship': 'firing' });
   assert.ok(bothFiring >= STANCE.missFloor, 'the most accurate pairing never reaches a guaranteed hit');
   // Stances are inert outside a Reimagined war — the field is present but ignored.
-  for (const opts of [{}, { extended: true }]) {
-    const off = withShips(createGame({ seed: 'stance-parity', ...opts }), (ship) => {
+  {
+    const off = withShips(createGame({ seed: 'stance-parity' }), (ship) => {
       if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
       if (ship.id === 'axis-flagship') return { ...ship, x: 120, y: 100 };
       return ship;
@@ -4205,9 +4183,9 @@ test('stance resolves stored > doctrine > neutral, exactly like power allocation
   // A hull beaten below its retreat threshold sheds its bias and weaves as it breaks off.
   const hurt = withShips(game, (ship) => (ship.id === 'axis-flagship' ? { ...ship, shields: 1 } : ship));
   assert.equal(stanceOf(hurt, getShip(hurt, 'axis-flagship')), 'evasive', 'a gutted hull stops standing still');
-  // Classic and extended never leave neutral, whatever the doctrine table says.
-  for (const opts of [{}, { extended: true }]) {
-    const off = createGame({ seed: 'stance-resolve', ...opts });
+  // Classic never leave neutral, whatever the doctrine table says.
+  {
+    const off = createGame({ seed: 'stance-resolve' });
     assert.equal(stanceOf(off, getShip(off, 'axis-flagship')), 'standard');
   }
 });
@@ -4223,8 +4201,8 @@ test('setting a stance is free, persistent, Federation-only, and Reimagined-only
   assert.equal(other.game.stances['fed-cruiser-1'], 'firing', 'any Federation hull takes a stance by id');
   assert.match(applyPlayerAction(game, { type: 'stance', stance: 'firing', shipId: 'axis-flagship' }).messages.join(' '), /Only Federation hulls/);
   assert.match(applyPlayerAction(game, { type: 'stance', stance: 'aggressive' }).messages.join(' '), /Unknown stance/);
-  for (const opts of [{}, { extended: true }]) {
-    const off = applyPlayerAction(createGame({ seed: 'stance-set', ...opts }), { type: 'stance', stance: 'evasive' });
+  {
+    const off = applyPlayerAction(createGame({ seed: 'stance-set' }), { type: 'stance', stance: 'evasive' });
     assert.match(off.messages.join(' '), /Reimagined/);
     assert.equal(off.game.phase, 'player');
   }
@@ -4281,11 +4259,11 @@ test('disengage refuses without engines, under a lock, with no threat, or out of
   assert.match(applyPlayerAction(createGame({ seed: 'stance-disengage-classic' }), { type: 'disengage' }).messages.join(' '), /Reimagined/);
 });
 
-test('stances never touch a classic or extended war, even one played out', () => {
-  for (const opts of [{}, { extended: true }]) {
-    assert.deepEqual(createGame({ seed: 'stance-war-parity', ...opts }).stances, {}, 'the field exists but stays empty');
+test('stances never touch a classic war, even one played out', () => {
+  {
+    assert.deepEqual(createGame({ seed: 'stance-war-parity' }).stances, {}, 'the field exists but stays empty');
   }
-  let war = createGame({ seed: 'stance-extended-war', extended: true });
+  let war = createGame({ seed: 'stance-classic-war' });
   for (let round = 0; round < 30 && !war.outcome; round += 1) {
     war = resolveComputerTurns({ ...war, phase: 'computer' });
   }
@@ -4326,9 +4304,9 @@ test('ion is a Reimagined subsystem the artillery and interceptor carry, and not
   }
   assert.equal(RANGES.ion, 35, 'ion outranges the phasers');
   assert.ok(RANGES.ion > RANGES.phasers);
-  // A classic or extended hull never carries the system, so its damage lottery is untouched.
-  for (const opts of [{}, { extended: true }]) {
-    const off = createGame({ seed: 'ion-carry', ...opts });
+  // A classic hull never carries the system, so its damage lottery is untouched.
+  {
+    const off = createGame({ seed: 'ion-carry' });
     assert.ok(off.ships.every((ship) => !('ion' in ship.systems)), 'no ion outside a Reimagined war');
   }
 });
@@ -4399,9 +4377,9 @@ test('ion refuses without the emitter, out of range, jammed, or outside a Reimag
   // Jammed in an ion storm's core.
   const jammed = { ...game, terrain: [{ id: 'ion-storm-1', type: 'ion-storm', x: 100, y: 100, radius: 20 }] };
   assert.match(applyPlayerAction(jammed, { type: 'ion', targetId: 'axis-cruiser-1' }).messages.join(' '), /offline in the ion storm/);
-  // A classic or extended war has no emitter at all.
-  for (const opts of [{}, { extended: true }]) {
-    const off = applyPlayerAction(createGame({ seed: 'ion-refuse', ...opts }), { type: 'ion', targetId: 'axis-cruiser-1' });
+  // A classic war has no emitter at all.
+  {
+    const off = applyPlayerAction(createGame({ seed: 'ion-refuse' }), { type: 'ion', targetId: 'axis-cruiser-1' });
     assert.match(off.messages.join(' '), /Ion are disabled/);
     assert.equal(off.game.phase, 'player');
   }
@@ -4417,9 +4395,9 @@ test('a hull ion-gutted of engines and guns strikes its colors in a Reimagined w
   assert.equal(cruiser.status, 'vacant', 'it becomes a boardable derelict, feeding the prize race');
   assert.equal(cruiser.crew, 0, 'the crew takes to the pods');
   assert.ok(out.messages.some((line) => /Grendel is disabled and strikes its colors/.test(line)));
-  // A classic or extended (non-precision) war leaves the same hulk fighting on.
-  for (const opts of [{}, { extended: true }]) {
-    const off = withShips(createGame({ seed: 'ion-surrender-off', ...opts }), (ship) => (ship.id === 'axis-cruiser-1'
+  // A classic (non-precision) war leaves the same hulk fighting on.
+  {
+    const off = withShips(createGame({ seed: 'ion-surrender-off' }), (ship) => (ship.id === 'axis-cruiser-1'
       ? { ...ship, systems: { ...ship.systems, engines: 0, phasers: 0, photons: 0 } }
       : ship));
     const resolved = resolveDisabledSurrender(off);
@@ -4471,9 +4449,9 @@ test('the dockyard rebuilds an ion-stripped hull back to its class complement', 
   assert.equal(systemUnits(getShip(out.game, 'fed-artillery'), 'ion'), 1, 'one unit per stardate, starting from the most-damaged');
 });
 
-test('ion never touches a classic or extended war, and old saves tolerate its absence', () => {
-  for (const opts of [{}, { extended: true }]) {
-    const game = createGame({ seed: 'ion-parity', ...opts });
+test('ion never touches a classic war, and old saves tolerate its absence', () => {
+  {
+    const game = createGame({ seed: 'ion-parity' });
     assert.ok(game.ships.every((ship) => !('ion' in ship.systems)));
   }
   assert.deepEqual(createGame({ seed: 'ion-parity' }), createGame({ seed: 'ion-parity', reimagined: false }),
@@ -4513,8 +4491,8 @@ test('spread is a Reimagined subsystem the battle cruiser and carrier carry', ()
     assert.ok(!('spread' in getShip(game, id).systems), `${id} carries no spread key at all`);
   }
   assert.ok(RANGES.spread < RANGES.phasers, 'the salvo is short-ranged');
-  for (const opts of [{}, { extended: true }]) {
-    const off = createGame({ seed: 'spread-carry', ...opts });
+  {
+    const off = createGame({ seed: 'spread-carry' });
     assert.ok(off.ships.every((ship) => !('spread' in ship.systems)), 'no spread outside a Reimagined war');
   }
 });
@@ -4584,8 +4562,8 @@ test('spread refuses without the tubes, out of range, jammed, or outside a Reima
   assert.match(applyPlayerAction(far, { type: 'spread', targetId: 'axis-cruiser-1' }).messages.join(' '), /out of range for the spread/);
   const jammed = { ...staged, terrain: [{ id: 'ion-storm-1', type: 'ion-storm', x: 100, y: 100, radius: 20 }] };
   assert.match(applyPlayerAction(jammed, { type: 'spread', targetId: 'axis-cruiser-1' }).messages.join(' '), /torpedo tubes are offline/);
-  for (const opts of [{}, { extended: true }]) {
-    const off = applyPlayerAction(createGame({ seed: 'spread-refuse', ...opts }), { type: 'spread', targetId: 'axis-cruiser-1' });
+  {
+    const off = applyPlayerAction(createGame({ seed: 'spread-refuse' }), { type: 'spread', targetId: 'axis-cruiser-1' });
     assert.match(off.messages.join(' '), /Spread are disabled/);
     assert.equal(off.game.phase, 'player');
   }
@@ -4624,9 +4602,9 @@ test('the computer phase resolves an AI spread salvo', () => {
   assert.ok(out.log.some((line) => /spread of torpedoes/.test(line)), 'the flagship looses the salvo');
 });
 
-test('spread never touches a classic or extended war, and old saves tolerate its absence', () => {
-  for (const opts of [{}, { extended: true }]) {
-    assert.ok(createGame({ seed: 'spread-parity', ...opts }).ships.every((ship) => !('spread' in ship.systems)));
+test('spread never touches a classic war, and old saves tolerate its absence', () => {
+  {
+    assert.ok(createGame({ seed: 'spread-parity' }).ships.every((ship) => !('spread' in ship.systems)));
   }
   assert.deepEqual(createGame({ seed: 'spread-parity' }), createGame({ seed: 'spread-parity', reimagined: false }),
     'the standing parity scaffold still holds');
@@ -4699,9 +4677,9 @@ test('arcSplit keeps the breakdown invariant for any pool, deterministically', (
   assert.deepEqual(arcSplit(-5), arcSplit(0), 'a negative pool splits as empty');
 });
 
-test('classic and extended hulls never carry arcs or facing, and the parity scaffold holds', () => {
-  for (const opts of [{}, { extended: true }]) {
-    const game = createGame({ seed: 'arc-parity', ...opts });
+test('classic hulls never carry arcs or facing, and the parity scaffold holds', () => {
+  {
+    const game = createGame({ seed: 'arc-parity' });
     assert.ok(game.ships.every((ship) => !('arcs' in ship) && !('facing' in ship)), 'no directional fields');
     assert.equal(hasArcs(game, getShip(game, 'fed-flagship')), false);
     assert.equal(arcsOf(game, getShip(game, 'fed-flagship')), null);
@@ -4788,8 +4766,8 @@ test('setFacing is free, persistent, Federation-only, Reimagined-only, and valid
   const droneTurn = applyPlayerAction({ ...flown, phase: 'player' }, { type: 'facing', degrees: 90, shipId: 'fed-carrier-drone-1' });
   assert.match(droneTurn.messages.join(' '), /no heading to set/);
   // Outside a Reimagined war the command is refused.
-  for (const opts of [{}, { extended: true }]) {
-    const off = applyPlayerAction(createGame({ seed: 'arc-setfacing-off', ...opts }), { type: 'facing', degrees: 90 });
+  {
+    const off = applyPlayerAction(createGame({ seed: 'arc-setfacing-off' }), { type: 'facing', degrees: 90 });
     assert.match(off.messages.join(' '), /only available in a Reimagined war/);
     assert.equal(off.game.phase, 'player');
   }
@@ -5104,8 +5082,8 @@ test('setArcFocus is free, persistent, Federation-only, Reimagined-only, and val
   assert.match(applyPlayerAction(game, { type: 'arcFocus', arc: 'fore', shipId: 'axis-flagship' }).messages.join(' '), /Only Federation hulls/);
   const flown = launchDrones(game, getShip(game, 'fed-carrier')).game;
   assert.match(applyPlayerAction({ ...flown, phase: 'player' }, { type: 'arcFocus', arc: 'fore', shipId: 'fed-carrier-drone-1' }).messages.join(' '), /no shield arcs to focus/);
-  for (const opts of [{}, { extended: true }]) {
-    const off = applyPlayerAction(createGame({ seed: 'arc-focus-off', ...opts }), { type: 'arcFocus', arc: 'fore' });
+  {
+    const off = applyPlayerAction(createGame({ seed: 'arc-focus-off' }), { type: 'arcFocus', arc: 'fore' });
     assert.match(off.messages.join(' '), /only available in a Reimagined war/);
     assert.equal(off.game.phase, 'player');
   }
@@ -5115,9 +5093,9 @@ test('setArcFocus is free, persistent, Federation-only, Reimagined-only, and val
   assert.equal(arcFocusOf(out.game, getShip(out.game, 'axis-flagship')), null);
 });
 
-test('arc damage never touches a classic or extended war, and old saves keep playing', () => {
-  for (const opts of [{}, { extended: true }]) {
-    const off = createGame({ seed: 'arc-damage-parity', ...opts });
+test('arc damage never touches a classic war, and old saves keep playing', () => {
+  {
+    const off = createGame({ seed: 'arc-damage-parity' });
     assert.ok(off.ships.every((ship) => !('arcs' in ship)), 'no hull carries a breakdown');
   }
   assert.deepEqual(createGame({ seed: 'arc-damage-parity' }), createGame({ seed: 'arc-damage-parity', reimagined: false }),
@@ -5217,16 +5195,16 @@ test('AI facing never touches drones, and never fires outside a Reimagined war',
   const out = resolveComputerTurns({ ...flown, phase: 'computer' });
   assert.ok(out.ships.filter(isDrone).every((drone) => !('facing' in drone) && !('arcs' in drone)),
     'a drone keeps its single pool and no heading');
-  // A classic or extended computer phase stamps no facing anywhere.
-  for (const opts of [{}, { extended: true }]) {
-    const off = withShips(createGame({ seed: 'ai-facing-parity', ...opts }), (ship) => {
+  // A classic computer phase stamps no facing anywhere.
+  {
+    const off = withShips(createGame({ seed: 'ai-facing-parity' }), (ship) => {
       if (ship.id === 'axis-flagship') return { ...ship, x: 20, y: 20 };
       if (ship.id === 'fed-flagship') return { ...ship, x: 26, y: 20 };
       return ship;
     });
     const resolved = resolveComputerTurns({ ...off, phase: 'computer' });
     assert.ok(resolved.ships.every((ship) => !('facing' in ship) && !('arcs' in ship)),
-      'no directional fields in a classic or extended war');
+      'no directional fields in a classic war');
   }
   assert.deepEqual(createGame({ seed: 'ai-facing-parity' }), createGame({ seed: 'ai-facing-parity', reimagined: false }),
     'the standing parity scaffold still holds');
@@ -5352,9 +5330,9 @@ test('encounters arrive on the seeded sub-stream, off-field, and never touch the
 });
 
 test('encounters are Reimagined-only, capped, and skip a crowded field', () => {
-  // A classic or extended war never rolls the boundary draw.
-  for (const opts of [{}, { extended: true }]) {
-    const off = createGame({ seed: 'enc-parity', ...opts });
+  // A classic war never rolls the boundary draw.
+  {
+    const off = createGame({ seed: 'enc-parity' });
     assert.deepEqual(resolveEncounters(off).game.ships, off.ships, 'no encounter outside Reimagined');
   }
   assert.deepEqual(createGame({ seed: 'enc-parity' }), createGame({ seed: 'enc-parity', reimagined: false }),

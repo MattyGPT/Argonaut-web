@@ -4,7 +4,7 @@
  * the war game: a seeded branching corridor of star systems, the player's
  * carried fleet records, and a per-node battle history. It composes whole wars
  * (`createGame` + the headless autopilot loop) but changes none of their rules
- * — a classic, extended, or ordinary Reimagined war never imports this
+ * — a classic or ordinary Reimagined war never imports this
  * module's behavior, so the parity scaffolds and the harness stay untouched.
  *
  * Determinism: the sector graph draws on `${seed}:sector`, each node battle

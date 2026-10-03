@@ -17,26 +17,31 @@ G5 follows the corresponding delivered UI. See the
 `assets/guide` images. **Inspect:** `scripts/capture-guide-shots.mjs`.
 **Create:** `docs/superpowers/reviews/2026-10-03-guide-content-inventory.md`.
 
-- [ ] Record each topic's supported ruleset/options, actual UI entry point,
+- [x] Record each topic's supported ruleset/options, actual UI entry point,
   authoritative function/constant, test or reproducible scenario, and image.
   Mark correct, stale, missing, or ambiguous, with the exact correction needed.
-- [ ] Audit the entire command set and keys, free versus time-consuming
+- [x] Audit the entire command set and keys, free versus time-consuming
   actions, cooldown, confirmations, information limits, damage, surrender,
   victory, existing scenarios, dockyard, and campaign carry-over. Inspect
   the handlers when UI prose and old phase documents disagree.
-- [ ] Verify the known issues: turn-based-only opening, fixed-fleet framing,
+- [x] Verify the known issues: turn-based-only opening, fixed-fleet framing,
   circles versus sprites, drone-bay rebuilding scope, camera button/key
   confusion, and real-time/campaign topics buried in long paragraphs.
-- [ ] Visually inspect every existing screenshot against the current UI.
+- [x] Visually inspect every existing screenshot against the current UI.
   Record retain/replace/remove and why. Do not call file existence or a
   capture-script comment proof that an image is current.
-- [ ] Cross-check README and GitHub description against shipped behavior.
+- [x] Cross-check README and GitHub description against shipped behavior.
   PR #85 already refreshed both; update again only for new factual changes
   such as the implemented two-mode chooser. Preserve attribution and rights.
 
 **Verification:** Review the inventory against actual handlers and constants.
 No new tests are needed merely to preserve wording. Numeric or behavioral
 claims that can drift become focused checks in G6, not prose snapshot tests.
+
+G1 evidence: [source and image inventory](../reviews/2026-10-03-guide-content-inventory.md).
+This audits the pre-consolidation baseline; proposed validation cases have
+not been run as guide acceptance. The GitHub description was checked during
+M4 and already accurately describes the supported modes.
 
 ## G2 Restructure the guide around the two rulesets and player tasks
 

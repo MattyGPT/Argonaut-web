@@ -48,7 +48,7 @@ const advanceRandom = (game) => ({ ...game, randomStep: (game.randomStep ?? 0) +
  * are exempt: a burn already implies its heading (23a), which is how a retreating
  * hull ends up running on its weak aft with no special-casing. Free (no stardate,
  * no turn cost) and deterministic (pure bearing math, no RNG), Reimagined only;
- * drones have no facing, and a classic or extended war never touches one.
+ * drones have no facing, and a classic war never touches one.
  */
 const faceThreat = (game, actor, action) => {
   if (!game.reimagined || isDrone(actor)) return actor;
@@ -130,7 +130,7 @@ const resolveAiAction = (startGame, shipId, plotDest = false) => {
     const amount = weaponDamage(action.type, actor, rng, grudge, powerEffect(game, actor, 'weapons'), game.reimagined ? REIMAGINED_WEAPON_DAMAGE_SCALE : 1);
     const before = target.status;
     // Round 23: an aimed volley strikes the target's arc the shooter bears on —
-    // null outside a Reimagined war or against a drone, so a classic or extended
+    // null outside a Reimagined war or against a drone, so a classic
     // hit keeps its single-pool math byte-identically.
     const arc = struckArc(game, actor, target);
     const hit = damageShip(target, amount, rng, arc ? { arc } : {});
@@ -486,7 +486,7 @@ export const applySurrender = (game) => {
  * would linger helpless — repaired at the dockyard, back out, gutted again — and the
  * war would stall. Striking its colors turns the ion kill-shot into a derelict anyone
  * can board, so suppression feeds the prize race instead of stretching the war. A
- * classic or extended (non-precision) war sees neither and its hulks behave exactly
+ * classic (non-precision) war sees neither and its hulks behave exactly
  * as calibrated. A starbase is exempt — it never had engines, so burnt-out guns leave
  * it a fortress, not a derelict — and your command ship never surrenders while you
  * have the conn.
@@ -561,12 +561,12 @@ const relayOrders = (game) => {
 /**
  * Ships sitting near a healthy friendly starbase repair between rounds. The
  * original had no way to recover damage, so a long war was a one-way ratchet
- * downward; an extended war gives retreating and screening something to be for.
- * Subsystem units stay lost — the dockyard can restore shield power and transfer
- * crew, but it cannot rebuild a burnt-out mapper.
+ * downward; a Reimagined war gives retreating and screening something to be for.
+ * Dockyards restore shield power and crew, and rebuild one damaged subsystem
+ * unit per stardate, starting with the largest deficit.
  */
 export const resolveDocking = (game) => {
-  if (!game.extended) return { game, messages: [] };
+  if (!game.reimagined) return { game, messages: [] };
   const messages = [];
   const ships = game.ships.map((ship) => {
     const base = dockedAt(game, ship);
@@ -601,7 +601,7 @@ export const resolveDocking = (game) => {
  * Power management (Reimagined): surplus routed to the shield sink regenerates a
  * little shield power every stardate, scaled by how hard the reactor drives it. A
  * hull whose reactor is knocked out regenerates nothing. Resolves in the computer
- * phase, like the dockyard. Inert in a classic or extended war.
+ * phase, like the dockyard. Inert in a classic war.
  */
 export const resolvePowerRegen = (game) => {
   if (!game.reimagined) return { game, messages: [] };
@@ -628,7 +628,7 @@ export const resolvePowerRegen = (game) => {
  * overcharge a sink without starving another. Contested — hulls of two or more
  * alliances inside when the stardate ends — or driven off, the node goes dark and
  * free. Resolves in the computer phase like the dockyard and is narrated on every
- * change. Without relay terrain this is inert, so a classic or extended war never
+ * change. Without relay terrain this is inert, so a classic war never
  * sees it, and old saves default `held` safely.
  */
 export const resolveObjectives = (game) => {

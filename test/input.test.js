@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bindInput, promptForConfirmation, promptForCoordinates, promptForTarget } from '../ui/input.js';
+import { bindInput, normalizeNewGameOptions, promptForConfirmation, promptForCoordinates, promptForTarget } from '../ui/input.js';
 
 // bindInput only reads `dialog[open]` and `activeElement`, so stubbing those two
 // is enough to drive its keydown handler directly. The dialog prompts read a
@@ -377,4 +377,30 @@ test('dismissing a confirmation without submitting resolves false', async () => 
   const pending = promptForConfirmation('Resign command?', 'The autopilot takes the Federation.');
   element('#confirm-dialog').onclose();
   assert.equal(await pending, false);
+});
+
+// New-game submission must treat the selected ruleset as authoritative.
+test('Classic submission discards stale hidden expansion options', () => {
+  assert.deepEqual(normalizeNewGameOptions({
+    ruleset: 'classic', campaign: true, realtime: true,
+    scenario: 'hunt-the-vendetta', loadout: { xanadu: false },
+  }), { reimagined: false, campaign: false, realtime: false, scenario: 'annihilation', loadout: null });
+});
+
+test('Reimagined submission retains fleet and scenario choices', () => {
+  const loadout = { xanadu: true, factions: ['Federation', 'Axis'] };
+  assert.deepEqual(normalizeNewGameOptions({ ruleset: 'reimagined', scenario: 'defend-xanadu', loadout }),
+    { reimagined: true, campaign: false, realtime: false, scenario: 'defend-xanadu', loadout });
+});
+
+test('campaign takes priority over real-time in Reimagined submission', () => {
+  assert.deepEqual(normalizeNewGameOptions({ ruleset: 'reimagined', campaign: true, realtime: true }),
+    { reimagined: true, campaign: true, realtime: false, scenario: 'annihilation', loadout: null });
+  assert.equal(normalizeNewGameOptions({ ruleset: 'reimagined', realtime: true }).realtime, true);
+});
+
+test('Hold Xanadu requires its base and an unknown ruleset falls back to Classic', () => {
+  assert.equal(normalizeNewGameOptions({ ruleset: 'reimagined', scenario: 'defend-xanadu', loadout: { xanadu: false } }).scenario, 'annihilation');
+  assert.equal(normalizeNewGameOptions({ ruleset: 'retired', realtime: true }).reimagined, false);
+  assert.equal(normalizeNewGameOptions({ ruleset: 'reimagined', scenario: 'invalid' }).scenario, 'annihilation');
 });

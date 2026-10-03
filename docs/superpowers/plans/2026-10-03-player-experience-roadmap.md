@@ -1,7 +1,9 @@
 # Player experience implementation plan
 
-**Status:** Ready for implementation planning review; no implementation
-tasks below have been executed. Based on merged PR #85, commit `c1a6e64`.
+**Status:** Implementation started after merging PR #86 (`dc63b81`). P0 and
+M1–M4 are complete with local validation; G1 inventory is complete. The first
+delivery is on `codex/two-mode-consolidation`, pending PR review. C/F/H and
+G2–G6 remain unimplemented; P2 cross-feature acceptance is still pending.
 **Spec:** [Player experience roadmap](../specs/2026-10-03-player-experience-roadmap.md).
 **Goal:** Deliver all six October 3 specifications in small, verifiable
 changes, preserving Classic while making Reimagined the sole expansion.
@@ -38,17 +40,17 @@ where the feature work is otherwise independent.
 **Read:** `README.md`, `CALIBRATION.md`, the six October 3 specs, and the
 existing tests. **Inspect:** `git status --short`, branch, and current HEAD.
 
-- [ ] Preserve unrelated local edits. Do not stage broad directories or
+- [x] Preserve unrelated local edits. Do not stage broad directories or
   overwrite existing roadmap corrections while following these plans.
-- [ ] Run `npm test` once before code changes. PR #84 recorded 601 passing
+- [x] Run `npm test` once before code changes. PR #84 recorded 601 passing
   tests; record the actual current count rather than hard-coding that count
   as a future acceptance requirement.
-- [ ] Capture supported-mode baselines at the same revision using the
+- [x] Capture supported-mode baselines at the same revision using the
   commands below. Retain full JSON results in temporary evidence storage
   outside production assets, labelled with commit and exact command.
-- [ ] Record `sim-0` through `sim-249`, precision off, regional off, and the
+- [x] Record `sim-0` through `sim-249`, precision off, regional off, and the
   current 600-stardate cap. Do not compare unlike harness settings.
-- [ ] Verify an available browser runtime and installed browser. Reuse
+- [x] Verify an available browser runtime and installed browser. Reuse
   `scripts/check-combat-feedback.mjs` and the existing Playwright setup;
   browser tests are optional developer tooling, not runtime dependencies.
 

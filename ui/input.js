@@ -1,5 +1,20 @@
 import { GRID_SIZE, SURGICAL_DAMAGE_FACTOR, WEAPONS } from '../game/constants.js';
 
+/** Normalize new-game choices at submission, even if hidden controls are stale. */
+export const normalizeNewGameOptions = ({ ruleset, campaign = false, realtime = false, scenario = 'annihilation', loadout = null } = {}) => {
+  const reimagined = ruleset === 'reimagined';
+  const wantsCampaign = reimagined && Boolean(campaign);
+  const validScenario = ['annihilation', 'defend-xanadu', 'hunt-the-vendetta'].includes(scenario)
+    && !(scenario === 'defend-xanadu' && loadout?.xanadu === false);
+  return {
+    reimagined,
+    campaign: wantsCampaign,
+    realtime: reimagined && !wantsCampaign && Boolean(realtime),
+    scenario: reimagined && validScenario ? scenario : 'annihilation',
+    loadout: reimagined ? loadout : null,
+  };
+};
+
 const keys = Object.freeze({
   '0': 'computer',
   '1': 'shields',

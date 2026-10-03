@@ -22,7 +22,7 @@ test('the realtime option implies Reimagined and widens the field', () => {
   const game = createGame({ seed: 'rt-flag', realtime: true });
   assert.equal(game.realtime, true);
   assert.equal(game.reimagined, true);
-  assert.equal(game.extended, true);
+  assert.deepEqual(game.orders, {});
   assert.equal(game.gridSize, REIMAGINED_GRID_SIZE);
   // The flag is the ONLY difference: same seed, same fleets, same streams.
   assert.deepEqual(game.ships, createGame({ seed: 'rt-flag', reimagined: true }).ships);
@@ -32,7 +32,6 @@ test('a war created without the realtime option is untouched by it', () => {
   // The standing parity scaffold pattern: an option defaulted off changes nothing.
   assert.deepEqual(createGame({ seed: 'rt-parity' }), createGame({ seed: 'rt-parity', realtime: false }));
   assert.equal(createGame({ seed: 'rt-parity' }).realtime, false);
-  assert.equal(createGame({ seed: 'rt-parity', extended: true }).realtime, false);
   assert.equal(createGame({ seed: 'rt-parity', reimagined: true }).realtime, false);
 });
 
