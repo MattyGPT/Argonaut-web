@@ -1,5 +1,7 @@
 # Reimagined campaign service records and debrief
 
+Implementation plan: [Campaign record and debrief tasks](../plans/2026-10-03-campaign-service-records.md).
+
 Status: **DESIGN DRAFT, 2026-10-03.** Covers proposal 8 in the
 [player experience roadmap](2026-10-03-player-experience-roadmap.md).
 Campaigns are Reimagined-only. This work adds history and explanation,

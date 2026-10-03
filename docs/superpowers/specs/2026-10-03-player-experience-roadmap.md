@@ -1,5 +1,7 @@
 # Argonaut player experience roadmap
 
+Implementation plan: [Delivery sequence and verification](../plans/2026-10-03-player-experience-roadmap.md).
+
 Status: **DESIGN DRAFT, 2026-10-03.** Matt approved the direction of all
 eight play-test proposals and added a thorough user-guide and tutorial
 review. Detailed behavior below is proposed for implementation; it is not
