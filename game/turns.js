@@ -4,6 +4,7 @@ import { chooseAiAction } from './ai.js';
 import { advanceSubtick, integrateStardate, positionsOf, simTimeOf, SUBTICK } from './realtime.js';
 import { createRng } from './rng.js';
 import { scenarioOutcome } from './scenarios.js';
+import { beginBattleResolution, finishBattleResolution, emitBattleRecord, snapshotKnowledge, snapshotShip, shipConsequences, withBattleAction, withBattleCause } from './battle-records.js';
 import {
   appendLog,
   applyHeading,
@@ -40,6 +41,118 @@ const replaceShip = (game, replacement) => ({ ...game, ships: game.ships.map((sh
 const rngFor = (game) => createRng(`${game.seed}:${game.randomStep ?? 0}`);
 const advanceRandom = (game) => ({ ...game, randomStep: (game.randomStep ?? 0) + 1 });
 
+const recordedObject = (game, resolve) => {
+  const scope = beginBattleResolution(game);
+  const result = resolve(scope.game);
+  const finished = finishBattleResolution(scope, result.game);
+  return { ...result, game: finished.game, records: finished.records };
+};
+
+const recordedGame = (game, resolve, options = {}) => {
+  const scope = beginBattleResolution(game);
+  const finished = finishBattleResolution(scope, resolve(scope.game));
+  options.onRecords?.(finished.records);
+  return finished.game;
+};
+
+// Records describe resolved rule facts. Animation events and log wording never
+// participate in determining accuracy, damage, or terminal consequences.
+const recordVolley = (game, target, weapon, result, details = {}, after = null) => {
+  if (!game.battleRecordState) return game;
+  const consequences = after ? shipConsequences(target, after) : null;
+  let next = emitBattleRecord(game, {
+    kind: 'weapon-resolution', target: snapshotShip(target),
+    payload: { weapon, result, ...details, ...(consequences ? { consequences } : {}) },
+  });
+  if (after) {
+    next = emitBattleRecord(next, {
+      kind: 'damage', target: snapshotShip(target),
+      payload: { cause: weapon, ...details, consequences },
+    });
+    if (target.status !== after.status && ['destroyed', 'vacant'].includes(after.status)) {
+      next = emitBattleRecord(next, {
+        kind: after.status === 'destroyed' ? 'destruction' : 'vacancy', target: snapshotShip(target),
+        payload: { cause: weapon, status: after.status },
+      });
+    }
+    const disabled = Object.keys(target.systems ?? {}).filter((name) => target.systems[name] > 0 && after.systems?.[name] === 0);
+    if (disabled.length) next = emitBattleRecord(next, { kind: 'system-disabled', target: snapshotShip(target), payload: { cause: weapon, systems: disabled } });
+  }
+  return next;
+};
+
+const recordRuleChanges = (before, after, cause) => {
+  if (!before.battleRecordState) return after;
+  let game = after;
+  const record = (kind, fields) => {
+    game = emitBattleRecord(game, { kind, source: 'system', actionId: null, ...fields });
+  };
+  for (const ship of before.ships) {
+    const next = getShip(after, ship.id);
+    if (!next) continue;
+    const consequences = shipConsequences(ship, next);
+    if (cause !== 'faction-capitulation' && ship.status !== next.status && ['destroyed', 'vacant', 'surrendered'].includes(next.status)) {
+      const kind = next.status === 'destroyed' ? 'destruction'
+        : next.status === 'surrendered' || cause === 'disabled' ? 'surrender' : 'vacancy';
+      record(kind, {
+        target: snapshotShip(ship), payload: { cause, consequences },
+      });
+    }
+    if (cause === 'dockyard' || cause === 'reactor-regeneration') {
+      const systems = Object.fromEntries(Object.keys(next.systems).map((key) => [key, next.systems[key] - ship.systems[key]]).filter(([, gain]) => gain > 0));
+      const shields = next.shields - ship.shields;
+      const crew = next.crew - ship.crew;
+      if (shields > 0 || crew > 0 || Object.keys(systems).length) {
+        const base = cause === 'dockyard' ? dockedAt(before, ship) : null;
+        if (base) record('docking', { actor: snapshotShip(ship), target: snapshotShip(base), payload: { cause } });
+        record('repair', {
+          actor: snapshotShip(ship), ...(base ? { target: snapshotShip(base) } : {}),
+          payload: { cause, shields, crew, systems, consequences },
+        });
+      }
+    }
+  }
+  if (cause === 'distress-abandonment') {
+    const existing = new Set(before.ships.map((ship) => ship.id));
+    for (const ship of after.ships) {
+      if (existing.has(ship.id) || !ship.encounter) continue;
+      record('encounter-arrival', {
+        target: snapshotShip(ship),
+        payload: { cause: 'encounter-arrival', encounterType: ship.encounter.type, consequences: shipConsequences(null, ship) },
+      });
+    }
+  }
+  if (cause === 'relay-control') {
+    for (const relay of before.terrain ?? []) {
+      if (relay.type !== 'relay') continue;
+      const oldFaction = before.held?.[relay.id] ?? null;
+      const faction = after.held?.[relay.id] ?? null;
+      if (oldFaction === faction) continue;
+      const inside = before.ships.filter((ship) => isActive(ship) && !isDrone(ship) && !isNeutral(ship) && !isTractorHeld(before, ship) && distance(ship, relay) <= relay.radius);
+      record('relay-change', { payload: { cause, relayId: relay.id, x: relay.x, y: relay.y, before: oldFaction, after: faction, occupants: inside.map(snapshotShip) } });
+    }
+  }
+  if (cause === 'order-delivery') {
+    for (const [id, order] of Object.entries(before.pendingOrders ?? {})) {
+      record('order-delivery', { target: snapshotShip(getShip(before, id)), payload: { cause, order, delivered: isActive(getShip(before, id)) } });
+    }
+  }
+  if (cause === 'command-loss' && (before.playerShipId !== after.playerShipId || before.commandLost !== after.commandLost)) {
+    record('command-transfer', {
+      actor: snapshotShip(getShip(before, before.playerShipId)),
+      target: after.commandLost ? null : snapshotShip(getShip(after, after.playerShipId)),
+      ...(after.commandLost ? { knowledge: snapshotKnowledge(after, { actor: getShip(before, before.playerShipId), kind: 'command-loss' }) } : {}),
+      payload: { cause, fromId: before.playerShipId, toId: after.commandLost ? null : after.playerShipId },
+    });
+  }
+  return game;
+};
+
+const recordedRule = (game, resolve, cause) => recordedObject(game, (prepared) => {
+  const result = resolve(prepared);
+  return { ...result, game: recordRuleChanges(prepared, result.game, cause) };
+});
+
 /**
  * Round 23 (23c): AI captains fight bow-on. A hull that is NOT moving this
  * stardate snaps its facing to the target of its chosen action — or the nearest
@@ -64,11 +177,50 @@ const faceThreat = (game, actor, action) => {
   return actor.facing === facing ? actor : { ...actor, facing };
 };
 
-const resolveAiAction = (startGame, shipId, plotDest = false) => {
+const resolveAiAction = (game, shipId, plotDest = false) => {
+  const actor = getShip(game, shipId);
+  if (!isActive(actor)) return { game, messages: [], type: 'pass', records: [] };
+  const action = chooseAiAction(game, shipId);
+  return withBattleAction(game, {
+    actor,
+    source: shipId === game.playerShipId ? 'auto-conn' : 'fleet-ai',
+    command: action.type,
+    request: action,
+    accepted: true,
+  }, (prepared) => {
+    let result = executeAiAction(prepared, shipId, action, plotDest);
+    if (!['phasers', 'photons', 'ion', 'spread', 'self-destruct', 'tractor'].includes(result.type)) {
+      result = {
+        ...result,
+        game: emitBattleRecord(result.game, {
+          kind: 'action-resolution', target: snapshotShip(getShip(prepared, action.targetId)),
+          payload: {
+            command: result.type, result: result.type === 'pass' ? 'held' : 'resolved',
+            consequences: shipConsequences(actor, getShip(result.game, shipId)),
+          },
+        }),
+      };
+    }
+    let next = result.game;
+    const moved = getShip(next, shipId);
+    if (plotDest || result.type !== 'move' || !isActive(moved)) return result;
+    const collision = resolveCollision(next, moved);
+    next = collision.game;
+    if (next.reimagined) next = separateOverlaps(next);
+    const strike = resolveAsteroidStrike(next, getShip(next, shipId));
+    return {
+      ...result,
+      game: strike.game,
+      messages: [...result.messages, ...collision.messages, ...strike.messages],
+      events: [...(result.events ?? []), ...(collision.events ?? []), ...(strike.events ?? [])],
+    };
+  });
+};
+
+const executeAiAction = (startGame, shipId, action, plotDest = false) => {
   let game = startGame;
   let actor = getShip(game, shipId);
   if (!isActive(actor)) return { game, messages: [], type: 'pass' };
-  const action = chooseAiAction(game, shipId);
   // The bow snaps onto the threat BEFORE the action resolves, so every volley of
   // this stardate — the ones this hull fires and the ones fired at it later in the
   // phase — reads the disciplined facing.
@@ -120,7 +272,7 @@ const resolveAiAction = (startGame, shipId, plotDest = false) => {
     if (rng.next() < volleyMissChance(game, actor, target)) {
       const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
       return {
-        game: advanceRandom(replaceShip(game, shooter)),
+        game: recordVolley(advanceRandom(replaceShip(game, shooter)), target, action.type, 'miss'),
         messages: [`${actor.name} fires ${action.type} at ${target.name}. Missed!${covered ? ' The volley splashes into asteroids.' : ''}`],
         type: action.type,
         events: [fireEvent(action.type, actor, target, false)],
@@ -153,7 +305,7 @@ const resolveAiAction = (startGame, shipId, plotDest = false) => {
       events.push(terminalEvent('destruction', action.type, victim, { attacker: actor }));
     }
     return {
-      game: updated,
+      game: recordVolley(updated, target, action.type, 'hit', { damage: amount, arc }, victim),
       messages: [
         `${actor.name} fires ${action.type} at ${target.name}.`,
         ...(kill ? killLines(game, actor, victim) : []),
@@ -171,7 +323,7 @@ const resolveAiAction = (startGame, shipId, plotDest = false) => {
     if (rng.next() < volleyMissChance(game, actor, target)) {
       const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
       return {
-        game: advanceRandom(replaceShip(game, shooter)),
+        game: recordVolley(advanceRandom(replaceShip(game, shooter)), target, action.type, 'miss'),
         messages: [`${actor.name} fires an ion burst at ${target.name}. Missed!`],
         type: action.type,
         events: [fireEvent('ion', actor, target, false)],
@@ -194,7 +346,7 @@ const resolveAiAction = (startGame, shipId, plotDest = false) => {
       - Object.values(hit.systems).reduce((total, units) => total + units, 0);
     const burned = Object.keys(hit.systems).filter((name) => target.systems[name] > 0 && hit.systems[name] === 0);
     return {
-      game: updated,
+      game: recordVolley(updated, target, 'ion', 'hit', { damage: amount }, victim),
       messages: [
         stripped > 0
           ? `${actor.name}'s ion burst tears through ${target.name}'s shields, burning out ${stripped} subsystem unit${stripped === 1 ? '' : 's'}.`
@@ -227,7 +379,7 @@ const resolveAiAction = (startGame, shipId, plotDest = false) => {
     if (rng.next() < volleyMissChance(game, actor, target)) {
       const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
       return {
-        game: advanceRandom(replaceShip(game, shooter)),
+        game: recordVolley(advanceRandom(replaceShip(game, shooter)), target, action.type, 'miss'),
         messages: [`${actor.name} fires a spread of torpedoes at ${target.name}. Missed — the salvo splashes nothing.`],
         type: action.type,
         events: [fireEvent('spread', actor, target, false)],
@@ -237,7 +389,7 @@ const resolveAiAction = (startGame, shipId, plotDest = false) => {
     const full = weaponDamage('spread', actor, rng, grudge, powerEffect(game, actor, 'weapons'), game.reimagined ? REIMAGINED_WEAPON_DAMAGE_SCALE : 1);
     const splash = spreadSplash(game, actor, target, full, rng);
     return {
-      game: advanceRandom(splash.game),
+      game: recordVolley(advanceRandom(splash.game), target, 'spread', 'hit', { damage: full }),
       messages: [`${actor.name} fires a spread of torpedoes at ${target.name}.`, ...splash.messages],
       type: action.type,
       events: [fireEvent('spread', actor, target, true), ...splash.events],
@@ -259,7 +411,10 @@ const resolveAiAction = (startGame, shipId, plotDest = false) => {
         tow: { x: position.x, y: position.y, rate: pull / REALTIME.ticksPerStardate, remaining: pull },
       };
       return {
-        game: replaceShip(game, towed),
+        game: emitBattleRecord(replaceShip(game, towed), {
+          kind: 'tractor-lock', target: snapshotShip(target),
+          payload: { pull, result: 'hauling', destination: position, distressTow: target.encounter?.type === 'distress' && target.faction === actor.faction, consequences: shipConsequences(target, towed) },
+        }),
         messages: [
           `${actor.name} locks ${target.name} in a tractor beam.`,
           `Tractor beam good for ${pull} units pull. ${actor.name} is hauling ${target.name} toward ${Math.round(position.x)},${Math.round(position.y)}.`,
@@ -270,7 +425,11 @@ const resolveAiAction = (startGame, shipId, plotDest = false) => {
     }
     // Round 23: a towed hull heads the way it was dragged (Reimagined only).
     const pulled = { ...applyHeading(game, target, position.x, position.y), tractorBy: actor.id };
-    const collision = resolveCollision(replaceShip(game, pulled), pulled);
+    const locked = emitBattleRecord(replaceShip(game, pulled), {
+      kind: 'tractor-lock', target: snapshotShip(target),
+      payload: { pull, result: 'pulled', destination: position, distressTow: target.encounter?.type === 'distress' && target.faction === actor.faction, consequences: shipConsequences(target, pulled) },
+    });
+    const collision = resolveCollision(locked, pulled);
     // A tow that ends inside an asteroid field exposes the victim to a rock strike
     // (15c) — the Cabal's tractor-ram can now dump a hull into the rocks as well.
     const strike = resolveAsteroidStrike(collision.game, pulled);
@@ -355,7 +514,9 @@ const victoryMessage = (kind, faction) => {
  * remaining Federation ship so the player keeps fighting, matching the original's
  * "the war will continue without you" behavior.
  */
-export const transferCommandIfNeeded = (game) => {
+export const transferCommandIfNeeded = (game) => recordedRule(game, transferCommandIfNeededRules, "command-loss");
+
+const transferCommandIfNeededRules = (game) => {
   const current = getShip(game, game.playerShipId);
   if (isActive(current)) return { game, message: null };
   const preface = current?.status === 'destroyed'
@@ -452,7 +613,9 @@ const markFactionSurrendered = (game, faction, winner) => ({
  * the war — its ships stand down and the fight continues. Only the Federation
  * autopilot's surrender (after you resign) ends the game.
  */
-export const applySurrender = (game) => {
+export const applySurrender = (game) => recordedRule(game, applySurrenderRules, "faction-capitulation");
+
+const applySurrenderRules = (game) => {
   if (game.outcome) return { game, events: [] };
   let next = game;
   const events = [];
@@ -469,7 +632,14 @@ export const applySurrender = (game) => {
     for (const ship of active) {
       events.push(terminalEvent('surrender', 'surrender', ship, { surrenderedTo: winner }));
     }
+    const stoodDown = next.ships.filter((ship) => isActive(ship) && ship.faction === faction);
     next = markFactionSurrendered(next, faction, winner);
+    for (const ship of stoodDown) {
+      next = emitBattleRecord(next, {
+        kind: 'surrender', source: 'system', actionId: null, target: snapshotShip(ship),
+        payload: { cause: 'faction-capitulation', surrenderedTo: winner, consequences: shipConsequences(ship, getShip(next, ship.id)) },
+      });
+    }
     if (next.outcome) return { game: next, events };
   }
   return { game: next, events };
@@ -491,7 +661,9 @@ export const applySurrender = (game) => {
  * it a fortress, not a derelict — and your command ship never surrenders while you
  * have the conn.
  */
-export const resolveDisabledSurrender = (game) => {
+export const resolveDisabledSurrender = (game) => recordedRule(game, resolveDisabledSurrenderRules, "disabled");
+
+const resolveDisabledSurrenderRules = (game) => {
   if ((!game.precision && !game.reimagined) || game.outcome) return { game, messages: [], events: [] };
   const messages = [];
   const events = [];
@@ -520,7 +692,9 @@ export const resolveDisabledSurrender = (game) => {
  * alliance's drones still flying. Inert outside a Reimagined war, where no drone
  * ever exists.
  */
-export const darkenOrphanDrones = (game) => {
+export const darkenOrphanDrones = (game) => recordedRule(game, darkenOrphanDronesRules, "orphan-drone");
+
+const darkenOrphanDronesRules = (game) => {
   if (!game.reimagined) return { game, messages: [] };
   const crewed = new Set(game.ships.filter((ship) => isActive(ship) && !isDrone(ship)).map((ship) => ship.faction));
   const messages = [];
@@ -542,7 +716,9 @@ export const darkenOrphanDrones = (game) => {
  * after every autopilot has acted, so the fleet moves on them from the next
  * stardate onward.
  */
-const relayOrders = (game) => {
+const relayOrders = (game) => recordedRule(game, relayOrdersRules, "order-delivery");
+
+const relayOrdersRules = (game) => {
   const pending = game.pendingOrders ?? {};
   const ids = Object.keys(pending);
   if (ids.length === 0) return { game, messages: [] };
@@ -565,7 +741,9 @@ const relayOrders = (game) => {
  * Dockyards restore shield power and crew, and rebuild one damaged subsystem
  * unit per stardate, starting with the largest deficit.
  */
-export const resolveDocking = (game) => {
+export const resolveDocking = (game) => recordedRule(game, resolveDockingRules, "dockyard");
+
+const resolveDockingRules = (game) => {
   if (!game.reimagined) return { game, messages: [] };
   const messages = [];
   const ships = game.ships.map((ship) => {
@@ -603,7 +781,9 @@ export const resolveDocking = (game) => {
  * hull whose reactor is knocked out regenerates nothing. Resolves in the computer
  * phase, like the dockyard. Inert in a classic war.
  */
-export const resolvePowerRegen = (game) => {
+export const resolvePowerRegen = (game) => recordedRule(game, resolvePowerRegenRules, "reactor-regeneration");
+
+const resolvePowerRegenRules = (game) => {
   if (!game.reimagined) return { game, messages: [] };
   const messages = [];
   const ships = game.ships.map((ship) => {
@@ -631,7 +811,9 @@ export const resolvePowerRegen = (game) => {
  * change. Without relay terrain this is inert, so a classic war never
  * sees it, and old saves default `held` safely.
  */
-export const resolveObjectives = (game) => {
+export const resolveObjectives = (game) => recordedRule(game, resolveObjectivesRules, "relay-control");
+
+const resolveObjectivesRules = (game) => {
   const relays = (game.terrain ?? []).filter((feature) => feature.type === 'relay');
   if (relays.length === 0) return { game, messages: [] };
   const held = { ...(game.held ?? {}) };
@@ -673,7 +855,9 @@ export const resolveObjectives = (game) => {
  * the computer phase after the actors have moved and before the dockyard, so an
  * arrival never acts on the stardate it arrives.
  */
-export const resolveEncounters = (game) => {
+export const resolveEncounters = (game) => recordedRule(game, resolveEncountersRules, "distress-abandonment");
+
+const resolveEncountersRules = (game) => {
   if (!game.reimagined || game.outcome) return { game, messages: [] };
   const messages = [];
   // The rescue window (round 24): a distress hull nobody got under tow or
@@ -746,7 +930,9 @@ const warSignature = (game) => game.ships
   .join('|');
 
 /** Runs one autopilot turn for the player's ship (backtick command / spectator mode). */
-export const resolveAutopilotTurn = (game) => {
+export const resolveAutopilotTurn = (game) => recordedObject(game, resolveAutopilotTurnRules);
+
+const resolveAutopilotTurnRules = (game) => {
   // Real-time movement (Phase 8, round 30): snapshot where every hull stands
   // BEFORE this stardate's burns resolve — the trajectory `resolveComputerTurns`
   // builds at the boundary starts here. Pure presentation data; no rule reads it.
@@ -756,26 +942,12 @@ export const resolveAutopilotTurn = (game) => {
   let next = action.game;
   const log = [...action.messages];
   const events = [...(action.events ?? [])];
-  const actor = getShip(next, shipId);
-  if (action.type === 'move' && isActive(actor)) {
-    const collision = resolveCollision(next, actor);
-    next = collision.game;
-    log.push(...collision.messages);
-    events.push(...(collision.events ?? []));
-    // Round 35: one meeting is one collision — survivors left inside the
-    // radius separate now (the real-time sweep's own rule, ported), so a pair
-    // cannot re-detonate every stardate while a cluster melee eats itself.
-    if (next.reimagined) next = separateOverlaps(next);
-    // Ending the move inside an asteroid field risks a rock strike (15c).
-    const strike = resolveAsteroidStrike(next, getShip(next, shipId));
-    next = strike.game;
-    log.push(...strike.messages);
-    events.push(...(strike.events ?? []));
-  }
   return { game: { ...next, phase: 'computer' }, messages: log, events };
 };
 
-export const resolveComputerTurns = (initialGame) => {
+export const resolveComputerTurns = (initialGame, options = {}) => recordedGame(initialGame, resolveComputerTurnsRules, options);
+
+const resolveComputerTurnsRules = (initialGame) => {
   let game = { ...initialGame, ships: initialGame.ships.map((ship) => ({ ...ship, systems: { ...ship.systems } })) };
   const log = [];
   const events = [];
@@ -786,26 +958,6 @@ export const resolveComputerTurns = (initialGame) => {
     game = action.game;
     log.push(...action.messages);
     events.push(...(action.events ?? []));
-    const actor = getShip(game, shipId);
-    if (action.type === 'move' && isActive(actor)) {
-      const collision = resolveCollision(game, actor);
-      game = collision.game;
-      log.push(...collision.messages);
-      events.push(...(collision.events ?? []));
-      // Round 35: one meeting is one collision — survivors left inside the
-      // radius separate now (the real-time sweep's own rule, ported), so a
-      // pair cannot re-detonate every stardate while a cluster melee eats
-      // itself. Blanket boundary separation was measured and rejected: it
-      // also disarmed the deliberate overlap pressure that thins firing
-      // clusters (27c's recorded Federation snowball, reproduced 2026-09-29).
-      if (game.reimagined) game = separateOverlaps(game);
-      // Ending the move inside an asteroid field risks a rock strike (15c), for
-      // every alliance's hulls alike — terrain applies symmetrically.
-      const strike = resolveAsteroidStrike(game, getShip(game, shipId));
-      game = strike.game;
-      log.push(...strike.messages);
-      events.push(...(strike.events ?? []));
-    }
   }
   // An alliance whose last crewed hull died this stardate takes its drones with
   // it (round 20), before the dockyard, the objectives, and the outcome checks
@@ -822,7 +974,9 @@ export const resolveComputerTurns = (initialGame) => {
  * One source of truth, so the two presentations of a war can never disagree
  * about what a stardate does. `log` and `events` are the caller's accumulators.
  */
-export const resolveStardateChain = (startGame, log, events) => {
+export const resolveStardateChain = (startGame, log, events, options = {}) => recordedGame(startGame, (prepared) => resolveStardateChainRules(prepared, log, events), options);
+
+const resolveStardateChainRules = (startGame, log, events) => {
   let game = startGame;
   const darkened = darkenOrphanDrones(game);
   game = darkened.game;
@@ -874,6 +1028,12 @@ export const resolveStardateChain = (startGame, log, events) => {
 
   const outcome = game.outcome ?? evaluateOutcome(game);
   if (!game.outcome && outcome.kind !== 'active') log.push(outcome.message);
+  if (!startGame.outcome && outcome.kind !== 'active') {
+    game = emitBattleRecord(game, {
+      kind: 'battle-outcome', source: 'system', actionId: null,
+      payload: { cause: 'outcome-rules', outcome },
+    });
+  }
   return {
     ...game,
     turn: game.turn + 1,
@@ -905,7 +1065,9 @@ export const resolveStardateChain = (startGame, log, events) => {
  * the sub-tick continuum, where they happen in flight rather than in a batch
  * here; the boundary is decisions + chain only.)
  */
-export const resolveRealtimeBoundary = (initialGame) => {
+export const resolveRealtimeBoundary = (initialGame, options = {}) => recordedGame(initialGame, resolveRealtimeBoundaryRules, options);
+
+const resolveRealtimeBoundaryRules = (initialGame) => {
   let game = initialGame;
   const log = [];
   const events = [];
@@ -1049,7 +1211,32 @@ const sweepCollisions = (game, prev) => {
  * launch-time shooter snapshot keeps the volley resolvable even if the
  * launcher died in flight; the shot itself was counted at launch.
  */
-const resolveWarheadImpact = (game, warhead) => {
+const recordImpact = (game, warhead, target, result, details = {}, after = null) => {
+  if (!game.battleRecordState) return game;
+  const attribution = {
+    actor: warhead.causal?.actor ?? snapshotShip(warhead.shooter),
+    actionId: warhead.causal?.actionId ?? null,
+    ordnanceId: warhead.causal?.ordnanceId ?? warhead.id,
+  };
+  const consequences = after ? shipConsequences(target, after) : null;
+  let next = emitBattleRecord(game, {
+    kind: 'ordnance-impact', ...attribution, target: snapshotShip(target),
+    payload: { weapon: warhead.kind, result, point: { x: warhead.x, y: warhead.y }, ...details, ...(consequences ? { consequences } : {}) },
+  });
+  if (after) {
+    next = emitBattleRecord(next, { kind: 'damage', ...attribution, target: snapshotShip(target), payload: { cause: warhead.kind, ...details, consequences } });
+    if (target.status !== after.status && ['destroyed', 'vacant'].includes(after.status)) {
+      next = emitBattleRecord(next, { kind: after.status === 'destroyed' ? 'destruction' : 'vacancy', ...attribution, target: snapshotShip(target), payload: { cause: warhead.kind, status: after.status } });
+    }
+    const disabled = Object.keys(target.systems ?? {}).filter((name) => target.systems[name] > 0 && after.systems?.[name] === 0);
+    if (disabled.length) next = emitBattleRecord(next, { kind: 'system-disabled', ...attribution, target: snapshotShip(target), payload: { cause: warhead.kind, systems: disabled } });
+  }
+  return next;
+};
+
+const resolveWarheadImpact = (game, warhead) => withBattleCause(game, warhead.causal, (prepared) => resolveWarheadImpactRules(prepared, warhead));
+
+const resolveWarheadImpactRules = (game, warhead) => {
   const point = { x: warhead.x, y: warhead.y };
   const live = getShip(game, warhead.shooterId);
   const actor = isActive(live) ? live : warhead.shooter;
@@ -1058,12 +1245,12 @@ const resolveWarheadImpact = (game, warhead) => {
   const boom = { kind: 'explosion', fromId: warhead.shooterId, toId: warhead.targetId, x1: point.x, y1: point.y, x2: point.x, y2: point.y, hit: true };
   if (warhead.kind === 'photons') {
     if (!target || !isActive(target) || distance(point, target) > REALTIME.impactRadius) {
-      return { game, messages: [`A photon warhead from ${actor.name} detonates harmlessly at ${at}.`], events: [boom] };
+      return { game: recordImpact(game, warhead, target, 'empty-space'), messages: [`A photon warhead from ${actor.name} detonates harmlessly at ${at}.`], events: [boom] };
     }
     const rng = rngFor(game);
     if (rng.next() < volleyMissChance(game, actor, target)) {
       return {
-        game: advanceRandom(game),
+        game: recordImpact(advanceRandom(game), warhead, target, 'miss'),
         messages: [`${actor.name}'s photons splash wide of ${target.name}. Missed!`],
         events: [boom, fireEvent('photons', actor, target, false)],
       };
@@ -1090,7 +1277,7 @@ const resolveWarheadImpact = (game, warhead) => {
       events.push(terminalEvent('destruction', 'photons', victim, { attacker: actor }));
     }
     return {
-      game: updated,
+      game: recordImpact(updated, warhead, target, 'hit', { damage, arc }, victim),
       messages: [
         `${actor.name}'s photons hit ${target.name} for ${damage} damage.`,
         ...(arc && hit.arcs ? [`The hit lands on ${target.name}'s ${arc} arc.`] : []),
@@ -1104,12 +1291,12 @@ const resolveWarheadImpact = (game, warhead) => {
   // aimed hull alive (stances and terrain bias it); a dead target leaves the
   // salvo to detonate harmless.
   if (!target || !isActive(target)) {
-    return { game, messages: [`A spread salvo detonates harmlessly at ${at}.`], events: [boom] };
+    return { game: recordImpact(game, warhead, target, 'empty-space'), messages: [`A spread salvo detonates harmlessly at ${at}.`], events: [boom] };
   }
   const rng = rngFor(game);
   if (rng.next() < volleyMissChance(game, actor, target)) {
     return {
-      game: advanceRandom(game),
+      game: recordImpact(advanceRandom(game), warhead, target, 'miss'),
       messages: [`${actor.name}'s spread splashes nothing at ${at}. Missed!`],
       events: [boom, fireEvent('spread', actor, target, false)],
     };
@@ -1117,8 +1304,9 @@ const resolveWarheadImpact = (game, warhead) => {
   const grudge = vendettaGrudge(game, actor, target);
   const full = weaponDamage('spread', actor, rng, grudge, powerEffect(game, actor, 'weapons'), game.reimagined ? REIMAGINED_WEAPON_DAMAGE_SCALE : 1);
   const splash = spreadSplashAt(game, actor, target, point, full, rng, false);
+  const affected = splash.game.ships.filter((ship) => ship.shotsTaken > (getShip(game, ship.id)?.shotsTaken ?? 0)).map((ship) => ship.id);
   return {
-    game: advanceRandom(splash.game),
+    game: recordImpact(advanceRandom(splash.game), warhead, target, affected.length ? 'hit' : 'empty-space', { affected, ...(affected.length ? { damage: full } : {}) }),
     messages: [`${actor.name}'s spread detonates at ${at}.`, ...splash.messages],
     events: [boom, fireEvent('spread', actor, target, true), ...splash.events],
   };
@@ -1178,12 +1366,33 @@ const advanceOrdnance = (game, prev) => {
  * onto the log. This is the single driver every real-time war runs on —
  * browser clock, spectator, tests, and the harness's `--mode realtime`.
  */
-export const stepContinuum = (game) => {
+export const stepContinuum = (game) => recordedObject(game, stepContinuumRules);
+
+const stepContinuumRules = (game) => {
   const prev = positionsOf(game);
   const step = advanceSubtick(game);
   let next = step.game;
   const messages = [];
   const events = [];
+  // Completion is a rule fact at this sub-tick's endpoint. Captains may plot
+  // another destination at the boundary; that does not erase this arrival.
+  for (const [kind, ids] of [['arrival', step.arrived], ['tow-complete', step.towsDone]]) {
+    for (const shipId of ids) {
+      const before = getShip(game, shipId);
+      const after = getShip(step.game, shipId);
+      const tow = kind === 'tow-complete';
+      next = emitBattleRecord(next, {
+        kind, source: 'system', actionId: null,
+        actor: snapshotShip(tow ? getShip(game, before.tractorBy) : before),
+        target: snapshotShip(before),
+        payload: {
+          cause: tow ? 'tractor-tow' : 'plotted-course',
+          destination: tow ? { x: before.tow.x, y: before.tow.y } : before.dest,
+          consequences: shipConsequences(before, after),
+        },
+      });
+    }
+  }
   // Ordnance flies and detonates against the field as it stood this sub-tick.
   const ordnanceStep = advanceOrdnance(next, prev);
   next = ordnanceStep.game;

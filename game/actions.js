@@ -34,9 +34,11 @@ import {
 } from './constants.js';
 import { createRng } from './rng.js';
 import { simTimeOf } from './realtime.js';
+import { battleActionOf, emitBattleRecord, shipConsequences, snapshotShip, withBattleAction } from './battle-records.js';
 import {
   alertLevel,
   applyHeading,
+  arcFocusOf,
   arcsOf,
   blastRadius,
   captainOf,
@@ -76,6 +78,7 @@ import {
   sensorRange,
   shieldCapacity,
   spawnDrone,
+  stanceOf,
   struckArc,
   strongestFederation,
   systemUnits,
@@ -187,6 +190,52 @@ const usableActor = (game) => {
 
 const seededRng = (game) => createRng(`${game.seed}:${game.randomStep ?? 0}`);
 const advanceRandom = (game) => ({ ...game, randomStep: (game.randomStep ?? 0) + 1 });
+
+const consequenceMilestones = (game, actor, target, consequences, cause) => {
+  if (!consequences) return game;
+  let next = game;
+  const { before, after } = consequences;
+  if (before.status !== after.status && ['destroyed', 'vacant'].includes(after.status)) {
+    next = emitBattleRecord(next, {
+      kind: after.status === 'destroyed' ? 'destruction' : 'vacancy', actor, target,
+      payload: { cause, status: after.status },
+    });
+  }
+  const disabled = Object.keys(before.systems ?? {}).filter((name) => before.systems[name] > 0 && after.systems?.[name] === 0);
+  if (disabled.length) next = emitBattleRecord(next, {
+    kind: 'system-disabled', actor, target, payload: { cause, systems: disabled },
+  });
+  return next;
+};
+
+const resolvedWeapon = (game, actor, target, weapon, outcome, details = {}) => consequenceMilestones(emitBattleRecord(game, {
+  kind: 'weapon-resolution', actor, target,
+  payload: { weapon, result: outcome, ...details },
+}), actor, target, details.consequences, weapon);
+
+const resolvedDamage = (game, actor, before, after, cause, details = {}) => {
+  const consequences = shipConsequences(before, after);
+  const context = battleActionOf(game);
+  const creditedActor = context?.ordnanceId ? context.actor : actor;
+  return consequenceMilestones(emitBattleRecord(game, {
+    kind: 'damage', actor: creditedActor, target: before,
+    payload: { cause, ...details, consequences },
+  }), creditedActor, before, consequences, cause);
+};
+
+// Record only execution inputs, never menu state, DOM nodes or presentation data.
+const commandRequest = (action) => {
+  const request = {};
+  for (const key of ['targetId', 'shipId', 'dx', 'dy', 'x', 'y', 'towardId', 'towardX', 'towardY', 'power', 'focus', 'amount', 'transferCommand', 'kind', 'sink', 'delta', 'stance', 'degrees', 'deltaDegrees', 'arc']) {
+    const value = action[key];
+    if (typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) || value === null) request[key] = value;
+  }
+  if (typeof action.order?.type === 'string') request.order = { type: action.order.type };
+  if (action.allocation && typeof action.allocation === 'object') request.allocation = Object.fromEntries(
+    POWER_SINKS.filter((sink) => Number.isFinite(action.allocation[sink])).map((sink) => [sink, action.allocation[sink]]),
+  );
+  return request;
+};
 
 const targetFor = (game, action, actor) => {
   if (!action.targetId) return { error: 'A target is required.', requiresTarget: true };
@@ -649,7 +698,7 @@ const weaponAction = (game, action, actor, type) => {
   if (shooterMissed) {
     const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
     const updated = completeTurn(advanceRandom(replaceShip(game, shooter)));
-    return result(updated, `${actor.name} fires ${type} at ${found.target.name}. Missed!${covered ? ' The volley splashes into asteroids.' : ''}`, { events: [fireEvent(type, actor, found.target, false, details)] });
+    return result(resolvedWeapon(updated, actor, found.target, type, 'miss', details), `${actor.name} fires ${type} at ${found.target.name}. Missed!${covered ? ' The volley splashes into asteroids.' : ''}`, { events: [fireEvent(type, actor, found.target, false, details)] });
   }
   const grudge = vendettaGrudge(game, actor, found.target);
   const roll = weaponDamage(type, actor, rng, grudge, powerEffect(game, actor, 'weapons'), game.reimagined ? REIMAGINED_WEAPON_DAMAGE_SCALE : 1);
@@ -682,7 +731,10 @@ const weaponAction = (game, action, actor, type) => {
     events.push(terminalEvent('destruction', type, victim, { attacker: actor }));
   }
   const powerNote = power !== 100 ? ` at ${power}% power` : '';
-  return result(updated, [
+  return result(resolvedWeapon(updated, actor, found.target, type, 'hit', {
+    damage, arc, focus, power, consequences: shipConsequences(found.target, victim),
+    actorConsequences: shipConsequences(actor, shooter),
+  }), [
     focus
       ? `${actor.name} fires a focused phaser beam${powerNote} at ${found.target.name}'s ${focus} for ${damage} damage.`
       : `${actor.name} fires ${type} at ${found.target.name}${powerNote} for ${damage} damage.`,
@@ -713,7 +765,7 @@ const ionAction = (game, action, actor) => {
   const rng = seededRng(game);
   if (rng.next() < volleyMissChance(game, actor, found.target)) {
     const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
-    return result(completeTurn(advanceRandom(replaceShip(game, shooter))),
+    return result(resolvedWeapon(completeTurn(advanceRandom(replaceShip(game, shooter))), actor, found.target, 'ion', 'miss'),
       `${actor.name} fires an ion burst at ${found.target.name}. Missed!`,
       { events: [fireEvent('ion', actor, found.target, false)] });
   }
@@ -730,7 +782,9 @@ const ionAction = (game, action, actor) => {
   const stripped = Object.values(before.systems).reduce((total, units) => total + units, 0)
     - Object.values(hit.systems).reduce((total, units) => total + units, 0);
   const burned = Object.keys(hit.systems).filter((name) => before.systems[name] > 0 && hit.systems[name] === 0);
-  return result(updated, [
+  return result(resolvedWeapon(updated, actor, before, 'ion', 'hit', {
+    damage: amount, consequences: shipConsequences(before, victim), actorConsequences: shipConsequences(actor, shooter),
+  }), [
     stripped > 0
       ? `${actor.name}'s ion burst tears through ${found.target.name}'s shields, burning out ${unitName(stripped, 'subsystem unit')}.`
       : `${actor.name} fires an ion burst at ${found.target.name}; its shields absorb the charge.`,
@@ -761,6 +815,7 @@ export const spreadSplashAt = (game, actor, target, impact, full, rng, creditSho
   const messages = [];
   const events = [];
   let kills = 0;
+  let recorded = game;
   const splashed = game.ships.map((ship) => {
     if (!isActive(ship) || ship.id === actor.id) return ship; // the shooter spares itself
     const dist = distance(impact, ship);
@@ -772,6 +827,9 @@ export const spreadSplashAt = (game, actor, target, impact, full, rng, creditSho
     // arc the launcher bears on. The splash on secondary hulls is positional:
     // it hits the total pool and burns the arcs proportionally.
     const hit = damageShip(ship, amount, rng, ship.id === target?.id ? { arc: struckArc(game, actor, target) } : {});
+    recorded = resolvedDamage(recorded, actor, ship, { ...hit, shotsTaken: hit.shotsTaken + 1 }, 'spread', {
+      damage: amount, arc: ship.id === target?.id ? struckArc(game, actor, target) : null,
+    });
     if (before === 'active' && hit.status !== 'active') {
       if (ship.faction !== actor.faction) kills += 1;
       events.push({ kind: 'explosion', fromId: actor.id, toId: ship.id, x1: ship.x, y1: ship.y, x2: ship.x, y2: ship.y, hit: true });
@@ -788,7 +846,7 @@ export const spreadSplashAt = (game, actor, target, impact, full, rng, creditSho
   const ships = splashed.map((ship) => (ship.id === actor.id
     ? { ...ship, ...(creditShooter ? { shotsFired: ship.shotsFired + 1 } : {}), kills: ship.kills + kills }
     : ship));
-  return { game: { ...game, ships }, messages, events, kills };
+  return { game: { ...recorded, ships }, messages, events, kills };
 };
 
 /**
@@ -798,10 +856,12 @@ export const spreadSplashAt = (game, actor, target, impact, full, rng, creditSho
  * The shot is COUNTED here (shotsFired); the rolls wait for the impact, in the
  * continuum. The id rides a counter, never the RNG stream.
  */
-export const launchWarhead = (game, actor, target, kind) => {
+export const launchWarhead = (game, actor, target, kind, actionContext = null) => {
   const dx = target.x - actor.x;
   const dy = target.y - actor.y;
   const span = Math.hypot(dx, dy) || 1;
+  const context = actionContext ?? battleActionOf(game);
+  const causal = context ? { ...context, ordnanceId: `${context.actionId}:ordnance` } : null;
   const warhead = {
     id: `ord-${game.ordnanceCount ?? 0}`,
     kind,
@@ -813,13 +873,19 @@ export const launchWarhead = (game, actor, target, kind) => {
     ux: dx / span,
     uy: dy / span,
     remaining: span,
+    ...(causal ? { causal } : {}),
   };
-  return {
+  const launched = {
     ...game,
     ordnance: [...(game.ordnance ?? []), warhead],
     ordnanceCount: (game.ordnanceCount ?? 0) + 1,
     ships: game.ships.map((ship) => (ship.id === actor.id ? { ...ship, shotsFired: ship.shotsFired + 1 } : ship)),
   };
+  return emitBattleRecord(launched, {
+    kind: 'ordnance-launch', actor: causal?.actor ?? actor, target,
+    actionId: causal?.actionId, ordnanceId: causal?.ordnanceId,
+    payload: { weapon: kind, result: 'pending', ordnanceId: warhead.id, destination: { x: target.x, y: target.y } },
+  });
 };
 
 const spreadAction = (game, action, actor) => {
@@ -840,14 +906,14 @@ const spreadAction = (game, action, actor) => {
   const rng = seededRng(game);
   if (rng.next() < volleyMissChance(game, actor, found.target)) {
     const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
-    return result(completeTurn(advanceRandom(replaceShip(game, shooter))),
+    return result(resolvedWeapon(completeTurn(advanceRandom(replaceShip(game, shooter))), actor, found.target, 'spread', 'miss'),
       `${actor.name} fires a spread of torpedoes at ${found.target.name}. Missed — the salvo splashes nothing.`,
       { events: [fireEvent('spread', actor, found.target, false)] });
   }
   const grudge = vendettaGrudge(game, actor, found.target);
   const full = weaponDamage('spread', actor, rng, grudge, powerEffect(game, actor, 'weapons'), game.reimagined ? REIMAGINED_WEAPON_DAMAGE_SCALE : 1);
   const splash = spreadSplash(game, actor, found.target, full, rng);
-  return result(completeTurn(advanceRandom(splash.game)), [
+  return result(resolvedWeapon(completeTurn(advanceRandom(splash.game)), actor, found.target, 'spread', 'hit', { damage: full }), [
     `${actor.name} fires a spread of torpedoes at ${found.target.name}.`,
     ...splash.messages,
   ], { events: [fireEvent('spread', actor, found.target, true), ...splash.events] });
@@ -871,7 +937,7 @@ const oneCollision = (game, first, second) => {
   const destroyedId = rng.pick([first.id, second.id]);
   const destroyed = collided(destroyedShip(getShip(game, destroyedId)));
   const survivor = collided(cripple(getShip(game, destroyedId === first.id ? second.id : first.id), rng));
-  const updated = advanceRandom({
+  let updated = advanceRandom({
     ...game,
     ships: game.ships.map((ship) => ship.id === destroyed.id ? destroyed : ship.id === survivor.id ? survivor : ship),
   });
@@ -879,6 +945,12 @@ const oneCollision = (game, first, second) => {
     { kind: 'explosion', fromId: survivor.id, toId: destroyed.id, x1: destroyed.x, y1: destroyed.y, x2: destroyed.x, y2: destroyed.y, hit: true },
     terminalEvent('destruction', 'collision', destroyed, { attacker: survivor }),
   ];
+  updated = emitBattleRecord(updated, {
+    kind: 'collision', actor: first, target: second,
+    payload: { destroyedId: destroyed.id, survivorId: survivor.id },
+  });
+  updated = resolvedDamage(updated, second, first, getShip(updated, first.id), 'collision');
+  updated = resolvedDamage(updated, first, second, getShip(updated, second.id), 'collision');
   return {
     game: updated,
     messages: [`Collision: ${destroyed.name} is destroyed; ${survivor.name} is crippled.`],
@@ -937,7 +1009,7 @@ export const resolveAsteroidStrike = (game, ship) => {
     ? { ...raked, arcs: deductArcsProportionally(current.arcs, struck) }
     : raked);
   return {
-    game: updated,
+    game: resolvedDamage(updated, null, current, getShip(updated, current.id), 'asteroids', { damage: struck }),
     messages: [`Asteroid strike: rocks rake ${current.name} for ${struck} shield damage.`],
     events: [{ kind: 'explosion', fromId: current.id, toId: current.id, x1: current.x, y1: current.y, x2: current.x, y2: current.y, hit: true }],
   };
@@ -959,7 +1031,10 @@ const moveAction = (game, action, actor) => {
   if (game.realtime) {
     if (x < 0 || x > grid || y < 0 || y > grid) return invalid(game, 'Movement would leave the tactical map.');
     const plotted = plotCourse(game, actor, x, y);
-    return result(completeTurn(replaceShip(game, plotted)), [`${actor.name} sets course for ${Math.round(x)},${Math.round(y)}.`]);
+    return result(emitBattleRecord(completeTurn(replaceShip(game, plotted)), {
+      kind: 'course-plotted', actor, target: actor,
+      payload: { destination: { x, y }, consequences: shipConsequences(actor, plotted) },
+    }), [`${actor.name} sets course for ${Math.round(x)},${Math.round(y)}.`]);
   }
   const displacement = Math.hypot(dx, dy);
   const capacity = engineCapacity(actor, game.gridSize ?? GRID_SIZE, powerEffect(game, actor, 'engines'));
@@ -968,7 +1043,10 @@ const moveAction = (game, action, actor) => {
   // Round 23: the move implies the heading — a Reimagined hull ends the burn
   // facing the direction it traveled (inert elsewhere, so parity holds).
   const movedActor = applyHeading(game, actor, x, y);
-  const collision = resolveCollision(replaceShip(game, movedActor), movedActor);
+  const moved = emitBattleRecord(replaceShip(game, movedActor), {
+    kind: 'movement', actor, target: actor, payload: { cause: 'move', consequences: shipConsequences(actor, movedActor) },
+  });
+  const collision = resolveCollision(moved, movedActor);
   // Ending the move inside an asteroid field risks a rock strike (15c).
   const strike = resolveAsteroidStrike(collision.game, movedActor);
   return result(completeTurn(strike.game), [`${actor.name} moves to ${x},${y}.`, ...collision.messages, ...strike.messages], { events: [...collision.events, ...strike.events] });
@@ -1022,7 +1100,9 @@ const tractorAction = (game, action, actor) => {
   if (disabled) return disabled;
   if (!action.targetId) {
     const released = game.ships.map((ship) => ship.tractorBy === actor.id ? { ...ship, tractorBy: null } : ship);
-    return result(completeTurn({ ...game, ships: released }), `${actor.name} releases its tractor lock.`);
+    return result(emitBattleRecord(completeTurn({ ...game, ships: released }), {
+      kind: 'tractor-release', actor, payload: { targetIds: game.ships.filter((ship) => ship.tractorBy === actor.id).map((ship) => ship.id) },
+    }), `${actor.name} releases its tractor lock.`);
   }
   // The beam is a weapon — aimed at enemies — with one exception (round 24): a
   // friendly hull broadcasting distress may be towed, which is the rescue.
@@ -1048,7 +1128,10 @@ const tractorAction = (game, action, actor) => {
       tractorBy: actor.id,
       tow: { x: position.x, y: position.y, rate: pull / REALTIME.ticksPerStardate, remaining: pull },
     };
-    return result(completeTurn(replaceShip(game, towed)), [
+    return result(emitBattleRecord(completeTurn(replaceShip(game, towed)), {
+      kind: 'tractor-lock', actor, target: found.target,
+      payload: { pull, result: 'hauling', destination: position, distressTow: rescueTow, consequences: shipConsequences(found.target, towed) },
+    }), [
       `${actor.name} locks a tractor beam on ${found.target.name}.`,
       `Tractor beam good for ${pull} units pull. ${actor.name} is hauling ${found.target.name} toward ${Math.round(position.x)},${Math.round(position.y)}.`,
     ]);
@@ -1057,7 +1140,11 @@ const tractorAction = (game, action, actor) => {
   const pulled = { ...applyHeading(game, found.target, position.x, position.y), tractorBy: actor.id };
   // A beam can drag a hull straight into another one, and that is a collision like
   // any other — which makes towing an enemy into a friend a real tactic.
-  const collision = resolveCollision(completeTurn(replaceShip(game, pulled)), pulled);
+  const locked = emitBattleRecord(completeTurn(replaceShip(game, pulled)), {
+    kind: 'tractor-lock', actor, target: found.target,
+    payload: { pull, result: 'pulled', destination: position, distressTow: rescueTow, consequences: shipConsequences(found.target, pulled) },
+  });
+  const collision = resolveCollision(locked, pulled);
   // A tow that ends inside an asteroid field exposes the victim to a rock strike
   // (15c) — towing an enemy into the rocks is a deliberate weapon.
   const strike = resolveAsteroidStrike(collision.game, pulled);
@@ -1145,6 +1232,14 @@ export const captureHull = (game, boarder, target, party) => {
       return ship;
     }),
   };
+  next = emitBattleRecord(next, {
+    kind: flip ? 'capture' : 'crew-transfer', actor: boarder, target,
+    payload: {
+      placed, fromFaction: target.faction, toFaction: captured.faction,
+      before: snapshotShip(target), after: snapshotShip(captured),
+      consequences: shipConsequences(target, captured),
+    },
+  });
   return { game: next, captured, source, placed, messages };
 };
 
@@ -1181,7 +1276,9 @@ export const launchDrones = (game, carrier) => {
   const drones = chosen.map((post, index) => spawnDrone(carrier, index + 1, post.x, post.y));
   const flown = { ...carrier, dronesLaunched: true };
   return {
-    game: { ...game, ships: [...game.ships.map((ship) => (ship.id === flown.id ? flown : ship)), ...drones] },
+    game: emitBattleRecord({ ...game, ships: [...game.ships.map((ship) => (ship.id === flown.id ? flown : ship)), ...drones] }, {
+      kind: 'drone-launch', actor: carrier, payload: { drones: drones.map(snapshotShip) },
+    }),
     drones,
     messages: [`${carrier.name} opens its bay and launches ${unitName(drones.length, 'fighter drone')}: ${drones.map((drone) => drone.name).join(', ')}.`],
   };
@@ -1225,7 +1322,10 @@ const transportAction = (game, action, actor) => {
     const source = { ...actor, crew: actor.crew - added };
     const target = { ...found.target, crew: found.target.crew + added };
     const updated = completeTurn({ ...game, ships: game.ships.map((ship) => ship.id === source.id ? source : ship.id === target.id ? target : ship) });
-    return result(updated, `${added} crew beam from ${actor.name} to ${target.name}.`);
+    return result(emitBattleRecord(updated, {
+      kind: 'crew-transfer', actor, target: found.target,
+      payload: { placed: added, sourceCrew: { before: actor.crew, after: source.crew }, targetCrew: { before: found.target.crew, after: target.crew } },
+    }), `${added} crew beam from ${actor.name} to ${target.name}.`);
   }
   if (found.target.status !== 'vacant') return invalid(game, 'Only a vacant ship can be occupied.');
   const capture = captureHull(game, actor, found.target, amount);
@@ -1263,10 +1363,14 @@ export const detonate = (game, actor) => {
   // The detonator's captain is credited with every enemy hull the blast finishes off,
   // exactly as a weapon kill is; friendlies caught in the same blast are not.
   let kills = 0;
+  let recorded = emitBattleRecord(game, { kind: 'self-destruct', actor, payload: { blastRadius: blast, shrapnelRadius: shrapnel } });
+  const damageFacts = [];
   const victims = game.ships.map((ship) => {
     if (ship.id === actor.id) {
       events.push(terminalEvent('destruction', 'self-destruct', ship));
-      return destroyedShip(ship);
+      const destroyed = destroyedShip(ship);
+      damageFacts.push({ before: ship });
+      return destroyed;
     }
     if (!isActive(ship)) return ship;
     const range = distance(actor, ship);
@@ -1274,12 +1378,15 @@ export const detonate = (game, actor) => {
       messages.push(`${ship.name} falls within blast range.`);
       events.push(terminalEvent('destruction', 'self-destruct', ship, { attacker: actor }));
       if (ship.faction !== actor.faction) kills += 1;
-      return destroyedShip(ship);
+      const destroyed = destroyedShip(ship);
+      damageFacts.push({ before: ship });
+      return destroyed;
     }
     if (range <= shrapnel) {
       const damage = SHRAPNEL_DAMAGE.base + rng.integer(SHRAPNEL_DAMAGE.min, SHRAPNEL_DAMAGE.max);
       messages.push(`${ship.name} has been hit by shrapnel.  Damage to shields: ${damage} units.`);
       const damaged = damageShip(ship, damage, rng);
+      damageFacts.push({ before: ship, damage });
       if (damaged.status === 'destroyed') {
         events.push(terminalEvent('destruction', 'self-destruct', damaged, { attacker: actor }));
         if (ship.faction !== actor.faction) kills += 1;
@@ -1293,7 +1400,11 @@ export const detonate = (game, actor) => {
   const ships = victims.map((ship) => ship.id === actor.id
     ? { ...ship, kills: (ship.kills ?? 0) + kills }
     : ship);
-  return { game: advanceRandom({ ...game, ships }), messages, events };
+  for (const fact of damageFacts) {
+    recorded = resolvedDamage(recorded, actor, fact.before, ships.find((ship) => ship.id === fact.before.id), 'self-destruct',
+      fact.damage === undefined ? {} : { damage: fact.damage });
+  }
+  return { game: advanceRandom({ ...recorded, ships }), messages, events };
 };
 
 const selfDestructAction = (game, actor) => {
@@ -1307,7 +1418,7 @@ const hyperspaceAction = (game, action, actor) => {
   const rng = seededRng(game);
   if (rng.next() < HYPERSPACE_BURN_CHANCE) {
     return result(
-      completeTurn(advanceRandom(replaceShip(game, destroyedShip(actor)))),
+      resolvedDamage(completeTurn(advanceRandom(replaceShip(game, destroyedShip(actor)))), actor, actor, destroyedShip(actor), 'hyperspace'),
       `${actor.name} has burnt up trying to hyperspace.`,
       { events: [terminalEvent('destruction', 'hyperspace', actor)] },
     );
@@ -1327,7 +1438,8 @@ const hyperspaceAction = (game, action, actor) => {
     : emerged;
   // Materializing inside another hull is a collision like any other, which makes a
   // jump onto an enemy a suicide ram.
-  const collision = resolveCollision(completeTurn(advanceRandom(replaceShip(game, relocated))), relocated);
+  const jumped = resolvedDamage(completeTurn(advanceRandom(replaceShip(game, relocated))), actor, actor, relocated, 'hyperspace', { damage: actor.shields - relocated.shields });
+  const collision = resolveCollision(jumped, relocated);
   return result(
     collision.game,
     [`${actor.name} enters hyperspace and emerges at ${x},${y}; shields lose ${shieldDamage}.`, ...collision.messages],
@@ -1574,10 +1686,17 @@ const disengageAction = (game, actor) => {
     // Round 31: the escape run plots a destination; the integrator flies it and
     // the boundary resolves what the runner arrives into.
     const plotted = plotCourse(game, actor, x, y);
-    return result(completeTurn(replaceShip(game, plotted)), [`${actor.name} disengages from ${threat.name}, running to ${Math.round(x)},${Math.round(y)}.`]);
+    return result(emitBattleRecord(completeTurn(replaceShip(game, plotted)), {
+      kind: 'course-plotted', actor, target: actor,
+      payload: { cause: 'disengage', threatId: threat.id, destination: { x, y }, consequences: shipConsequences(actor, plotted) },
+    }), [`${actor.name} disengages from ${threat.name}, running to ${Math.round(x)},${Math.round(y)}.`]);
   }
   const movedActor = applyHeading(game, actor, x, y);
-  const collision = resolveCollision(replaceShip(game, movedActor), movedActor);
+  const moved = emitBattleRecord(replaceShip(game, movedActor), {
+    kind: 'movement', actor, target: actor,
+    payload: { cause: 'disengage', threatId: threat.id, consequences: shipConsequences(actor, movedActor) },
+  });
+  const collision = resolveCollision(moved, movedActor);
   const strike = resolveAsteroidStrike(collision.game, movedActor);
   return result(completeTurn(strike.game), [
     `${actor.name} disengages from ${threat.name}, running to ${x},${y}.`,
@@ -1602,7 +1721,10 @@ const applyCommand = (game, action = {}) => {
           ? `${actor.name} cannot flush engines for shield power.`
           : 'Shields are already at full strength.');
       }
-      return result(completeTurn(replaceShip(game, flushed.ship)), `Engines flushed for ${flushed.gained} units of shield power.`);
+      return result(emitBattleRecord(completeTurn(replaceShip(game, flushed.ship)), {
+        kind: 'shield-recovery', actor, target: actor,
+        payload: { cause: 'engines-flush', gained: flushed.gained, consequences: shipConsequences(actor, flushed.ship) },
+      }), `Engines flushed for ${flushed.gained} units of shield power.`);
     }
     case 'move': return moveAction(game, action, actor);
     case 'disengage': return disengageAction(game, actor);
@@ -1699,7 +1821,7 @@ export { REALTIME_COOLDOWN };
 /** Manual burns and volleys take the conn back from a real-time autopilot. */
 const REALTIME_MANUAL_CONN = new Set(['move', 'disengage', 'phasers', 'photons', 'spread', 'ion', 'tractor', 'hyperspace']);
 
-export const applyPlayerAction = (game, action = {}) => {
+const applyManualCommand = (game, action = {}) => {
   if (game?.realtime && REALTIME_COOLDOWN.has(action.type)) {
     const ready = game.readyAt?.[game.playerShipId] ?? 0;
     if (ready > simTimeOf(game)) {
@@ -1715,3 +1837,40 @@ export const applyPlayerAction = (game, action = {}) => {
   if (next.autoConn && REALTIME_MANUAL_CONN.has(action.type)) next = { ...next, autoConn: false };
   return next === outcome.game ? outcome : { ...outcome, game: next };
 };
+
+const confirmedCommandState = (game, ship) => ({
+  playerShipId: game.playerShipId,
+  resigned: Boolean(game.resigned),
+  autoConn: Boolean(game.autoConn),
+  heading: facingOf(game, ship),
+  ...(game.reimagined ? { power: powerAllocation(game, ship), stance: stanceOf(game, ship), arcFocus: arcFocusOf(game, ship) } : {}),
+  order: game.orders?.[ship?.id] ?? null,
+  pendingOrder: game.pendingOrders?.[ship?.id] ?? null,
+  refit: game.refits?.[ship?.id] ?? null,
+  readyAt: game.readyAt?.[ship?.id] ?? null,
+});
+
+export const applyPlayerAction = (game, action = {}) => withBattleAction(game, {
+  actor: game ? getShip(game, game.playerShipId) : null, source: 'manual', command: action.type, request: commandRequest(action),
+}, (prepared) => {
+  const outcome = applyManualCommand(prepared, action);
+  if (outcome.game === prepared) return outcome;
+  const issuer = getShip(prepared, prepared.playerShipId);
+  const subjectId = action.shipId ?? prepared.playerShipId;
+  const subjectBefore = getShip(prepared, subjectId);
+  const subjectAfter = getShip(outcome.game, subjectId);
+  let next = emitBattleRecord(outcome.game, {
+    kind: 'action-resolution', actor: issuer, target: subjectBefore,
+    payload: {
+      command: action.type, result: 'resolved',
+      before: confirmedCommandState(prepared, subjectBefore),
+      after: confirmedCommandState(outcome.game, subjectAfter),
+      consequences: shipConsequences(subjectBefore, subjectAfter),
+    },
+  });
+  if (prepared.playerShipId !== next.playerShipId) next = emitBattleRecord(next, {
+    kind: 'command-transfer', actor: issuer, target: getShip(next, next.playerShipId),
+    payload: { cause: action.type, fromId: prepared.playerShipId, toId: next.playerShipId },
+  });
+  return { ...outcome, game: next };
+});

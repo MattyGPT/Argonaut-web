@@ -50,35 +50,35 @@ actor/target IDs and historical labels, optional `actionId`/`ordnanceId`,
 and confirmed consequence data. Keep these names centralized; do not make
 render code depend on three slightly different versions of the schema.
 
-- [ ] Trace manual dispatch, turn-based autopilot, `resolveComputerTurns`,
+- [x] Trace manual dispatch, turn-based autopilot, `resolveComputerTurns`,
   `resolveRealtimeBoundary`, `stepContinuum`, `launchWarhead`, impact
   resolution, and campaign auto-resolve. Document where each accepted action
   starts and where its consequences become final.
-- [ ] Add tests for one accepted action producing one causal identity, a
+- [x] Add tests for one accepted action producing one causal identity, a
   rejected action producing none, and a beam hit/miss carrying exactly the
   resolved result. Include subsystem, crew, and arc consequences using actual
   before/after damage data, never a second roll or prediction.
-- [ ] Assign a battle-instance identity outside the gameplay RNG and use
+- [x] Assign a battle-instance identity outside the gameplay RNG and use
   monotonic record/action counters within it. Keep counters resumable and
   classify them as metadata in parity comparisons. Allocate the same
   battle-instance identity at campaign battle entry, including headless
   entry; H2 will reuse it as the engagement identity. This allocation does
   not depend on H1's later hull registry. A repeated standalone seed or
   repeat campaign node must not reuse a previous journal by accident.
-- [ ] Emit from player and AI execution paths with shared factories. Preserve
+- [x] Emit from player and AI execution paths with shared factories. Preserve
   existing messages and FX events until their consumers are migrated. Do not
   parse English log lines or treat a DOM animation as evidence of a hit.
-- [ ] Carry `actionId`, issuer snapshot, and `ordnanceId` through launch and
+- [x] Carry `actionId`, issuer snapshot, and `ordnanceId` through launch and
   eventual impact, including the shooter dying or command changing before
   arrival. Emit an explicit resolution for empty-space impacts as well as
   hits. Distinguish automatic conn from manual orders.
-- [ ] Cover captures, surrender, destruction, docking/repair, relay changes,
+- [x] Cover captures, surrender, destruction, docking/repair, relay changes,
   and other milestones required by the journal and campaign. Events state
   observable facts; do not call ordinary proximity a rescue.
-- [ ] Expose records from the authoritative resolution boundary, before
+- [x] Expose records from the authoritative resolution boundary, before
   presentation truncation. H2 will consume this stream for campaign summaries
   even when no tactical UI is present. Do not import UI code into the engine.
-- [ ] Test propagation and de-duplication across computer phases and sub-ticks.
+- [x] Test propagation and de-duplication across computer phases and sub-ticks.
   Replaying or reading records must never emit them again. Confirm identical
   RNG and mechanical state with recording enabled and disabled.
 
@@ -207,8 +207,8 @@ cohesive commits but must share one documented event contract.
 
 ## C1 delivery evidence — 2026-10-03
 
-Implemented on `codex/compact-console-guide` from merged PR #87 (`7881c67`).
-C2–C6 remain pending; this delivery does not add causal event attribution.
+Merged in [PR #88](https://github.com/MattyGPT/Argonaut-web/pull/88) (`9b5bed3`),
+from PR #87 (`7881c67`). This delivery did not add causal event attribution.
 The console keeps primary controls and readiness visible, retains native
 control nodes and pending edits, saves expansion as a presentation preference,
 and labels independently scrollable desktop regions. Narrow layouts stack
@@ -227,3 +227,18 @@ Screenshots were inspected at both desktop sizes, 390px narrow width, and
 an 800×500 CSS viewport with device scale 2 (the reflow equivalent of
 200-percent zoom on a 1600×1000 display). Raw evidence remains under the
 local temporary `argonaut-console-guide` directory, outside production assets.
+
+## C2 delivery evidence — 2026-10-03
+
+Implemented on `codex/causal-battle-records`, based on PR #88 (`9b5bed3`).
+The [record contract](../reviews/2026-10-03-battle-record-contract.md) documents
+identities, observation snapshots, source boundaries, delayed attribution,
+campaign callbacks, and the retention boundary for C3. Raw records remain
+ephemeral; the visible journal and campaign service records remain pending.
+
+Full suite: 661/661 passing. Independent review closed event-time knowledge,
+confirmed free-command results, AI tractor consequences, abandonment versus
+surrender, encounter arrivals, and completed movement gaps. The browser
+new-game check passes and now verifies identity survives reload while a
+same-seed new battle receives a distinct identity. Guide-content and diff
+checks pass. Mechanical parity evidence is recorded with the shared contract.

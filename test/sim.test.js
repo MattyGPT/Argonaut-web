@@ -69,3 +69,22 @@ test('simulate folds a short run into an aggregate report', () => {
   const outcomes = Object.values(report.outcomes).reduce((a, b) => a + b, 0);
   assert.equal(outcomes, 3, 'every war is counted exactly once');
 });
+
+test('record observers receive causal batches in every mode without changing metrics', () => {
+  for (const mode of ['classic', 'reimagined', 'realtime']) {
+    const options = { mode, maxStardates: 5 };
+    const batches = [];
+    const recorded = runWar(3, { ...options, onRecords: batch => batches.push(batch) });
+    assert.deepEqual(recorded, runWar(3, options));
+    assert.ok(batches.length > 0, mode);
+    const records = batches.flat();
+    assert.equal(new Set(records.map(record => record.battleId)).size, 1);
+    assert.equal(new Set(records.map(record => record.eventId)).size, records.length);
+    assert.ok(records.some(record => record.kind === 'action'));
+  }
+});
+
+test('recording options stay out of the aggregate report', () => {
+  const options = { mode: 'classic', seeds: 2, maxStardates: 5 };
+  assert.deepEqual(simulate({ ...options, recordBattles: true, onRecords() {} }), simulate(options));
+});

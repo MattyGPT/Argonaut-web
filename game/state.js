@@ -622,6 +622,8 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, s
     ? [...veterans].sort((a, b) => ((b.shields ?? 0) + (b.crew ?? 0)) - ((a.shields ?? 0) + (a.crew ?? 0)))[0]?.id ?? null
     : null;
 
+  // Battle record identity is attached at app/campaign entry, outside this pure
+  // seeded factory. Reconstructing a fixture here must remain deterministic.
   return {
     seed: normalizedSeed,
     regional: Boolean(regional),
