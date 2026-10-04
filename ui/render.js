@@ -36,8 +36,148 @@ import {
 } from '../game/state.js';
 
 import { commandHistoryHtml } from './command-history.js';
+import { journalView } from './battle-journal.js';
 import { updateConsole, updateScrolledContent } from './console-state.js';
 import { simTimeOf } from '../game/realtime.js';
+
+const escapeJournal = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+})[char]);
+const journalReaders = new WeakMap();
+const journalReaderHtml = new WeakMap();
+const journalReaderIds = ['command-log', 'your-ship-effects', 'battle-developments-log', 'fleet-journal-log', 'journal-log'];
+
+// These cards receive only the event-time projection. Historical names, results
+// and observation times never come from the current ships or radio condition.
+export const journalCardsHtml = (cards = [], region = 'history') => cards.map((card) => {
+  const id = `${region}-${encodeURIComponent(card.id)}`;
+  const automatic = card.source === 'automatic' || card.source === 'auto-conn';
+  const summary = (card.source === 'legacy' ? card.lines?.[0] : card.summary) ?? card.summary ?? '';
+  // Some causal summaries already carry their current state. Avoid repeating
+  // that label; state still comes exclusively from the projected card contract.
+  const status = card.status === 'pending' && !summary.toLowerCase().includes('awaiting impact') ? 'Launched; awaiting impact'
+    : card.status === 'unknown' && !summary.toLowerCase().includes('outcome unknown') ? 'Outcome unknown' : '';
+  return `<li id="${escapeJournal(id)}" class="journal-card" data-journal-id="${escapeJournal(card.id)}" data-journal-sequence="${card.sequence}">
+    <details><summary><span class="command-stamp">Stardate ${escapeJournal(card.source === 'legacy' ? card.simTime : Math.round((card.simTime + 1) * 10) / 10)}${automatic ? ' · Automatic conn' : card.source === 'legacy' ? ` · ${escapeJournal(card.actor?.name)} · Legacy text record` : ''}</span><span class="journal-summary">${escapeJournal(summary)}</span>${status ? `<span class="journal-state">${status}</span>` : ''}</summary>
+    ${(card.lines ?? []).map((line) => `<p>${escapeJournal(line)}</p>`).join('')}
+    ${card.earlierDetailDiscarded ? '<p class="journal-note">Earlier detail discarded; this is a partial record.</p>' : ''}</details></li>`;
+}).join('');
+
+// Reconcile keyed cards to retain the actual focused summary and its expansion.
+// When arrivals are inserted above a reader, anchor the first visible old card
+// to the same pixel rather than merely restoring a now different scroll offset.
+const updateJournalReader = (root, html) => {
+  if (!root) return;
+  if (journalReaderHtml.get(root) === html) return;
+  journalReaderHtml.set(root, html);
+  const reading = root.scrollTop > 2;
+  const edge = root.getBoundingClientRect?.().top;
+  const anchor = reading && edge != null ? [...root.children].find((node) => node.getBoundingClientRect().bottom > edge) : null;
+  const offset = anchor ? anchor.getBoundingClientRect().top - edge : 0;
+  const active = document.activeElement;
+  const focusInCard = root.contains?.(active) && active !== root;
+  updateConsole(root, html);
+  if (anchor?.isConnected) root.scrollTop += anchor.getBoundingClientRect().top - root.getBoundingClientRect().top - offset;
+  if (focusInCard && active?.isConnected && document.activeElement !== active) active.focus?.({ preventScroll: true });
+};
+
+export const renderBattleJournal = (journal) => {
+  const root = document.querySelector('#battle-journal');
+  if (!root || !journal) return null;
+  let reader = journalReaders.get(root);
+  if (!reader || reader.battleId !== journal.battleId) {
+    reader = { battleId: journal.battleId, filter: 'all', seen: 0, fleetSeen: 0, announced: 0, model: null };
+    journalReaders.set(root, reader);
+  }
+  const model = reader.journal === journal ? reader.model : journalView(journal);
+  reader.journal = journal;
+  reader.model = model;
+  const get = (id) => document.querySelector(`#${id}`);
+  const pageReading = () => (root.getBoundingClientRect?.().top ?? 0) < -2;
+  const away = () => journalReaderIds.some((id) => (get(id)?.scrollTop ?? 0) > 2) || (root.scrollTop ?? 0) > 2 || pageReading();
+  const fleet = get('fleet-traffic');
+  const expanded = get('journal-expanded');
+  const markFleetRead = () => {
+    const region = get('fleet-journal-log');
+    if (!fleet?.open || (region?.scrollTop ?? 0) > 2) return;
+    const first = region.firstElementChild;
+    if (!first?.getBoundingClientRect) return;
+    const top = first.getBoundingClientRect().top;
+    const bounds = region.getBoundingClientRect();
+    const panel = root.getBoundingClientRect();
+    if (top >= Math.max(0, bounds.top, panel.top) - 2 && top < Math.min(globalThis.window.innerHeight, bounds.bottom, panel.bottom)) journalReaders.get(root).fleetSeen = journalReaders.get(root).model.latestSequence;
+  };
+  const draw = () => {
+    const pageAnchor = pageReading() ? [...root.querySelectorAll('[data-journal-id]')].find((node) => !node.closest('[hidden]')
+      && (!node.closest('#fleet-traffic') || fleet.open) && (!node.closest('#journal-expanded') || expanded.open)
+      && node.getBoundingClientRect().height > 0 && node.getBoundingClientRect().bottom > 0 && node.getBoundingClientRect().top < globalThis.window.innerHeight) : null;
+    const pageAnchorTop = pageAnchor?.getBoundingClientRect().top;
+    const heldReader = journalReaderIds.map(get).find((node) => (node?.scrollTop ?? 0) > 2 && node.children);
+    const held = heldReader ? [...heldReader.children].find((node) => node.getBoundingClientRect().bottom > heldReader.getBoundingClientRect().top) : null;
+    const heldTop = held?.getBoundingClientRect().top;
+    const current = journalReaders.get(root);
+    const model = current.model;
+    const commands = model.recentCommands;
+    const commandIds = new Set(commands.map((card) => card.id));
+    const effects = model.yourShip.filter((card) => !commandIds.has(card.id) && (!card.isOwnCommand || card.events.some((event) => event.kind === 'ordnance-impact'))).slice(0, 12);
+    get('command-history').hidden = !commands.length && !effects.length;
+    get('your-ship-effects').hidden = !effects.length;
+    get('battle-developments').hidden = !model.battleDevelopments.length;
+    get('fleet-journal-log').hidden = !model.fleetTraffic.length;
+    updateJournalReader(get('command-log'), journalCardsHtml(commands, 'own'));
+    updateJournalReader(get('your-ship-effects'), journalCardsHtml(effects, 'effect'));
+    updateJournalReader(get('battle-developments-log'), journalCardsHtml(model.battleDevelopments.slice(0, 6), 'development'));
+    if (fleet?.open || !fleet?.tagName) updateJournalReader(get('fleet-journal-log'), journalCardsHtml(model.fleetTraffic, 'fleet'));
+    const all = [...model.yourShip, ...model.battleDevelopments, ...model.fleetTraffic].sort((a, b) => a.sequence < 0 && b.sequence < 0 ? a.sequence - b.sequence : b.sequence - a.sequence);
+    if (expanded?.open || !expanded?.tagName) updateJournalReader(get('journal-log'), journalCardsHtml(all.filter((card) => current.filter === 'all' || card.group === current.filter), 'full'));
+    get('journal-retention').textContent = model.truncated ? 'Earlier battle detail has been discarded. This journal contains the available retained records.' : 'Available retained records · newest first';
+    for (const button of root.querySelectorAll?.('[data-journal-filter]') ?? []) button.setAttribute('aria-pressed', String(button.dataset.journalFilter === current.filter));
+    const unread = all.flatMap((card) => card.events ?? []).filter((event) => event.sequence > current.seen).length;
+    const fleetUnread = model.fleetTraffic.flatMap((card) => card.events ?? []).filter((event) => event.sequence > current.fleetSeen).length;
+    get('fleet-unread').textContent = fleetUnread ? `· ${fleetUnread} unread` : '';
+    get('journal-latest').hidden = !away();
+    get('journal-latest').textContent = unread ? `${unread} new event${unread === 1 ? '' : 's'} · Return to latest` : 'Return to latest';
+    if (held?.isConnected) root.scrollTop += held.getBoundingClientRect().top - heldTop;
+    if (pageAnchor?.isConnected) globalThis.window?.scrollBy(0, pageAnchor.getBoundingClientRect().top - pageAnchorTop);
+  };
+  // Wire only the stable shell. Event handlers always obtain the current battle
+  // reader so a new game cannot inherit the old battle's unread counter.
+  if (!root.dataset?.journalWired && root.addEventListener) {
+    root.dataset.journalWired = 'true';
+    root.addEventListener('click', (event) => {
+      const current = journalReaders.get(root);
+      const filter = event.target.closest?.('[data-journal-filter]');
+      if (filter) { current.filter = filter.dataset.journalFilter; get('journal-log').scrollTop = 0; draw(); }
+      if (event.target.closest?.('#journal-latest')) {
+        for (const id of journalReaderIds) get(id).scrollTop = 0;
+        root.scrollTop = 0;
+        if (pageReading()) root.scrollIntoView({ block: 'start' });
+        current.seen = current.model.latestSequence;
+        if (fleet.open) current.fleetSeen = current.model.latestSequence;
+        draw();
+      }
+    });
+    root.addEventListener('toggle', (event) => {
+      if (event.target === fleet && fleet.open) journalReaders.get(root).fleetSeen = journalReaders.get(root).model.latestSequence;
+      draw();
+    }, true);
+    const readPosition = (event) => {
+      const current = journalReaders.get(root);
+      if (!away()) current.seen = current.model.latestSequence;
+      markFleetRead();
+      draw();
+    };
+    root.addEventListener('scroll', readPosition, true);
+    globalThis.window?.addEventListener('scroll', readPosition, { passive: true });
+  }
+  if (!away()) reader.seen = model.latestSequence;
+  markFleetRead();
+  draw();
+  const own = model.yourShip.find((card) => card.sequence > reader.announced);
+  const critical = model.battleDevelopments.find((card) => card.sequence > reader.announced);
+  reader.announced = model.latestSequence;
+  return critical?.summary ?? own?.summary ?? null;
+};
 
 const commands = [
   ['computer', 'Computer', '0'],
@@ -834,11 +974,14 @@ export const renderGame = (game, view = {}) => {
   const narrated = abbreviateNarrative(entries, integrity, actor.name);
   const commandHistory = document.querySelector('#command-history');
   const commandLog = document.querySelector('#command-log');
-  if (commandHistory && commandLog) {
+  const journalAnnouncement = renderBattleJournal(view.journal);
+  const historical = document.querySelector('#journal-history-status');
+  if (historical) historical.hidden = !view.journalHistorical;
+  if (!view.journal && commandHistory && commandLog) {
     commandHistory.hidden = !view.commandHistory?.length;
     updateScrolledContent(commandLog, commandHistoryHtml(view.commandHistory));
   }
-  updateScrolledContent(log, terminalNarrative(view.terminalEvent) + narrated.slice(-150).reverse().map((entry) => `<li>${entry}</li>`).join(''));
+  updateScrolledContent(log, terminalNarrative(view.terminalEvent) + narrated.slice().reverse().map((entry) => `<li>${entry}</li>`).join(''));
   document.querySelector('#log-meta').textContent = integrity >= 1
     ? 'Newest first'
     : `Newest first · radio at ${Math.round(integrity * 100)}%, traffic abbreviated`;
@@ -850,7 +993,11 @@ export const renderGame = (game, view = {}) => {
   // of it flooded a screen reader with the entire board on every keystroke.
   const status = document.querySelector('#sr-status');
   if (status) {
-    status.textContent = [
+    const announcement = view.journal ? [
+      game.outcome?.message ?? null,
+      view.report?.title ?? null,
+      journalAnnouncement,
+    ].filter(Boolean).join(' ') : [
       game.outcome?.message ?? null,
       view.report?.title ?? null,
       view.terminalEvent ? `${terminalHeading(view.terminalEvent)}. ${terminalDescription(view.terminalEvent)}` : null,
@@ -858,6 +1005,8 @@ export const renderGame = (game, view = {}) => {
       `${actor.name} at ${coordOf(actor)}; shields ${actor.shields}, crew ${actor.crew}.`,
       narrated[narrated.length - 1] ?? null,
     ].filter(Boolean).join(' ');
+    // Do not repeatedly announce unchanged history or routine fleet arrivals.
+    if (announcement && status.textContent !== announcement) status.textContent = announcement;
   }
 
   if (game.outcome) {

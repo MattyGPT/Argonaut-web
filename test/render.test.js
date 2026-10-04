@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { createGame, getShip, isNeutral, spawnDrone, spawnEncounter } from '../game/state.js';
 import { createRng } from '../game/rng.js';
 import { launchDrones } from '../game/actions.js';
-import { commandReadiness, fanOutOffsets, renderGame, reportFor, terminalNarrative } from '../ui/render.js';
+import { commandReadiness, fanOutOffsets, journalCardsHtml, renderGame, reportFor, terminalNarrative } from '../ui/render.js';
+import { createJournal } from '../ui/battle-journal.js';
 
 // render.js only touches the document inside renderGame, so a bare element stub
 // is enough to exercise it under node --test, keeping the suite dependency-free.
@@ -33,6 +34,83 @@ const withPair = (game, firstId, first, secondId, second) => ({
 });
 
 const TRAFFIC = 'Firebreather fires phasers at Bonhomme for 32 damage.';
+
+const projectedJournal = (events) => ({
+  ...createJournal('render-journal'),
+  events: events.map((event, index) => ({ battleId: 'render-journal', eventId: `render-journal:e${index + 1}`, sequence: index + 1, simTime: index + 1, detail: 'confirmed', source: 'manual', result: 'accepted', own: event.group === 'your-ship', ...event })),
+  nextSequence: events.length + 1,
+});
+
+test('journal uses frozen identities, keeps twelve own cards independent of traffic and exposes retained groups', () => {
+  elements.clear();
+  const own = Array.from({ length: 14 }, (_, index) => ({ kind: 'action', group: 'your-ship', actionId: `own-${index}`, command: 'phasers', actor: { name: 'Historical Argo' }, target: { name: 'Historical Orion' } }));
+  const milestone = { kind: 'surrender', group: 'battle-developments', target: { name: 'Orion', faction: 'Axis' }, result: 'surrendered' };
+  const traffic = Array.from({ length: 180 }, (_, index) => ({ kind: 'action', group: 'fleet-traffic', actionId: `fleet-${index}`, command: 'move', actor: { name: 'Bonhomme' } }));
+  const journal = projectedJournal([...own, milestone, ...traffic]);
+  const before = JSON.stringify(journal);
+  const base = createGame({ seed: 'journal-frozen' });
+  const game = withFlagship(base, { name: 'Captured current hull', systems: { ...getShip(base, base.playerShipId).systems, radio: 0 } });
+  renderGame(game, { journal });
+  assert.equal((read('#command-log').innerHTML.match(/class="journal-card"/g) ?? []).length, 12);
+  assert.match(read('#command-log').innerHTML, /Historical Argo/);
+  assert.doesNotMatch(read('#command-log').innerHTML, /Captured current hull|Bonhomme/);
+  assert.match(read('#battle-developments-log').innerHTML, /Orion.*surrendered/);
+  assert.equal((read('#fleet-journal-log').innerHTML.match(/class="journal-card"/g) ?? []).length, 180);
+  assert.equal((read('#journal-log').innerHTML.match(/class="journal-card"/g) ?? []).length, 195);
+  assert.match(read('#fleet-unread').textContent, /180 unread/);
+  assert.equal(JSON.stringify(journal), before, 'rendering is a read of frozen journal records');
+});
+
+test('historical journal cards escape text, label automatic orders and expose only supplied unknown outcomes', () => {
+  const html = journalCardsHtml([{ id: 'unsafe"id', sequence: 1, simTime: 4.5, source: 'auto-conn', status: 'unknown', summary: 'Argo <enemy> & "target"', lines: ['Stardate 6 · outcome unknown'], earlierDetailDiscarded: true }]);
+  assert.match(html, /Automatic conn/);
+  assert.match(html, /Argo &lt;enemy&gt; &amp; &quot;target&quot;/);
+  assert.match(html, /Outcome unknown/);
+  assert.match(html, /Stardate 6 · outcome unknown/);
+  assert.match(html, /Earlier detail discarded/);
+  assert.doesNotMatch(html, /awaiting impact/);
+  assert.match(journalCardsHtml([{ id: 'pending', sequence: 2, simTime: 3, status: 'pending', summary: 'Photons launched', lines: [] }]), /Launched; awaiting impact/);
+});
+
+test('journal announcements retain an own action through crowded routine arrivals without announcing fleet lines', () => {
+  elements.clear();
+  const own = { kind: 'action', group: 'your-ship', actionId: 'own-action', command: 'phasers', actor: { name: 'Argo' }, target: { name: 'Orion' } };
+  const routine = { kind: 'action', group: 'fleet-traffic', command: 'move', actor: { name: 'Bonhomme' } };
+  const game = createGame({ seed: 'journal-announcement' });
+  renderGame(game, { journal: projectedJournal([own, routine]) });
+  const announcement = read('#sr-status').textContent;
+  assert.match(announcement, /Argo.*Orion/);
+  assert.doesNotMatch(announcement, /Bonhomme/);
+  renderGame(game, { journal: projectedJournal([own, routine, routine]) });
+  assert.equal(read('#sr-status').textContent, announcement, 'routine reports do not replace the own-action announcement');
+});
+
+test('a scrolled journal reader offers new-event count while keeping its scroll on redraw', () => {
+  elements.clear();
+  const own = { kind: 'action', group: 'your-ship', actionId: 'own-action', command: 'pass', actor: { name: 'Argo' } };
+  const game = createGame({ seed: 'journal-unread' });
+  renderGame(game, { journal: projectedJournal([own]) });
+  elements.get('#command-log').scrollTop = 80;
+  renderGame(game, { journal: projectedJournal([own, { ...own, actionId: 'new-action' }]) });
+  assert.equal(elements.get('#command-log').scrollTop, 80);
+  assert.equal(elements.get('#journal-latest').hidden, false);
+  assert.equal(read('#journal-latest').textContent, '1 new event · Return to latest');
+});
+
+test('incoming attacks and an old launch resolving later stay visible without displacing the latest twelve issued commands', () => {
+  elements.clear();
+  const rows = Array.from({ length: 15 }, (_, index) => ({ kind: 'action', group: 'your-ship', actionId: `own-${index}`, command: 'photons', actor: { name: 'Argo' }, target: { name: 'Orion' } }));
+  rows.splice(1, 0, { kind: 'ordnance-launch', group: 'your-ship', actionId: 'own-0', ordnanceId: 'old-photon', weapon: 'photons', actor: { name: 'Argo' }, target: { name: 'Orion' }, result: 'pending' });
+  rows.push({ kind: 'ordnance-impact', group: 'your-ship', actionId: 'own-0', ordnanceId: 'old-photon', weapon: 'photons', actor: { name: 'Argo' }, target: { name: 'Orion' }, result: 'hit', delta: { shields: -9 } });
+  rows.push({ kind: 'action', group: 'your-ship', own: false, actionId: 'incoming', command: 'phasers', actor: { name: 'Enemy hull' }, target: { name: 'Argo' } });
+  rows.push({ kind: 'weapon-resolution', group: 'your-ship', own: false, actionId: 'incoming', weapon: 'phasers', actor: { name: 'Enemy hull' }, target: { name: 'Argo' }, result: 'hit', delta: { shields: -5 } });
+  renderGame(createGame({ seed: 'incoming-effects' }), { journal: projectedJournal(rows) });
+  const compact = read('#command-log').innerHTML;
+  assert.equal((compact.match(/class="journal-card"/g) ?? []).length, 12);
+  assert.doesNotMatch(compact, /Enemy hull|own-0(?:&quot;|")/);
+  assert.match(read('#your-ship-effects').innerHTML, /Enemy hull.*phasers.*5 shields lost/);
+  assert.match(read('#your-ship-effects').innerHTML, /Argo launched photons.*9 shields lost/);
+});
 
 test('compact console keeps every command and puts frequent commands before labelled expanders', () => {
   elements.clear();

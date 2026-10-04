@@ -65,21 +65,44 @@
       </section>
       <aside id="console" class="panel" aria-label="Command console"></aside>
       <section id="report" class="panel report" tabindex="0" aria-label="Mission and command reports"></section>
-      <section class="panel log-panel">
+      <section id="battle-journal" class="panel log-panel" aria-label="Battle journal">
         <div class="panel-title">
-          <span>Battle narrative</span>
+          <span>Battle journal</span>
           <span class="panel-meta">
             <button id="replay-round" class="secondary tiny" data-command="replay" hidden>Replay round</button>
             <span id="log-meta">Newest first</span>
           </span>
         </div>
+        <p id="journal-history-status" class="journal-note" hidden>Historical replay · journal records remain frozen</p>
         <section id="command-history" aria-labelledby="command-history-title" hidden>
-          <h2 id="command-history-title">Your recent commands</h2>
+          <h2 id="command-history-title">Your ship</h2>
           <ol id="command-log" tabindex="0" aria-label="Your last 12 commands, newest first"></ol>
+          <ol id="your-ship-effects" tabindex="0" aria-label="Effects received by your ship, newest first" hidden></ol>
         </section>
-        <div class="log-scroll">
-          <ol id="log" tabindex="0" aria-label="Battle narrative, newest first"></ol>
-        </div>
+        <section id="battle-developments" aria-labelledby="battle-developments-title" hidden>
+          <h2 id="battle-developments-title">Battle developments</h2>
+          <ol id="battle-developments-log" tabindex="0" aria-label="Battle developments, newest first"></ol>
+        </section>
+        <button id="journal-latest" class="secondary tiny" hidden>Return to latest</button>
+        <details id="fleet-traffic">
+          <summary>Fleet traffic <span id="fleet-unread"></span></summary>
+          <ol id="fleet-journal-log" tabindex="0" aria-label="Fleet traffic, newest first" hidden></ol>
+          <h3 id="legacy-reports-title">Legacy reports</h3>
+          <div class="log-scroll">
+            <ol id="log" tabindex="0" aria-label="Available battle reports, newest first"></ol>
+          </div>
+        </details>
+        <details id="journal-expanded">
+          <summary>Full available journal</summary>
+          <div class="journal-filters" role="group" aria-label="Filter journal">
+            <button class="secondary tiny" data-journal-filter="all" aria-pressed="true">All</button>
+            <button class="secondary tiny" data-journal-filter="your-ship" aria-pressed="false">Your ship</button>
+            <button class="secondary tiny" data-journal-filter="battle-developments" aria-pressed="false">Developments</button>
+            <button class="secondary tiny" data-journal-filter="fleet-traffic" aria-pressed="false">Fleet</button>
+          </div>
+          <p id="journal-retention" class="journal-note"></p>
+          <ol id="journal-log" tabindex="0" aria-label="Full available journal, newest first"></ol>
+        </details>
       </section>
     </main>
     <main id="sector-root" hidden aria-label="Sector campaign">
@@ -300,14 +323,14 @@
             <ol>
               <li>Find your command ship on the map and check its name, shields, crew, and status in the console.</li>
               <li>Click a clear point inside the cyan engine ring, away from other hulls, to move. Or choose <b>Engines</b> (<kbd>2</kbd>) and enter a small ΔX / ΔY displacement. Working engines and freedom from a tractor lock are required.</li>
-              <li>After an accepted maneuver, other captains act and the stardate advances. Read <b>Your recent commands</b> for your result, then the battle narrative for fleet events.</li>
+              <li>After an accepted maneuver, other captains act and the stardate advances. Read <b>Your ship</b> in the battle journal for your result, then <b>Battle developments</b> for milestones.</li>
               <li>Use <b>Pass turn</b> (<kbd>P</kbd>) when you want to hold position and let the next stardate resolve. If an enemy is in range, click its hull and choose <b>Fire phasers</b> instead of moving.</li>
             </ol>
             <p>A target is not guaranteed to be in weapon range at the opening. Movement is enough for your first order. A rejected command explains its refusal; canceling a prompt or issuing an invalid order does not spend a turn.</p>
             <h4>Start a real-time battle — Reimagined</h4>
             <ol>
               <li>Press <b>Pause</b> above the map before planning. Identify your command ship in the console.</li>
-              <li>Click clear space to plot a course. <b>Your recent commands</b> confirms the destination; plotting it does not mean you have arrived.</li>
+              <li>Click clear space to plot a course. <b>Your ship</b> confirms the destination; plotting it does not mean you have arrived.</li>
               <li>Press <b>Resume</b> to let the drive fly there. Pause again to inspect targets, range, or damage. Fire an available weapon when the shared command cycle is ready.</li>
               <li>Read your accepted command result and the later battle narrative separately: a launched torpedo may still be traveling. See <a href="#guide-realtime">real-time play</a> for readiness and automatic conn.</li>
             </ol>
@@ -399,7 +422,7 @@
               </table>
             </div>
             <p><kbd>Tab</kbd> passes only when focus is away from interactive controls; on a button, link, or form it navigates normally. Use <kbd>P</kbd> for a deliberate pass. Hyperspace, self-destruct, and resign require confirmation. <b>Cancel</b> closes a prompt without accepting an action.</p>
-            <p><b>Your recent commands</b> keeps accepted orders and their results with the battle save. The battle narrative records events from the wider fleet. Information reports appear in the mission panel. Use the command result to confirm your own order before interpreting enemy traffic.</p>
+            <p>The <b>Battle journal</b> keeps your last twelve command cards in <b>Your ship</b>, independently of fleet traffic. Expand a card for its confirmed consequences; traveling ordnance stays pending until its later result arrives. <b>Battle developments</b> highlights observable milestones. Expand <b>Fleet traffic</b> for other available reports or <b>Full available journal</b> to filter retained events. While reading older entries, new arrivals are counted; <b>Return to latest</b> brings you back. The journal is saved with the battle and reports when older detail has been discarded. Information reports appear in the mission panel.</p>
             <figure class="guide-figure">
               <img src="assets/guide/report.png" width="2174" height="938" alt="A roll call report lists hull names with positions, distance, status, shields, and crew." loading="lazy">
               <figcaption>Roll call example. Read the status alongside crew and shields to distinguish an active hull, a vacant frame, and a destroyed wreck.</figcaption>
@@ -483,7 +506,7 @@
             <h4>Read the shared command cycle</h4>
             <p>Weapons, shields, tractor, hyperspace, transport, drone launch, and self-destruct share one simulation-time cycle. Once accepted, the next of these must wait until readiness recovers. Reports, settings, and course changes remain free. While paused, simulation time and cooldown recovery stop; Resume lets them progress. Canceling or receiving a refusal does not consume readiness.</p>
             <h4>Wait for ballistic impacts</h4>
-            <p>Photons and spread torpedoes travel through space before detonating. A launched shot is not a confirmed hit: a moving target can evade, and a warhead can arrive in empty space. Check later impact events in the battle narrative. Phasers and ion resolve as instant beams. Tractor tows move smoothly; a tow or ordered ram can collide during travel.</p>
+            <p>Photons and spread torpedoes travel through space before detonating. A launched shot is not a confirmed hit: a moving target can evade, and a warhead can arrive in empty space. Its command card in <b>Your ship</b> links the later impact and its time. An unobserved result reads <b>outcome unknown</b>. Phasers and ion resolve as instant beams. Tractor tows move smoothly; a tow or ordered ram can collide during travel.</p>
             <h4>Take back the conn</h4>
             <p><b>Autopilot</b> (<kbd>`</kbd>) toggles automatic conn: the captain chooses your ship's orders at stardate boundaries. A manual burn or volley takes control back. Other captains, docking, regeneration, relay ownership, and encounters still resolve at boundaries while hulls move between them.</p>
           </section>
@@ -525,7 +548,7 @@
               <li><b>No boarding:</b> the target may still have hostile crew, be a wreck or drone, lie outside transporter reach, or require more crew than your source can spare.</li>
               <li><b>Commands locked:</b> close or submit an open dialog, or wait for a terminal-event display or replay to finish automatically. In real time also check the shared command cycle. A completed battle cannot accept new orders.</li>
               <li><b>No docking or purchase:</b> battle recovery needs a friendly base with enough shields, a ship within range that is not tractor-held, and a stardate boundary; paid campaign services need a friendly system, an eligible offer, and enough credits.</li>
-              <li><b>A command seems lost:</b> read Your recent commands for acceptance or the refusal message for rejection. A plotted course and a launched torpedo can have consequences later than their accepted order.</li>
+              <li><b>A command seems lost:</b> read <b>Your ship</b> for acceptance or the refusal message for rejection. A plotted course and a launched torpedo can have consequences later than their accepted order.</li>
             </ul>
             <p>If an instruction still fails, <a href="https://github.com/MattyGPT/Argonaut-web/issues" target="_blank" rel="noopener">report an issue</a> with the seed, ruleset, options, command, and observed result. Those details make an opening reproducible; real-time reports also need the simulation timing of the order.</p>
           </section>

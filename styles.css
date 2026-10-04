@@ -1276,7 +1276,7 @@ body.classic .console-section summary { color: inherit; }
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: 15rem;
+  max-height: 14rem;
   overflow-y: auto;
 }
 
@@ -1297,6 +1297,41 @@ body.classic .console-section summary { color: inherit; }
 
 body.classic #command-history { background: #001a00; }
 body.classic #command-log li { color: inherit; }
+
+/* The own-action reader has its own fixed budget; expanding fleet reports or
+   history never pushes it out of the desktop viewport. */
+#battle-journal { overflow-y: auto; overscroll-behavior: contain; }
+#battle-journal > .panel-title { flex-wrap: wrap; flex: 0 0 auto; }
+#battle-journal > section, #battle-journal > details, #journal-latest { flex: 0 0 auto; }
+#battle-journal h2, #battle-journal h3 { padding: .5rem .75rem .3rem; font-size: .75rem; color: var(--cyan); }
+#battle-journal > details { border-top: 1px solid var(--line); }
+#battle-journal summary { padding: .55rem .75rem; cursor: pointer; font-size: .78rem; line-height: 1.4; }
+#battle-journal summary:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
+#battle-journal ol { list-style: none; margin: 0; padding: 0; }
+#battle-journal .journal-card { border-bottom: 1px solid var(--line); font-size: .77rem; line-height: 1.45; }
+#battle-journal .journal-card > details > summary { padding: .45rem .65rem; }
+#battle-journal .journal-card .command-stamp { display: inline-block; }
+.journal-summary { display: block; }
+#battle-journal .journal-card p { padding: .1rem .75rem .4rem; margin: 0; }
+.journal-state { display: block; color: #b8d5e7; font-size: .7rem; }
+.journal-filters { display: flex; flex-wrap: wrap; gap: .3rem; padding: .4rem .6rem; }
+.journal-filters [aria-pressed="true"] { border-color: var(--cyan); color: var(--cyan); }
+.journal-note { padding: .2rem .75rem .5rem; color: #a9c7d8; font-size: .7rem; line-height: 1.4; }
+#journal-latest { margin: .4rem .6rem; align-self: flex-start; }
+#your-ship-effects { max-height: 6rem; overflow-y: auto; }
+#battle-developments-log { max-height: 8rem; overflow-y: auto; }
+#fleet-journal-log, #journal-log { max-height: 16rem; overflow-y: auto; }
+#fleet-unread { color: var(--cyan); }
+#fleet-traffic .log-scroll { position: static; }
+#fleet-traffic #log { position: static; max-height: 16rem; }
+body.classic .journal-state, body.classic .journal-note { color: inherit; }
+
+@media (max-width: 1100px), (max-height: 619px) {
+  #battle-journal { overflow: visible; }
+  #battle-journal #command-log, #battle-journal #your-ship-effects,
+  #battle-journal #battle-developments-log, #battle-journal #fleet-journal-log,
+  #battle-journal #journal-log, #battle-journal #log { max-height: none; overflow: visible; }
+}
 
 /* The out-of-flow list keeps the narrative's height out of grid track sizing;
    in flow, every new entry stretched the rows and pushed the report down. */

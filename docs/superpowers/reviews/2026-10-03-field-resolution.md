@@ -1,7 +1,7 @@
 # F1 collision attribution — 2026-10-04
 
 Baseline: `371bce579bcc8d3f64e5e3bcfa5de56cc9fba615` (merged PR #89),
-plus the uncommitted F1 observation hooks. No navigation, collision, damage,
+plus the F1 observation hooks committed in `d368cf55484424b17e0c4fe04edfe5550f4720a4`. No navigation, collision, damage,
 RNG, surrender, or outcome rule changed. F2–F4 remain separate work.
 
 ## Method and reproducibility

@@ -18,7 +18,8 @@ import {
 import { commandReadiness, fanOutOffsets, primeMoveMemory, renderGame, reportFor } from './ui/render.js';
 import { playEffect, playEvent } from './ui/sound.js';
 import { playEffects, replayEffects } from './ui/fx.js';
-import { rememberCommand, restoreCommandHistory } from './ui/command-history.js';
+import { restoreCommandHistory } from './ui/command-history.js';
+import { appendRecords, createJournal, restoreJournal } from './ui/battle-journal.js';
 import { enableBattleRecords } from './game/battle-records.js';
 import { createHelpState } from './ui/help-state.js';
 
@@ -68,7 +69,7 @@ const save = () => {
   try {
     const commandHistory = { seed: game?.seed, entries: view.commandHistory ?? [] };
     if (campaign) localStorage.setItem(CAMPAIGN_SAVE_KEY, JSON.stringify({ version: 1, campaign, commandHistory }));
-    else localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 1, game, commandHistory }));
+    else localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 1, game, commandHistory, journal: view.journal }));
   } catch {
     /* storage unavailable */
   }
@@ -83,13 +84,24 @@ let sectorSelection = null;
 
 let game = campaign ? campaign.battle?.game ?? null : loadSave() ?? createGame({ seed: randomSeed() });
 // Only resumable counters and in-flight causal identities belong in this state.
-// Resolution records remain ephemeral until the knowledge-filtered journal lands.
+// Raw resolution records are projected before entering the saved journal.
 if (game) game = enableBattleRecords(game);
 let view = { entries: [], camera: null, paused: false, speed: 1 };
+if (game) view.journal = createJournal(game.battleRecordState.battleId);
 try {
   const saved = JSON.parse(localStorage.getItem(campaign ? CAMPAIGN_SAVE_KEY : SAVE_KEY));
   view.commandHistory = restoreCommandHistory(saved?.commandHistory, game?.seed);
+  if (game) view.journal = restoreJournal(campaign?.battle?.journal ?? saved?.journal, game.battleRecordState.battleId, view.commandHistory);
 } catch { /* Old saves or unavailable storage start with an empty command record. */ }
+
+/** Consume once at authoritative seams, never from drawing, replay or loading. */
+const collectRecords = (records) => {
+  if (!records?.length || !view.journal) return false;
+  const journal = appendRecords(view.journal, records);
+  if (journal === view.journal) return false;
+  view = { ...view, journal };
+  return true;
+};
 
 /** The war's field, defaulting safely for an old save that predates `gridSize`. */
 const field = () => game?.gridSize ?? GRID_SIZE;
@@ -146,8 +158,8 @@ const sectorMode = () => campaign !== null && !campaign.battle;
 
 /** Keep the campaign container pointing at the live battle game it wraps. */
 const syncCampaign = () => {
-  if (campaign?.battle && game && campaign.battle.game !== game) {
-    campaign = { ...campaign, battle: { ...campaign.battle, game } };
+  if (campaign?.battle && game && (campaign.battle.game !== game || campaign.battle.journal !== view.journal)) {
+    campaign = { ...campaign, battle: { ...campaign.battle, game, journal: view.journal } };
   }
 };
 
@@ -313,7 +325,7 @@ const playTrajectory = () => new Promise((resolve) => {
 
 const runComputer = async () => {
   if (game.phase === 'computer' && !game.outcome) {
-    game = resolveComputerTurns(game);
+    game = resolveComputerTurns(game, { onRecords: collectRecords });
     view = { ...view, entries: [] };
     // A real-time war flies the stardate first, so the boundary's events are
     // presented on hulls standing where the resolution actually put them.
@@ -463,6 +475,7 @@ const simLoop = (now) => {
   }
   let consumed = 0;
   let crossed = false;
+  let journalChanged = false;
   const frameEvents = [];
   while (consumed < budget && !crossed && !game.outcome) {
     // Round 32: the continuum driver moves the field (with avoidance), meets
@@ -472,6 +485,7 @@ const simLoop = (now) => {
     const snapshot = positionsOf(game);
     const ordnanceSnapshot = Object.fromEntries((game.ordnance ?? []).map((warhead) => [warhead.id, { x: warhead.x, y: warhead.y }]));
     const step = stepContinuum(game);
+    journalChanged = collectRecords(step.records) || journalChanged;
     game = step.game;
     prevPositions = snapshot;
     prevOrdnance = ordnanceSnapshot;
@@ -482,7 +496,7 @@ const simLoop = (now) => {
   // Unspent sub-ticks stay in the accumulator: the core never loses or gains
   // time to a frame rate.
   simAccumulator = Math.max(0, simAccumulator - consumed * subtickMs);
-  if (game.outcome || crossed || frameEvents.length) {
+  if (game.outcome || crossed || frameEvents.length || journalChanged) {
     // A full render draws the true state; snap the interpolation baseline to
     // it so the next frame never drags a glyph back toward a stale snapshot.
     prevPositions = positionsOf(game);
@@ -581,6 +595,7 @@ const spectate = () => {
       return;
     }
     const auto = resolveAutopilotTurn(game);
+    collectRecords(auto.records);
     game = { ...auto.game, log: appendLog(game.log, auto.messages) };
     showEvents(auto.events);
     await presentTerminalEvents(auto.events);
@@ -662,6 +677,7 @@ const dispatch = async (action) => {
         report: null,
         contextShipId: null,
         battlePaused: true,
+        journalHistorical: true,
       };
       refresh();
       await playReplayEvents(
@@ -672,7 +688,7 @@ const dispatch = async (action) => {
       );
     } finally {
       replayingRound = false;
-      view = { ...view, terminalEvent: null, battlePaused: false };
+      view = { ...view, terminalEvent: null, battlePaused: false, journalHistorical: false };
       refresh();
     }
     return;
@@ -762,7 +778,7 @@ const dispatch = async (action) => {
 
   if (action.type === 'autopilot' && !game.realtime) {
     const auto = resolveAutopilotTurn(game);
-    view = { ...view, commandHistory: rememberCommand(view.commandHistory, game, action.type, auto) };
+    collectRecords(auto.records);
     game = { ...auto.game, log: appendLog(game.log, auto.messages) };
     view = { ...view, contextShipId: null, entries: [] };
     showEvents(auto.events);
@@ -781,7 +797,7 @@ const dispatch = async (action) => {
   // boundaries except a resolution, which clears it.
   if (game.realtime && !game.preTurn) game = { ...game, preTurn: positionsOf(game) };
   const outcome = applyPlayerAction(game, action);
-  view = { ...view, commandHistory: rememberCommand(view.commandHistory, game, action.type, outcome) };
+  collectRecords(outcome.records);
   const acted = outcome.game !== game;
   game = acted
     ? { ...outcome.game, log: appendLog(outcome.game.log ?? game.log, outcome.messages) }
@@ -1131,7 +1147,7 @@ document.querySelector('#new-game-form').addEventListener('submit', (event) => {
     loadout,
   }));
   sectorSelection = null;
-  view = { entries: openingLines(game), camera: null };
+  view = { entries: openingLines(game), camera: null, journal: createJournal(game.battleRecordState.battleId) };
   refresh();
   newGameDialog.close();
 });
@@ -1170,7 +1186,7 @@ const enterBattle = (next) => {
   campaign = next;
   game = campaign.battle.game;
   precisionSettings = { power: 100, focus: null };
-  view = { entries: openingLines(game), camera: null };
+  view = { entries: openingLines(game), camera: null, journal: createJournal(game.battleRecordState.battleId) };
 };
 
 /**

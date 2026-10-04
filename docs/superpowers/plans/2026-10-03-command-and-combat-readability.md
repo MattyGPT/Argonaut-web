@@ -93,33 +93,33 @@ simulations. Deliver the schema and emitters before relying on them in UI.
 `styles.css`, `test/command-history.test.js`, `test/render.test.js`, and
 `scripts/check-combat-feedback.mjs`.
 
-- [ ] Define the projection from authoritative records to player-known
+- [x] Define the projection from authoritative records to player-known
   records at event time using mapper, scan, and radio policy. Tests must
   distinguish a full own-action result, an abbreviated fleet report, a
   globally reported terminal loss, and hidden target details. Save only the
   filtered journal, not unrestricted engine records under a hidden UI tab.
-- [ ] Snapshot names, allegiance, issuing ship, and observation time. A
+- [x] Snapshot names, allegiance, issuing ship, and observation time. A
   captured ship must not rewrite an older card; an unseen target must not
   gain a live position through historical records.
-- [ ] Reduce records idempotently into three groups: Your ship, Battle
+- [x] Reduce records idempotently into three groups: Your ship, Battle
   developments, and Fleet traffic. Keep twelve recent command cards and an
   initial 500-record journal budget. Maintain pending ordnance separately
   until resolved, and evict completed causal groups together.
-- [ ] Link impact to launch, while also listing its actual resolution time.
+- [x] Link impact to launch, while also listing its actual resolution time.
   Show pending only while unresolved and unknown when the player lacks the
   outcome. Never count the impact as another shot.
-- [ ] Append records once at the app's accepted-resolution seams; do not
+- [x] Append records once at the app's accepted-resolution seams; do not
   append in `renderGame`, `renderFrame`, replay, or load. Persist journal and
   counters in the correct battle/campaign envelope and reset on a new battle.
   An absent journal defaults to empty. Preserve existing command cards as
   text when present; do not invent causal links for them.
-- [ ] Implement filters, expansion, unread counts, and return-to-latest.
+- [x] Implement filters, expansion, unread counts, and return-to-latest.
   Preserve scroll while the reader is away from the newest edge. Keep a
   concise live announcement rather than reading every fleet line aloud.
-- [ ] Add same-seed-new-battle, reload, replay, command-transfer, hidden-impact,
+- [x] Add same-seed-new-battle, reload, replay, command-transfer, hidden-impact,
   capture, truncation, and pending-card-eviction regressions. Measure storage
   size and render cost on a long dense battle before fixing the budget.
-- [ ] Extend the browser check to issue a shot, process crowded fleet turns,
+- [x] Extend the browser check to issue a shot, process crowded fleet turns,
   resolve a later impact, switch ships, reload, and inspect older entries
   while new ones arrive. Verify full available traffic remains accessible.
 
@@ -230,7 +230,7 @@ local temporary `argonaut-console-guide` directory, outside production assets.
 
 ## C2 delivery evidence — 2026-10-03
 
-Implemented on `codex/causal-battle-records`, based on PR #88 (`9b5bed3`).
+Merged in [PR #89](https://github.com/MattyGPT/Argonaut-web/pull/89) (`371bce5`), based on PR #88 (`9b5bed3`).
 The [record contract](../reviews/2026-10-03-battle-record-contract.md) documents
 identities, observation snapshots, source boundaries, delayed attribution,
 campaign callbacks, and the retention boundary for C3. Raw records remain
@@ -242,3 +242,19 @@ surrender, encounter arrivals, and completed movement gaps. The browser
 new-game check passes and now verifies identity survives reload while a
 same-seed new battle receives a distinct identity. Guide-content and diff
 checks pass. Mechanical parity evidence is recorded with the shared contract.
+
+## C3 delivery evidence — 2026-10-04
+
+Implemented on `codex/battle-journal`, based on merged PR #89 (`371bce5`).
+The [journal delivery review](../reviews/2026-10-04-battle-journal.md) records
+knowledge filtering, delayed attribution, bounded retention, save envelopes,
+review findings, and measured storage/render costs. Existing command-history
+code remains the legacy import contract; new records use the journal reducer.
+
+Browser checks cover the actual app lifecycle, campaign saves, same-seed reset,
+replay, crowded fleet turns, delayed impact after transfer, focus/expansion,
+reader anchoring, unread state, desktop controls, and narrow/enlarged layouts.
+The existing combat-feedback, compact-console, and new-game checks pass.
+Complete 250-seed reports in Classic, Reimagined, and real time match PR #89.
+F1 also verifies state-by-state diagnostic parity in 500 paired wars.
+C4–C6 remain pending; this delivery changes presentation and observation only.

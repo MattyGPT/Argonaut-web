@@ -4,11 +4,12 @@
 M1–M4 and G1 shipped in [PR #87](https://github.com/MattyGPT/Argonaut-web/pull/87),
 merged as `7881c67`. C1 and G2–G3 shipped in
 [PR #88](https://github.com/MattyGPT/Argonaut-web/pull/88), merged as `9b5bed3`.
-C2 is implemented and verified on `codex/causal-battle-records`, pending PR
-review; C3–C6, F/H, G4–G6,
-and P2 cross-feature acceptance remain pending. C3 follows the record contract;
-F1 instrumentation follows the shared engine edits so it measures the final
-collision resolution path rather than duplicating that work in parallel.
+C2 shipped in [PR #89](https://github.com/MattyGPT/Argonaut-web/pull/89), merged
+as `371bce5`. C3 journal and F1 opt-in collision diagnostics are implemented
+on `codex/battle-journal`, pending delivery review. They were developed in
+parallel after C2: journal work stays in presentation and app integration,
+while diagnostics observe the engine. C4–C6, F2–F6, H1–H4, G4–G6, and P2
+cross-feature acceptance remain pending. No experimental field rule is active.
 **Spec:** [Player experience roadmap](../specs/2026-10-03-player-experience-roadmap.md).
 **Goal:** Deliver all six October 3 specifications in small, verifiable
 changes, preserving Classic while making Reimagined the sole expansion.
