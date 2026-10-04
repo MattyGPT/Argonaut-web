@@ -94,6 +94,7 @@ export const bindInput = (root, dispatch, getCamera = () => ({ minX: 0, minY: 0,
     // target prompt the console buttons need.
     const menuCommand = event.target.closest('[data-ship-command]');
     if (menuCommand) {
+      if (menuCommand.disabled || menuCommand.getAttribute?.('aria-disabled') === 'true') return;
       dispatch({ type: menuCommand.dataset.shipCommand, targetId: menuCommand.dataset.shipTarget });
       return;
     }
@@ -186,15 +187,28 @@ export const bindInput = (root, dispatch, getCamera = () => ({ minX: 0, minY: 0,
  */
 const submittedConfirm = (event) => event?.submitter?.value === 'confirm';
 
+let activeTargetPrompt = null;
+/** Called by the app's live redraw/frame boundary; preserves the selected ID. */
+export const refreshTargetPrompt = () => activeTargetPrompt?.();
+
+const escapeOption = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+})[char]);
+
 export const promptForTarget = (title, ships, options = {}) => new Promise((resolve) => {
   const dialog = document.querySelector('#target-dialog');
   const form = document.querySelector('#target-form');
   const select = document.querySelector('#target-select');
   document.querySelector('#target-title').textContent = title;
   select.innerHTML = ships
-    .map((ship) => `<option value="${ship.id}">${ship.name} — ${ship.faction} (${ship.status})</option>`)
+    .map((ship) => `<option value="${escapeOption(ship.id)}">${escapeOption(ship.name)} — ${escapeOption(ship.faction)} (${escapeOption(ship.status)})</option>`)
     .join('');
-  if (options.defaultId && [...select.options].some((option) => option.value === options.defaultId)) {
+  if (options.defaultId) {
+    // A named hull that went away must keep its identity. Never let the browser
+    // select the first remaining contact in its place.
+    if (!ships.some((ship) => ship.id === options.defaultId)) {
+      select.innerHTML += `<option value="${escapeOption(options.defaultId)}">Selected target unavailable</option>`;
+    }
     select.value = options.defaultId;
   }
   document.querySelector('#amount-label').hidden = !options.amount;
@@ -234,28 +248,55 @@ export const promptForTarget = (title, ships, options = {}) => new Promise((reso
   }
 
   let resolved = false;
+  const details = () => ({
+    targetId: select.value,
+    amount: Number(document.querySelector('#crew-amount').value),
+    transferCommand: document.querySelector('#transfer-command').checked,
+    ...(precision ? {
+      focus: focusSelect.value === 'standard' ? null : focusSelect.value,
+      power: Number(powerSlider.value),
+    } : {}),
+  });
+  const explanation = document.querySelector('#target-explanation');
+  const confirm = form.querySelector?.('button[value="confirm"]') ?? document.querySelector('#target-form button[value="confirm"]');
+  const inspect = () => {
+    const result = options.availability?.(details()) ?? { available: Boolean(select.value), text: select.value ? '' : 'No known target is available.' };
+    if (explanation) { explanation.hidden = !result.text; explanation.textContent = result.text ?? ''; }
+    if (confirm) confirm.disabled = !result.available;
+    return result;
+  };
+  activeTargetPrompt = inspect;
+  select.onchange = inspect;
+  document.querySelector('#crew-amount').oninput = inspect;
+  document.querySelector('#transfer-command').onchange = inspect;
+  if (precision) {
+    const describePower = powerSlider.oninput;
+    const describeFocus = focusSelect.onchange;
+    powerSlider.oninput = () => { describePower(); inspect(); };
+    focusSelect.onchange = () => { describeFocus(); inspect(); };
+  }
+  const finish = (value) => {
+    resolved = true;
+    activeTargetPrompt = null;
+    select.onchange = null;
+    document.querySelector('#crew-amount').oninput = null;
+    document.querySelector('#transfer-command').onchange = null;
+    resolve(value);
+  };
   const close = () => {
-    if (!resolved) {
-      resolved = true;
-      resolve(null);
-    }
+    // A queued close from a previous use can arrive after the same native
+    // dialog was reopened. It must not cancel the new selection.
+    if (!resolved && !dialog.open) finish(null);
   };
   form.onsubmit = (event) => {
-    resolved = true;
     // The select always carries a value, so dismissing this prompt used to fire
     // the command at whichever target had been preselected for it.
-    if (!submittedConfirm(event)) return resolve(null);
-    resolve({
-      targetId: select.value,
-      amount: Number(document.querySelector('#crew-amount').value),
-      transferCommand: document.querySelector('#transfer-command').checked,
-      ...(precision ? {
-        focus: focusSelect.value === 'standard' ? null : focusSelect.value,
-        power: Number(powerSlider.value),
-      } : {}),
-    });
+    if (!submittedConfirm(event)) return finish(null);
+    if (!inspect().available) { event.preventDefault?.(); return; }
+    finish(details());
   };
   dialog.onclose = close;
+  inspect();
   dialog.showModal();
 });
 

@@ -1,5 +1,5 @@
 import { ARCS, DOCKING, FACTIONS, GRID_SIZE, POWER_SINKS, PRIZE, RANGES, REFITS, STANCES, TERRAIN } from '../game/constants.js';
-import { canLaunchDrones, shipCommands } from '../game/actions.js';
+import { actionAvailability, canLaunchDrones, REALTIME_COOLDOWN } from '../game/actions.js';
 import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
 import { cameraWindow, fieldTransform, viewportFromWorld } from './camera.js';
 import { drawMove } from './fx.js';
@@ -32,6 +32,7 @@ import {
   reactorOutput,
   sensorRange,
   stanceOf,
+  struckArc,
   systemUnits,
 } from '../game/state.js';
 
@@ -318,6 +319,92 @@ const prizeNote = (ship) => {
 /** Short labels for the four shield arcs (round 23), used across console/menu/reports. */
 const ARC_LABELS = { fore: 'Fore', starboard: 'Stbd', aft: 'Aft', port: 'Port' };
 
+const targetedCommands = new Set(['phasers', 'photons', 'spread', 'ion', 'tractor', 'scan', 'transport']);
+
+/** Current mapper geometry only: a past scan never reveals a hidden live hull. */
+export const targetGeometryKnown = (game, target) => {
+  if (!target) return false;
+  const actor = getShip(game, game.playerShipId);
+  return isSpectator(game) || (isActive(actor) && (target.id === actor.id
+    || (distance(actor, target) <= sensorRange(game, actor, 'mapper') && !nebulaHides(game, actor, target))));
+};
+
+/** Read-only public explanation; no accuracy rolls or target system inspection. */
+export const targetExplanation = (game, action, view = {}) => {
+  const target = getShip(game, action.targetId);
+  const known = targetGeometryKnown(game, target);
+  const result = actionAvailability(game, action, { targetKnown: known });
+  const unavailable = view.battlePaused ? 'Resolving orders — command unavailable.' : isSpectator(game) ? 'Observing — command unavailable.' : result.reason;
+  const facts = result.facts;
+  const lines = view.compact ? [
+    ...(facts.range != null ? [`Range ${Number(facts.range.toFixed(1))}`] : []),
+    unavailable || `Ready${game.realtime && !REALTIME_COOLDOWN.has(action.type) ? ' (free command)' : ''}.`,
+  ] : [
+    ...(facts.distance != null ? [`Distance ${facts.distance.toFixed(1)}.`] : []),
+    ...(facts.range != null ? [`Range ${Number(facts.range.toFixed(1))}.`] : []),
+    ...(game.realtime && REALTIME_COOLDOWN.has(action.type) ? [facts.readiness.ready ? 'Shared command cycle ready.' : `Shared command cycle: ${facts.readiness.remaining.toFixed(1)} stardates remaining.`] : []),
+    ...(game.realtime && !REALTIME_COOLDOWN.has(action.type) ? ['Free command; does not use the shared cycle.'] : []),
+    ...(unavailable ? [unavailable] : ['Ready for this target.']),
+  ];
+  const actor = getShip(game, game.playerShipId);
+  // Old saves can infer a facing using unseen hulls. Require an observed numeric
+  // heading before previewing enemy geometry rather than consulting that fallback.
+  if (view.arcPreview !== false && known && isActive(target) && game.reimagined && ['phasers', 'photons', 'spread'].includes(action.type)
+    && hasArcs(game, target) && Number.isFinite(target.facing)) {
+    const arc = struckArc(game, actor, target);
+    const arcs = arcsOf(game, target);
+    lines.push(`Current arc preview: ${cap(arc)}; reported shields ${arcs[arc]} at stardate ${(simTimeOf(game) + 1).toFixed(1)}. Motion can change the struck arc.`);
+  }
+  return { ...result, available: result.available && !view.battlePaused && !isSpectator(game), text: lines.join(view.compact ? ' · ' : ' ') };
+};
+
+const menuCommands = (game, actor, ship) => {
+  if (ship.id === actor?.id) return [];
+  const commands = [['phasers', 'Fire phasers'], ['photons', 'Fire photons'], ['tractor', 'Tractor beam'], ['scan', 'Scan']];
+  if (game.reimagined && systemUnits(actor, 'spread') > 0) commands.splice(2, 0, ['spread', 'Fire spread']);
+  if (game.reimagined && systemUnits(actor, 'ion') > 0) commands.splice(2, 0, ['ion', 'Fire ion']);
+  if (!isDrone(ship)) commands.push(['transport', ship.status === 'vacant' ? 'Board ship' : isNeutral(ship) ? 'Seize merchant' : 'Transport crew']);
+  if (game.reimagined && ship.faction !== actor?.faction && isActive(ship)) commands.push(['tractor-direct', 'Direct tow…']);
+  return commands;
+};
+
+/** Refresh stable reasons as real-time motion and the shared cycle advance. */
+export const updateTargetReadiness = (game, view = {}) => {
+  const actor = getShip(game, game.playerShipId);
+  if (view.contextShipId) {
+    const target = getShip(game, view.contextShipId);
+    if (!target || target.status === 'destroyed' || !targetGeometryKnown(game, target)) {
+      document.querySelector('#ship-menu')?.removeAttribute?.('open');
+    } else {
+      const range = document.querySelector('#menu-target-distance');
+      if (range) range.textContent = target.id === actor?.id ? 'your command ship' : `${distance(actor, target).toFixed(1)} away`;
+    }
+  }
+  const cycle = document.querySelector('#menu-command-cycle');
+  if (cycle && game.realtime) {
+    const remaining = Math.max(0, (game.readyAt?.[actor?.id] ?? 0) - simTimeOf(game));
+    cycle.textContent = remaining > 0 ? `Shared command cycle: ${remaining.toFixed(1)} stardates remaining. Scans are free.` : 'Shared command cycle ready. Scans are free.';
+  }
+  for (const button of document.querySelectorAll?.('[data-ship-command]') ?? []) {
+    const type = button.dataset.shipCommand === 'tractor-direct' ? 'tractor' : button.dataset.shipCommand;
+    const result = targetExplanation(game, { type, targetId: button.dataset.shipTarget, ...(type === 'transport' ? { amount: 1 } : {}) }, { ...view, arcPreview: false, compact: true });
+    button.disabled = !result.available;
+    const reason = document.getElementById?.(button.getAttribute('aria-describedby'));
+    if (reason) reason.textContent = result.text;
+  }
+  for (const button of document.querySelectorAll?.('[data-command]') ?? []) {
+    if (!targetedCommands.has(button.dataset.command)) continue;
+    const result = actionAvailability(game, { type: button.dataset.command });
+    const unavailable = !result.available && !result.requiresTarget;
+    button.disabled = unavailable || Boolean(view.battlePaused) || isSpectator(game);
+    const reason = document.getElementById?.(`command-${button.dataset.command}-reason`);
+    if (reason) {
+      reason.textContent = view.battlePaused ? 'Resolving orders — command unavailable.' : isSpectator(game) ? 'Observing — command unavailable.' : unavailable ? result.reason : '';
+      reason.hidden = !reason.textContent;
+    }
+  }
+};
+
 /**
  * The one-line arc breakdown the console, menus, and reports read (round 23):
  * "F 60 · S 50 · A 40 · P 50". Null for a hull that does not fight with arcs, so
@@ -332,16 +419,18 @@ const arcReadout = (game, ship) => {
 /**
  * The context menu that grows out of a clicked hull: what your command ship can
  * actually do to it, plus — in a Reimagined war — the standing orders and dockyard
- * refits a Federation hull can be given. Commands whose hardware is dead or whose
- * range does not reach are simply absent, so every button in the menu lands.
+ * refits a Federation hull can be given. Disabled commands explain their current
+ * hardware, target, range or readiness restriction beside the control.
  */
 const shipMenu = (game, actor, ship) => {
   const disabled = game.phase !== 'player' ? ' disabled' : '';
   const own = ship.id === actor?.id;
   const captain = game.reimagined && game.scanned?.[ship.id] ? ship.captain : null;
+  const remaining = Math.max(0, (game.readyAt?.[actor?.id] ?? 0) - simTimeOf(game));
   const lines = [
     `${ship.faction} ${ship.className.toLowerCase()} · ${ship.status}`,
-    `${own ? 'your command ship' : `${distance(actor, ship).toFixed(1)} away`} · shields ${ship.shields} · crew ${ship.crew}`,
+    `<span id="menu-target-distance">${own ? 'your command ship' : `${distance(actor, ship).toFixed(1)} away`}</span> · shields ${ship.shields} · crew ${ship.crew} · reported stardate ${(simTimeOf(game) + 1).toFixed(1)}`,
+    ...(game.realtime ? [`<span id="menu-command-cycle">${remaining > 0 ? `Shared command cycle: ${remaining.toFixed(1)} stardates remaining. Scans are free.` : 'Shared command cycle ready. Scans are free.'}</span>`] : []),
     ...(captain ? [`Captain ${captain}${isAce(ship) ? ` · an ace, ${ship.kills} kills` : ''}`] : []),
     // A drone has nobody aboard (round 20): the menu says so plainly instead of
     // reading an absent captain.
@@ -366,14 +455,20 @@ const shipMenu = (game, actor, ship) => {
     ...(game.reimagined && isActive(ship) && arcReadout(game, ship)
       ? [`Shield arcs: ${arcReadout(game, ship)} · heading ${Math.round(facingOf(game, ship))}°.`]
       : []),
+    ...(game.reimagined && isActive(ship) && hasArcs(game, ship) && Number.isFinite(ship.facing) && !own
+      ? [`Current arc preview: ${cap(struckArc(game, actor, ship))}; shields reported at stardate ${(simTimeOf(game) + 1).toFixed(1)}. Motion can change the struck arc.`] : []),
     // A prize of your alliance tells its story in the menu (round 17); the record
     // only exists in a Reimagined war, so no mode check is needed here.
     ...(ship.prize && ship.faction === actor?.faction
       ? [`Prize of war — taken from the ${ship.prize.from} at stardate ${ship.prize.turn}; prize crew ${ship.crew}/${crewCapacity(ship)}${ship.crew < crewCapacity(ship) * PRIZE.manningFloor ? ' — under-manned, engines and guns degraded' : ''}`]
       : []),
   ];
-  const commands = shipCommands(game, ship.id)
-    .map(({ type, label }) => `<button data-ship-command="${type}" data-ship-target="${ship.id}"${disabled}>${label}</button>`)
+  const commands = menuCommands(game, actor, ship)
+    .map(([type, label]) => {
+      const result = targetExplanation(game, { type: type === 'tractor-direct' ? 'tractor' : type, targetId: ship.id, ...(type === 'transport' ? { amount: 1 } : {}) }, { arcPreview: false, compact: true });
+      const id = `menu-${type}-reason`;
+      return `<div class="command-control" data-console-key="menu-${type}"><button data-ship-command="${type}" data-ship-target="${ship.id}" aria-describedby="${id}"${!result.available ? ' disabled' : ''}>${label}</button><span id="${id}" class="action-explanation">${escapeJournal(result.text)}</span></div>`;
+    })
     .join('');
   let orders = '';
   const canOrder = game.reimagined && game.phase === 'player' && isActive(ship) && ship.faction === actor?.faction;
@@ -440,17 +535,23 @@ const shipMenu = (game, actor, ship) => {
 const placeShipMenu = (menu, map, ship, win) => {
   const rect = map?.getBoundingClientRect?.();
   if (!rect?.width || !rect?.height) return;
+  menu.style.maxHeight = `${Math.max(100, rect.height - 8)}px`;
+  const visibleWidth = Math.min(rect.width, (globalThis.window?.innerWidth ?? rect.right) - rect.left);
+  // Absolute shrink-to-fit width changes when left changes near a clipped
+  // narrow map. Fix the preferred width before measuring/clamping its position.
+  menu.style.width = '16rem';
+  menu.style.maxWidth = `${Math.max(100, visibleWidth - 8)}px`;
   const at = viewportFromWorld(ship.x, ship.y, win);
   const px = at.vx * rect.width;
   const py = at.vy * rect.height;
   const gap = 16;
   let side = 'right';
   let left = px + gap;
-  if (left + menu.offsetWidth > rect.width - 4) {
+  if (left + menu.offsetWidth > visibleWidth - 4) {
     side = 'left';
     left = px - gap - menu.offsetWidth;
   }
-  left = Math.max(4, Math.min(left, rect.width - menu.offsetWidth - 4));
+  left = Math.max(4, Math.min(left, visibleWidth - menu.offsetWidth - 4));
   const top = Math.max(4, Math.min(py - menu.offsetHeight / 2, rect.height - menu.offsetHeight - 4));
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
@@ -920,11 +1021,14 @@ export const renderGame = (game, view = {}) => {
   const menu = document.querySelector('#ship-menu');
   if (menu) {
     const wasOpen = menu.hasAttribute?.('open');
-    menu.innerHTML = menuShip ? shipMenu(game, actor, menuShip) : '';
+    updateConsole(menu, menuShip ? shipMenu(game, actor, menuShip) : '');
     if (menuShip) {
       menu.setAttribute?.('open', '');
       placeShipMenu(menu, document.querySelector('#map'), menuShip, win);
-      if (!wasOpen) menu.querySelector?.('button')?.focus?.();
+      if (!wasOpen) {
+        menu.querySelector?.('button:not(:disabled)')?.focus?.({ preventScroll: true });
+        menu.scrollTop = 0;
+      }
     } else {
       menu.removeAttribute?.('open');
     }
@@ -933,7 +1037,13 @@ export const renderGame = (game, view = {}) => {
   const condition = alertLevel(actor);
   const availableCommands = commandList(game, actor);
   const primary = new Set(['move', 'phasers', 'photons', 'spread', 'ion', 'pass', 'autopilot']);
-  const button = ([type, label, key]) => `<button data-command="${type}" ${game.phase !== 'player' || game.outcome || isSpectator(game) || view.battlePaused ? 'disabled' : ''}>${game.realtime && type === 'pass' ? 'Hold position' : game.realtime && type === 'autopilot' ? 'Automatic conn' : label}<kbd>${key}</kbd></button>`;
+  const button = ([type, label, key]) => {
+    const result = targetedCommands.has(type) ? actionAvailability(game, { type }) : null;
+    const reason = view.battlePaused ? 'Resolving orders — command unavailable.' : isSpectator(game) ? 'Observing — command unavailable.' : result && !result.available && !result.requiresTarget ? result.reason : '';
+    const disabled = game.phase !== 'player' || game.outcome || isSpectator(game) || view.battlePaused || Boolean(reason);
+    const id = `command-${type}-reason`;
+    return `<div class="command-control" data-console-key="command-${type}"><button data-command="${type}" ${disabled ? 'disabled' : ''}${result ? ` aria-describedby="${id}"` : ''}>${game.realtime && type === 'pass' ? 'Hold position' : game.realtime && type === 'autopilot' ? 'Automatic conn' : label}<kbd>${key}</kbd></button>${result ? `<span id="${id}" class="action-explanation"${reason ? '' : ' hidden'}>${escapeJournal(reason)}</span>` : ''}</div>`;
+  };
   const gridOf = (list) => `<div class="command-grid">${list.map(button).join('')}</div>`;
   updateConsole(consoleRoot, `
     <div class="panel-title" data-console-key="title"><span>Command console</span><span class="alert-${condition.toLowerCase()}">Condition: ${condition}</span></div>

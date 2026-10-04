@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bindInput, normalizeNewGameOptions, promptForConfirmation, promptForCoordinates, promptForTarget } from '../ui/input.js';
+import { bindInput, normalizeNewGameOptions, promptForConfirmation, promptForCoordinates, promptForTarget, refreshTargetPrompt } from '../ui/input.js';
+import { createGame } from '../game/state.js';
+import { targetExplanation } from '../ui/render.js';
 
 // bindInput only reads `dialog[open]` and `activeElement`, so stubbing those two
 // is enough to drive its keydown handler directly. The dialog prompts read a
@@ -259,6 +261,12 @@ test('a ship-menu command carries the hull it was opened for', () => {
   assert.deepEqual(dispatched, [{ type: 'phasers', targetId: 'axis-flagship' }]);
 });
 
+test('a disabled ship-menu command never dispatches even through a synthetic click', () => {
+  const dispatched = bind();
+  clickHandler({ target: { closest: (wanted) => wanted === '[data-ship-command]' ? { disabled: true, dataset: { shipCommand: 'photons', shipTarget: 'axis-flagship' } } : null } });
+  assert.deepEqual(dispatched, []);
+});
+
 test('a reactor power pip nudges one sink by its delta', () => {
   openDialog = null;
   const dispatched = bind();
@@ -351,6 +359,88 @@ test('a target prompt without precision options keeps the called-shot dials hidd
   const details = await pending;
   assert.equal(details.focus, undefined, 'no dials, no dial values on the action');
   assert.equal(details.power, undefined);
+});
+
+test('live target inspection revalidates motion and destruction without substituting another hull', async () => {
+  let game = createGame({ seed: 'pending-target', reimagined: true, realtime: true });
+  game = { ...game, terrain: [], ships: game.ships.map((ship) => ({ ...ship, x: ship.id === 'axis-flagship' ? 16 : 10, y: 10 })) };
+  const target = game.ships.find((ship) => ship.id === 'axis-flagship');
+  element('#target-select').value = target.id;
+  const pending = promptForTarget('Photons target', [target, game.ships.find((ship) => ship.id === 'bloc-flagship')], {
+    defaultId: target.id,
+    availability: (details) => targetExplanation(game, { type: 'photons', ...details }),
+  });
+  assert.equal(element('#target-form button[value="confirm"]').disabled, false);
+  game = { ...game, ships: game.ships.map((ship) => ship.id === target.id ? { ...ship, x: 30 } : ship) };
+  refreshTargetPrompt();
+  assert.match(element('#target-explanation').textContent, /out of range for photons/);
+  assert.equal(element('#target-select').value, target.id);
+  let prevented = false;
+  element('#target-form').onsubmit({ submitter: { value: 'confirm' }, preventDefault: () => { prevented = true; } });
+  assert.equal(prevented, true, 'a stale confirmation stays in the dialog');
+  game = { ...game, ships: game.ships.map((ship) => ship.id === target.id ? { ...ship, status: 'destroyed' } : ship) };
+  refreshTargetPrompt();
+  assert.match(element('#target-explanation').textContent, /no longer available/);
+  assert.equal(element('#target-select').value, target.id);
+  submit('#target-form', 'cancel');
+  assert.equal(await pending, null);
+});
+
+test('a named target missing at prompt open stays selected and unavailable', async () => {
+  const pending = promptForTarget('Phasers target', FLEET, {
+    defaultId: 'lost-hull',
+    availability: ({ targetId }) => ({ available: targetId !== 'lost-hull', text: 'Selected hull unavailable.' }),
+  });
+  assert.equal(element('#target-select').value, 'lost-hull');
+  assert.equal(element('#target-form button[value="confirm"]').disabled, true);
+  assert.match(element('#target-select').innerHTML, /Selected target unavailable/);
+  submit('#target-form', 'cancel');
+  assert.equal(await pending, null);
+});
+
+test('a delayed native close event cannot cancel a newly opened target prompt', async () => {
+  element('#target-dialog').open = true;
+  const pending = promptForTarget('Scan target', FLEET, { defaultId: FLEET[0].id });
+  element('#target-dialog').onclose();
+  submit('#target-form', 'confirm');
+  assert.equal((await pending).targetId, FLEET[0].id);
+  element('#target-dialog').open = false;
+});
+
+test('a prompt refresh tracks the spent shared cycle and rechecks readiness on confirmation', async () => {
+  let ready = true;
+  const inspected = [];
+  const pending = promptForTarget('Scan target', FLEET, {
+    defaultId: FLEET[0].id,
+    availability: ({ targetId }) => { inspected.push(targetId); return { available: ready, text: ready ? 'Shared command cycle ready.' : 'Shared command cycle: 0.5 stardates remaining.' }; },
+  });
+  ready = false;
+  refreshTargetPrompt();
+  assert.equal(element('#target-form button[value="confirm"]').disabled, true);
+  assert.match(element('#target-explanation').textContent, /0\.5/);
+  ready = true;
+  // No intermediate redraw: submit must query the latest state itself.
+  submit('#target-form', 'confirm');
+  assert.equal((await pending).targetId, FLEET[0].id);
+  const count = inspected.length;
+  refreshTargetPrompt();
+  assert.equal(inspected.length, count, 'closed prompts release their refresh callback');
+});
+
+test('transporter amount changes refresh availability and cancel always closes an unavailable prompt', async () => {
+  element('#crew-amount').value = '10';
+  const pending = promptForTarget('Transport target', FLEET, {
+    amount: true, defaultId: FLEET[0].id,
+    availability: ({ amount }) => ({ available: amount < 2, text: amount < 2 ? 'Ready.' : 'Insufficient crew.' }),
+  });
+  assert.equal(element('#target-form button[value="confirm"]').disabled, true);
+  element('#crew-amount').value = '1';
+  element('#crew-amount').oninput();
+  assert.equal(element('#target-form button[value="confirm"]').disabled, false);
+  element('#crew-amount').value = '10';
+  element('#crew-amount').oninput();
+  submit('#target-form', 'cancel');
+  assert.equal(await pending, null);
 });
 
 test('a precision phaser prompt resolves the called system, the power, and a live readout', async () => {
