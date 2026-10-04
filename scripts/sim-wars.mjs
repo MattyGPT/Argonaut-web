@@ -23,6 +23,7 @@ import { pathToFileURL } from 'node:url';
 import { appendLog, createGame } from '../game/state.js';
 import { resolveAutopilotTurn, resolveComputerTurns, stepContinuum } from '../game/turns.js';
 import { REALTIME } from '../game/constants.js';
+import { enableBattleRecords } from '../game/battle-records.js';
 
 export const DEFAULTS = Object.freeze({ mode: 'all', seeds: 250, precision: false, regional: false, maxStardates: 600 });
 
@@ -32,17 +33,22 @@ export const DEFAULTS = Object.freeze({ mode: 'all', seeds: 250, precision: fals
  * Federation loses plays on spectated until the field decides it, exactly as
  * the shipped game does.
  *
+ * Programmatic callers may set recordBattles or pass onRecords(batch) to
+ * collect authoritative causal records without changing the reported metrics.
+ * Records are not retained by the harness and these are not CLI flags.
+ *
  * `--mode realtime` (round 32) plays the same war on the continuous-time
  * core: the conn hull flies on the autopilot toggle (`autoConn`), captains
  * plot burns at each boundary, torpedoes fly ballistically, collisions and
  * avoidance happen mid-tick. It is a SEPARATE baseline — 'all' stays the
  * two turn-based modes so cross-commit comparisons keep their meaning.
  */
-export const runWar = (index, { mode = 'classic', precision = false, regional = false, maxStardates = DEFAULTS.maxStardates } = {}) => {
+export const runWar = (index, { mode = 'classic', precision = false, regional = false, maxStardates = DEFAULTS.maxStardates, recordBattles = false, onRecords } = {}) => {
   if (!['classic', 'reimagined', 'realtime'].includes(mode)) throw new Error(`Unsupported mode: ${mode}. Choose classic, reimagined, or realtime.`);
   const realtime = mode === 'realtime';
   const reimagined = mode === 'reimagined' || realtime;
   let game = createGame({ seed: `sim-${index}`, reimagined, realtime, precision, regional });
+  if (recordBattles || onRecords) game = enableBattleRecords(game);
   if (realtime) game = { ...game, autoConn: true };
 
   // Self-destruct tracking off the terminal events: a detonation's own card has
@@ -76,6 +82,7 @@ export const runWar = (index, { mode = 'classic', precision = false, regional = 
     while (!game.outcome && guard > 0) {
       const step = stepContinuum(game);
       tally(step.events);
+      if (step.records?.length) onRecords?.(step.records);
       game = step.game;
       guard -= 1;
     }
@@ -83,7 +90,8 @@ export const runWar = (index, { mode = 'classic', precision = false, regional = 
     while (!game.outcome && game.turn < maxStardates) {
       const auto = resolveAutopilotTurn(game);
       tally(auto.events);
-      game = resolveComputerTurns(auto.game);
+      if (auto.records?.length) onRecords?.(auto.records);
+      game = resolveComputerTurns(auto.game, { onRecords });
       tally(game.events);
     }
   }
@@ -123,6 +131,7 @@ const quantile = (sorted, q) => sorted[Math.min(sorted.length - 1, Math.floor(so
 /** Runs `seeds` wars in one mode and folds them into an aggregate report. */
 export const simulate = (options = {}) => {
   const opts = { ...DEFAULTS, ...options };
+  const { recordBattles, onRecords, ...reportOptions } = opts;
   const wars = Array.from({ length: opts.seeds }, (_, index) => runWar(index, opts));
   const turns = wars.map((war) => war.turns).sort((a, b) => a - b);
   const outcomes = {};
@@ -138,7 +147,7 @@ export const simulate = (options = {}) => {
   const shots = mean(wars.map((war) => war.shots));
   const kills = mean(wars.map((war) => war.kills));
   return {
-    ...opts,
+    ...reportOptions,
     wars: opts.seeds,
     stardates: {
       mean: Number(mean(turns).toFixed(1)),

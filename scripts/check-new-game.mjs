@@ -61,6 +61,21 @@ try {
   await page.waitForTimeout(300);
   assert.equal((await snapshot()).state, replacement.state, 'old battle cannot resume over the new Classic game');
 
+  const identity = JSON.parse(replacement.state).battleRecordState;
+  assert.ok(identity.battleId);
+  assert.equal(identity.nextAction, 1);
+  assert.equal(identity.nextEvent, 1);
+  await page.reload();
+  assert.deepEqual(JSON.parse((await snapshot()).state).battleRecordState, identity, 'reload resumes the same battle identity and counters');
+  await page.click('#new-game');
+  await page.selectOption('#ruleset', 'classic');
+  await page.fill('#new-seed', 'replacement-classic');
+  await page.click('#new-game-form button[value="confirm"]');
+  const repeated = JSON.parse((await snapshot()).state);
+  assert.notEqual(repeated.battleRecordState.battleId, identity.battleId, 'a repeated seed starts a distinct battle instance');
+  assert.equal(repeated.battleRecordState.nextAction, 1);
+  assert.equal(repeated.records, undefined, 'raw records do not enter saved battle state');
+
   for (const method of ['Cancel', 'Escape']) {
     await fixture();
     await page.click('#new-game');

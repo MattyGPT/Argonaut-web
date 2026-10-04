@@ -19,6 +19,7 @@ import { FACTIONS, ACE_KILLS, ION, LOADOUT, POWER, REFITS, REFIT_OVER_TEMPLATE, 
 import { createRng } from './rng.js';
 import { arcSplit, createGame, defaultLoadout, fleetCost, isActive, isDrone, isImmovable, isNeutral, normalizeFleetSpec } from './state.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './turns.js';
+import { enableBattleRecords, withBattleRecords } from './battle-records.js';
 
 /** The per-battle seed derivation (round 26 decision 5): one deliberate rule. */
 export const battleSeed = (seed, nodeId) => `${String(seed)}:battle:${nodeId}`;
@@ -277,12 +278,12 @@ export const travelTo = (campaign, nodeId) => {
  * marks intent for the UI: an auto-resolved battle is the same game run
  * headless.
  */
-export const startNodeBattle = (campaign, nodeId, { player = true } = {}) => {
+export const startNodeBattle = (campaign, nodeId, { player = true, recordBattles = true, battleId } = {}) => {
   if (!engageableHere(campaign) || nodeId !== campaign.currentNode) return campaign;
   const node = nodeById(campaign.sector, nodeId);
   const threat = campaign.threat && campaign.threat.nodeId === nodeId ? campaign.threat : null;
   const isHome = node.id === homeNodeOf(campaign.sector)?.id;
-  const game = createGame({
+  const created = createGame({
     seed: battleSeed(campaign.seed, nodeId),
     reimagined: true,
     loadout: threat
@@ -299,9 +300,10 @@ export const startNodeBattle = (campaign, nodeId, { player = true } = {}) => {
         xanadu: false,
       },
   });
+  const game = recordBattles ? enableBattleRecords(created, { battleId }) : created;
   return {
     ...campaign,
-    battle: { nodeId, player, game, ...(threat ? { defense: true, attacker: threat.attacker } : {}) },
+    battle: { nodeId, player, game, ...(game.battleRecordState ? { battleId: game.battleRecordState.battleId } : {}), ...(threat ? { defense: true, attacker: threat.attacker } : {}) },
   };
 };
 
@@ -321,7 +323,7 @@ export const startNodeBattle = (campaign, nodeId, { player = true } = {}) => {
  * layer then takes its one move for the turn. `strategy: false` suppresses
  * that step for callers (tests, headless tools) that want the bare mapping.
  */
-export const resolveNodeBattle = (campaign, { abandoned = false, strategy = true } = {}) => {
+export const resolveNodeBattle = (campaign, { abandoned = false, strategy = true, onRecords, recordBattles = true } = {}) => {
   if (!campaign.battle) return campaign;
   const { nodeId, game, defense = false, attacker = null } = campaign.battle;
   const node = nodeById(campaign.sector, nodeId);
@@ -355,6 +357,7 @@ export const resolveNodeBattle = (campaign, { abandoned = false, strategy = true
     : 'retreated';
   const result = {
     nodeId,
+    ...(game.battleRecordState ? { battleId: game.battleRecordState.battleId } : {}),
     name: node?.name ?? nodeId,
     turn: campaign.turn + 1,
     outcome,
@@ -390,7 +393,7 @@ export const resolveNodeBattle = (campaign, { abandoned = false, strategy = true
     threat: null,
     status: fleet.length === 0 || homeLost ? 'defeat' : victory ? 'victory' : 'active',
   };
-  return strategy && resolved.status === 'active' ? resolveStrategy(resolved) : resolved;
+  return strategy && resolved.status === 'active' ? resolveStrategy(resolved, { onRecords, recordBattles }) : resolved;
 };
 
 /**
@@ -410,15 +413,25 @@ export const abandonEngagement = (campaign, options) => (campaign.battle ? resol
  * smoke test stay untouched) played to `game.outcome` or the stardate cap,
  * then mapped through `resolveNodeBattle`. Deterministic per campaign seed.
  */
-export const autoResolveNode = (campaign, nodeId, { maxStardates = 600 } = {}) => {
-  const started = startNodeBattle(campaign, nodeId, { player: false });
+export const autoResolveNode = (campaign, nodeId, { maxStardates = 600, recordBattles = true, battleId, onRecords } = {}) => {
+  const started = startNodeBattle(campaign, nodeId, { player: false, recordBattles, battleId });
   if (!started.battle) return started;
   let game = started.battle.game;
   while (!game.outcome && game.turn < maxStardates) {
-    const auto = resolveAutopilotTurn(game);
-    game = resolveComputerTurns(auto.game);
+    game = resolveCampaignRound(game, onRecords, { nodeId, kind: 'node' });
   }
-  return resolveNodeBattle({ ...started, battle: { ...started.battle, game } });
+  return resolveNodeBattle({ ...started, battle: { ...started.battle, game } }, { onRecords, recordBattles });
+};
+
+/** The full headless stream is delivered before any UI/log retention limits.
+ * Hooks live in invocation options, never in campaign state or saved games. */
+const resolveCampaignRound = (game, onRecords, engagement) => {
+  const resolved = withBattleRecords(game, (input) => {
+    const auto = resolveAutopilotTurn(input);
+    return resolveComputerTurns(auto.game);
+  });
+  if (resolved.records.length) onRecords?.(resolved.records, { ...engagement, battleId: resolved.result.battleRecordState.battleId });
+  return resolved.result;
 };
 
 // --- Round 27a: the between-battles dockyard and the credit economy ---
@@ -628,7 +641,7 @@ const withNews = (campaign, turn, text) => ({ ...campaign, news: [...(campaign.n
  * carries out of it — the garrison is local, not the campaign fleet — so only
  * the node's ownership and the news line survive.
  */
-const garrisonHolds = (campaign, node, attacker) => {
+const garrisonHolds = (campaign, node, attacker, { onRecords, recordBattles = true } = {}) => {
   let game = createGame({
     seed: battleSeed(campaign.seed, `${node.id}:raid:${campaign.turn}`),
     reimagined: true,
@@ -639,9 +652,9 @@ const garrisonHolds = (campaign, node, attacker) => {
       xanadu: false,
     },
   });
+  if (recordBattles) game = enableBattleRecords(game);
   while (!game.outcome && game.turn < 600) {
-    const auto = resolveAutopilotTurn(game);
-    game = resolveComputerTurns(auto.game);
+    game = resolveCampaignRound(game, onRecords, { nodeId: node.id, kind: 'garrison' });
   }
   return (game.outcome?.kind ?? 'timeout') === 'federation-win';
 };
@@ -660,7 +673,7 @@ const garrisonHolds = (campaign, node, attacker) => {
  * elsewhere is fought headless by the garrison on the spot. Quiet turns
  * (`chance`) leave the map alone.
  */
-export const resolveStrategy = (campaign) => {
+export const resolveStrategy = (campaign, { onRecords, recordBattles = true } = {}) => {
   if (campaign.status !== 'active' || campaign.threat || campaign.battle) return campaign;
   const rng = createRng(`${campaign.seed}:sector-strategy:${campaign.turn}`);
   if (rng.next() >= SECTOR.strategy.chance) return campaign;
@@ -709,7 +722,7 @@ export const resolveStrategy = (campaign) => {
         : `${attacker} raid ${node.name} — the fleet stands to defend it.`,
     );
   }
-  const holds = garrisonHolds(campaign, node, attacker);
+  const holds = garrisonHolds(campaign, node, attacker, { onRecords, recordBattles });
   return withNews(
     holds ? campaign : { ...campaign, sector: withOwner(campaign, node.id, attacker) },
     turn,

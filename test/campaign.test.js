@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { FACTIONS, LOADOUT, REIMAGINED_GRID_SIZE, SECTOR, SHIP_TEMPLATES } from '../game/constants.js';
 import { abandonEngagement, atDockyard, autoResolveNode, battleSeed, buyDockyard, campaignReport, carriedFleetFrom, createCampaign, dockyardOffers, engageableHere, fleetRecordsFrom, generateSector, homeNodeOf, hullPrice, linksFrom, nodeById, objectiveNodeOf, resolveNodeBattle, resolveStrategy, startNodeBattle, travelTo } from '../game/campaign.js';
 import { createGame, defaultLoadout, spawnDrone } from '../game/state.js';
+import { stripBattleRecordMetadata } from '../game/battle-records.js';
 
 const ENEMY_FACTIONS = Object.values(FACTIONS).filter((faction) => faction !== FACTIONS.FEDERATION);
 
@@ -440,7 +441,7 @@ test('a whole auto-resolved campaign is deterministic end to end', () => {
   };
   const a = run('campaign-e2e');
   const b = run('campaign-e2e');
-  assert.deepEqual(a, b, 'the same seed replays the same campaign');
+  assert.deepEqual(stripBattleRecordMetadata(a), stripBattleRecordMetadata(b), 'the same seed replays the same campaign mechanics');
   assert.ok(a.results.length >= 1, 'the walk fought at least one battle');
 });
 
@@ -451,6 +452,57 @@ test('a campaign survives a JSON save round-trip and plays on', () => {
   const started = startNodeBattle(saved, nodeId);
   assert.ok(started.battle, 'the restored campaign engages');
   assert.equal(started.battle.game.seed, battleSeed(campaign.seed, nodeId));
+});
+
+test('each campaign engagement gets a fresh identity while its mechanics stay deterministic', () => {
+  const { campaign, nodeId } = campaignAtEnemy();
+  const one = startNodeBattle(campaign, nodeId);
+  const two = startNodeBattle(campaign, nodeId);
+  assert.notEqual(one.battle.battleId, two.battle.battleId);
+  assert.equal(one.battle.battleId, one.battle.game.battleRecordState.battleId);
+  assert.deepEqual(stripBattleRecordMetadata(one), stripBattleRecordMetadata(two));
+  const loaded = JSON.parse(JSON.stringify(one));
+  assert.equal(startNodeBattle(loaded, nodeId), loaded, 'continuing an engagement preserves its identity');
+  const resolved = resolveNodeBattle(loaded, { strategy: false });
+  assert.equal(resolved.results[0].battleId, one.battle.battleId);
+});
+
+test('headless auto-resolve streams complete unique records without retaining unrestricted facts', () => {
+  const { campaign, nodeId } = campaignAtEnemy();
+  const received = [];
+  const enabled = autoResolveNode(campaign, nodeId, {
+    maxStardates: 100, battleId: 'campaign-stream',
+    onRecords: (records, engagement) => received.push({ records, engagement }),
+  });
+  const disabled = autoResolveNode(campaign, nodeId, { maxStardates: 100, recordBattles: false });
+  assert.deepEqual(stripBattleRecordMetadata(enabled), disabled);
+  const main = received.filter((batch) => batch.engagement.kind === 'node');
+  assert.ok(main.length > 0);
+  assert.ok(main.every((batch) => batch.engagement.battleId === 'campaign-stream' && batch.engagement.nodeId === nodeId));
+  const records = main.flatMap((batch) => batch.records);
+  assert.equal(new Set(records.map((record) => record.eventId)).size, records.length);
+  assert.ok(records.some((record) => record.kind === 'action'));
+  assert.equal(enabled.results[0].battleId, 'campaign-stream');
+  assert.equal(JSON.stringify(enabled).includes('weapon-resolution'), false);
+});
+
+test('offscreen garrison raids expose their own battle stream without a tactical UI', () => {
+  const base = createCampaign({ seed: 'strat-raid' });
+  const staged = { ...base, sector: {
+    ...base.sector, enemies: [base.sector.enemies[0]],
+    nodes: base.sector.nodes.map((node) => node.id === 'home' || node.column === 4 ? node : { ...node, owner: FACTIONS.FEDERATION }),
+  } };
+  const batches = [];
+  for (let turn = 1; turn <= 40 && batches.length === 0; turn += 1) {
+    const input = { ...staged, turn };
+    const resolved = resolveStrategy(input, { onRecords: (records, engagement) => batches.push({ records, engagement }) });
+    assert.deepEqual(stripBattleRecordMetadata(resolved), resolveStrategy(input, { recordBattles: false }));
+  }
+  assert.ok(batches.length > 0);
+  assert.ok(batches.every((batch) => batch.engagement.kind === 'garrison'));
+  assert.equal(new Set(batches.map((batch) => batch.engagement.battleId)).size, 1);
+  const records = batches.flatMap((batch) => batch.records);
+  assert.equal(new Set(records.map((record) => record.eventId)).size, records.length);
 });
 
 // --- Round 27a: bounties, the between-battles dockyard, commissions ---
