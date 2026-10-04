@@ -16,26 +16,26 @@ or save migration is required. See the [execution plan](2026-10-03-player-experi
 (`resolveCollision`), `game/ai.js`, `scripts/sim-wars.mjs`.
 **Create:** `scripts/diagnose-field.mjs`, `test/field-diagnostics.test.js`.
 
-- [ ] Trace the actual pair-resolution call sites and the navigation intent
+- [x] Trace the actual pair-resolution call sites and the navigation intent
   that led to them. Distinguish a swept real-time contact from a turn-based
   endpoint contact. Instrument the resolver, not an FX or damage-log parser.
-- [ ] Add opt-in diagnostic output through the call chain. Keep it absent
+- [x] Add opt-in diagnostic output through the call chain. Keep it absent
   by default and out of saves; do not use a mutable global collector or RNG
   draws. Callers must not feed observations back into behavior.
-- [ ] Record one pair event per actual resolution, its damage/losses,
+- [x] Record one pair event per actual resolution, its damage/losses,
   simulation time, hull IDs/classes/allegiances, positions, velocities,
   destinations, manual/automatic conn, tow links, and avoidance choice.
   Preserve separate repeated contacts; suppress only duplicate observations
   of the same resolution. Retain a bounded preceding trajectory window for
   selected outliers, not every frame of every war.
-- [ ] Classify friendly/opposing contact, drone traffic, manual ram,
+- [x] Classify friendly/opposing contact, drone traffic, manual ram,
   doctrine-driven tow-ram, stationary contact, and unknown intent. Keep
   multiple descriptive tags so a towed drone does not disappear from either
   analysis. Never infer deliberate ramming solely from enemy allegiance.
-- [ ] Add diagnostic script options for mode, seed count, individual seed,
+- [x] Add diagnostic script options for mode, seed count, individual seed,
   and output path. Document these as new options only when implemented.
   Summaries report both pair events and hull involvements with explicit units.
-- [ ] Test one known pair, a repeated pair, a three-hull encounter, a deliberate
+- [x] Test one known pair, a repeated pair, a three-hull encounter, a deliberate
   tow, and the disabled collector. Assert identical mechanical state and RNG
   with collection enabled/disabled; pair count must not double when both
   damaged hulls update their counters.

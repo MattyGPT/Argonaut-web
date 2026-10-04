@@ -95,7 +95,7 @@ try {
     await page.click('[data-command="phasers"]');
     await page.selectOption('#target-select', 'axis-flagship');
     await page.click('#target-form button[value="confirm"]');
-    await page.waitForFunction(() => document.querySelector('#command-log').textContent.includes('Argo fires'));
+    await page.waitForFunction(() => /Argo.*phasers/s.test(document.querySelector('#command-log').textContent));
     const first = await page.locator('#command-log').innerText();
     await page.click('[data-command="pass"]');
     await page.waitForFunction(() => document.querySelectorAll('#command-log li').length === 2);
@@ -148,7 +148,7 @@ try {
     // Reposition through the actual camera redraw, then fire through the menu.
     await page.click('#camera-center');
     await page.click('#ship-menu [data-ship-command="phasers"]');
-    await page.waitForFunction(() => document.querySelector('#command-log').textContent.includes('Argo fires'));
+    await page.waitForFunction(() => /Argo.*phasers/s.test(document.querySelector('#command-log').textContent));
     const realtimeShot = await page.locator('#command-log').innerText();
     await page.click('#pause-button');
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('argonaut-web-save-v1')).game.turn >= 2);

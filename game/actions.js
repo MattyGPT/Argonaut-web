@@ -33,6 +33,7 @@ import {
   WEAPONS,
 } from './constants.js';
 import { createRng } from './rng.js';
+import { noteFieldCollision, withFieldAction } from './field-diagnostics.js';
 import { simTimeOf } from './realtime.js';
 import { battleActionOf, emitBattleRecord, shipConsequences, snapshotShip, withBattleAction } from './battle-records.js';
 import {
@@ -951,6 +952,7 @@ const oneCollision = (game, first, second) => {
   });
   updated = resolvedDamage(updated, second, first, getShip(updated, first.id), 'collision');
   updated = resolvedDamage(updated, first, second, getShip(updated, second.id), 'collision');
+  noteFieldCollision(game, updated, first, second);
   return {
     game: updated,
     messages: [`Collision: ${destroyed.name} is destroyed; ${survivor.name} is crippled.`],
@@ -1850,7 +1852,7 @@ const confirmedCommandState = (game, ship) => ({
   readyAt: game.readyAt?.[ship?.id] ?? null,
 });
 
-export const applyPlayerAction = (game, action = {}) => withBattleAction(game, {
+export const applyPlayerAction = (game, action = {}) => withFieldAction(game, game ? getShip(game, game.playerShipId) : null, action, 'manual', () => withBattleAction(game, {
   actor: game ? getShip(game, game.playerShipId) : null, source: 'manual', command: action.type, request: commandRequest(action),
 }, (prepared) => {
   const outcome = applyManualCommand(prepared, action);
@@ -1873,4 +1875,4 @@ export const applyPlayerAction = (game, action = {}) => withBattleAction(game, {
     payload: { cause: action.type, fromId: prepared.playerShipId, toId: next.playerShipId },
   });
   return { ...outcome, game: next };
-});
+}));

@@ -19,6 +19,7 @@
  */
 
 import { GRID_SIZE, REALTIME } from './constants.js';
+import { noteFieldMovement } from './field-diagnostics.js';
 import { engineCapacity, isActive, isSpectator, isTractorHeld, powerEffect } from './state.js';
 
 /** Where every hull stands right now — the pre-resolution snapshot a stardate's trajectory starts from. */
@@ -233,6 +234,7 @@ export const advanceSubtick = (game) => {
       y: Math.max(0, Math.min(grid, ship.y + uy * burn.stepLen)),
     };
   });
+  noteFieldMovement(game, ships, burns, deflects, manualConn);
   return {
     game: { ...game, simTime, ships },
     arrived,

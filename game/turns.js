@@ -4,6 +4,7 @@ import { chooseAiAction } from './ai.js';
 import { advanceSubtick, integrateStardate, positionsOf, simTimeOf, SUBTICK } from './realtime.js';
 import { createRng } from './rng.js';
 import { scenarioOutcome } from './scenarios.js';
+import { withFieldAction, withFieldSweep } from './field-diagnostics.js';
 import { beginBattleResolution, finishBattleResolution, emitBattleRecord, snapshotKnowledge, snapshotShip, shipConsequences, withBattleAction, withBattleCause } from './battle-records.js';
 import {
   appendLog,
@@ -181,7 +182,7 @@ const resolveAiAction = (game, shipId, plotDest = false) => {
   const actor = getShip(game, shipId);
   if (!isActive(actor)) return { game, messages: [], type: 'pass', records: [] };
   const action = chooseAiAction(game, shipId);
-  return withBattleAction(game, {
+  return withFieldAction(game, actor, action, shipId === game.playerShipId ? 'auto-conn' : 'fleet-ai', () => withBattleAction(game, {
     actor,
     source: shipId === game.playerShipId ? 'auto-conn' : 'fleet-ai',
     command: action.type,
@@ -214,7 +215,7 @@ const resolveAiAction = (game, shipId, plotDest = false) => {
       messages: [...result.messages, ...collision.messages, ...strike.messages],
       events: [...(result.events ?? []), ...(collision.events ?? []), ...(strike.events ?? [])],
     };
-  });
+  }));
 };
 
 const executeAiAction = (startGame, shipId, action, plotDest = false) => {
@@ -1193,7 +1194,7 @@ const sweepCollisions = (game, prev) => {
           return ship;
         }),
       };
-      const resolved = resolveCollision(staged, getShip(staged, a.id));
+      const resolved = withFieldSweep(staged, [a.id, b.id], contact, () => resolveCollision(staged, getShip(staged, a.id)));
       next = separateOverlaps(resolved.game);
       messages.push(...resolved.messages);
       events.push(...(resolved.events ?? []));

@@ -72,8 +72,8 @@ for planned polish. Design drafts describe future work, not shipped features.
    reproduce the opening position; subsequent orders determine the war.
 2. Find your command ship and its range rings. Click empty map space to
    maneuver, or click a visible enemy for available weapons and scans.
-3. Issue an order and read **Your recent commands** above the fleet
-   narrative. It keeps your last twelve accepted commands even after all
+3. Issue an order and read **Your ship** in the battle journal.
+   It keeps your last twelve accepted commands even after all
    the other captains act. Use **P** to pass in turn-based play.
 4. In real time, use **Pause** to inspect and plan; **Resume** lets ships
    continue moving. **User guide** pauses a real-time battle while you read
@@ -503,14 +503,19 @@ the round replay.
   the map edge so it stays on the map, with a tail that keeps pointing at the hull.
 - Weapon and tractor prompts preselect the nearest sensible target; confirm or
   pick another.
-- The battle narrative keeps a scrolling, newest-first log of your actions and
-  the autopilots'. A damaged radio abbreviates what comes back — the panel
-  header reports how much traffic you are still receiving — while your own
-  ship's lines stay intact.
-- **Your recent commands** stays above that traffic: the last twelve accepted
-  commands, with the issuing ship, stardate, and full result. It scrolls
-  independently and resumes with your save, so the fleet's turn cannot bury
-  your last shot. A new battle starts a fresh command record.
+- The **Battle journal** separates **Your ship**, **Battle developments**, and
+  **Fleet traffic**. Your last twelve accepted commands remain easy to find,
+  with the issuing ship, stardate, and confirmed result. Automatic conn is
+  labelled separately. Later torpedo impacts stay linked to their launches;
+  unavailable results say **outcome unknown**.
+- Expand **Full available journal** to filter and inspect older records.
+  New events preserve your reading position and offer **Return to latest**.
+  The journal saves up to 500 filtered records, preserves pending launches,
+  and reports when older detail was discarded. Reload and replay add no
+  duplicates; a new battle starts a fresh journal, even with the same seed.
+- Mapper, scan, and radio knowledge limit journal detail before it is saved.
+  A damaged radio still abbreviates fleet reports. The existing narrative
+  remains available under **Fleet traffic** for reports and command feedback.
 - Condition reads RED, YELLOW, or GREEN against your own shield capacity, so a
   scout and a starbase are judged by the same standard.
 - Phaser fire draws a beam, photon torpedoes a traveling spark, and kills a
