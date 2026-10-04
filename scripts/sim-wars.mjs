@@ -24,6 +24,7 @@ import { appendLog, createGame } from '../game/state.js';
 import { resolveAutopilotTurn, resolveComputerTurns, stepContinuum } from '../game/turns.js';
 import { REALTIME } from '../game/constants.js';
 import { enableBattleRecords } from '../game/battle-records.js';
+import { withFieldDiagnostics } from '../game/field-diagnostics.js';
 
 export const DEFAULTS = Object.freeze({ mode: 'all', seeds: 250, precision: false, regional: false, maxStardates: 600 });
 
@@ -43,11 +44,11 @@ export const DEFAULTS = Object.freeze({ mode: 'all', seeds: 250, precision: fals
  * avoidance happen mid-tick. It is a SEPARATE baseline — 'all' stays the
  * two turn-based modes so cross-commit comparisons keep their meaning.
  */
-export const runWar = (index, { mode = 'classic', precision = false, regional = false, maxStardates = DEFAULTS.maxStardates, recordBattles = false, onRecords } = {}) => {
+export const runWar = (index, { mode = 'classic', precision = false, regional = false, maxStardates = DEFAULTS.maxStardates, recordBattles = false, onRecords, fieldDiagnostics, onState, seed } = {}) => {
   if (!['classic', 'reimagined', 'realtime'].includes(mode)) throw new Error(`Unsupported mode: ${mode}. Choose classic, reimagined, or realtime.`);
   const realtime = mode === 'realtime';
   const reimagined = mode === 'reimagined' || realtime;
-  let game = createGame({ seed: `sim-${index}`, reimagined, realtime, precision, regional });
+  let game = createGame({ seed: seed ?? `sim-${index}`, reimagined, realtime, precision, regional });
   if (recordBattles || onRecords) game = enableBattleRecords(game);
   if (realtime) game = { ...game, autoConn: true };
 
@@ -80,18 +81,21 @@ export const runWar = (index, { mode = 'classic', precision = false, regional = 
     // ordnance, strikes, the collision sweep, and the boundary on a crossing).
     let guard = (maxStardates + 1) * REALTIME.ticksPerStardate;
     while (!game.outcome && guard > 0) {
-      const step = stepContinuum(game);
+      const step = withFieldDiagnostics(game, fieldDiagnostics, stepContinuum);
       tally(step.events);
       if (step.records?.length) onRecords?.(step.records);
       game = step.game;
+      onState?.(game);
       guard -= 1;
     }
   } else {
     while (!game.outcome && game.turn < maxStardates) {
-      const auto = resolveAutopilotTurn(game);
+      const auto = withFieldDiagnostics(game, fieldDiagnostics, resolveAutopilotTurn);
       tally(auto.events);
       if (auto.records?.length) onRecords?.(auto.records);
-      game = resolveComputerTurns(auto.game, { onRecords });
+      onState?.(auto.game);
+      game = withFieldDiagnostics(auto.game, fieldDiagnostics, (input) => resolveComputerTurns(input, { onRecords }));
+      onState?.(game);
       tally(game.events);
     }
   }
@@ -131,7 +135,7 @@ const quantile = (sorted, q) => sorted[Math.min(sorted.length - 1, Math.floor(so
 /** Runs `seeds` wars in one mode and folds them into an aggregate report. */
 export const simulate = (options = {}) => {
   const opts = { ...DEFAULTS, ...options };
-  const { recordBattles, onRecords, ...reportOptions } = opts;
+  const { recordBattles, onRecords, fieldDiagnostics, onState, ...reportOptions } = opts;
   const wars = Array.from({ length: opts.seeds }, (_, index) => runWar(index, opts));
   const turns = wars.map((war) => war.turns).sort((a, b) => a - b);
   const outcomes = {};

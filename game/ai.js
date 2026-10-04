@@ -1,6 +1,7 @@
 import { AI_PURSUIT, DRONE, ENCOUNTERS, FLEET_ORDER_TUNING, GRID_SIZE, PERSONALITIES, RANGES, REIMAGINED_SUICIDE_MIN_ENEMIES, SPREAD } from './constants.js';
 import { canLaunchDrones, flushShields, tractorLock } from './actions.js';
 import { createRng } from './rng.js';
+import { noteFieldDecision } from './field-diagnostics.js';
 import {
   blastRadius,
   distance,
@@ -322,7 +323,11 @@ const doctrineAction = (game, actor) => {
     const { position } = tractorLock(actor, target, game.gridSize ?? GRID_SIZE, null, powerEffect(game, actor, 'tractor'));
     const wreck = game.ships.some((ship) => ship.id !== target.id && isActive(ship)
       && ship.faction !== actor.faction && distance(position, ship) < 1);
-    if (wreck) return { type: 'tractor', targetId: target.id };
+    if (wreck) {
+      const action = { type: 'tractor', targetId: target.id };
+      noteFieldDecision(game, actor.id, action, { reason: 'doctrine-tow-ram' });
+      return action;
+    }
   }
 
   const shot = engage(game, actor, target, range, doctrine.noTractor);
@@ -556,7 +561,13 @@ export const avoidStackedArrival = (game, actor, dx, dy) => {
 
 export const chooseAiAction = (game, shipId) => {
   const action = chooseAiActionInner(game, shipId);
-  if (action?.type !== 'move') return action;
+  if (action?.type !== 'move') {
+    noteFieldDecision(game, shipId, action, { source: shipId === game.playerShipId ? 'auto-conn' : 'fleet-ai' });
+    return action;
+  }
   const adjusted = avoidStackedArrival(game, getShip(game, shipId), action.dx, action.dy);
-  return adjusted.dx === action.dx && adjusted.dy === action.dy ? action : { ...action, ...adjusted };
+  const changed = adjusted.dx !== action.dx || adjusted.dy !== action.dy;
+  const chosen = changed ? { ...action, ...adjusted } : action;
+  noteFieldDecision(game, shipId, chosen, { source: shipId === game.playerShipId ? 'auto-conn' : 'fleet-ai', requested: action, avoidance: changed ? 'arrival-adjusted' : 'arrival-unchanged' });
+  return chosen;
 };
