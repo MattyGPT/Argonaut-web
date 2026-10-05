@@ -10,7 +10,7 @@ retired as a new-game mode under
 [Mode consolidation](2026-10-03-mode-consolidation.md), without a legacy
 rules path to maintain.
 
-Implementation status: F1 diagnostics merged in PR #90. F2 exhaustion observations are implemented pending delivery review. F3–F6 remain planned; no new navigation or surrender rule is active.
+Implementation status: F1–F2 diagnostics are merged through PR #91 (`900dcf3`). The F3 navigation candidate was tested and rejected: fewer friendly collisions came with new timeouts and material faction shifts. The [experiment review](../reviews/2026-10-05-navigation-experiment.md) preserves the evidence and inactive candidate. F4–F6 remain planned; no new navigation or surrender rule is active.
 
 ## Purpose and relationship to earlier work
 

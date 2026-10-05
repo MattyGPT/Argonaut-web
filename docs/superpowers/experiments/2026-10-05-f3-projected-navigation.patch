@@ -1,0 +1,238 @@
+diff --git a/game/field-diagnostics.js b/game/field-diagnostics.js
+index 9ae4bf6..8622e35 100644
+--- a/game/field-diagnostics.js
++++ b/game/field-diagnostics.js
+@@ -70,7 +70,7 @@ export const withFieldAction = (game, actor, action, source, resolve) => {
+ };
+ 
+ /** Inspect the already chosen movement; does not recalculate avoidance. */
+-export const noteFieldMovement = (game, ships, burns, deflects, manualConn) => {
++export const noteFieldMovement = (game, ships, burns, deflects, manualConn, decisions) => {
+   const field = game[FIELD];
+   if (!field) return;
+   const elapsed = 1 / REALTIME.ticksPerStardate;
+@@ -82,10 +82,11 @@ export const noteFieldMovement = (game, ships, burns, deflects, manualConn) => {
+     if (!before || !isActive(before)) continue;
+     if (!before.tow) field.towDecisions.delete(ship.id);
+     const burn = burns.get(ship.id);
+-    const held = Boolean(burn?.arrival && deflects.has(ship.id));
+-    const avoidance = held ? 'hold-short' : deflects.has(ship.id) ? 'starboard-deflect'
++    const decision = decisions?.get(ship.id);
++    const held = decision?.held ?? Boolean(burn?.arrival && deflects.has(ship.id));
++    const avoidance = decision?.avoidance ?? (held ? 'hold-short' : deflects.has(ship.id) ? 'starboard-deflect'
+       : before.noAvoid ? 'noAvoid-exempt' : manualConn && ship.id === game.playerShipId ? 'manual-exempt'
+-      : burn ? 'clear' : 'not-burning';
++      : burn ? 'clear' : 'not-burning');
+     const movement = { simTime, previous: point(before), position: point(ship),
+       velocity: { x: (ship.x - before.x) / elapsed, y: (ship.y - before.y) / elapsed },
+       destination: clone(before.dest ?? null), tow: clone(before.tow ?? null), avoidance };
+diff --git a/game/realtime.js b/game/realtime.js
+index 2b332d8..4e18004 100644
+--- a/game/realtime.js
++++ b/game/realtime.js
+@@ -97,6 +97,67 @@ export const SUBTICK = 1 / REALTIME.ticksPerStardate;
+ /** The sim clock a war is on: fractional elapsed stardates, tolerant of round-30 saves that predate it. */
+ export const simTimeOf = (game) => game.simTime ?? (game.turn ?? 1) - 1;
+ 
++const projectedDistance = (a, endA, b, endB) => {
++  const px = a.x - b.x;
++  const py = a.y - b.y;
++  const dx = endA.x - a.x - (endB.x - b.x);
++  const dy = endA.y - a.y - (endB.y - b.y);
++  const speed2 = dx * dx + dy * dy;
++  const t = speed2 > 1e-12 ? Math.max(0, Math.min(1, -(px * dx + py * dy) / speed2)) : 0;
++  return Math.hypot(px + dx * t, py + dy * t);
++};
++
++/** F3 experiment: validate the segments actually flown, including arrivals and
++ * bends. Higher stable IDs yield first. This is continuum geometry only;
++ * captain intent and turn-based arrival rules are unchanged. */
++const separateFriendlyCourses = (game, proposed, burns, manualConn, decisions) => {
++  if (!game.reimagined) return proposed;
++  const grid = game.gridSize ?? GRID_SIZE;
++  const ends = new Map(proposed.map((ship) => [ship.id, ship]));
++  const active = game.ships.filter(isActive);
++  const mutable = active.filter((ship) => burns.has(ship.id) && !ship.tow && !ship.noAvoid
++    && !(manualConn && ship.id === game.playerShipId)).sort((a, b) => b.id.localeCompare(a.id));
++  for (const ship of mutable) {
++    const burn = burns.get(ship.id);
++    if (burn.ux === 0 && burn.uy === 0) continue;
++    const planned = ends.get(ship.id);
++    const allies = active.filter((other) => other.id !== ship.id && other.faction === ship.faction);
++    const safe = (point) => allies.every((other) => projectedDistance(ship, point, other, ends.get(other.id)) >= REALTIME.collisionRadius + 0.01);
++    // Include occupied friendly arrivals that the older pass held short.
++    const heldArrival = burn.arrival && planned.x === ship.x && planned.y === ship.y
++      && allies.some((other) => projectedDistance(ship, burn.dest, other, ends.get(other.id)) < REALTIME.collisionRadius + 0.01);
++    if (!heldArrival && safe(planned)) {
++      if (ship.navigationYield) ends.set(ship.id, { ...planned, navigationYield: null });
++      continue;
++    }
++    const length = Math.min(burn.stepLen, Math.hypot(burn.dest.x - ship.x, burn.dest.y - ship.y));
++    let chosen = null;
++    for (const fraction of [1, 0.5, 0]) {
++      for (const angle of [0, 25, -25, 50, -50, 75, -75, 90, -90, 135, -135, 180]) {
++        const radians = angle * Math.PI / 180;
++        const ux = burn.ux * Math.cos(radians) - burn.uy * Math.sin(radians);
++        const uy = burn.ux * Math.sin(radians) + burn.uy * Math.cos(radians);
++        const point = { x: Math.max(0, Math.min(grid, ship.x + ux * length * fraction)),
++          y: Math.max(0, Math.min(grid, ship.y + uy * length * fraction)) };
++        if (safe(point)) { chosen = point; break; }
++      }
++      if (chosen) break;
++    }
++    const old = ship.navigationYield;
++    const ticks = old?.x === burn.dest.x && old?.y === burn.dest.y ? old.ticks + 1 : 1;
++    const recovered = ticks >= REALTIME.ticksPerStardate;
++    // If no safe segment exists, hold instead of knowingly adding a contact.
++    // A plot may yield for at most one stardate before returning to the captain.
++    const reached = chosen?.x === burn.dest.x && chosen?.y === burn.dest.y;
++    ends.set(ship.id, { ...planned, ...(chosen ?? { x: ship.x, y: ship.y }),
++      dest: recovered || reached ? null : burn.dest,
++      navigationYield: recovered || reached ? null : { x: burn.dest.x, y: burn.dest.y, ticks } });
++    decisions.set(ship.id, { avoidance: recovered ? 'projected-replan' : chosen && (chosen.x !== ship.x || chosen.y !== ship.y) ? 'projected-deflect' : 'projected-yield',
++      held: !chosen || (chosen.x === ship.x && chosen.y === ship.y) });
++  }
++  return proposed.map((ship) => ends.get(ship.id));
++};
++
+ /**
+  * Round 31 — the live core. Advances a real-time war by ONE fixed sub-tick:
+  * every hull with a destination burns toward it at its own speed —
+@@ -185,7 +246,7 @@ export const advanceSubtick = (game) => {
+   // Movement pass.
+   const arrived = [];
+   const towsDone = [];
+-  const ships = game.ships.map((ship) => {
++  const plannedShips = game.ships.map((ship) => {
+     // Round 32: a tractor lock hauls its victim smoothly toward the point the
+     // beam was laid on — the same per-stardate pull total, spread across the
+     // ticks. Running out of rope finishes the tow; the continuum rolls the
+@@ -234,10 +295,17 @@ export const advanceSubtick = (game) => {
+       y: Math.max(0, Math.min(grid, ship.y + uy * burn.stepLen)),
+     };
+   });
+-  noteFieldMovement(game, ships, burns, deflects, manualConn);
++  const navigationDecisions = new Map();
++  const ships = separateFriendlyCourses(game, plannedShips, burns, manualConn, navigationDecisions);
++  // The final geometry can replace an arrival with a recovery course.
++  const finalArrived = ships.filter((ship) => {
++    const burn = burns.get(ship.id);
++    return burn && !ship.dest && ship.x === burn.dest.x && ship.y === burn.dest.y;
++  }).map((ship) => ship.id);
++  noteFieldMovement(game, ships, burns, deflects, manualConn, navigationDecisions);
+   return {
+     game: { ...game, simTime, ships },
+-    arrived,
++    arrived: finalArrived,
+     towsDone,
+     crossed: Math.floor(simTime) > Math.floor(before),
+   };
+diff --git a/test/navigation.test.js b/test/navigation.test.js
+new file mode 100644
+--- /dev/null
++++ b/test/navigation.test.js
+@@ -0,0 +1,104 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { createGame } from '../game/state.js';
++import { advanceSubtick } from '../game/realtime.js';
++import { avoidStackedArrival } from '../game/ai.js';
++
++const scene = (changes) => {
++  const game = createGame({ seed: 'f3-navigation', realtime: true });
++  const hull = game.ships.find((ship) => ship.id === 'fed-flagship');
++  return { ...game, autoConn: true, ships: changes.map((change, index) => ({ ...structuredClone(hull),
++    id: String.fromCharCode(97 + index), x: 100, y: 100, dest: null, ...change })) };
++};
++const separation = (before, after) => {
++  let closest = Infinity;
++  for (let i = 0; i < before.ships.length; i += 1) for (let j = i + 1; j < before.ships.length; j += 1) {
++    const a = before.ships[i], b = before.ships[j];
++    const aa = after.ships.find((s) => s.id === a.id), bb = after.ships.find((s) => s.id === b.id);
++    const px = a.x - b.x, py = a.y - b.y;
++    const dx = aa.x - a.x - bb.x + b.x, dy = aa.y - a.y - bb.y + b.y;
++    const d2 = dx * dx + dy * dy;
++    const t = d2 > 1e-12 ? Math.max(0, Math.min(1, -(px * dx + py * dy) / d2)) : 0;
++    closest = Math.min(closest, Math.hypot(px + dx * t, py + dy * t));
++  }
++  return closest;
++};
++
++for (const [name, ships] of [
++  ['crossing', [{ dest: { x: 140, y: 140 } }, { x: 120, y: 100, dest: { x: 80, y: 140 } }]],
++  ['overtaking', [{ dest: { x: 150, y: 100 } }, { x: 110, y: 100, dest: { x: 112, y: 100 } }]],
++  ['stationary obstruction', [{ dest: { x: 150, y: 100 } }, { x: 102, y: 100 }]],
++  ['symmetric arrival', [{ dest: { x: 110, y: 110 } }, { x: 120, y: 100, dest: { x: 110, y: 110 } }]],
++  ['drone wing', [{ className: 'Drone', dest: { x: 110, y: 110 } },
++    { className: 'Drone', x: 120, y: 100, dest: { x: 110, y: 110 } }, { x: 110, y: 113 }]],
++]) test(`F3 synchronized friendly ${name} stays separated`, () => {
++  const game = scene(ships);
++  const result = advanceSubtick(game).game;
++  assert.ok(separation(game, result) >= 1, `${name} swept separation ${separation(game, result)}`);
++});
++
++test('F3 stable-ID correction is independent of ship array order and RNG-free', () => {
++  const game = scene([{ dest: { x: 110, y: 110 } }, { x: 120, dest: { x: 110, y: 110 } }]);
++  const original = structuredClone(game);
++  const a = advanceSubtick(game).game;
++  const b = advanceSubtick({ ...game, ships: [...game.ships].reverse() }).game;
++  assert.deepEqual(a.ships, [...b.ships].reverse());
++  assert.deepEqual(game, original);
++  assert.equal(a.randomStep, game.randomStep);
++});
++
++test('F3 occupied arrival makes safe progress and either arrives or explicitly returns plot within eight corrections', () => {
++  let game = scene([{ dest: { x: 110, y: 100 } }, { x: 110, y: 100 }]);
++  const start = game.ships[0];
++  let ended = false;
++  for (let i = 0; i < 32; i += 1) {
++    const result = advanceSubtick(game);
++    assert.ok(separation(game, result.game) >= 1);
++    const ship = result.game.ships[0];
++    if (result.arrived.includes(ship.id)) assert.deepEqual({ x: ship.x, y: ship.y }, { x: 110, y: 100 });
++    game = result.game;
++    if (!ship.dest) { ended = true; break; }
++  }
++  assert.ok(ended, 'an occupied plot must finish or be returned for replanning');
++  assert.ok(Math.hypot(game.ships[0].x - start.x, game.ships[0].y - start.y) > 1);
++});
++
++test('F3 recovered blocked plot is not emitted as an arrival', () => {
++  const dest = { x: 110, y: 110 };
++  const game = scene([{ dest, navigationYield: { ...dest, ticks: 7 } },
++    { x: 120, dest, navigationYield: { ...dest, ticks: 7 } }]);
++  const result = advanceSubtick(game);
++  for (const id of result.arrived) {
++    const ship = result.game.ships.find((s) => s.id === id);
++    assert.deepEqual({ x: ship.x, y: ship.y }, dest);
++  }
++  assert.equal(result.game.ships[1].dest, null);
++  assert.ok(!result.arrived.includes('b'));
++});
++
++test('F3 a yielded course resumes once its obstruction leaves', () => {
++  const game = scene([{ dest: { x: 110, y: 100 }, navigationYield: { x: 110, y: 100, ticks: 6 } }, { x: 200 }]);
++  const result = advanceSubtick(game);
++  assert.equal(result.game.ships[0].x, 110);
++  assert.equal(result.game.ships[0].navigationYield, null);
++  assert.deepEqual(result.arrived, ['a']);
++});
++
++test('F3 manual conn, explicit noAvoid and tractor tow segments remain immutable', () => {
++  const fixtures = [
++    { game: { autoConn: false, playerShipId: 'a' }, ship: {} },
++    { game: {}, ship: { noAvoid: true } },
++    { game: {}, ship: { tow: { x: 110, y: 100, rate: 10, remaining: 10 } } },
++  ];
++  for (const fixture of fixtures) {
++    const game = { ...scene([{ dest: { x: 110, y: 100 }, ...fixture.ship }, { x: 110 }]), ...fixture.game };
++    const expected = advanceSubtick({ ...game, reimagined: false }).game.ships[0];
++    assert.deepEqual(advanceSubtick(game).game.ships[0], expected);
++  }
++});
++
++test('F3 shared captain arrival behavior remains identical in both Reimagined timings', () => {
++  const game = scene([{ dest: null }, { x: 110 }]);
++  assert.deepEqual(avoidStackedArrival(game, game.ships[0], 10, 0),
++    avoidStackedArrival({ ...game, realtime: false }, game.ships[0], 10, 0));
++});
