@@ -136,8 +136,9 @@
         <h2 id="target-title">Select target</h2>
         <label>
           Ship
-          <select id="target-select"></select>
+          <select id="target-select" aria-describedby="target-explanation"></select>
         </label>
+        <p id="target-explanation" class="dialog-note target-explanation" role="status" aria-live="polite"></p>
         <label id="amount-label" hidden>
           Crew
           <input id="crew-amount" type="number" min="1" value="10">
@@ -157,7 +158,7 @@
         <p id="power-readout" class="dialog-note" hidden></p>
         <div class="dialog-actions">
           <button value="cancel" class="secondary">Cancel</button>
-          <button value="confirm">Confirm</button>
+          <button value="confirm" aria-describedby="target-explanation">Confirm</button>
         </div>
       </form>
     </dialog>
@@ -218,70 +219,74 @@
         </div>
       </form>
     </dialog>
-    <dialog id="new-game-dialog">
+    <dialog id="new-game-dialog" aria-labelledby="new-game-title">
       <form method="dialog" id="new-game-form">
-        <h2>Begin a new war</h2>
-        <label>
-          Seed
-          <input id="new-seed" value="xanadu" maxlength="40">
-        </label>
-        <label class="check">
-          <input id="regional" type="checkbox">
-          Regional enemy formations
-        </label>
-        <label class="check">
-          <input id="sound" type="checkbox">
-          Tactical sound
-        </label>
-        <label class="check">
-          <input id="precision" type="checkbox">
-          Precision fire — called shots and phaser power
-        </label>
-        <label>
-          Ruleset
-          <select id="ruleset" aria-describedby="ruleset-note">
-            <option value="classic">Classic</option>
-            <option value="reimagined">Reimagined</option>
-          </select>
-        </label>
-        <p class="dialog-note" id="ruleset-note">Classic preserves the calibrated original game. Reimagined adds fleet orders, scenarios, and a wider battlefield with new combat systems.</p>
-        <p class="dialog-note"><a href="#guide-start">Ruleset and option help</a> · <a href="#guide-precision">Precision fire help</a></p>
-        <fieldset id="reimagined-options" class="ruleset-options" hidden disabled>
-          <legend>Reimagined options</legend>
-          <label class="check">
-            <input id="campaign" type="checkbox">
-            Sector campaign — fight across a star map, carrying your fleet between battles
-          </label>
-          <label class="check">
-            <input id="realtime" type="checkbox">
-            Real-time movement — hulls fly continuously through space between stardates
-          </label>
-          <label>
-            Scenario
-            <select id="scenario">
-              <option value="annihilation">Cease hostilities — annihilation</option>
-              <option value="defend-xanadu">Hold Xanadu</option>
-              <option value="hunt-the-vendetta">Hunt the hunter</option>
-            </select>
-          </label>
-          <p class="dialog-note"><a href="#guide-fleet">Fleet and scenario help</a> · <a href="#guide-realtime">Real-time help</a> · <a href="#guide-campaign">Campaign help</a></p>
-          <div class="loadout" id="loadout-section" hidden>
-            <p class="menu-sub">Fleet loadout — every alliance spends a points budget on its ships of the line. Compose your Federation fleet and set each alliance's budget; enemy captains draw seeded fleets within theirs, leaning to their doctrines. Prizes taken in the war are won, not budgeted.</p>
-            <p class="menu-sub">Alliances at war — the Federation always fights; pick at least one enemy</p>
-            <div class="loadout-factions">
-              <label class="check"><input id="faction-Federation" type="checkbox" checked disabled> Federation (you)</label>
-              <label class="check"><input id="faction-Axis" type="checkbox" checked> Axis</label>
-              <label class="check"><input id="faction-Bloc" type="checkbox" checked> Bloc</label>
-              <label class="check"><input id="faction-Cabal" type="checkbox" checked> Cabal</label>
-            </div>
-            <label class="check"><input id="loadout-xanadu" type="checkbox" checked> Federation starbase Xanadu — the dockyard, a radio relay, and where withdraw runs to. Hold Xanadu needs it.</label>
-            <div id="loadout-budgets"></div>
-            <div id="loadout-fleet"></div>
-            <p class="console-note" id="loadout-summary"></p>
-            <button type="button" class="secondary tiny" id="loadout-reset">Reset to default</button>
+        <h2 id="new-game-title">Begin a new war</h2>
+        <div class="new-game-content">
+          <div class="new-game-basics">
+            <label>
+              Seed
+              <input id="new-seed" value="xanadu" maxlength="40">
+            </label>
+            <label class="check">
+              <input id="regional" type="checkbox">
+              Regional enemy formations
+            </label>
+            <label class="check">
+              <input id="sound" type="checkbox">
+              Tactical sound
+            </label>
+            <label class="check">
+              <input id="precision" type="checkbox">
+              Precision fire — called shots and phaser power
+            </label>
+            <label>
+              Ruleset
+              <select id="ruleset" aria-describedby="ruleset-note">
+                <option value="classic">Classic</option>
+                <option value="reimagined">Reimagined</option>
+              </select>
+            </label>
+            <p class="dialog-note" id="ruleset-note">Classic preserves the calibrated original game. Reimagined adds fleet orders, scenarios, and a wider battlefield with new combat systems.</p>
+            <p class="dialog-note"><a href="#guide-start">Ruleset and option help</a> · <a href="#guide-precision">Precision fire help</a></p>
+            <p class="dialog-note">The same seed and options reproduce the opening position; your orders determine what follows. Starting a new war or campaign replaces the other save.</p>
           </div>
-        </fieldset>
-        <p class="dialog-note">The same seed reproduces the initial war within the chosen ruleset. Precision fire gives your phaser volleys a power dial and called subsystem shots, and lets a hull burnt out of engines and guns strike its colors; the enemy still fires standard volleys. Reimagined includes standing orders, alliance doctrines, the Xanadu dockyard, named captains, and expansion scenarios. Real-time movement and sector campaign are Reimagined options. A sector campaign carries fleet wounds, prizes, and captains between seeded battles. Starting a new war or campaign retires the other save.</p>
+          <fieldset id="reimagined-options" class="ruleset-options" hidden disabled>
+            <legend>Reimagined options</legend>
+            <label class="check">
+              <input id="campaign" type="checkbox">
+              Sector campaign — fight across a star map, carrying your fleet between battles
+            </label>
+            <label class="check">
+              <input id="realtime" type="checkbox">
+              Real-time movement — hulls fly continuously through space between stardates
+            </label>
+            <label>
+              Scenario
+              <select id="scenario">
+                <option value="annihilation">Cease hostilities — annihilation</option>
+                <option value="defend-xanadu">Hold Xanadu</option>
+                <option value="hunt-the-vendetta">Hunt the hunter</option>
+              </select>
+            </label>
+            <p class="dialog-note"><a href="#guide-fleet">Fleet and scenario help</a> · <a href="#guide-realtime">Real-time help</a> · <a href="#guide-campaign">Campaign help</a></p>
+            <div class="loadout" id="loadout-section" hidden>
+              <p class="menu-sub">Fleet loadout — every alliance spends a points budget on its ships of the line. Compose your Federation fleet and set each alliance's budget; enemy captains draw seeded fleets within theirs, leaning to their doctrines. Prizes taken in the war are won, not budgeted.</p>
+              <p class="menu-sub">Alliances at war — the Federation always fights; pick at least one enemy</p>
+              <div class="loadout-factions">
+                <label class="check"><input id="faction-Federation" type="checkbox" checked disabled> Federation (you)</label>
+                <label class="check"><input id="faction-Axis" type="checkbox" checked> Axis</label>
+                <label class="check"><input id="faction-Bloc" type="checkbox" checked> Bloc</label>
+                <label class="check"><input id="faction-Cabal" type="checkbox" checked> Cabal</label>
+              </div>
+              <label class="check"><input id="loadout-xanadu" type="checkbox" checked> Federation starbase Xanadu — the dockyard, a radio relay, and where withdraw runs to. Hold Xanadu needs it.</label>
+              <div id="loadout-budgets"></div>
+              <div id="loadout-fleet"></div>
+              <p class="console-note" id="loadout-summary"></p>
+              <button type="button" class="secondary tiny" id="loadout-reset">Reset to default</button>
+            </div>
+          </fieldset>
+        </div>
         <div class="dialog-actions">
           <button value="cancel" class="secondary">Cancel</button>
           <button value="confirm">Begin</button>
@@ -375,6 +380,7 @@
           <section id="guide-commands">
             <h3>Commands and time</h3>
             <p>The console keeps movement, primary weapons, passing or holding, and autopilot close at hand. Expand <b>Systems and commands</b> for the complete command set. Keyboard shortcuts work during play; dialogs own the keyboard. Menu commands can preselect the hull you clicked.</p>
+            <p>Target menus and weapon prompts show known distance, weapon reach, and an explanation when an action is unavailable. In real time, a spent shared command cycle is separate from a target being out of range. The selected hull is checked again on confirmation; if it moves out of reach or disappears, choose another target explicitly.</p>
             <p><b>Turn-based cost:</b> an accepted action marked “Turn” completes your turn, then other captains act. “Free” reports and configuration keep the current stardate. <b>Real-time cost:</b> “Cycle” commands share a readiness timer measured in simulation time; course changes, reports, and configuration do not spend that timer. A paused clock cannot recharge it.</p>
             <div class="guide-table-wrap">
               <table class="guide-keys" data-guide-scope="classic reimagined">

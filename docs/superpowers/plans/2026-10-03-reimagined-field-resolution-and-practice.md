@@ -58,21 +58,21 @@ large raw traces remain outside deployed assets.
 and journal/debrief formatters when confirmed reasons are available.
 **Create:** `test/exhaustion.test.js` for diagnostic predicates and later rules.
 
-- [ ] Record the final bounded stretch of draws and timeouts: reactor output
+- [x] Record the final bounded stretch of draws and timeouts: reactor output
   including relays, usable power sinks, weapons, movement, pending ordnance,
   vacancy/boarding, dockyard eligibility, aid/tow routes, relay changes, and
   the existing stalemate signature.
-- [ ] Return structured explanations such as effective output exhausted,
+- [x] Return structured explanations such as effective output exhausted,
   repair possible, ordnance pending, or recovery uncertain. Do not assert
   impossibility from a zero-damage text line or zero reactor units alone.
-- [ ] Build fixtures for a relay-supported reactor-dead hull, a hull repairing
+- [x] Build fixtures for a relay-supported reactor-dead hull, a hull repairing
   at Xanadu, a powered boarder with a vacant dead-reactor target, a still-crewed
   non-boardable target, and a field with an incoming torpedo.
-- [ ] Present only facts permitted by current player knowledge. Full-field
+- [x] Present only facts permitted by current player knowledge. Full-field
   diagnostic dumps are developer evidence, not an unrestricted player report.
   Explain an actual draw with its confirmed outcome reason without changing
   the victory detector.
-- [ ] Publish counts of recoverable, demonstrably exhausted, and uncertain
+- [x] Publish counts of recoverable, demonstrably exhausted, and uncertain
   endings. Include reviewed examples and retain uncertainty explicitly.
 
 **Verify:** New exhaustion tests plus game/real-time tests. Repeat the P0
@@ -204,3 +204,18 @@ RNG or changes ordinary outcome rules.
 **Verify:** Practice tests, browser lifecycle check, full suite, and supported
 baseline comparisons for any shared engine changes. Keep F5/F6 independent
 of whether every experimental rule was accepted.
+
+## F1–F2 delivery evidence
+
+F1 shipped in [PR #90](https://github.com/MattyGPT/Argonaut-web/pull/90), merged
+as `404bc45`. F2 is implemented on `codex/target-readiness`; see the
+[exhaustion review](../reviews/2026-10-04-exhaustion-diagnostics.md) for methods,
+limitations, counts, reviewed seeds, and reproduction commands.
+
+The 435 focused tests pass. All 500 paired wars preserve every returned state,
+RNG and normal metric; all 48 non-winning endings were refreshed with the final
+observer and match the original state digests. Concrete recovery opportunities
+remain in 32 endings and 16 remain uncertain. None meets the conservative
+current-field exhaustion predicate. The existing terminal display already shows
+the confirmed draw reason; omniscient diagnostics do not enter that display.
+F3 and F4 remain separate experiments, with no new outcome rule enabled here.

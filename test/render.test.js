@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, getShip, isNeutral, spawnDrone, spawnEncounter } from '../game/state.js';
 import { createRng } from '../game/rng.js';
-import { launchDrones } from '../game/actions.js';
-import { commandReadiness, fanOutOffsets, journalCardsHtml, renderGame, reportFor, terminalNarrative } from '../ui/render.js';
+import { actionAvailability, applyPlayerAction, launchDrones } from '../game/actions.js';
+import { commandReadiness, fanOutOffsets, journalCardsHtml, renderGame, reportFor, targetExplanation, targetGeometryKnown, terminalNarrative } from '../ui/render.js';
 import { createJournal } from '../ui/battle-journal.js';
 
 // render.js only touches the document inside renderGame, so a bare element stub
@@ -311,7 +311,7 @@ test('selecting an enemy hull never opens an order picker', () => {
   assert.match(menu, /data-ship-command="phasers" data-ship-target="axis-flagship"/);
 });
 
-test('the ship menu offers exactly the commands that can reach the target', () => {
+test('the ship menu explains disabled range commands beside accessible controls', () => {
   elements.clear();
   const game = withPair(createGame({ seed: 'ship-menu' }),
     'fed-flagship', { x: 10, y: 10 }, 'axis-flagship', { x: 25, y: 10 });
@@ -320,7 +320,8 @@ test('the ship menu offers exactly the commands that can reach the target', () =
   assert.match(menu, /data-ship-command="phasers"/);
   assert.match(menu, /data-ship-command="tractor"/);
   assert.match(menu, /data-ship-command="scan"/);
-  assert.ok(!/data-ship-command="photons"/.test(menu), 'photons reach 10 and the target sits 15 away');
+  assert.match(menu, /data-ship-command="photons"[^>]*aria-describedby="menu-photons-reason"[^>]*disabled/);
+  assert.match(menu, /id="menu-photons-reason"[^>]*>Range 10 ·.*out of range for photons/);
 });
 
 test('no ship menu is rendered without a selected hull', () => {
@@ -329,24 +330,88 @@ test('no ship menu is rendered without a selected hull', () => {
   assert.equal(read('#ship-menu').innerHTML, '');
 });
 
-test('a hull nothing can reach says so instead of offering dead buttons', () => {
+test('a distant known hull explains why each command cannot reach', () => {
   elements.clear();
   const game = withPair(createGame({ seed: 'ship-menu-far' }),
     'fed-flagship', { x: 10, y: 10 }, 'axis-flagship', { x: 45, y: 45 });
   renderGame(game, { contextShipId: 'axis-flagship' });
   const menu = read('#ship-menu').innerHTML;
-  assert.ok(!/data-ship-command=/.test(menu));
-  assert.match(menu, /Nothing can reach this hull/);
+  assert.ok((menu.match(/data-ship-command=/g) ?? []).length > 0);
+  assert.ok([...menu.matchAll(/<button data-ship-command=[^>]+>/g)].every(([button]) => button.includes('disabled')));
+  assert.match(menu, /out of range/);
 });
 
-test('a vacant hull offers boarding, not weapons', () => {
+test('a vacant hull offers boarding and explains why weapons are unavailable', () => {
   elements.clear();
   const game = withPair(createGame({ seed: 'ship-menu-vacant' }),
     'fed-flagship', { x: 10, y: 10 }, 'axis-flagship', { x: 16, y: 10, status: 'vacant' });
   renderGame(game, { contextShipId: 'axis-flagship' });
   const menu = read('#ship-menu').innerHTML;
   assert.match(menu, /data-ship-command="transport"[^>]*>Board ship/);
-  assert.ok(!/data-ship-command="phasers"/.test(menu), 'weapons cannot fire on a vacant hull');
+  assert.match(menu, /data-ship-command="phasers"[^>]*disabled/);
+  assert.match(menu, /not an active enemy ship/);
+});
+
+test('target explanations reuse authoritative reasons and never mutate state or RNG', () => {
+  const base = createGame({ seed: 'explanation-purity', reimagined: true, realtime: true });
+  const game = { ...withPair(base, 'fed-flagship', { x: 10, y: 10 }, 'axis-flagship', { x: 25, y: 10 }), terrain: [] };
+  const action = { type: 'photons', targetId: 'axis-flagship' };
+  const before = JSON.stringify(game);
+  const explanation = targetExplanation(game, action);
+  assert.equal(explanation.reasonCode, actionAvailability(game, action).reasonCode);
+  assert.equal(explanation.reason, applyPlayerAction(game, action).messages[0]);
+  assert.match(explanation.text, /Distance 15\.0\. Range 10\./);
+  assert.doesNotMatch(explanation.text, /damage|probability|phasers \d|engines \d/i);
+  assert.equal(JSON.stringify(game), before);
+});
+
+test('current arc previews use mapper knowledge and do not treat an old scan as current sight', () => {
+  const base = createGame({ seed: 'arc-preview', reimagined: true });
+  const game = { ...withPair(base, 'fed-flagship', { x: 10, y: 10 }, 'axis-flagship', { x: 16, y: 10, facing: 180 }), terrain: [], scanned: { 'axis-flagship': true } };
+  const action = { type: 'phasers', targetId: 'axis-flagship' };
+  assert.match(targetExplanation(game, action).text, /Current arc preview: Fore; reported shields 60 at stardate 1\.0.*Motion can change/);
+  const hidden = withPair(game, 'fed-flagship', {}, 'axis-flagship', { x: 300, y: 300, facing: 90 });
+  assert.equal(targetGeometryKnown(hidden, getShip(hidden, action.targetId)), false);
+  const explanation = targetExplanation(hidden, action);
+  assert.equal(explanation.reasonCode, 'target-unknown');
+  assert.equal(explanation.facts.distance, null);
+  assert.doesNotMatch(explanation.text, /Distance|arc preview|reported shields|heading|300/);
+  assert.doesNotMatch(targetExplanation({ ...game, reimagined: false }, action).text, /arc|reported shields/);
+  assert.doesNotMatch(targetExplanation(game, { ...action, type: 'ion' }).text, /arc preview/);
+  const legacy = withPair(game, 'fed-flagship', {}, 'axis-flagship', { facing: undefined });
+  assert.doesNotMatch(targetExplanation(legacy, action).text, /arc preview/, 'do not infer an old-save heading from unseen opponents');
+});
+
+test('disabled target commands expose shared-cycle and hardware reasons in the console and menu', () => {
+  elements.clear();
+  const base = createGame({ seed: 'menu-cooldown', realtime: true, reimagined: true });
+  const game = { ...withPair(base, 'fed-flagship', { x: 10, y: 10 }, 'axis-flagship', { x: 16, y: 10 }), terrain: [], simTime: 0.25, readyAt: { [base.playerShipId]: 1 } };
+  renderGame(game, { contextShipId: 'axis-flagship' });
+  assert.match(read('#ship-menu').innerHTML, /data-ship-command="phasers"[^>]*disabled/);
+  assert.match(read('#ship-menu').innerHTML, /Shared command cycle: 0\.8 stardates remaining/);
+  assert.match(read('#ship-menu').innerHTML, /Range \d+ · Ready \(free command\)/);
+  assert.doesNotMatch(targetExplanation(game, { type: 'scan', targetId: 'axis-flagship' }).text, /Shared command cycle ready/);
+  assert.match(read('#console').innerHTML, /data-command="phasers" disabled aria-describedby="command-phasers-reason"/);
+  assert.match(read('#console').innerHTML, /id="command-phasers-reason"[^>]*>Argo is still cycling/);
+  const actor = getShip(game, game.playerShipId);
+  renderGame(withFlagship({ ...game, readyAt: {} }, { systems: { ...actor.systems, phasers: 0 } }), { contextShipId: 'axis-flagship' });
+  assert.match(read('#ship-menu').innerHTML, /Phasers are disabled/);
+  assert.match(read('#console').innerHTML, /id="command-phasers-reason"[^>]*>Phasers are disabled/);
+});
+
+test('target explanations keep observer command gating', () => {
+  const base = createGame({ seed: 'observing-targets', reimagined: true, realtime: true });
+  const game = { ...withPair(base, 'fed-flagship', { x: 10, y: 10 }, 'axis-flagship', { x: 16, y: 10 }), terrain: [], resigned: true };
+  assert.equal(targetExplanation(game, { type: 'phasers', targetId: 'axis-flagship' }).available, false);
+  assert.match(targetExplanation(game, { type: 'phasers', targetId: 'axis-flagship' }).text, /Observing — command unavailable/);
+});
+
+test('a transporter menu with only two crew can still open the amount prompt', () => {
+  elements.clear();
+  const game = withPair(createGame({ seed: 'menu-lowcrew' }), 'fed-flagship', { x: 10, y: 10, crew: 2 }, 'axis-flagship', { x: 16, y: 10, crew: 0, status: 'vacant' });
+  renderGame(game, { contextShipId: 'axis-flagship' });
+  assert.match(read('#ship-menu').innerHTML, /data-ship-command="transport"[^>]*>Board ship/);
+  assert.doesNotMatch(read('#ship-menu').innerHTML, /data-ship-command="transport"[^>]*disabled/);
 });
 
 test('the top bar and legend mark a Reimagined war', () => {

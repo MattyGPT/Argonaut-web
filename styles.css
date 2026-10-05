@@ -588,6 +588,7 @@ body.realtime .ship {
   z-index: 5;
   min-width: 10.5rem;
   max-width: 16rem;
+  overflow-y: auto;
   padding: .55rem .6rem .6rem;
   background: linear-gradient(145deg, rgba(15, 33, 52, .98), rgba(7, 15, 28, .98));
   border: 1px solid var(--line);
@@ -790,17 +791,13 @@ body.classic .ship.stance-evasive { filter: drop-shadow(0 0 5px #40e0ff); }
 body.classic .legend-swatch.stance-firing { background: #ffe040; box-shadow: none; }
 body.classic .legend-swatch.stance-evasive { background: #40e0ff; box-shadow: none; }
 
-/* Fleet loadout (round 19): the New game panel's budget and composition
-   steppers. The section can grow tall, so it scrolls inside the dialog and the
-   Begin/Cancel actions stay visible. */
+/* Fleet loadout shares the setup form's single scrolling surface. */
 .loadout {
   display: grid;
   gap: .5rem;
   padding: .6rem .7rem;
   border: 1px solid var(--line);
   border-radius: 6px;
-  max-height: 42vh;
-  overflow-y: auto;
 }
 
 .loadout-row {
@@ -1415,6 +1412,51 @@ dialog h2 {
   font-size: 1rem;
 }
 
+/* Setup keeps its actions in view; only the options area scrolls. */
+#new-game-dialog {
+  width: min(94vw, 1120px);
+  max-width: 1120px;
+  max-height: 94dvh;
+  padding: 1rem;
+  overflow: hidden;
+}
+
+#new-game-form {
+  min-width: 0;
+  max-height: calc(94dvh - 2rem - 2px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+#new-game-title { margin: 0; }
+
+.new-game-content {
+  overflow-y: auto;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr);
+  align-items: start;
+  gap: 1rem;
+  padding: .1rem .35rem .35rem .1rem;
+  scrollbar-gutter: stable;
+}
+
+.new-game-basics { display: grid; gap: .9rem; min-width: 0; }
+.new-game-content:has(#reimagined-options[hidden]) { grid-template-columns: 1fr; }
+#new-game-dialog:has(#reimagined-options[hidden]) { width: min(94vw, 660px); }
+#new-game-form > .dialog-actions { border-top: 1px solid var(--line); padding-top: .75rem; }
+
+@media (min-width: 1100px) {
+  #loadout-section { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #loadout-section > :not(#loadout-budgets):not(#loadout-fleet) { grid-column: 1 / -1; }
+}
+
+@media (max-width: 760px) {
+  .new-game-content { grid-template-columns: minmax(0, 1fr); }
+  #new-game-dialog { padding: .75rem; }
+  #new-game-form { max-height: calc(94dvh - 1.5rem - 2px); }
+}
+
 .ruleset-options {
   display: grid;
   gap: .9rem;
@@ -1481,6 +1523,12 @@ dialog input[type=range] {
   font-size: .75rem;
   line-height: 1.5;
 }
+
+.command-control { display: grid; align-content: start; gap: .25rem; min-width: 0; }
+.command-control > button { width: 100%; }
+.action-explanation { display: block; color: #b9d2e1; font-size: .72rem; line-height: 1.4; overflow-wrap: anywhere; }
+#ship-menu .action-explanation { padding: 0 .15rem .2rem; }
+.target-explanation { margin: 0; }
 
 .console-note {
   color: var(--cyan);

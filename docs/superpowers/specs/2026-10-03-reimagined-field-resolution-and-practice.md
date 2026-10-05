@@ -10,6 +10,8 @@ retired as a new-game mode under
 [Mode consolidation](2026-10-03-mode-consolidation.md), without a legacy
 rules path to maintain.
 
+Implementation status: F1 diagnostics merged in PR #90. F2 exhaustion observations are implemented pending delivery review. F3–F6 remain planned; no new navigation or surrender rule is active.
+
 ## Purpose and relationship to earlier work
 
 Improve the parts of a war that can feel accidental or unproductive, then

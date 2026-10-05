@@ -133,19 +133,19 @@ This task unlocks compact terminal presentation and campaign UI integration.
 helpers belong, `ui/render.js`, `ui/input.js`, `app.js`, and focused game,
 input, render, and real-time tests.
 
-- [ ] Extract a pure eligibility result from existing action validation,
+- [x] Extract a pure eligibility result from existing action validation,
   reusing `eligibleTargets`, `sensorRange`, hardware checks, and the actual
   `readyAt`/`simTimeOf` cooldown. Return a stable reason code and safe public
   facts, leaving final execution validation authoritative.
-- [ ] Test unavailable hardware, wrong allegiance/status, crew limits,
+- [x] Test unavailable hardware, wrong allegiance/status, crew limits,
   out-of-range targets, and a spent shared real-time cycle. Inspecting a
   target must leave game state and RNG unchanged.
-- [ ] Render known range and readiness with an accessible reason for disabled
+- [x] Render known range and readiness with an accessible reason for disabled
   commands. Do not rely on a tooltip attached only to a disabled button.
-- [ ] Show Reimagined arc geometry only when current knowledge permits it,
+- [x] Show Reimagined arc geometry only when current knowledge permits it,
   labelled as a preview that can change with motion. Keep hidden system
   values, precise hit probabilities, and damage forecasts out of scope.
-- [ ] Revalidate moving or destroyed targets on confirmation without silently
+- [x] Revalidate moving or destroyed targets on confirmation without silently
   choosing a different hull. Confirm UI reason and execution agree when
   supplied the same state and allowed knowledge.
 
@@ -245,7 +245,7 @@ checks pass. Mechanical parity evidence is recorded with the shared contract.
 
 ## C3 delivery evidence — 2026-10-04
 
-Implemented on `codex/battle-journal`, based on merged PR #89 (`371bce5`).
+Merged in [PR #90](https://github.com/MattyGPT/Argonaut-web/pull/90) (`404bc45`), based on PR #89 (`371bce5`).
 The [journal delivery review](../reviews/2026-10-04-battle-journal.md) records
 knowledge filtering, delayed attribution, bounded retention, save envelopes,
 review findings, and measured storage/render costs. Existing command-history
@@ -258,3 +258,17 @@ The existing combat-feedback, compact-console, and new-game checks pass.
 Complete 250-seed reports in Classic, Reimagined, and real time match PR #89.
 F1 also verifies state-by-state diagnostic parity in 500 paired wars.
 C4–C6 remain pending; this delivery changes presentation and observation only.
+## C4 delivery evidence — 2026-10-04
+
+Implemented on `codex/target-readiness`, based on merged PR #90 (`404bc45`).
+The [target-readiness review](../reviews/2026-10-04-target-readiness.md) documents
+shared pure validation, visible reasons, safe geometry previews, and explicit
+selected-target revalidation. The same delivery widens New Game, removes nested
+loadout scrolling, and keeps Begin/Cancel visible across viewport sizes.
+
+Validation: 733 tests pass; targeted browser checks cover actual commands,
+shared cooldown and free scans, moving/destroyed target retention, confirmation,
+fractional cooldown expiry without a boundary redraw, knowledge/purity, and
+bounded desktop/narrow menus. Setup, help, compact-console, and combat-feedback
+checks pass. All three 250-seed simulation reports match PR #90 exactly, as do
+15,444 differential manual-action outcomes. No gameplay rule changed.

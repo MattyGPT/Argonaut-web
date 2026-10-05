@@ -501,8 +501,12 @@ the round replay.
   whole war zone; `7` lists exact local positions.
 - Clicking a hull opens its context menu beside it, flipping sides and clamping at
   the map edge so it stays on the map, with a tail that keeps pointing at the hull.
-- Weapon and tractor prompts preselect the nearest sensible target; confirm or
-  pick another.
+- Target menus and prompts explain known distance, reach, and unavailable
+  commands. A spent real-time command cycle is distinct from an out-of-range
+  target. Confirmation checks the selected hull again; it never substitutes
+  a different ship after that hull disappears.
+- New Game uses a wider setup panel with one scrolling area and keeps Begin
+  and Cancel in view, including when configuring a Reimagined fleet.
 - The **Battle journal** separates **Your ship**, **Battle developments**, and
   **Fleet traffic**. Your last twelve accepted commands remain easy to find,
   with the issuing ship, stardate, and confirmed result. Automatic conn is

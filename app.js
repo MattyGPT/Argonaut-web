@@ -5,7 +5,7 @@ import { abandonEngagement, autoResolveNode, buyDockyard, createCampaign, nodeBy
 import { scenarioFor } from './game/scenarios.js';
 import { positionAt, positionsOf, simTimeOf } from './game/realtime.js';
 import { resolveAutopilotTurn, resolveComputerTurns, stepContinuum } from './game/turns.js';
-import { bindInput, normalizeNewGameOptions, promptForConfirmation, promptForCoordinates, promptForTarget, promptForTowDestination } from './ui/input.js';
+import { bindInput, normalizeNewGameOptions, promptForConfirmation, promptForCoordinates, promptForTarget, promptForTowDestination, refreshTargetPrompt } from './ui/input.js';
 import { cameraWindow, centerOn, clampCamera, fieldTransform, makeCamera, panBy, zoomAt } from './ui/camera.js';
 import { renderSectorScreen } from './ui/sector.js';
 import {
@@ -15,7 +15,7 @@ import {
   whenPlaybackUnlocked,
   withPlaybackLock,
 } from './ui/battle-events.js';
-import { commandReadiness, fanOutOffsets, primeMoveMemory, renderGame, reportFor } from './ui/render.js';
+import { commandReadiness, fanOutOffsets, primeMoveMemory, renderGame, reportFor, targetExplanation, targetGeometryKnown, updateTargetReadiness } from './ui/render.js';
 import { playEffect, playEvent } from './ui/sound.js';
 import { playEffects, replayEffects } from './ui/fx.js';
 import { restoreCommandHistory } from './ui/command-history.js';
@@ -198,6 +198,7 @@ const refresh = () => {
   if (game) {
     syncCamera();
     redraw();
+    refreshTargetPrompt();
     warnOnRedAlert();
   }
   showScreens();
@@ -453,6 +454,8 @@ const renderFrame = () => {
   document.querySelectorAll('[data-command]').forEach((button) => {
     if (REALTIME_COOLDOWN.has(button.dataset.command)) button.disabled = baseline || cycling;
   });
+  updateTargetReadiness(game, view);
+  refreshTargetPrompt();
   // The readout rides the sim clock between boundaries, so pause and speed are
   // visible on the header without a full re-render.
   const readout = document.querySelector('#turn-readout');
@@ -721,13 +724,18 @@ const dispatch = async (action) => {
   if (targetActions.has(action.type)
     && (!action.targetId || precisionPrompt || (action.type === 'transport' && action.amount === undefined))) {
     const actor = getShip(game, game.playerShipId);
+    const pool = eligibleTargets(game, action.type);
+    if (action.type === 'tractor') pool.push(...game.ships.filter((ship) => ship.id !== actor?.id && ship.status === 'active' && ship.faction === actor?.faction && ship.encounter?.type === 'distress'));
+    const candidates = pool.filter((ship) => targetGeometryKnown(game, ship));
+    const preferredId = defaultTargetFor(game, action.type);
     const details = await promptForTarget(
       action.type === 'transport' ? 'Transporter target' : `${action.type} target`,
-      eligibleTargets(game, action.type),
+      candidates,
       {
         amount: action.type === 'transport',
         transfer: action.type === 'transport',
-        defaultId: action.targetId ?? defaultTargetFor(game, action.type),
+        defaultId: action.targetId ?? (candidates.some((ship) => ship.id === preferredId) ? preferredId : candidates[0]?.id),
+        availability: (details) => targetExplanation(game, { ...action, ...details }, view),
         ...(precisionPrompt ? {
           precision: {
             systems: Object.keys(actor?.systems ?? {}),

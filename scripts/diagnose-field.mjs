@@ -9,6 +9,7 @@ import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { createFieldDiagnostics } from '../game/field-diagnostics.js';
+import { createExhaustionDiagnostics } from '../game/exhaustion.js';
 import { REALTIME } from '../game/constants.js';
 import { runWar } from './sim-wars.mjs';
 
@@ -28,6 +29,14 @@ export const summarizeField = (wars, mode) => {
   const normal = wars.map((war) => war.normal);
   return {
     wars: wars.length, exactStateAndMetricsParity: wars.every((war) => war.parity),
+    exhaustion: {
+      endings: counts(wars.filter((war) => war.exhaustion).map((war) => war.exhaustion.classification)),
+      byOutcome: Object.fromEntries(['draw', 'hopeless-draw', 'timeout'].map((outcome) => [outcome,
+        counts(wars.filter((war) => war.normal.outcome === outcome && war.exhaustion).map((war) => war.exhaustion.classification))])),
+      examples: wars.filter((war) => war.exhaustion).map((war) => ({ seed: war.seed, outcome: war.normal.outcome,
+        classification: war.exhaustion.classification, reasons: war.exhaustion.tail.at(-1)?.reasons,
+        recoveries: war.exhaustion.tail.at(-1)?.recoveries })),
+    },
     pairEvents: { total: pairs.length, perWar: distribution(wars.map((war) => war.pairs.length)), perContactStardate: distribution(perStardate) },
     hullInvolvements: { total: pairs.length * 2, perWar: distribution(wars.map((war) => war.pairs.length * 2)) },
     finalHullCounterDiscrepancies: wars.filter((war) => war.normal.collisions !== war.pairs.length * 2).map((war) => ({ seed: war.seed, observedInvolvements: war.pairs.length * 2, finalHullCounters: war.normal.collisions })),
@@ -55,12 +64,13 @@ export const summarizeField = (wars, mode) => {
   };
 };
 
-export const diagnoseField = ({ mode = 'reimagined', seeds = 250, seed, maxStardates = 600, trajectoryWindow = 0, progress } = {}) => {
+export const diagnoseField = ({ mode = 'reimagined', seeds = 250, seed, maxStardates = 600, trajectoryWindow = 0, exhaustionWindow = 16, progress } = {}) => {
   const wars = [];
   for (let index = 0; index < (seed ? 1 : seeds); index += 1) {
     const selectedSeed = seed ?? `sim-${index}`;
     const pairs = [];
     const collector = createFieldDiagnostics({ onCollision: (pair) => pairs.push(pair), trajectoryWindow });
+    const exhaustion = createExhaustionDiagnostics({ window: exhaustionWindow });
     const hash = () => {
       const digest = createHash('sha256');
       return { update: (game) => digest.update(`${JSON.stringify(game)}\n`), finish: () => digest.digest('hex') };
@@ -69,15 +79,15 @@ export const diagnoseField = ({ mode = 'reimagined', seeds = 250, seed, maxStard
     const measuredHash = hash();
     const options = { mode, seed: selectedSeed, precision: false, regional: false, maxStardates };
     const baseline = runWar(index, { ...options, onState: baselineHash.update });
-    const normal = runWar(index, { ...options, fieldDiagnostics: collector, onState: measuredHash.update });
+    const normal = runWar(index, { ...options, fieldDiagnostics: collector, onState: (game) => { measuredHash.update(game); exhaustion.observe(game); } });
     const before = baselineHash.finish();
     const after = measuredHash.finish();
     const parity = isDeepStrictEqual(baseline, normal) && before === after;
     if (!parity) throw new Error(`Diagnostics changed authoritative state or metrics: ${mode}/${selectedSeed}`);
-    wars.push({ seed: selectedSeed, parity, stateDigest: after, normal, pairs, arrivalHolds: { ...collector.stalls }, ...(trajectoryWindow ? { tailTrajectory: collector.history } : {}) });
+    wars.push({ seed: selectedSeed, parity, stateDigest: after, normal, pairs, exhaustion: exhaustion.finish(normal.outcome), arrivalHolds: { ...collector.stalls }, ...(trajectoryWindow ? { tailTrajectory: collector.history } : {}) });
     progress?.(index + 1, seed ? 1 : seeds);
   }
-  return { mode, settings: { seed: seed ?? 'sim-0..sim-N-1', seeds: wars.length, precision: false, regional: false, maxStardates, trajectoryWindow }, summary: summarizeField(wars, mode), wars };
+  return { mode, settings: { seed: seed ?? 'sim-0..sim-N-1', seeds: wars.length, precision: false, regional: false, maxStardates, trajectoryWindow, exhaustionWindow }, summary: summarizeField(wars, mode), wars };
 };
 
 export const parseFieldArgs = (argv) => {
@@ -91,10 +101,10 @@ export const parseFieldArgs = (argv) => {
       options.mode = value;
     } else if (flag === '--seed') options.seed = value;
     else if (flag === '--output') options.output = value;
-    else if (['--seeds', '--max-stardates', '--trajectory-window'].includes(flag)) {
+    else if (['--seeds', '--max-stardates', '--trajectory-window', '--exhaustion-window'].includes(flag)) {
       const numeric = Number(value);
-      if (!Number.isInteger(numeric) || numeric < (flag === '--trajectory-window' ? 0 : 1) || (flag === '--trajectory-window' && numeric > 64)) throw new Error(`Invalid ${flag}: ${value}`);
-      options[flag === '--seeds' ? 'seeds' : flag === '--max-stardates' ? 'maxStardates' : 'trajectoryWindow'] = numeric;
+      if (!Number.isInteger(numeric) || numeric < (flag === '--trajectory-window' ? 0 : 1) || (['--trajectory-window', '--exhaustion-window'].includes(flag) && numeric > 64)) throw new Error(`Invalid ${flag}: ${value}`);
+      options[flag === '--seeds' ? 'seeds' : flag === '--max-stardates' ? 'maxStardates' : flag === '--exhaustion-window' ? 'exhaustionWindow' : 'trajectoryWindow'] = numeric;
     } else throw new Error(`Unknown option: ${flag}`);
   }
   if (options.trajectoryWindow && !options.seed) throw new Error('Trajectory windows require --seed to select an outlier.');

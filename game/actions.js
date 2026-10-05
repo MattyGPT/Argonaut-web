@@ -239,24 +239,140 @@ const commandRequest = (action) => {
 };
 
 const targetFor = (game, action, actor) => {
-  if (!action.targetId) return { error: 'A target is required.', requiresTarget: true };
+  if (!action.targetId) return { reasonCode: 'target-required', error: 'A target is required.', requiresTarget: true };
   const target = getShip(game, action.targetId);
-  if (!target || target.status === 'destroyed') return { error: 'That target is no longer available.' };
-  if (target.id === actor.id) return { error: 'A ship cannot target itself.' };
+  if (!target || target.status === 'destroyed') return { reasonCode: 'target-unavailable', error: 'That target is no longer available.' };
+  if (target.id === actor.id) return { reasonCode: 'self-target', error: 'A ship cannot target itself.' };
   return { target };
 };
 
 const hostileTarget = (game, action, actor) => {
   const found = targetFor(game, action, actor);
   if (found.error) return found;
-  if (found.target.faction === actor.faction) return { error: 'Weapons cannot fire on a friendly target.' };
-  if (!isActive(found.target)) return { error: 'That target is not an active enemy ship.' };
+  if (found.target.faction === actor.faction) return { reasonCode: 'wrong-allegiance', error: 'Weapons cannot fire on a friendly target.' };
+  if (!isActive(found.target)) return { reasonCode: 'wrong-status', error: 'That target is not an active enemy ship.' };
   return found;
 };
 
-const requiresSystem = (game, actor, system) => systemUnits(actor, system) > 0
-  ? null
-  : invalid(game, `${system[0].toUpperCase()}${system.slice(1)} are disabled.`);
+const TARGET_ACTIONS = new Set(['phasers', 'photons', 'spread', 'ion', 'tractor', 'scan', 'transport']);
+const ACTION_SYSTEM = { phasers: 'phasers', photons: 'photons', spread: 'spread', ion: 'ion', tractor: 'tractor', scan: 'scanner', transport: 'transporter', move: 'engines', disengage: 'engines', hyperspace: 'engines', map: 'mapper', radio: 'radio' };
+const unavailable = (reasonCode, error, extra = {}) => ({ reasonCode, error, ...extra });
+const actionRange = (game, actor, type) => type === 'scan' || type === 'transport'
+  ? sensorRange(game, actor, ACTION_SYSTEM[type])
+  : RANGES[type] ?? null;
+
+/** Pure own-ship checks, in the same order as command execution. */
+const actionHardware = (game, action, actor) => {
+  if (action.type === 'disengage' && !game.reimagined) return unavailable('mode-unavailable', 'Disengage is only available in a Reimagined war.');
+  const system = ACTION_SYSTEM[action.type];
+  if (system && systemUnits(actor, system) <= 0) return unavailable('hardware-unavailable', `${system[0].toUpperCase()}${system.slice(1)} are disabled.`);
+  if (['phasers', 'photons', 'spread', 'ion'].includes(action.type) && ionStormZone(game, actor) === 'core') {
+    const noun = { phasers: 'weapons', photons: 'weapons', spread: 'torpedo tubes', ion: 'ion emitter' }[action.type];
+    return unavailable('ion-storm', `${actor.name}'s ${noun} ${action.type === 'ion' ? 'is' : 'are'} offline in the ion storm.`);
+  }
+  return {};
+};
+
+const ownActionEligibility = (game, action, actor) => {
+  const hardware = actionHardware(game, action, actor);
+  if (hardware.error) return hardware;
+  if (action.type === 'radio' && ionStormZone(game, actor) === 'core') return unavailable('ion-storm', `${actor.name}'s radio is offline in the ion storm.`);
+  if (action.type === 'shields' && !flushShields(actor, game)) return systemUnits(actor, 'engines') <= 0
+    ? unavailable('hardware-unavailable', `${actor.name} cannot flush engines for shield power.`)
+    : unavailable('shields-full', 'Shields are already at full strength.');
+  if (action.type === 'launch') {
+    if (!game.reimagined) return unavailable('mode-unavailable', 'Fighter drones fly only in a Reimagined war.');
+    if (actor.className !== 'Carrier') return unavailable('hardware-unavailable', `${actor.name} carries no drone bay.`);
+    if (hasLaunchedDrones(game, actor)) return unavailable('bay-empty', `${actor.name}'s bay is empty — its drones are already away.`);
+  }
+  if (action.type === 'move' && isTractorHeld(game, actor)) return unavailable('tractor-held', `${actor.name} cannot move while held by a tractor lock. Hyperspace shakes it off.`);
+  if (action.type === 'disengage') {
+    if (isTractorHeld(game, actor)) return unavailable('tractor-held', `${actor.name} cannot disengage while held by a tractor lock.`);
+    if (!nearestThreat(game, actor)) return unavailable('no-threat', `${actor.name} has no enemy to disengage from.`);
+  }
+  return {};
+};
+
+/**
+ * Authoritative target validation shared by inspection and execution. It reads
+ * no random values and returns a ship only to engine callers, never to the UI.
+ * Keep the validation order: in particular transports check range before crew.
+ */
+const targetEligibility = (game, action, actor) => {
+  const type = action.type;
+  if (type === 'tractor' && !action.targetId) return {}; // Release an existing lock.
+  const found = ['phasers', 'photons', 'spread', 'ion'].includes(type)
+    ? hostileTarget(game, action, actor) : targetFor(game, action, actor);
+  if (found.error) return found;
+  const target = found.target;
+  if (type === 'tractor') {
+    const rescueTow = target.encounter?.type === 'distress' && target.faction === actor.faction;
+    if (target.faction === actor.faction && !rescueTow) return unavailable('wrong-allegiance', 'Weapons cannot fire on a friendly target.');
+    if (!isActive(target)) return unavailable('wrong-status', 'That target is not an active enemy ship.');
+  }
+  if (distance(actor, target) > actionRange(game, actor, type)) {
+    const message = {
+      phasers: `${target.name} is out of range for phasers.`, photons: `${target.name} is out of range for photons.`,
+      spread: `${target.name} is out of range for the spread torpedoes.`, ion: `${target.name} is out of range for the ion emitter.`,
+      tractor: `${target.name} is out of tractor range.`, scan: `${target.name} is out of scanner range.`, transport: `${target.name} is out of transporter range.`,
+    }[type];
+    return unavailable('out-of-range', message);
+  }
+  if (type === 'tractor' && isImmovable(target)) return unavailable('target-immovable', `${target.name} is far too massive for the tractor beam to move.`);
+  if (type === 'scan' && nebulaHides(game, actor, target)) return unavailable('nebula-obscured', `${target.name} is lost in the static of a nebula.`);
+  if (type === 'transport') {
+    if (isActive(target) && target.faction !== actor.faction && !isNeutral(target)) return unavailable('wrong-allegiance', 'Cannot transport onto a live enemy ship.');
+    const amount = Number(action.amount ?? DEFAULT_CREW_TRANSFER);
+    if (!Number.isInteger(amount) || amount < 1) return unavailable('invalid-crew-amount', 'Transport crew amount must be a positive whole number.');
+    if (actor.crew <= amount) return unavailable('insufficient-crew', 'Insufficient crew to complete that transport.');
+    if (isActive(target) && !isNeutral(target) && Math.min(amount, Math.max(0, crewCapacity(target) - target.crew)) === 0) return unavailable('crew-capacity', `${target.name} has no space for additional crew.`);
+    if (!isActive(target) && target.status !== 'vacant') return unavailable('wrong-status', 'Only a vacant ship can be occupied.');
+  }
+  return found;
+};
+
+const commandEligibility = (game, action) => {
+  // The real-time cycle precedes other checks in the existing command path.
+  if (game?.realtime && REALTIME_COOLDOWN.has(action.type)) {
+    const ready = game.readyAt?.[game.playerShipId] ?? 0;
+    if (ready > simTimeOf(game)) return unavailable('cooldown', `${getShip(game, game.playerShipId)?.name ?? 'Your ship'} is still cycling — ready again at stardate ${Math.floor(ready) + 1}.`);
+  }
+  if (!game || !action.type) return unavailable('command-required', 'Choose a command.');
+  if (game.outcome || game.phase === 'ended') return unavailable('battle-ended', 'The war has already ended.');
+  if (game.phase !== 'player') return unavailable('not-player-turn', 'Wait for the player turn.');
+  const usable = usableActor(game);
+  if (usable.error) return unavailable('actor-unavailable', usable.error);
+  return { actor: usable.ship };
+};
+
+/**
+ * Read-only command/target availability. Callers must supply targetKnown:false
+ * for a contact whose current geometry is not known; this suppresses all target
+ * facts and target-dependent reasons. No target systems, shield values, accuracy
+ * or damage estimates cross this boundary. Non-target parameterized commands
+ * expose their shared readiness/hardware gates; final input validation remains
+ * authoritative in execution.
+ */
+export const actionAvailability = (game, action = {}, { targetKnown = true } = {}) => {
+  const actor = game ? getShip(game, game.playerShipId) : null;
+  const target = game && targetKnown && action.targetId ? getShip(game, action.targetId) : null;
+  const now = game ? simTimeOf(game) : 0;
+  const cycles = Boolean(game?.realtime && REALTIME_COOLDOWN.has(action.type));
+  const readyAt = cycles ? game.readyAt?.[game.playerShipId] ?? 0 : now;
+  const facts = {
+    range: actor && TARGET_ACTIONS.has(action.type) ? actionRange(game, actor, action.type) : null,
+    distance: actor && target && target.status !== 'destroyed' ? distance(actor, target) : null,
+    readiness: { ready: readyAt <= now, readyAt, simTime: now, remaining: Math.max(0, readyAt - now) },
+  };
+  let check = commandEligibility(game, action);
+  if (!check.error) check = ownActionEligibility(game, action, actor);
+  if (!check.error && TARGET_ACTIONS.has(action.type)) {
+    check = action.targetId && !targetKnown
+      ? unavailable('target-unknown', 'Current target position is not known.')
+      : targetEligibility(game, action, actor);
+  }
+  return { available: !check.error, reasonCode: check.reasonCode ?? 'available', reason: check.error ?? '', requiresTarget: Boolean(check.requiresTarget), facts };
+};
 
 /**
  * Applies combat damage without changing its ship argument. Shields absorb damage
@@ -666,16 +782,8 @@ const precisionSettings = (game, action, type, target) => {
 };
 
 const weaponAction = (game, action, actor, type) => {
-  const disabled = requiresSystem(game, actor, type);
-  if (disabled) return disabled;
-  // Ion-storm jam (15d): inside the storm's core the guns are dead for the
-  // stardate — the command refuses without spending the turn.
-  if (ionStormZone(game, actor) === 'core') return invalid(game, `${actor.name}'s weapons are offline in the ion storm.`);
-  const found = hostileTarget(game, action, actor);
+  const found = targetEligibility(game, action, actor);
   if (found.error) return invalid(game, found.error, found.requiresTarget);
-  const range = RANGES[type];
-  const targetDistance = distance(actor, found.target);
-  if (targetDistance > range) return invalid(game, `${found.target.name} is out of range for ${type}.`);
   if (game.realtime && type === 'photons') {
     // Round 32: the torpedo enters flight — a ballistic run aimed where the
     // target is NOW. Beams (phasers) stay instant. The rolls wait for the
@@ -756,13 +864,8 @@ const weaponAction = (game, action, actor, type) => {
  * player's command; the autopilots' mirror lives in turns.js.
  */
 const ionAction = (game, action, actor) => {
-  const disabled = requiresSystem(game, actor, 'ion');
-  if (disabled) return disabled;
-  // The ion storm's core jams every emitter, this one included (15d).
-  if (ionStormZone(game, actor) === 'core') return invalid(game, `${actor.name}'s ion emitter is offline in the ion storm.`);
-  const found = hostileTarget(game, action, actor);
+  const found = targetEligibility(game, action, actor);
   if (found.error) return invalid(game, found.error, found.requiresTarget);
-  if (distance(actor, found.target) > RANGES.ion) return invalid(game, `${found.target.name} is out of range for the ion emitter.`);
   const rng = seededRng(game);
   if (rng.next() < volleyMissChance(game, actor, found.target)) {
     const shooter = { ...actor, shotsFired: actor.shotsFired + 1 };
@@ -890,13 +993,8 @@ export const launchWarhead = (game, actor, target, kind, actionContext = null) =
 };
 
 const spreadAction = (game, action, actor) => {
-  const disabled = requiresSystem(game, actor, 'spread');
-  if (disabled) return disabled;
-  // The ion storm's core jams the tubes like any gun (15d).
-  if (ionStormZone(game, actor) === 'core') return invalid(game, `${actor.name}'s torpedo tubes are offline in the ion storm.`);
-  const found = hostileTarget(game, action, actor);
+  const found = targetEligibility(game, action, actor);
   if (found.error) return invalid(game, found.error, found.requiresTarget);
-  if (distance(actor, found.target) > RANGES.spread) return invalid(game, `${found.target.name} is out of range for the spread torpedoes.`);
   if (game.realtime) {
     // Round 32: the salvo enters flight — a ballistic spread aimed where the
     // target is NOW. The rolls wait for the detonation; a target that burns
@@ -1018,9 +1116,6 @@ export const resolveAsteroidStrike = (game, ship) => {
 };
 
 const moveAction = (game, action, actor) => {
-  const disabled = requiresSystem(game, actor, 'engines');
-  if (disabled) return disabled;
-  if (isTractorHeld(game, actor)) return invalid(game, `${actor.name} cannot move while held by a tractor lock. Hyperspace shakes it off.`);
   const dx = Number(action.dx);
   const dy = Number(action.dy);
   if (!Number.isFinite(dx) || !Number.isFinite(dy)) return invalid(game, 'Movement requires numeric displacement coordinates.');
@@ -1098,8 +1193,8 @@ const towDestination = (game, action, grid) => {
 };
 
 const tractorAction = (game, action, actor) => {
-  const disabled = requiresSystem(game, actor, 'tractor');
-  if (disabled) return disabled;
+  const found = targetEligibility(game, action, actor);
+  if (found.error) return invalid(game, found.error, found.requiresTarget);
   if (!action.targetId) {
     const released = game.ships.map((ship) => ship.tractorBy === actor.id ? { ...ship, tractorBy: null } : ship);
     return result(emitBattleRecord(completeTurn({ ...game, ships: released }), {
@@ -1108,13 +1203,7 @@ const tractorAction = (game, action, actor) => {
   }
   // The beam is a weapon — aimed at enemies — with one exception (round 24): a
   // friendly hull broadcasting distress may be towed, which is the rescue.
-  const found = targetFor(game, action, actor);
-  if (found.error) return invalid(game, found.error, found.requiresTarget);
   const rescueTow = found.target.encounter?.type === 'distress' && found.target.faction === actor.faction;
-  if (found.target.faction === actor.faction && !rescueTow) return invalid(game, 'Weapons cannot fire on a friendly target.');
-  if (!isActive(found.target)) return invalid(game, 'That target is not an active enemy ship.');
-  if (distance(actor, found.target) > RANGES.tractor) return invalid(game, `${found.target.name} is out of tractor range.`);
-  if (isImmovable(found.target)) return invalid(game, `${found.target.name} is far too massive for the tractor beam to move.`);
   const grid = game.gridSize ?? GRID_SIZE;
   // A directed tow is Reimagined-only; a classic war ignores the fields
   // and pulls toward the caster exactly as calibrated.
@@ -1287,23 +1376,14 @@ export const launchDrones = (game, carrier) => {
 };
 
 const launchAction = (game, actor) => {
-  if (!game.reimagined) return invalid(game, 'Fighter drones fly only in a Reimagined war.');
-  if (actor.className !== 'Carrier') return invalid(game, `${actor.name} carries no drone bay.`);
-  if (hasLaunchedDrones(game, actor)) return invalid(game, `${actor.name}'s bay is empty — its drones are already away.`);
   const out = launchDrones(game, actor);
   return result(completeTurn(out.game), out.messages);
 };
 
 const transportAction = (game, action, actor) => {
-  const disabled = requiresSystem(game, actor, 'transporter');
-  if (disabled) return disabled;
-  const found = targetFor(game, action, actor);
+  const found = targetEligibility(game, action, actor);
   if (found.error) return invalid(game, found.error, found.requiresTarget);
-  if (distance(actor, found.target) > sensorRange(game, actor, 'transporter')) return invalid(game, `${found.target.name} is out of transporter range.`);
-  if (isActive(found.target) && found.target.faction !== actor.faction && !isNeutral(found.target)) return invalid(game, 'Cannot transport onto a live enemy ship.');
   const amount = Number(action.amount ?? DEFAULT_CREW_TRANSFER);
-  if (!Number.isInteger(amount) || amount < 1) return invalid(game, 'Transport crew amount must be a positive whole number.');
-  if (actor.crew <= amount) return invalid(game, 'Insufficient crew to complete that transport.');
   // Seizing an active neutral merchant (round 24): the civilian crew strikes its
   // colors rather than fight, and the hull becomes a round-17 prize — cargo hold,
   // complement, and all. Attacking one instead works too, and costs nothing yet:
@@ -1320,7 +1400,6 @@ const transportAction = (game, action, actor) => {
   }
   if (isActive(found.target)) {
     const added = Math.min(amount, Math.max(0, crewCapacity(found.target) - found.target.crew));
-    if (added === 0) return invalid(game, `${found.target.name} has no space for additional crew.`);
     const source = { ...actor, crew: actor.crew - added };
     const target = { ...found.target, crew: found.target.crew + added };
     const updated = completeTurn({ ...game, ships: game.ships.map((ship) => ship.id === source.id ? source : ship.id === target.id ? target : ship) });
@@ -1329,7 +1408,6 @@ const transportAction = (game, action, actor) => {
       payload: { placed: added, sourceCrew: { before: actor.crew, after: source.crew }, targetCrew: { before: found.target.crew, after: target.crew } },
     }), `${added} crew beam from ${actor.name} to ${target.name}.`);
   }
-  if (found.target.status !== 'vacant') return invalid(game, 'Only a vacant ship can be occupied.');
   const capture = captureHull(game, actor, found.target, amount);
   const base = {
     ...capture.game,
@@ -1415,8 +1493,6 @@ const selfDestructAction = (game, actor) => {
 };
 
 const hyperspaceAction = (game, action, actor) => {
-  const disabled = requiresSystem(game, actor, 'engines');
-  if (disabled) return disabled;
   const rng = seededRng(game);
   if (rng.next() < HYPERSPACE_BURN_CHANCE) {
     return result(
@@ -1671,12 +1747,7 @@ const nearestThreat = (game, actor) => game.ships
  * Pair it with the evasive stance (free) to break off under fire.
  */
 const disengageAction = (game, actor) => {
-  if (!game.reimagined) return invalid(game, 'Disengage is only available in a Reimagined war.');
-  const disabled = requiresSystem(game, actor, 'engines');
-  if (disabled) return disabled;
-  if (isTractorHeld(game, actor)) return invalid(game, `${actor.name} cannot disengage while held by a tractor lock.`);
   const threat = nearestThreat(game, actor);
-  if (!threat) return invalid(game, `${actor.name} has no enemy to disengage from.`);
   const grid = game.gridSize ?? GRID_SIZE;
   const capacity = engineCapacity(actor, grid, powerEffect(game, actor, 'engines'));
   const span = distance(actor, threat) || 1;
@@ -1708,21 +1779,15 @@ const disengageAction = (game, actor) => {
 };
 
 const applyCommand = (game, action = {}) => {
-  if (!game || !action.type) return invalid(game, 'Choose a command.');
-  if (game.outcome || game.phase === 'ended') return invalid(game, 'The war has already ended.');
-  if (game.phase !== 'player') return invalid(game, 'Wait for the player turn.');
-  const usable = usableActor(game);
+  const usable = commandEligibility(game, action);
   if (usable.error) return invalid(game, usable.error);
-  const actor = usable.ship;
+  const actor = usable.actor;
+  const own = ownActionEligibility(game, action, actor);
+  if (own.error) return invalid(game, own.error);
 
   switch (action.type) {
     case 'shields': {
       const flushed = flushShields(actor, game);
-      if (!flushed) {
-        return invalid(game, systemUnits(actor, 'engines') <= 0
-          ? `${actor.name} cannot flush engines for shield power.`
-          : 'Shields are already at full strength.');
-      }
       return result(emitBattleRecord(completeTurn(replaceShip(game, flushed.ship)), {
         kind: 'shield-recovery', actor, target: actor,
         payload: { cause: 'engines-flush', gained: flushed.gained, consequences: shipConsequences(actor, flushed.ship) },
@@ -1746,12 +1811,8 @@ const applyCommand = (game, action = {}) => {
       );
     case 'computer': return result(game, 'Computer report ready.', { report: computerReport(game, actor) });
     case 'scan': {
-      const disabled = requiresSystem(game, actor, 'scanner');
-      if (disabled) return disabled;
-      const found = targetFor(game, action, actor);
+      const found = targetEligibility(game, action, actor);
       if (found.error) return invalid(game, found.error, found.requiresTarget);
-      if (distance(actor, found.target) > sensorRange(game, actor, 'scanner')) return invalid(game, `${found.target.name} is out of scanner range.`);
-      if (nebulaHides(game, actor, found.target)) return invalid(game, `${found.target.name} is lost in the static of a nebula.`);
       return result(
         { ...game, scanned: { ...(game.scanned ?? {}), [found.target.id]: true } },
         `Scan of ${found.target.name} complete.`,
@@ -1759,15 +1820,9 @@ const applyCommand = (game, action = {}) => {
       );
     }
     case 'map': {
-      const disabled = requiresSystem(game, actor, 'mapper');
-      if (disabled) return disabled;
       return result(game, 'Local map updated.', { report: mapReport(game, actor) });
     }
     case 'radio': {
-      const disabled = requiresSystem(game, actor, 'radio');
-      if (disabled) return disabled;
-      // Ion-storm jam (15d): inside the core the radio neither sends nor hears.
-      if (ionStormZone(game, actor) === 'core') return invalid(game, `${actor.name}'s radio is offline in the ion storm.`);
       return result(game, 'Radio report ready.', { report: radioReport(game, actor) });
     }
     case 'transport': return transportAction(game, action, actor);
@@ -1824,12 +1879,6 @@ export { REALTIME_COOLDOWN };
 const REALTIME_MANUAL_CONN = new Set(['move', 'disengage', 'phasers', 'photons', 'spread', 'ion', 'tractor', 'hyperspace']);
 
 const applyManualCommand = (game, action = {}) => {
-  if (game?.realtime && REALTIME_COOLDOWN.has(action.type)) {
-    const ready = game.readyAt?.[game.playerShipId] ?? 0;
-    if (ready > simTimeOf(game)) {
-      return invalid(game, `${getShip(game, game.playerShipId)?.name ?? 'Your ship'} is still cycling — ready again at stardate ${Math.floor(ready) + 1}.`);
-    }
-  }
   const outcome = applyCommand(game, action);
   if (!game?.realtime || outcome.game === game) return outcome;
   let next = outcome.game;
