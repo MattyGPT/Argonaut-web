@@ -7,6 +7,14 @@ Where the manual and the executable disagree, the executable's own string table
 wins; the proclamations and report columns quoted below were recovered from a
 dump of that table in `ARGONAUT.COM`.
 
+**2026-10-05 exhaustion experiment:** Conservative field settlement and
+three-boundary NPC surrender were tested separately against merged PR #92.
+Neither rule nor grace counter activated in either 250-seed Reimagined sample;
+all state/RNG streams and metrics matched. Both Classic variants also matched
+exactly. The benefit gate was unmet, so both rules are deferred, with no grace
+period selected and no live baseline row changed. See the
+[F4 review and inactive reproduction](docs/superpowers/reviews/2026-10-05-exhaustion-experiments.md).
+
 | Scenario | DOS reference behavior from manual | Web scenario | Current implementation |
 | --- | --- | --- | --- |
 | Fleet roster | A battle cruiser, three cruisers, and scout per fleet; Xanadu participates | Any seed | 21 ships: five ships for each alliance plus Xanadu |

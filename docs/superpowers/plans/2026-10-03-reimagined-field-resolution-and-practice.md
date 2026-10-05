@@ -117,28 +117,28 @@ Reimagined paired runs, and visual examples. Deliver separately from F4.
 chain readable. **Modify:** `game/turns.js`, `game/constants.js`, typed
 record emission, and `test/exhaustion.test.js`.
 
-- [ ] Define the conservative recovery predicate from F2: concrete dockyard
+- [x] Define the conservative recovery predicate from F2: concrete dockyard
   eligibility, effective aid/tow, reachable support, and pending threats.
   Return recoverable/blocked/unknown with reasons. Unknown must not trigger
   automatic surrender. Do not attempt an unbounded tactical search.
-- [ ] First prototype exhausted-field settlement using a snapshot of the
+- [x] First prototype exhausted-field settlement using a snapshot of the
   whole field before individual surrenders. Preserve annihilation and
   mission-specific precedence. Test different ship/faction iteration orders
   to prevent an arbitrary final winner in mutual exhaustion.
-- [ ] Separately prototype the three-boundary grace period for eligible NPC
+- [x] Separately prototype the three-boundary grace period for eligible NPC
   surrender. Reset on restored effective output; exempt the player with
   the conn, starbases, neutrals, drones, relay-supported and recovering hulls.
   Use the existing vacant-hull transition and record the factual cause.
-- [ ] Preserve the count through current-session save/reload; an absent
+- [x] Preserve the count through current-session save/reload; an absent
   counter can default to zero without a migration subsystem.
-- [ ] Test recovery just before expiry, a zero-power tractor lock, live
+- [x] Test recovery just before expiry, a zero-power tractor lock, live
   boarding opportunities, an inbound torpedo, disconnected stranded fleets,
   player agency, neutral departure, base repair, and simultaneous exhaustion.
-- [ ] Run separate paired experiments for settlement alone and NPC surrender
+- [x] Run separate paired experiments for settlement alone and NPC surrender
   alone, then a combined candidate only if justified. Measure premature
   endings, newly available prizes, war length, draws, timeouts, and winners.
   A lower draw count alone is not evidence of a better rule.
-- [ ] Record the selected predicate and grace period, or the reason for
+- [x] Record the selected predicate and grace period, or the reason for
   deferral, in the review and CALIBRATION. Substantial balance changes follow
   the spec's design-decision gate. Do not grant free damage/power or force
   surrender merely to make every war select a victor.
@@ -233,3 +233,17 @@ It was rejected and the live engine restored to merged PR #91 (`900dcf3`).
 CALIBRATION remains unchanged. F3's experiment is complete; a successful
 navigation improvement remains unresolved. Drone egress and occupied-arrival
 recovery are separate candidates for a narrower future investigation.
+
+## F4 experiment evidence — 2026-10-05
+
+The [exhaustion review](../reviews/2026-10-05-exhaustion-experiments.md)
+records separate settlement and three-boundary NPC candidates, fourteen
+exclusion/recovery fixtures, exact state-stream comparisons, and reproduction.
+Both isolated candidates pass 757 tests against PR #92 (`9961edd`). Across
+3,000 wars (baseline and two candidates, four mode/precision settings, 250
+seeds each), neither rule nor grace counter activates. All full state/RNG
+streams and normal metrics match the baseline; there are no changed endings
+or new prizes to inspect. Both candidates are deferred because their benefit
+gate is unmet. A combined arm and alternate grace periods are not justified
+by two inactive arms. CALIBRATION records this decision without new baseline
+rows. No live engine or save field changed; F5–F6 can use the current rules.

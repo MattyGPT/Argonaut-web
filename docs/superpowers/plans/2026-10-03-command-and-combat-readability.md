@@ -179,25 +179,25 @@ new screenshot-style unit tests for every CSS declaration.
 **Modify:** `ui/battle-events.js`, `app.js`, `ui/render.js`, `ui/fx.js`,
 `index.html`, `styles.css`, `test/battle-events.test.js`, and browser checks.
 
-- [ ] Introduce a pure grouping policy that takes ordered events from one
+- [x] Introduce a pure grouping policy that takes ordered events from one
   resolution and returns routine groups and prominent critical events.
   Preserve every member and never merge across resolution boundaries.
-- [ ] Add Compact and Full sequence preferences outside game state. Start
+- [x] Add Compact and Full sequence preferences outside game state. Start
   from the spec's proposed 700 ms routine/2000 ms critical timing for Compact;
   Full sequence retains individual cards. Keep timing injectable in tests.
-- [ ] Extend the existing `withPlaybackLock`/terminal queue ownership rather
+- [x] Extend the existing `withPlaybackLock`/terminal queue ownership rather
   than adding a competing lock. Implement finish/skip and error cleanup once,
   preserving the user's paused state and all journal records.
-- [ ] Verify own-ship/objective losses remain prominent amid drone losses,
+- [x] Verify own-ship/objective losses remain prominent amid drone losses,
   event order stays causal, replay uses frozen facts, and reduced motion
   changes effects without removing information.
-- [ ] Test skip during wait, repeated skip, replay cancellation/failure, new
+- [x] Test skip during wait, repeated skip, replay cancellation/failure, new
   game after playback, and a previously paused battle. Commands must execute
   at most once and the lock must release on every exit.
-- [ ] Compare states for identical commands at identical simulation times
+- [x] Compare states for identical commands at identical simulation times
   across Compact, Full sequence, skip, and speed settings. Do not compare
   wall-clock reaction timing as if it were the same input sequence.
-- [ ] Update guide explanations and run the C1/C3 browser journeys together.
+- [x] Update guide explanations and run the C1/C3 browser journeys together.
   Record the selected timings and retention budgets after visual review.
 
 **Verify:** `node --test test/battle-events.test.js test/render.test.js
@@ -275,7 +275,7 @@ checks pass. All three 250-seed simulation reports match PR #90 exactly, as do
 
 ## C5 delivery evidence — 2026-10-05
 
-Implemented on `codex/faction-navigation`, based on merged PR #91 (`900dcf3`).
+Merged in [PR #92](https://github.com/MattyGPT/Argonaut-web/pull/92) (`9961edd`), based on PR #91 (`900dcf3`).
 The [faction recognition review](../reviews/2026-10-05-faction-recognition.md)
 records the shared identity contract, capture/history behavior, bounded stack
 spacing, accessibility corrections, visual coverage, and remaining dense
@@ -286,3 +286,20 @@ grayscale, keyboard target/sector navigation, and dense-cluster checks pass.
 Existing live/replay beam alignment and command-history regressions pass.
 All three complete 250-seed simulation reports match PR #91 exactly. No
 engine content changed. C6 pacing and later integration remain pending.
+
+## C6 delivery evidence — 2026-10-05
+
+Implemented on merged PR #92 (9961edd); awaiting delivery review.
+The [compact playback review](../reviews/2026-10-05-compact-playback.md)
+records grouping, cancellation, frozen knowledge, timing, and source limits.
+Compact uses 700 ms routine groups and 2000 ms critical cards; Full sequence
+retains individual 2500 ms cards. Every member remains inspectable, the
+own-command reader stays above loss details, and the existing journal budgets
+remain unchanged. Historical beams mark their recorded origin and target.
+
+Validation: 750 tests pass; 109 focused tests pass independently. Actual-app
+browser checks cover full-state/RNG parity across presentation settings,
+repeated Finish, pause preservation, same-seed reset, failure cleanup, frozen
+beam geometry, and desktop/narrow/enlarged layouts. Existing console, journal,
+and combat-feedback journeys pass. All three complete 250-seed simulation
+reports match PR #92. No engine content changed.
