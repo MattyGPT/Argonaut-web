@@ -165,7 +165,7 @@ h1 {
   /* --dx/--dy: the stack-declutter fan (render.js), screen px, zero unless a
      hull shares its point with another. --invzoom: 1/zoom off the world layer
      (render.js), so glyphs hold a steady screen size while the field spreads. */
-  transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px))) scale(var(--invzoom, 1));
+  transform: translate(calc(-50% + var(--dx, 0px) * var(--invzoom, 1)), calc(-50% + var(--dy, 0px) * var(--invzoom, 1))) scale(var(--invzoom, 1));
   /* Readability pass (27c): the glyph and its glow were sized for the 100-unit
      classic field, where hulls sit tens of units apart. On the wide Reimagined
      field a melee stands 6–10 units apart and a 1.78rem disc with a 12px glow
@@ -185,7 +185,7 @@ h1 {
 }
 
 .ship:hover, .ship:focus-visible {
-  transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px))) scale(calc(var(--invzoom, 1) * 1.22));
+  transform: translate(calc(-50% + var(--dx, 0px) * var(--invzoom, 1)), calc(-50% + var(--dy, 0px) * var(--invzoom, 1))) scale(calc(var(--invzoom, 1) * 1.22));
   outline: 2px solid white;
   z-index: 2;
 }
@@ -245,8 +245,50 @@ body.realtime .ship {
   color: #b8c4cc;
 }
 
+/* Alliance shapes are independent of art, threat, stance, and selection.
+   SVG paths come from faction-identity.js, preserving the canonical colors. */
+.faction-identity { display: inline-flex; align-items: center; gap: .3em; color: var(--faction-color); }
+.faction-symbol { width: .85em; height: .85em; flex: 0 0 auto; overflow: visible; }
+.faction-symbol path { fill: var(--faction-color); stroke: var(--faction-color); stroke-width: .7; }
+.faction-symbol path.hollow { fill: none; stroke-width: 1.6; }
+.ship > .faction-identity, .wreck > .faction-identity {
+  position: absolute; left: -12px; top: 50%; transform: translateY(-50%);
+  width: 10px; height: 12px; padding: 1px; border-radius: 2px;
+  background: #071019; pointer-events: none;
+}
+.ship > .faction-identity .faction-symbol, .wreck > .faction-identity .faction-symbol { width: 8px; height: 10px; }
+.ship-state {
+  position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%);
+  color: #eaf6ff; background: #071019; padding: 0 2px;
+  font-size: 9px; font-weight: bold; line-height: 11px; pointer-events: none;
+}
+.stack-tether {
+  position: absolute; left: 50%; top: 50%; height: 1px;
+  width: hypot(var(--dx, 0px), var(--dy, 0px));
+  transform: rotate(atan2(calc(0px - var(--dy, 0px)), calc(0px - var(--dx, 0px))));
+  transform-origin: left center; border-top: 1px dotted #9fb6c655;
+  pointer-events: none; z-index: -1;
+}
+.ship:hover .stack-tether, .ship:focus-visible .stack-tether {
+  width: calc(hypot(var(--dx, 0px), var(--dy, 0px)) / 1.22);
+}
+.ship.selected { outline: 2px solid #fff; outline-offset: 5px; }
+.ship.selected.threat, .ship.selected.threat.drone { box-shadow: 0 0 0 6px #fff; }
+body.classic .ship.selected.threat { outline: 2px solid #ff5d5d; outline-offset: 2px; box-shadow: 0 0 0 6px #38ff38; }
+.ship.command-ship { border-style: double; border-width: 3px; }
+.legend-swatch.state-vacant { border: 1px dashed currentColor; }
+.legend-swatch.state-surrendered { border: 1px dotted currentColor; }
+.legend-swatch.state-selected { outline: 2px solid #fff; outline-offset: 1px; }
+.journal-identities { color: #a9c7d8; }
+body.classic .faction-identity { color: #38ff38; }
+body.classic .faction-symbol { --faction-color: #38ff38 !important; }
+body.classic .ship-state { color: #38ff38; background: #000; }
+body.classic .ship > .faction-identity, body.classic .wreck > .faction-identity { background: #000; }
+body.classic .ship.selected { outline-color: #baffba; }
+body.classic .journal-identities { color: inherit; }
+
 .ship.vacant {
-  opacity: .42;
+  opacity: .8;
   border-style: dashed;
   background: transparent;
   color: #b5c1ca;
@@ -308,8 +350,8 @@ body.realtime .ship {
 }
 
 .ship.surrendered {
-  opacity: .45;
-  border-style: dashed;
+  opacity: .8;
+  border-style: dotted;
   background: transparent;
 }
 
@@ -438,7 +480,7 @@ body.realtime .ship {
   position: absolute;
   left: calc(var(--x) * 1%);
   top: calc(var(--y) * 1%);
-  transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px))) scale(var(--invzoom, 1));
+  transform: translate(calc(-50% + var(--dx, 0px) * var(--invzoom, 1)), calc(-50% + var(--dy, 0px) * var(--invzoom, 1))) scale(var(--invzoom, 1));
   color: #43525f;
   font-size: .85rem;
   line-height: 1;
@@ -506,18 +548,22 @@ body.realtime .ship {
   position: absolute;
   left: calc(var(--mx) * 1%);
   top: calc(var(--my) * 1%);
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
-  transform: translate(-50%, -50%);
+  width: 8px;
+  height: 8px;
+  background: #071019;
+  transform: translate(calc(-50% + var(--mdx, 0px)), calc(-50% + var(--mdy, 0px)));
 }
 
 .mini-dot.you {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   box-shadow: 0 0 0 1px #fff;
 }
+.mini-dot .faction-symbol { display: block; width: 100%; height: 100%; }
+.mini-dot.vacant .faction-symbol path { fill: none; stroke-dasharray: 2 1; stroke-width: 1.4; }
+.mini-dot.surrendered { border-bottom: 2px dotted #eaf6ff; }
+.mini-dot.selected { outline: 1px solid #fff; outline-offset: 2px; }
+.mini-wreck { display: block; color: #b8c4cc; font-size: 12px; line-height: 8px; text-align: center; }
 
 .mini-view {
   position: absolute;
@@ -2136,7 +2182,7 @@ body.classic .guide-body b {
   padding: .5rem;
 }
 
-#sector-map svg {
+#sector-map > svg {
   display: block;
   width: 100%;
   height: auto;
@@ -2193,6 +2239,9 @@ body.classic .guide-body b {
   stroke: var(--cyan);
   stroke-width: 2.5;
 }
+.sector-allegiance .faction-symbol { width: 12px; height: 12px; }
+.sector-node:focus-visible { outline: none; }
+.sector-node:focus-visible > circle, .sector-node:focus-visible > rect { stroke: #fff; stroke-width: 3; }
 
 .sector-label {
   fill: #a9c7d8;

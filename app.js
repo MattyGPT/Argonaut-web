@@ -15,7 +15,7 @@ import {
   whenPlaybackUnlocked,
   withPlaybackLock,
 } from './ui/battle-events.js';
-import { commandReadiness, fanOutOffsets, primeMoveMemory, renderGame, reportFor, targetExplanation, targetGeometryKnown, updateTargetReadiness } from './ui/render.js';
+import { commandReadiness, fanOutOffsets, markerFanOptions, primeMoveMemory, renderGame, reportFor, targetExplanation, targetGeometryKnown, updateTargetReadiness } from './ui/render.js';
 import { playEffect, playEvent } from './ui/sound.js';
 import { playEffects, replayEffects } from './ui/fx.js';
 import { restoreCommandHistory } from './ui/command-history.js';
@@ -256,6 +256,22 @@ const presentTerminalEvents = (events) => withPlaybackLock(
   clearTerminalPresentation,
 );
 
+// Minimap decluttering follows the same visible, interpolated positions as the
+// tactical map. A departing ship must not keep its old cluster offset.
+const paintMinimapPositions = (entries, grid) => {
+  const positions = new Map(entries.map((entry) => [entry.id, entry]));
+  const offsets = fanOutOffsets(entries, { spacing: 12, maxRadius: 24 });
+  document.querySelector('#minimap')?.querySelectorAll('.mini-dot[data-ship-id]').forEach((dot) => {
+    const at = positions.get(dot.dataset.shipId);
+    if (!at) return;
+    const offset = offsets.get(at.id);
+    dot.style.setProperty('--mx', (at.x / grid) * 100);
+    dot.style.setProperty('--my', (at.y / grid) * 100);
+    dot.style.setProperty('--mdx', `${offset?.dx ?? 0}px`);
+    dot.style.setProperty('--mdy', `${offset?.dy ?? 0}px`);
+  });
+};
+
 /**
  * Real-time movement (Phase 8, round 30): plays the resolved stardate's sub-tick
  * trajectory — the hull buttons fly the course the fixed-timestep core computed,
@@ -282,6 +298,11 @@ const playTrajectory = () => new Promise((resolve) => {
   const flying = [...map.querySelectorAll('.ship[data-ship-id]')]
     .map((el) => ({ el, id: el.dataset.shipId, points: trajectory[el.dataset.shipId] }))
     .filter((entry) => Array.isArray(entry.points) && entry.points.length > 1);
+  const flyingIds = new Set(flying.map(({ id }) => id));
+  const stationary = [...map.querySelectorAll('.ship[data-ship-id], .wreck[data-ship-id]')]
+    .filter((el) => !flyingIds.has(el.dataset.shipId))
+    .map((el) => ({ el, id: el.dataset.shipId, at: getShip(game, el.dataset.shipId) }))
+    .filter(({ at }) => at);
   if (flying.length === 0) {
     primeMoveMemory(game);
     resolve();
@@ -294,11 +315,11 @@ const playTrajectory = () => new Promise((resolve) => {
   const started = performance.now();
   const frame = (now) => {
     const t = Math.min(1, (now - started) / REALTIME.msPerStardate);
-    const positions = flying.map(({ el, id, points }) => ({ el, id, at: positionAt(points, t) }));
+    const positions = [...flying.map(({ el, id, points }) => ({ el, id, at: positionAt(points, t) })), ...stationary];
     // The stack declutter runs in flight too: hulls crossing within 2 units fan
     // onto the same screen-space ring the boundary render uses, so a converging
     // melee reads as separate glyphs instead of one blob mid-burn.
-    const offsets = fanOutOffsets(positions.map(({ id, at }) => ({ id, x: at.x, y: at.y })));
+    const offsets = fanOutOffsets(positions.map(({ id, at }) => ({ id, x: at.x, y: at.y })), markerFanOptions(document.body.classList.contains('classic') ? 'letters' : shipArtPref));
     positions.forEach(({ el, id, at }) => {
       place(el, at);
       const offset = offsets.get(id);
@@ -310,6 +331,7 @@ const playTrajectory = () => new Promise((resolve) => {
         el.style.removeProperty('--dy');
       }
     });
+    paintMinimapPositions(positions.map(({ id, at }) => ({ id, x: at.x, y: at.y })), grid);
     if (t < 1) {
       requestAnimationFrame(frame);
       return;
@@ -380,13 +402,13 @@ const renderFrame = () => {
     return { ...ship, ...lerp(from, ship) };
   };
   const entries = [];
-  map.querySelectorAll('.ship[data-ship-id]').forEach((el) => {
+  map.querySelectorAll('.ship[data-ship-id], .wreck[data-ship-id]').forEach((el) => {
     const ship = getShip(game, el.dataset.shipId);
     if (!ship) return;
     const at = drawn(ship);
     entries.push({ el, id: ship.id, x: at.x, y: at.y });
   });
-  const offsets = fanOutOffsets(entries);
+  const offsets = fanOutOffsets(entries, markerFanOptions(document.body.classList.contains('classic') ? 'letters' : shipArtPref));
   for (const { el, id, x, y } of entries) {
     el.style.left = `${(x / grid) * 100}%`;
     el.style.top = `${(y / grid) * 100}%`;
@@ -407,13 +429,7 @@ const renderFrame = () => {
       else el.style.setProperty('--rot', `${Math.round(rot)}deg`);
     }
   }
-  document.querySelector('#minimap')?.querySelectorAll('.mini-dot[data-ship-id]').forEach((dot) => {
-    const ship = getShip(game, dot.dataset.shipId);
-    if (!ship) return;
-    const at = drawn(ship);
-    dot.style.setProperty('--mx', (at.x / grid) * 100);
-    dot.style.setProperty('--my', (at.y / grid) * 100);
-  });
+  paintMinimapPositions(entries, grid);
   // Warheads ride the same backward interpolation — a salvo crosses the field
   // at ~3× hull speed, so per-frame drawing is what makes it dodgeable to the
   // eye — and a detonated warhead's marker leaves the field immediately

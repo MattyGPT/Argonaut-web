@@ -40,6 +40,7 @@ import { commandHistoryHtml } from './command-history.js';
 import { journalView } from './battle-journal.js';
 import { updateConsole, updateScrolledContent } from './console-state.js';
 import { simTimeOf } from '../game/realtime.js';
+import { factionBadgeHtml, factionBadgeSvg, factionText } from './faction-identity.js';
 
 const escapeJournal = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -58,8 +59,17 @@ export const journalCardsHtml = (cards = [], region = 'history') => cards.map((c
   // that label; state still comes exclusively from the projected card contract.
   const status = card.status === 'pending' && !summary.toLowerCase().includes('awaiting impact') ? 'Launched; awaiting impact'
     : card.status === 'unknown' && !summary.toLowerCase().includes('outcome unknown') ? 'Outcome unknown' : '';
+  // Snapshot identities, including changes within a capture group, come only
+  // from the already filtered records. No lookup against the live game.
+  const identities = new Map();
+  for (const snapshot of [card.actor, card.target, ...(card.events ?? []).flatMap((event) => [event.actor, event.target, event.launch?.actor])]) {
+    if (snapshot?.name && snapshot?.faction) identities.set(`${snapshot.name}:${snapshot.faction}`, snapshot);
+  }
+  const identityLine = [...identities.values()].map((snapshot) => `<span>${escapeJournal(snapshot.name)} · ${factionBadgeHtml(snapshot.faction)}</span>`).join(' · ');
+  const stampIdentity = [...identities.values()][0];
   return `<li id="${escapeJournal(id)}" class="journal-card" data-journal-id="${escapeJournal(card.id)}" data-journal-sequence="${card.sequence}">
-    <details><summary><span class="command-stamp">Stardate ${escapeJournal(card.source === 'legacy' ? card.simTime : Math.round((card.simTime + 1) * 10) / 10)}${automatic ? ' · Automatic conn' : card.source === 'legacy' ? ` · ${escapeJournal(card.actor?.name)} · Legacy text record` : ''}</span><span class="journal-summary">${escapeJournal(summary)}</span>${status ? `<span class="journal-state">${status}</span>` : ''}</summary>
+    <details><summary><span class="command-stamp">Stardate ${escapeJournal(card.source === 'legacy' ? card.simTime : Math.round((card.simTime + 1) * 10) / 10)}${automatic ? ' · Automatic conn' : card.source === 'legacy' ? ` · ${escapeJournal(card.actor?.name)} · Legacy text record` : ''}${stampIdentity ? ` · ${factionBadgeHtml(stampIdentity.faction)}` : ''}</span><span class="journal-summary">${escapeJournal(summary)}</span>${status ? `<span class="journal-state">${status}</span>` : ''}</summary>
+    ${identityLine ? `<p class="journal-identities">At event time: ${identityLine}</p>` : ''}
     ${(card.lines ?? []).map((line) => `<p>${escapeJournal(line)}</p>`).join('')}
     ${card.earlierDetailDiscarded ? '<p class="journal-note">Earlier detail discarded; this is a partial record.</p>' : ''}</details></li>`;
 }).join('');
@@ -282,7 +292,7 @@ const DRONE_SPRITE_FACTIONS = new Set(['Federation', 'Axis', 'Bloc', 'Cabal']);
 
 export const terminalNarrative = (event) => {
   if (!event) return '';
-  return `<li class="terminal-event ${event.faction}"><strong>${terminalHeading(event)}</strong><span>${terminalDescription(event)}</span></li>`;
+  return `<li class="terminal-event ${event.faction}"><strong>${terminalHeading(event)}</strong><span>${factionBadgeHtml(event.faction)} · ${terminalDescription(event)}</span></li>`;
 };
 
 const ORDER_BUTTONS = Object.freeze([
@@ -428,7 +438,7 @@ const shipMenu = (game, actor, ship) => {
   const captain = game.reimagined && game.scanned?.[ship.id] ? ship.captain : null;
   const remaining = Math.max(0, (game.readyAt?.[actor?.id] ?? 0) - simTimeOf(game));
   const lines = [
-    `${ship.faction} ${ship.className.toLowerCase()} · ${ship.status}`,
+    `${factionBadgeHtml(ship.faction)} ${ship.className.toLowerCase()} · ${ship.status}`,
     `<span id="menu-target-distance">${own ? 'your command ship' : `${distance(actor, ship).toFixed(1)} away`}</span> · shields ${ship.shields} · crew ${ship.crew} · reported stardate ${(simTimeOf(game) + 1).toFixed(1)}`,
     ...(game.realtime ? [`<span id="menu-command-cycle">${remaining > 0 ? `Shared command cycle: ${remaining.toFixed(1)} stardates remaining. Scans are free.` : 'Shared command cycle ready. Scans are free.'}</span>`] : []),
     ...(captain ? [`Captain ${captain}${isAce(ship) ? ` · an ace, ${ship.kills} kills` : ''}`] : []),
@@ -623,7 +633,7 @@ export const primeMoveMemory = (game) => {
  * 8, round 30) runs the same ring per frame, so hulls crossing in flight stay
  * legible instead of stacking into a blob mid-burn.
  */
-export const fanOutOffsets = (entries) => {
+export const fanOutOffsets = (entries, { spacing = 36, maxRadius = 160 } = {}) => {
   const parent = new Map(entries.map((entry) => [entry.id, entry.id]));
   const find = (id) => {
     let root = id;
@@ -646,7 +656,9 @@ export const fanOutOffsets = (entries) => {
   const offsets = new Map();
   for (const group of groups.values()) {
     if (group.length < 2) continue;
-    const radius = 9 + 3 * group.length;
+    // Adjacent markers need room for their hull and left-edge identity badge.
+    // The chord sets actual screen-space separation, independent of zoom.
+    const radius = Math.min(maxRadius, spacing / (2 * Math.sin(Math.PI / group.length)) + 2);
     [...group].sort().forEach((id, index) => {
       const angle = (index * 2 * Math.PI) / group.length;
       offsets.set(id, {
@@ -658,6 +670,13 @@ export const fanOutOffsets = (entries) => {
   return offsets;
 };
 
+/** Shared by paint and live/replay flight. Leave a hull-width margin around a
+ * centered cluster; very large fleets may still overlap inside this bound. */
+export const markerFanOptions = (shipArt, map = document.querySelector('#map')) => ({
+  spacing: shipArt === 'sprites' ? 80 : 36,
+  maxRadius: Math.max(20, Math.min(160, (map?.clientWidth ?? 416) / 2 - 48, (map?.clientHeight ?? 416) / 2 - 48)),
+});
+
 /**
  * The minimap: the whole war zone in miniature, with the hulls the mapper can see and
  * a rectangle for the camera's current window. Dragging it (wired in app.js) re-centers
@@ -665,7 +684,7 @@ export const fanOutOffsets = (entries) => {
  * so it stands in for the Backspace report's sense of the battlefield. Hidden in a
  * Classic war, where the whole field already fits on screen.
  */
-const renderMinimap = (game, win, isVisible) => {
+const renderMinimap = (game, win, isVisible, view = {}) => {
   const minimap = document.querySelector('#minimap');
   const controls = document.querySelector('#camera-controls');
   const show = Boolean(game.reimagined);
@@ -685,9 +704,10 @@ const renderMinimap = (game, win, isVisible) => {
       return `<span class="mini-terrain ${feature.type}${holder ? ` ${holder}` : ''}" style="--mx:${frac(feature.x)};--my:${frac(feature.y)};--mr:${frac(feature.radius)}" aria-hidden="true"></span>`;
     })
     .join('');
+  const miniOffsets = fanOutOffsets(game.ships.filter(isVisible), { spacing: 12, maxRadius: 24 });
   const dots = game.ships
-    .filter((ship) => ship.status !== 'destroyed' && isVisible(ship))
-    .map((ship) => `<span class="mini-dot ${ship.faction}${ship.id === game.playerShipId ? ' you' : ''}" data-ship-id="${ship.id}" style="--mx:${frac(ship.x)};--my:${frac(ship.y)}"></span>`)
+    .filter(isVisible)
+    .map((ship) => `<span class="mini-dot ${ship.faction}${ship.id === game.playerShipId ? ' you' : ''} ${ship.status}${ship.id === view.contextShipId ? ' selected' : ''}" data-ship-id="${ship.id}" style="--mx:${frac(ship.x)};--my:${frac(ship.y)};--mdx:${miniOffsets.get(ship.id)?.dx ?? 0}px;--mdy:${miniOffsets.get(ship.id)?.dy ?? 0}px" role="img" aria-label="${escapeJournal(ship.name)}, ${factionText(ship.faction)}, ${ship.status}${ship.id === game.playerShipId ? ', command ship' : ''}${ship.id === view.contextShipId ? ', selected' : ''}">${ship.status === 'destroyed' ? '<span class="mini-wreck" aria-hidden="true">×</span>' : factionBadgeSvg(ship.faction)}</span>`)
     .join('');
   const viewport = `<span class="mini-view" style="--vx:${frac(win.minX)};--vy:${frac(win.minY)};--vw:${frac(win.size)}"></span>`;
   minimap.innerHTML = terrain + dots + viewport;
@@ -791,7 +811,7 @@ const renderMapLegend = (game, shipArt) => {
   // cue reads as the hull's facing rather than the needle spoke.
   const spritesOn = shipArt === 'sprites';
   const legendImg = (src) => `<img src="${src}" alt="">`;
-  const factions = ['Federation', 'Axis', 'Bloc', 'Cabal'].map((name) => `<span class="${name}">■ ${name}</span>`).join('');
+  const factions = ['Federation', 'Axis', 'Bloc', 'Cabal', ...(game.reimagined ? ['Neutral'] : [])].map((name) => factionBadgeHtml(name)).join('');
   const entries = [
     legendEntry('ring-phasers', 'phaser ring'),
     legendEntry('ring-photons', 'photon ring'),
@@ -800,6 +820,9 @@ const renderMapLegend = (game, shipArt) => {
     legendEntry('pip-tractor', 'tractor-held'),
     legendEntry('lock-tractor', 'tractor beam'),
     legendEntry('wreck', 'wreck', spritesOn ? legendImg('assets/sprites/neutral/wreck.png') : '+'),
+    legendEntry('state-vacant', 'vacant', 'V'),
+    legendEntry('state-surrendered', 'surrendered', 'S'),
+    legendEntry('state-selected', 'selected'),
     ...(game.reimagined ? [
       legendEntry('pip-order', 'under orders'),
       legendEntry('star-ace', 'scanned ace', '★'),
@@ -910,7 +933,7 @@ export const renderGame = (game, view = {}) => {
   // and fans them onto a screen-space ring so each glyph is seen and clicked;
   // presentation only — positions, beams, ranges, and every rule read the true
   // coordinates. The real-time flight playback reuses it per frame.
-  const stackOffsets = fanOutOffsets(game.ships.filter(isVisible));
+  const stackOffsets = fanOutOffsets(game.ships.filter(isVisible), markerFanOptions(view.shipArt));
   const stackStyle = (ship) => {
     const offset = stackOffsets.get(ship.id);
     return offset ? `;--dx:${offset.dx}px;--dy:${offset.dy}px` : '';
@@ -923,7 +946,7 @@ export const renderGame = (game, view = {}) => {
       const wreckMark = view.shipArt === 'sprites'
         ? '<img class="wreck-sprite" src="assets/sprites/neutral/wreck.png" alt="" aria-hidden="true">'
         : '+';
-      return `<span class="wreck" data-ship-id="${ship.id}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" title="${ship.name}: destroyed" aria-hidden="true">${wreckMark}</span>`;
+      return `<span class="wreck ${ship.faction}" data-ship-id="${ship.id}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" title="${escapeJournal(ship.name)}: destroyed · ${factionText(ship.faction)}" role="img" aria-label="${escapeJournal(ship.name)}, ${factionText(ship.faction)}, destroyed wreck">${wreckMark}<span class="stack-tether" aria-hidden="true"></span>${factionBadgeHtml(ship.faction, { label: false })}</span>`;
     }
     const threat = threats.has(ship.id) ? ' threat' : '';
     const standing = orderFor(game, ship.id) ?? pendingOrderFor(game, ship.id);
@@ -946,7 +969,8 @@ export const renderGame = (game, view = {}) => {
     // replaces the disc+letter only — every marker below still stacks on the
     // button. Classic never asks for sprites (app.js passes 'letters').
     const spriteSlug = SPRITE_SLUGS.get(ship.className);
-    const droneWaitsForArt = ship.className === 'Drone' && !DRONE_SPRITE_FACTIONS.has(ship.faction);
+    const spriteFaction = ship.className === 'Merchant' ? 'Neutral' : ship.faction;
+    const droneWaitsForArt = ship.className === 'Drone' && !DRONE_SPRITE_FACTIONS.has(spriteFaction);
     const useSprite = view.shipArt === 'sprites' && Boolean(spriteSlug) && !droneWaitsForArt;
     // A non-standard combat stance wears a marker (round 21): a firing hull glows
     // hot, an evasive hull runs cold. It changes how your volleys land, so like the
@@ -974,7 +998,10 @@ export const renderGame = (game, view = {}) => {
     const held = isTractorHeld(game, ship);
     const heldClass = held ? ' held' : '';
     const heldNote = held ? ' — held by a tractor beam' : '';
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}${heldClass}${useSprite ? ' has-sprite' : ''}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}${rotStyle}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}${useSprite ? `<img class="sprite" src="assets/sprites/${ship.faction.toLowerCase()}/${SPRITE_SLUGS.get(ship.className)}.png" alt="" aria-hidden="true" draggable="false">` : `<span class="glyph">${glyph}</span>`}${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}${held ? '<span class="tractor-pip" aria-hidden="true"></span>' : ''}</button>`;
+    const selected = ship.id === view.contextShipId;
+    const command = ship.id === game.playerShipId;
+    const statusMark = ['vacant', 'surrendered'].includes(ship.status) ? `<span class="ship-state" aria-hidden="true">${ship.status === 'vacant' ? 'V' : 'S'}</span>` : '';
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}${heldClass}${useSprite ? ' has-sprite' : ''}${selected ? ' selected' : ''}${command ? ' command-ship' : ''}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}${rotStyle}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status} · ${factionText(ship.faction)}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${selected ? ', selected' : ''}${command ? ', command ship' : ''}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}${useSprite ? `<img class="sprite" src="assets/sprites/${spriteFaction.toLowerCase()}/${SPRITE_SLUGS.get(ship.className)}.png" alt="" aria-hidden="true" draggable="false">` : `<span class="glyph">${glyph}</span>`}<span class="stack-tether" aria-hidden="true"></span>${factionBadgeHtml(ship.faction, { label: false })}${statusMark}${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}${held ? '<span class="tractor-pip" aria-hidden="true"></span>' : ''}</button>`;
   }).join('');
   // Tractor lock lines (Matt's call, 2026-09-25): the beam is physical. A held
   // hull you can see draws its lock back to the source even when a nebula hides
@@ -1009,7 +1036,7 @@ export const renderGame = (game, view = {}) => {
     map.style.setProperty('--invzoom', String(1 / (win.zoom || 1)));
   }
   animateMoves(map, game, win);
-  renderMinimap(game, win, isVisible);
+  renderMinimap(game, win, isVisible, view);
 
   // The context menu lives over the map field, beside the hull it grew from. It is
   // gone whenever that hull is gone, hidden by fog, or the war is not taking orders.
@@ -1048,7 +1075,7 @@ export const renderGame = (game, view = {}) => {
   updateConsole(consoleRoot, `
     <div class="panel-title" data-console-key="title"><span>Command console</span><span class="alert-${condition.toLowerCase()}">Condition: ${condition}</span></div>
     <div class="status" data-console-key="status">
-      <div class="status-row command-identity"><span>Command</span><b>${actor.name}</b></div>
+      <div class="status-row command-identity"><span>Command</span><b>${actor.name} ${factionBadgeHtml(actor.faction)}</b></div>
       <div class="status-row"><span>Location</span><b>${coordOf(actor)}</b></div>
       <div class="status-row"><span>Shields</span><b>${actor.shields}</b></div>
       <div class="status-row"><span>Crew</span><b>${actor.crew}</b></div>
@@ -1161,7 +1188,7 @@ export const reportFor = (game, type) => {
       // Course table; Course is the one column the remake does not track.
       lines: game.ships.map((ship) => {
         const range = command ? distance(command, ship).toFixed(1) : '?';
-        return `${ship.name} — ${ship.faction} ${ship.className} at ${coordOf(ship)}, ${range} away; ${statusLabel(ship)}; shields ${ship.shields}; crew ${ship.crew}.`;
+        return `${ship.name} — ${factionText(ship.faction)} ${ship.className} at ${coordOf(ship)}, ${range} away; ${statusLabel(ship)}; shields ${ship.shields}; crew ${ship.crew}.`;
       }),
     };
   }
@@ -1180,7 +1207,7 @@ export const reportFor = (game, type) => {
         const survivors = ships.reduce((total, ship) => total + ship.crew, 0);
         const chances = Math.round((strength(ships) / totalStrength) * 100);
         return [
-          `${faction}:`,
+          `${factionText(faction)}:`,
           `  Ships/rating/survivors: ${active.length} ships, rating ${strength(ships)}, ${survivors} crew.`,
           `  Dispersion factor: ${dispersion(ships).toFixed(1)}.`,
           `  Shots for/against: ${forCount} / ${against}.  Ratio = ${ratio(forCount, against)}.`,
@@ -1262,6 +1289,6 @@ export const reportFor = (game, type) => {
   const survivors = game.ships.filter((ship) => ship.status !== 'destroyed');
   return {
     title: 'War zone map',
-    lines: survivors.map((ship) => `${ship.name} (${ship.faction}) — ${statusLabel(ship)} at ${coordOf(ship)}.`),
+    lines: survivors.map((ship) => `${ship.name} (${factionText(ship.faction)}) — ${statusLabel(ship)} at ${coordOf(ship)}.`),
   };
 };

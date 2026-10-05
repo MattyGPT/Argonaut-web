@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { FACTIONS, SECTOR } from '../game/constants.js';
 import { createCampaign, nodeById, travelTo } from '../game/campaign.js';
 import { renderSectorScreen, sectorLayout, sectorResultsHtml, sectorSideHtml, sectorSvg, SECTOR_VIEW } from '../ui/sector.js';
+import { factionBadgeHtml, factionIdentity } from '../ui/faction-identity.js';
 
 // sector.js only touches the document inside renderSectorScreen, so the same
 // bare element stub render.test.js uses exercises it under node --test.
@@ -75,7 +76,7 @@ test('the side panel offers Engage and Auto-resolve on the enemy node the fleet 
   const html = sectorSideHtml(campaign, campaign.currentNode);
   assert.ok(html.includes('data-sector-action="engage"'));
   assert.ok(html.includes('data-sector-action="auto"'));
-  assert.ok(html.includes(`held by <span class="${nodeById(campaign.sector, campaign.currentNode).owner}"`));
+  assert.ok(html.includes(`data-faction="${nodeById(campaign.sector, campaign.currentNode).owner}"`));
   assert.ok(html.includes('Your fleet —'));
 });
 
@@ -159,4 +160,29 @@ test('renderSectorScreen paints the meta, chart, side panel, and log', () => {
   assert.ok(read('#sector-map').innerHTML.includes('<svg'));
   assert.ok(read('#sector-side').innerHTML.includes('data-sector-action="engage"'));
   assert.ok(read('#sector-results').innerHTML.includes('No battles fought yet'));
+});
+
+test('sector ownership uses canonical faction shapes independently of system type and selection', () => {
+  const campaign = createCampaign({ seed: 'sector-faction-shapes' });
+  const selectedId = campaign.sector.nodes.find((node) => node.owner === campaign.sector.enemies[0]).id;
+  const svg = sectorSvg(campaign, { selectedId });
+  assert.doesNotMatch(svg, /^<svg[^>]*aria-hidden="true"/);
+  for (const node of campaign.sector.nodes) {
+    const group = svg.match(new RegExp(`<g class="sector-node[^>]*data-node="${node.id}"[\\s\\S]*?<\\/g><text[\\s\\S]*?<\\/g>`))[0];
+    const identity = factionIdentity(node.owner ?? 'Unowned');
+    assert.ok(group.includes(`data-faction="${identity.label}" data-shape="${identity.shape}"`));
+    assert.match(group, /role="button" tabindex="0" aria-label=/);
+  }
+  renderSectorScreen(campaign);
+  assert.match(read('#sector-legend').innerHTML, /Dashed ring: your fleet/);
+  for (const faction of ['Federation', 'Axis', 'Bloc', 'Cabal', 'Unowned']) assert.ok(read('#sector-legend').innerHTML.includes(factionBadgeHtml(faction)));
+});
+
+test('carried prizes show current Federation ownership and original alliance separately', () => {
+  const campaign = createCampaign({ seed: 'sector-prize-identity' });
+  campaign.fleet[0].prize = { from: 'Cabal', byFaction: 'Federation', turn: 4 };
+  const html = sectorSideHtml(campaign);
+  const line = html.match(/<li><b>[\s\S]*?<\/li>/)[0];
+  assert.ok(line.includes(factionBadgeHtml('Federation')));
+  assert.ok(line.includes(`taken from ${factionBadgeHtml('Cabal')}`));
 });
