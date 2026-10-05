@@ -11,6 +11,7 @@
  */
 import { ACE_KILLS, SECTOR } from '../game/constants.js';
 import { atDockyard, campaignReport, dockyardOffers, engageableHere, linksFrom, nodeById } from '../game/campaign.js';
+import { factionBadgeHtml, factionBadgeSvg, factionText } from './faction-identity.js';
 
 /** The star chart's drawing box, in SVG user units. */
 export const SECTOR_VIEW = Object.freeze({ width: 760, height: 420, marginX: 72, marginY: 30 });
@@ -79,9 +80,10 @@ export const sectorSvg = (campaign, { selectedId = null } = {}) => {
     const held = node.owner ? (node.owner === 'Federation' ? 'Federation-held' : `held by ${node.owner}`) : 'unclaimed';
     const title = `<title>${node.name} — ${TYPE_LABELS[node.type]}, ${held}${node.budget ? `, garrison budget ${node.budget}` : ''}</title>`;
     const fleet = node.id === current ? `<circle class="fleet-marker" r="${radius + 6}"></circle>` : '';
-    return `<g class="${classes.join(' ')}" data-node="${node.id}" transform="translate(${x},${y})" role="button" tabindex="0" aria-label="${node.name}, ${TYPE_LABELS[node.type]}, ${held}">${title}${fleet}${shape}<text class="sector-label" y="${radius + 16}">${node.name}</text></g>`;
+    const badge = `<g class="sector-allegiance" transform="translate(${-radius - 16},-6)">${factionBadgeSvg(node.owner ?? 'Unowned')}</g>`;
+    return `<g class="${classes.join(' ')}" data-node="${node.id}" transform="translate(${x},${y})" role="button" tabindex="0" aria-label="${node.name}, ${TYPE_LABELS[node.type]}, ${held}, ${factionText(node.owner ?? 'Unowned')}">${title}${fleet}${shape}${badge}<text class="sector-label" y="${radius + 16}">${node.name}</text></g>`;
   });
-  return `<svg viewBox="0 0 ${view.width} ${view.height}" aria-hidden="true" focusable="false">${links.join('')}${glyphs.join('')}</svg>`;
+  return `<svg viewBox="0 0 ${view.width} ${view.height}" role="group" aria-label="Sector systems and routes">${links.join('')}${glyphs.join('')}</svg>`;
 };
 
 const recordLine = (record) => {
@@ -90,7 +92,9 @@ const recordLine = (record) => {
     record.kills >= ACE_KILLS ? `ace ★${record.kills}` : record.kills ? `${record.kills} kills` : null,
     record.dronesLaunched ? 'bay spent' : null,
   ].filter(Boolean);
-  return `<li><b>${record.name}</b> <i>${record.className}</i> — shields ${record.shields}, crew ${record.crew}${marks.length ? ` · ${marks.join(' · ')}` : ''}${record.captain ? ` · ${record.captain}` : ''}</li>`;
+  // Carried fleet records are Federation-owned by the campaign contract;
+  // prize.from is origin history, never the current allegiance.
+  return `<li><b>${record.name}</b> ${factionBadgeHtml('Federation')} <i>${record.className}</i> — shields ${record.shields}, crew ${record.crew}${marks.length ? ` · ${marks.join(' · ')}` : ''}${record.prize?.from ? ` · taken from ${factionBadgeHtml(record.prize.from)}` : ''}${record.captain ? ` · ${record.captain}` : ''}</li>`;
 };
 
 /**
@@ -104,17 +108,16 @@ export const sectorSideHtml = (campaign, selectedId = null) => {
   const here = node.id === campaign.currentNode;
   const adjacent = linksFrom(campaign.sector, campaign.currentNode).includes(node.id);
   const active = campaign.status === 'active';
-  const held = node.owner ? (node.owner === 'Federation' ? 'Federation' : node.owner) : 'unclaimed';
   const lines = [
     `<div class="panel-title"><span>${node.name}</span><span class="panel-meta">${TYPE_LABELS[node.type]}</span></div>`,
-    `<p class="menu-sub">Column ${node.column + 1} of ${SECTOR.columns} · held by <span class="${node.owner ?? 'Unowned'}">${held}</span>${node.budget ? ` · garrison budget ${node.budget}` : ''}${here ? ' · <b>your fleet is here</b>' : ''}</p>`,
+    `<p class="menu-sub">Column ${node.column + 1} of ${SECTOR.columns} · held by ${factionBadgeHtml(node.owner ?? 'Unowned')}${!node.owner ? ' (unclaimed)' : ''}${node.budget ? ` · garrison budget ${node.budget}` : ''}${here ? ' · <b>your fleet is here</b>' : ''}</p>`,
   ];
   if (campaign.status !== 'active') {
     lines.push(`<p class="sector-banner ${campaign.status}">${campaign.status === 'victory' ? 'The sector is yours — the enemy home has fallen.' : 'The fleet is lost — the campaign is over.'}</p>`);
   }
   if (campaign.threat) {
     const target = nodeById(campaign.sector, campaign.threat.nodeId);
-    lines.push(`<p class="sector-banner threat">${campaign.threat.attacker} raid ${target?.name ?? campaign.threat.nodeId} — resolve the defense before travelling.</p>`);
+    lines.push(`<p class="sector-banner threat">${factionBadgeHtml(campaign.threat.attacker)} raid ${target?.name ?? campaign.threat.nodeId} — resolve the defense before travelling.</p>`);
   }
   const buttons = [];
   if (adjacent && active && !campaign.threat) buttons.push(`<button type="button" class="secondary tiny" data-sector-action="travel" data-node="${node.id}">Travel here</button>`);
@@ -168,6 +171,9 @@ export const sectorResultsHtml = (campaign) => (campaign.results.length
 
 /** Paints the sector screen. The only document-touching export, mirroring `renderGame`. */
 export const renderSectorScreen = (campaign, { selectedId = null } = {}) => {
+  const legend = document.querySelector('#sector-legend');
+  if (legend) legend.innerHTML = ['Federation', 'Axis', 'Bloc', 'Cabal', 'Unowned'].map((faction) => factionBadgeHtml(faction)).join('')
+    + '<span>◉ home · ◆ supply objective · ● garrison · ○ empty</span><span class="legend-note">Dashed ring: your fleet · bright routes: reachable systems</span>';
   const meta = document.querySelector('#sector-meta');
   if (meta) meta.textContent = `Seed ${campaign.seed} · turn ${campaign.turn} · credits ${campaign.credits} · ${campaign.fleet.length} hulls`;
   const map = document.querySelector('#sector-map');

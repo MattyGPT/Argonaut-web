@@ -4040,7 +4040,7 @@ test('a drone reads as unmanned on every surface, never as "Captain undefined"',
   assert.ok(scanned.report.lines.includes('Command: none — an unmanned fighter drone.'));
   assert.ok(scanned.report.lines.every((line) => !/undefined/.test(line)));
   const rollcall = reportFor(wing, 'rollcall').lines.find((line) => line.startsWith('Lexington D1'));
-  assert.match(rollcall, /Lexington D1 — Federation Drone at 102, 100/);
+  assert.match(rollcall, /Lexington D1 — ■ Federation Drone at 102, 100/);
   assert.ok(!rollcall.includes('undefined'));
   const fleet = reportFor(wing, 'fleet').lines.find((line) => line.startsWith('Lexington D1'));
   assert.ok(fleet && !fleet.includes('undefined'), 'the fleet report lists the wing');

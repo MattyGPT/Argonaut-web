@@ -7,10 +7,15 @@ merged as `7881c67`. C1 and G2–G3 shipped in
 C2 shipped in [PR #89](https://github.com/MattyGPT/Argonaut-web/pull/89), merged
 as `371bce5`. C3 journal and F1 collision diagnostics shipped in
 [PR #90](https://github.com/MattyGPT/Argonaut-web/pull/90), merged as `404bc45`.
-C4 target explanations and F2 exhaustion diagnostics are implemented and verified on
-`codex/target-readiness`, pending delivery review, alongside the wider New Game setup dialog.
-C5–C6, F3–F6, H1–H4, G4–G6, and P2 cross-feature acceptance remain pending.
-No experimental field rule is active.
+C4 target explanations, F2 exhaustion diagnostics, and the wider New Game
+setup dialog shipped in [PR #91](https://github.com/MattyGPT/Argonaut-web/pull/91),
+merged as `900dcf3`. C5 faction recognition is in delivery review on
+`codex/faction-navigation`. F3's projected-separation candidate was rejected:
+friendly contacts fell, but timeouts and faction outcomes failed the gate.
+Its [review and inactive reproduction](../reviews/2026-10-05-navigation-experiment.md)
+are retained; live navigation is unchanged. C6, F4–F6, H1–H4, G4–G6, and
+P2 cross-feature acceptance remain pending. A narrower navigation investigation
+must establish its own evidence before any rule change is accepted.
 **Spec:** [Player experience roadmap](../specs/2026-10-03-player-experience-roadmap.md).
 **Goal:** Deliver all six October 3 specifications in small, verifiable
 changes, preserving Classic while making Reimagined the sole expansion.

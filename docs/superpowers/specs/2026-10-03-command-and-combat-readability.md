@@ -2,7 +2,7 @@
 
 Implementation plan: [Console and combat readability tasks](../plans/2026-10-03-command-and-combat-readability.md).
 
-Implementation status: C1–C3 are merged through PR #90. C4 target explanations are implemented pending delivery review; faction cues and pacing remain planned. See the implementation plan for delivery evidence.
+Implementation status: C1–C4 are merged through PR #91 (`900dcf3`). C5 faction cues are in delivery review; C6 pacing remains planned. See the implementation plan for delivery evidence.
 
 Status: **DESIGN DRAFT, 2026-10-03.** Covers approved proposals 1, 2, 3, 4,
 and 7 in the [player experience roadmap](2026-10-03-player-experience-roadmap.md).

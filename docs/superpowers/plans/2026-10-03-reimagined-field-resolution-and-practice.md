@@ -85,25 +85,26 @@ This is a useful independent delivery even if later experiments are rejected.
 `game/turns.js`, and `game/constants.js` if a named bound is needed.
 **Tests:** `test/realtime.test.js`, `test/game.test.js`, diagnostic fixtures.
 
-- [ ] Select the largest demonstrated accidental category from F1 and state
+- [x] Select the largest demonstrated accidental category from F1 and state
   the mechanism to correct. Set a category-specific measurable target using
   its measured prevalence; do not use an arbitrary total collision ceiling.
-- [ ] Implement one local deterministic candidate, initially projected
+- [x] Implement one local deterministic candidate, initially projected
   separation or stable-ID yielding at the demonstrated failure point.
   Bound yielding/recovery so symmetric traffic cannot deadlock. Preserve
   manual conn and deliberate tow-ram exceptions.
-- [ ] Add crossing, overtaking, stationary obstruction, drone-wing,
+- [x] Add crossing, overtaking, stationary obstruction, drone-wing,
   occupied-arrival, symmetric-yield, and recovery-from-yield tests. Test the
   relevant shared captain rule in both timing modes; keep continuum geometry
   in the real-time path rather than imposing it on turn-based physics.
-- [ ] Run the same 250 seeds on the baseline and candidate. Compare the
+- [x] Run the same 250 seeds on the baseline and candidate. Compare the
   targeted category, damage, repeated contacts, stuck arrivals, p90/max war
   length, draws, timeouts, prizes, and faction win shares. Inspect outliers
-  and deliberate ram fixtures in the browser.
-- [ ] Reject a candidate that merely trades collisions for stalled movement
+  in the browser. Deliberate ram fixtures passed headlessly; browser playback
+  of those fixtures was not pursued after the candidate failed its gate.
+- [x] Reject a candidate that merely trades collisions for stalled movement
   or increased timeouts. Report material balance changes as a separate design
   decision; do not compensate with the previously failed faction retunes.
-- [ ] If accepted, add the mechanism and both new Reimagined baseline rows
+- [x] If accepted, add the mechanism and both new Reimagined baseline rows
   to CALIBRATION with before/after commands and revision. If rejected, retain
   diagnostics and document the result; do not ship the failed rule.
 
@@ -208,7 +209,8 @@ of whether every experimental rule was accepted.
 ## F1–F2 delivery evidence
 
 F1 shipped in [PR #90](https://github.com/MattyGPT/Argonaut-web/pull/90), merged
-as `404bc45`. F2 is implemented on `codex/target-readiness`; see the
+as `404bc45`. F2 shipped in [PR #91](https://github.com/MattyGPT/Argonaut-web/pull/91),
+merged as `900dcf3`; see the
 [exhaustion review](../reviews/2026-10-04-exhaustion-diagnostics.md) for methods,
 limitations, counts, reviewed seeds, and reproduction commands.
 
@@ -219,3 +221,15 @@ remain in 32 endings and 16 remain uncertain. None meets the conservative
 current-field exhaustion predicate. The existing terminal display already shows
 the confirmed draw reason; omniscient diagnostics do not enter that display.
 F3 and F4 remain separate experiments, with no new outcome rule enabled here.
+
+## F3 experiment evidence — 2026-10-05
+
+The [navigation review](../reviews/2026-10-05-navigation-experiment.md) records
+the predeclared target, paired 250-seed measurements, exact Classic and
+turn-based parity, outlier inspection, and an inactive reproducible patch.
+The candidate reduced friendly non-tow contacts by 97.3%, but failed its gate:
+timeouts increased from seven to nine and faction outcomes shifted materially.
+It was rejected and the live engine restored to merged PR #91 (`900dcf3`).
+CALIBRATION remains unchanged. F3's experiment is complete; a successful
+navigation improvement remains unresolved. Drone egress and occupied-arrival
+recovery are separate candidates for a narrower future investigation.

@@ -158,15 +158,15 @@ browser tasks, then P1 checks. No new aim assistance or rule changes.
 **Modify:** `ui/render.js`, `ui/sector.js`, `styles.css`, journal rendering,
 `test/render.test.js`, `test/sector-ui.test.js`, and browser fixtures.
 
-- [ ] Define one mapping of faction to label, badge shape, and existing UI
+- [x] Define one mapping of faction to label, badge shape, and existing UI
   color; reuse it for ship markers, minimap, legend, targets, journal, and
   sector reports. Keep selection, threat, and stance as separate cues.
-- [ ] Apply current allegiance to captured hulls immediately while keeping
+- [x] Apply current allegiance to captured hulls immediately while keeping
   prize origin in history. Do not recolor commissioned sprite assets in
   this delivery; badges address their palette mismatch first.
-- [ ] Keep Classic phosphor glyphs legible with non-color distinctions.
+- [x] Keep Classic phosphor glyphs legible with non-color distinctions.
   Distinguish active, vacant, surrendered, wreck, neutral, and selected states.
-- [ ] Check all six ship classes, base, drones, merchant, prizes, and wrecks
+- [x] Check all six ship classes, base, drones, merchant, prizes, and wrecks
   at both zoom extremes and dense overlap. Test without color cues and verify
   a hidden ship still has no rendered marker or minimap badge.
 
@@ -260,7 +260,7 @@ F1 also verifies state-by-state diagnostic parity in 500 paired wars.
 C4–C6 remain pending; this delivery changes presentation and observation only.
 ## C4 delivery evidence — 2026-10-04
 
-Implemented on `codex/target-readiness`, based on merged PR #90 (`404bc45`).
+Merged in [PR #91](https://github.com/MattyGPT/Argonaut-web/pull/91) (`900dcf3`), based on PR #90 (`404bc45`).
 The [target-readiness review](../reviews/2026-10-04-target-readiness.md) documents
 shared pure validation, visible reasons, safe geometry previews, and explicit
 selected-target revalidation. The same delivery widens New Game, removes nested
@@ -272,3 +272,17 @@ fractional cooldown expiry without a boundary redraw, knowledge/purity, and
 bounded desktop/narrow menus. Setup, help, compact-console, and combat-feedback
 checks pass. All three 250-seed simulation reports match PR #90 exactly, as do
 15,444 differential manual-action outcomes. No gameplay rule changed.
+
+## C5 delivery evidence — 2026-10-05
+
+Implemented on `codex/faction-navigation`, based on merged PR #91 (`900dcf3`).
+The [faction recognition review](../reviews/2026-10-05-faction-recognition.md)
+records the shared identity contract, capture/history behavior, bounded stack
+spacing, accessibility corrections, visual coverage, and remaining dense
+overlap limit. Guide and README descriptions now explain the visible cues.
+
+Validation: 743 tests pass; 24 browser layout/art/zoom combinations plus
+grayscale, keyboard target/sector navigation, and dense-cluster checks pass.
+Existing live/replay beam alignment and command-history regressions pass.
+All three complete 250-seed simulation reports match PR #91 exactly. No
+engine content changed. C6 pacing and later integration remain pending.

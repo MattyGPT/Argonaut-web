@@ -1,0 +1,3 @@
+# Preserve the reviewed experiment patch's byte-level checksum on Windows.
+# Unified-diff context lines retain their leading space even when otherwise empty.
+*.patch text eol=lf whitespace=-blank-at-eol

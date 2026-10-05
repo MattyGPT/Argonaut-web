@@ -53,13 +53,13 @@
             <button id="zoom-out" class="secondary tiny" type="button" title="Zoom out" aria-label="Zoom out">&minus;</button>
             <button id="camera-center" class="secondary tiny" type="button" title="Center on command ship" aria-label="Center on command ship">&#8982;</button>
           </div>
-          <div id="minimap" class="minimap" role="img" aria-label="War zone minimap" hidden></div>
+          <div id="minimap" class="minimap" role="group" aria-label="War zone minimap" hidden></div>
         </div>
         <div class="map-legend" id="map-legend">
-          <span class="Federation">■ Federation</span>
-          <span class="Axis">■ Axis</span>
-          <span class="Bloc">■ Bloc</span>
-          <span class="Cabal">■ Cabal</span>
+          <span class="Federation">Federation</span>
+          <span class="Axis">Axis</span>
+          <span class="Bloc">Bloc</span>
+          <span class="Cabal">Cabal</span>
           <span class="legend-note" id="legend-note">dashed rings = your phaser / photon / engine range · red outline = enemy that can reach you</span>
         </div>
       </section>
@@ -113,10 +113,10 @@
         </div>
         <div id="sector-map" role="group" aria-label="Star systems and travel routes"></div>
         <div class="map-legend" id="sector-legend">
-          <span class="Federation">■ Federation</span>
-          <span class="Axis">■ Axis</span>
-          <span class="Bloc">■ Bloc</span>
-          <span class="Cabal">■ Cabal</span>
+          <span class="Federation">Federation</span>
+          <span class="Axis">Axis</span>
+          <span class="Bloc">Bloc</span>
+          <span class="Cabal">Cabal</span>
           <span class="legend-note">◎ home · ● garrison · ◆ supply · ○ empty · dashed ring = your fleet · bright routes lead onward</span>
         </div>
       </section>
@@ -355,6 +355,7 @@
           </section>
           <section id="guide-map">
             <h3>Map and targets</h3>
+            <p>Alliance badges use shape as well as color: <b>■ Federation</b>, <b>▲ Axis</b>, <b>◆ Bloc</b>, and <b>● Cabal</b>. A hollow circle marks a neutral contact. The badge beside a hull and its minimap marker show current allegiance, including after capture. Historical journal entries keep the allegiance reported when the event occurred. Threat rings, selection, stance, and prize markers are separate cues. Crowded markers spread apart for readability; dotted tethers lead back to their actual positions. Minimap symbols also separate slightly. Neither display offset changes coordinates, range, or combat results.</p>
             <p>Use the <b>legend under the map</b> to match alliance colors, range rings, threats, and status markers. Modern <b>Ship art</b> shows hull sprites; glyph view shows initials, with <b>+</b> for a destroyed wreck and <b>D</b> for a drone. A vacant hull has a surviving frame without a crew; it can be boarded. A wreck cannot. A captured Reimagined prize wears a gold pip.</p>
             <ul>
               <li><b>Range rings:</b> red is phaser reach, yellow photon reach, cyan engine reach. The green ring at Xanadu marks the Reimagined battle dockyard. Engine reach is movement, not weapon reach.</li>

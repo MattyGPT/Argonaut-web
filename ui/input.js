@@ -1,4 +1,5 @@
 import { GRID_SIZE, SURGICAL_DAMAGE_FACTOR, WEAPONS } from '../game/constants.js';
+import { factionText } from './faction-identity.js';
 
 /** Normalize new-game choices at submission, even if hidden controls are stale. */
 export const normalizeNewGameOptions = ({ ruleset, campaign = false, realtime = false, scenario = 'annihilation', loadout = null } = {}) => {
@@ -201,7 +202,7 @@ export const promptForTarget = (title, ships, options = {}) => new Promise((reso
   const select = document.querySelector('#target-select');
   document.querySelector('#target-title').textContent = title;
   select.innerHTML = ships
-    .map((ship) => `<option value="${escapeOption(ship.id)}">${escapeOption(ship.name)} — ${escapeOption(ship.faction)} (${escapeOption(ship.status)})</option>`)
+    .map((ship) => `<option value="${escapeOption(ship.id)}">${escapeOption(ship.name)} — ${escapeOption(factionText(ship.faction))} (${escapeOption(ship.status)})</option>`)
     .join('');
   if (options.defaultId) {
     // A named hull that went away must keep its identity. Never let the browser

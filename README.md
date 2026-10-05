@@ -542,6 +542,10 @@ the round replay.
   with scanlines; your choice persists.
 - **Ship art** — the modern view can show pixel-art fleets in place of letter
   markers. Classic view retains letters. This changes presentation only.
+- **Faction recognition** — shapes accompany faction colors across the map,
+  minimap, targets, journal, and campaign: ■ Federation, ▲ Axis, ◆ Bloc,
+  ● Cabal, and ○ Neutral. Captured ships show their current allegiance;
+  journal entries retain the allegiance known when the event occurred.
 - **Sound** — enable tactical sound in `New game` for distinct phaser, photon,
   explosion, and miss effects (WebAudio, no assets). A klaxon sounds on the
   transition into RED alert, not continuously while you sit there.

@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { createGame, getShip, isNeutral, spawnDrone, spawnEncounter } from '../game/state.js';
 import { createRng } from '../game/rng.js';
 import { actionAvailability, applyPlayerAction, launchDrones } from '../game/actions.js';
-import { commandReadiness, fanOutOffsets, journalCardsHtml, renderGame, reportFor, targetExplanation, targetGeometryKnown, terminalNarrative } from '../ui/render.js';
+import { commandReadiness, fanOutOffsets, journalCardsHtml, markerFanOptions, renderGame, reportFor, targetExplanation, targetGeometryKnown, terminalNarrative } from '../ui/render.js';
 import { createJournal } from '../ui/battle-journal.js';
+import { factionBadgeHtml, factionIdentity } from '../ui/faction-identity.js';
 
 // render.js only touches the document inside renderGame, so a bare element stub
 // is enough to exercise it under node --test, keeping the suite dependency-free.
@@ -462,7 +463,7 @@ test('a ship under orders wears a pip on the map', () => {
     orders: { 'fed-flagship': { type: 'hold', targetId: null } },
   };
   renderGame(game);
-  assert.match(read('#map-field').innerHTML, /class="ship Federation active has-order"/);
+  assert.match(read('#map-field').innerHTML, /class="ship Federation active has-order(?: [^"]*)?"/);
 });
 
 test('the fleet orders button only appears in a Reimagined war', () => {
@@ -512,7 +513,7 @@ test('a scanned ace wears a star; an unscanned one does not', () => {
   };
   elements.clear();
   renderGame(aced);
-  assert.match(read('#map-field').innerHTML, /class="ship Federation active ace"/);
+  assert.match(read('#map-field').innerHTML, /class="ship Federation active ace(?: [^"]*)?"/);
 
   elements.clear();
   renderGame({ ...aced, scanned: {} });
@@ -706,9 +707,9 @@ test('a prize of war wears a pip on the map and tells its story in the menu', ()
   elements.clear();
   renderGame(prizeRenderGame('render-prize'), { contextShipId: 'fed-cruiser-1' });
   const field = read('#map-field').innerHTML;
-  assert.match(field, /class="ship Federation active prize"/, 'the hull is marked as a prize');
+  assert.match(field, /class="ship Federation active prize(?: [^"]*)?"/, 'the hull is marked as a prize');
   assert.match(field, /prize-pip/, 'and wears its pip');
-  assert.match(field, /title="Bonhomme: active — prize of war( — heading \d+°)?"/);
+  assert.match(field, /title="Bonhomme: active · ■ Federation — prize of war( — heading \d+°)?"/);
   const menu = read('#ship-menu').innerHTML;
   assert.match(menu, /Prize of war — taken from the Axis at stardate 3; prize crew 10\/140 — under-manned, engines and guns degraded/);
 });
@@ -734,7 +735,7 @@ test('a Reimagined legend keys every color the map draws', () => {
     assert.match(legend, new RegExp(`legend-swatch ${swatch}`), `${swatch} is keyed`);
   }
   for (const faction of ['Federation', 'Axis', 'Bloc', 'Cabal']) {
-    assert.match(legend, new RegExp(`■ ${faction}`), 'the alliance colors stay');
+    assert.ok(legend.includes(factionBadgeHtml(faction)), 'the canonical alliance shape and name stay');
   }
   assert.match(read('#legend-note').textContent, /click a ship for its commands/, 'and the click hints');
   assert.match(read('#legend-note').textContent, /terrain fades beyond mapper reach/);
@@ -824,11 +825,11 @@ test('a wreck draws the commissioned hulk under sprite art and the plus under le
   elements.clear();
   const game = withFlagship(createGame({ seed: 'render-sprite-wreck', reimagined: true }), { status: 'destroyed' });
   renderGame(game, { shipArt: 'sprites' });
-  assert.match(read('#map-field').innerHTML, /class="wreck"[^>]*><img class="wreck-sprite" src="assets\/sprites\/neutral\/wreck\.png"/,
+  assert.match(read('#map-field').innerHTML, /class="wreck [^"]*"[^>]*><img class="wreck-sprite" src="assets\/sprites\/neutral\/wreck\.png"/,
     'the dead hull reads as the hulk');
   elements.clear();
   renderGame(game, { shipArt: 'letters' });
-  assert.match(read('#map-field').innerHTML, /class="wreck"[^>]*>\+<\/span>/,
+  assert.match(read('#map-field').innerHTML, /class="wreck [^"]*"[^>]*>\+<span class="stack-tether"[^>]*><\/span><span class="faction-identity"/,
     'letters keep the plus');
 });
 
@@ -1166,7 +1167,7 @@ test('a neutral merchant renders in civilian gray with a seize command and no st
   elements.clear();
   renderGame(game, { contextShipId: merchant.id });
   const field = read('#map-field').innerHTML;
-  assert.match(field, /class="ship Neutral active"/, 'the merchant wears the Neutral banner class');
+  assert.match(field, /class="ship Neutral active(?: [^"]*)?"/, 'the merchant wears the Neutral banner class');
   assert.ok(!/threat/.test(field.match(/data-ship-id="[^"]*"[^>]*class="[^"]*"/)?.[0] ?? ''), 'it is never outlined as a threat');
   const menu = read('#ship-menu').innerHTML;
   assert.match(menu, /unarmed neutral merchant/, 'the menu reads what it is');
@@ -1196,7 +1197,7 @@ test('a derelict renders as the vacant ghost it is, boardable from the menu', ()
   const ghost = game.ships.find((ship) => ship.encounter?.type === 'derelict');
   elements.clear();
   renderGame(game, { contextShipId: ghost.id });
-  assert.match(read('#map-field').innerHTML, new RegExp(`class="ship ${ghost.faction} vacant"`), 'dark and dashed like any derelict');
+  assert.match(read('#map-field').innerHTML, new RegExp(`class="ship ${ghost.faction} vacant(?: [^"]*)?"`), 'dark and dashed like any derelict');
   assert.match(read('#ship-menu').innerHTML, /data-ship-command="transport"[^>]*>Board ship</, 'and boardable');
 });
 
@@ -1272,4 +1273,91 @@ test('fanOutOffsets clusters within 2 units, deterministically, and leaves the r
     { id: 'r', x: 3, y: 0 },
   ];
   assert.equal(fanOutOffsets(chain).size, 3, 'a chain within 2-unit hops is one cluster');
+});
+
+test('decluttering respects marker size and caps dense fleets without mutating positions', () => {
+  const entries = Array.from({ length: 50 }, (_, index) => ({ id: `cluster-${index}`, x: 160, y: 160 }));
+  const before = JSON.stringify(entries);
+  for (const count of [2, 4, 6]) {
+    const offsets = [...fanOutOffsets(entries.slice(0, count), { spacing: 80 }).values()];
+    for (let i = 0; i < count; i += 1) for (let j = i + 1; j < count; j += 1) assert.ok(Math.hypot(offsets[i].dx - offsets[j].dx, offsets[i].dy - offsets[j].dy) >= 79);
+  }
+  const options = markerFanOptions('sprites', { clientWidth: 360, clientHeight: 320 });
+  assert.equal(options.maxRadius, 112);
+  for (const offset of fanOutOffsets(entries, options).values()) assert.ok(Math.hypot(offset.dx, offset.dy) < 113, 'rounding stays within one pixel of the cap');
+  assert.equal(JSON.stringify(entries), before, 'decluttering never changes physical coordinates');
+});
+
+test('current badges follow capture across field, minimap and target card while journal identity stays frozen', () => {
+  elements.clear();
+  const game = createGame({ seed: 'faction-capture', reimagined: true });
+  game.terrain = [];
+  const actor = getShip(game, game.playerShipId);
+  const prize = getShip(game, 'axis-flagship');
+  Object.assign(prize, { x: actor.x + 5, y: actor.y, faction: 'Federation', prize: { from: 'Axis', turn: 2, byFaction: 'Federation' } });
+  const journal = projectedJournal([{ kind: 'weapon-resolution', group: 'fleet-traffic', weapon: 'phasers', actor: { id: prize.id, name: prize.name, faction: 'Axis' }, target: { id: actor.id, name: actor.name, faction: 'Federation' }, result: 'miss' }]);
+  const before = JSON.stringify({ game, journal });
+  renderGame(game, { shipArt: 'sprites', contextShipId: prize.id, journal });
+  const marker = read('#map-field').innerHTML.match(new RegExp(`<button[^>]*data-ship-id="${prize.id}"[\\s\\S]*?<\\/button>`))[0];
+  assert.match(marker, /data-faction="Federation" data-shape="square"/);
+  assert.doesNotMatch(marker, /data-faction="Axis"/);
+  const mini = read('#minimap').innerHTML.match(new RegExp(`<span class="mini-dot[^>]*data-ship-id="${prize.id}"[\\s\\S]*?<\\/svg><\\/span>`))[0];
+  assert.match(mini, /data-faction="Federation" data-shape="square"/);
+  assert.match(mini, /selected/);
+  assert.ok(read('#ship-menu').innerHTML.includes(factionBadgeHtml('Federation')));
+  assert.match(read('#ship-menu').innerHTML, /taken from the Axis/);
+  assert.match(read('#fleet-journal-log').innerHTML, /At event time:[\s\S]*data-faction="Axis" data-shape="triangle"/);
+  assert.equal(JSON.stringify({ game, journal }), before);
+});
+
+test('hidden contacts and hidden wrecks get neither map nor minimap identities, even with an old scan', () => {
+  elements.clear();
+  const game = createGame({ seed: 'faction-hidden', reimagined: true });
+  game.terrain = [];
+  const actor = getShip(game, game.playerShipId);
+  Object.assign(actor, { x: 10, y: 10 });
+  const hidden = getShip(game, 'axis-flagship');
+  Object.assign(hidden, { x: 300, y: 300 });
+  game.scanned = { [hidden.id]: true };
+  for (const status of ['active', 'destroyed']) {
+    hidden.status = status;
+    renderGame(game, { contextShipId: hidden.id });
+    for (const selector of ['#map-field', '#minimap', '#ship-menu']) assert.ok(!read(selector).innerHTML.includes(`data-ship-id="${hidden.id}"`));
+    assert.equal(read('#ship-menu').innerHTML, '');
+  }
+});
+
+test('visible vacant, surrendered, neutral and wreck hulls keep distinct state cues', () => {
+  elements.clear();
+  const game = createGame({ seed: 'faction-status', reimagined: true });
+  game.terrain = [];
+  const actor = getShip(game, game.playerShipId);
+  const ships = ['axis-flagship', 'bloc-flagship', 'cabal-flagship'].map((id) => getShip(game, id));
+  ships.forEach((ship, index) => Object.assign(ship, { x: actor.x + 5 + index, y: actor.y, status: ['vacant', 'surrendered', 'destroyed'][index] }));
+  renderGame(game);
+  assert.match(read('#map-field').innerHTML, /class="ship-state" aria-hidden="true">V/);
+  assert.match(read('#map-field').innerHTML, /class="ship-state" aria-hidden="true">S/);
+  assert.match(read('#minimap').innerHTML, /mini-dot Axis vacant/);
+  assert.match(read('#minimap').innerHTML, /mini-dot Bloc surrendered/);
+  assert.match(read('#minimap').innerHTML, /mini-dot Cabal destroyed[\s\S]*mini-wreck/);
+  const history = journalCardsHtml([{ id: 'unknown-allegiance', summary: 'Old report', actor: { name: 'Contact' } }]);
+  assert.doesNotMatch(history, /faction-identity|Unowned/);
+});
+
+test('captured civilian merchant keeps its existing asset while displaying current allegiance', () => {
+  elements.clear();
+  const game = createGame({ seed: 'faction-merchant', reimagined: true });
+  game.terrain = [];
+  const actor = getShip(game, game.playerShipId);
+  const rng = createRng('faction-merchant-encounter');
+  const merchant = spawnEncounter(game, 'neutral', actor.x + 4, actor.y, rng);
+  game.ships.push(merchant);
+  merchant.x = actor.x + 4; merchant.y = actor.y;
+  merchant.faction = 'Federation'; merchant.neutral = false;
+  merchant.prize = { from: 'Neutral', byFaction: 'Federation', turn: 2 };
+  renderGame(game, { shipArt: 'sprites', contextShipId: merchant.id });
+  const marker = read('#map-field').innerHTML.match(new RegExp(`<button[^>]*data-ship-id="${merchant.id}"[\\s\\S]*?<\\/button>`))[0];
+  assert.match(marker, /src="assets\/sprites\/neutral\/merchant.png"/);
+  assert.match(marker, /data-faction="Federation"/);
+  assert.match(read('#ship-menu').innerHTML, /taken from the Neutral/);
 });
