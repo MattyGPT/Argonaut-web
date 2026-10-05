@@ -4,13 +4,15 @@ Implementation plan: [Delivery sequence and verification](../plans/2026-10-03-pl
 
 Implementation update, 2026-10-05: mode consolidation, console, journal,
 target explanations, faction recognition, and diagnostic groundwork are merged
-through PR #92. Compact playback is in delivery review; separate exhaustion
+through PR #93, including compact playback. Separate exhaustion
 experiments are complete and deferred because neither rule activated in the
 sampled wars. No exhaustion rule or grace period has been selected.
 The first navigation candidate
 was rejected after paired tests; live rules remain unchanged. The linked
-plan tracks remaining pacing, exhaustion, practice, campaign records, and
-guide acceptance work.
+plan tracks practice, first-order hints, and campaign records now in delivery
+review, plus the remaining screenshots, novice observation, and cross-feature
+acceptance. Direct tow collision report credit is included in this delivery;
+its report totals do not change combat or ace/vendetta bonuses.
 
 Status: **DESIGN DRAFT, 2026-10-03.** Matt approved the direction of all
 eight play-test proposals and added a thorough user-guide and tutorial

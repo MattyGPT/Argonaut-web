@@ -381,7 +381,7 @@ const menuCommands = (game, actor, ship) => {
   if (game.reimagined && systemUnits(actor, 'spread') > 0) commands.splice(2, 0, ['spread', 'Fire spread']);
   if (game.reimagined && systemUnits(actor, 'ion') > 0) commands.splice(2, 0, ['ion', 'Fire ion']);
   if (!isDrone(ship)) commands.push(['transport', ship.status === 'vacant' ? 'Board ship' : isNeutral(ship) ? 'Seize merchant' : 'Transport crew']);
-  if (game.reimagined && ship.faction !== actor?.faction && isActive(ship)) commands.push(['tractor-direct', 'Direct tow…']);
+  if (game.reimagined && isActive(ship) && (ship.faction !== actor?.faction || ship.encounter?.type === 'distress')) commands.push(['tractor-direct', 'Direct tow…']);
   return commands;
 };
 
@@ -1273,14 +1273,20 @@ export const reportFor = (game, type) => {
     const federation = game.ships.filter((ship) => ship.faction === FACTIONS.FEDERATION);
     const losses = federation.filter((ship) => ship.status === 'destroyed').length;
     const best = (list, pick) => list.reduce((top, ship) => (!top || pick(ship) > pick(top) ? ship : top), null);
-    const topGun = best(game.ships, (ship) => ship.kills);
+    const towCredits = game.reimagined ? game.battleRecordState?.towCollisionCredits ?? [] : [];
+    const towKills = (ship) => towCredits.filter((credit) => credit.actor.id === ship.id).length;
+    const creditedKills = (ship) => (ship.kills ?? 0) + towKills(ship);
+    const topGun = best(game.ships, creditedKills);
+    const topGunIdentity = topGun?.kills ? topGun : towCredits.find((credit) => credit.actor.id === topGun?.id)?.actor ?? topGun;
     const punished = best(survivors, (ship) => ship.shotsTaken);
     const clumsy = best(game.ships, (ship) => ship.collisions ?? 0);
     // A drone has no captain to credit (round 20): the hull form reads for it,
     // so the report never names "Captain undefined".
-    const gunner = topGun?.kills
-      ? `Top gun: ${game.reimagined && topGun.captain ? `Captain ${topGun.captain} of the ${topGun.name}` : `${topGun.name} of the ${topGun.faction}`}, ${topGun.kills} credited kills.`
+    const gunner = topGun && creditedKills(topGun)
+      ? `Top gun: ${game.reimagined && topGunIdentity.captain ? `Captain ${topGunIdentity.captain} of the ${topGunIdentity.name}` : `${topGunIdentity.name} of the ${topGunIdentity.faction}`}, ${creditedKills(topGun)} credited kills${towKills(topGun) ? ` (${towKills(topGun)} from direct tow collisions)` : ''}.`
       : 'No ship scored a kill.';
+    const towActors = [...new Map(towCredits.map((credit) => [credit.actor.id, credit.actor])).values()];
+    const ownTowKills = towCredits.filter((credit) => ['manual', 'auto-conn'].includes(credit.source) && credit.actor.id === credit.issuingShipId).length;
     // Prizes (round 17): taken counts every capture your side ever made (the
     // cumulative ledger — the per-ship record only remembers the last one), and
     // lost counts those hulls no longer flying your colors: retaken or destroyed.
@@ -1296,10 +1302,13 @@ export const reportFor = (game, type) => {
         `Federation losses: ${losses} of ${federation.length} hulls.`,
         prizesTaken ? `Prizes: ${prizesTaken} taken, ${prizesTaken - prizesHeld} lost.` : null,
         gunner,
+        ...towActors.map((actor) => `Direct tow collision credit: ${actor.captain ? `Captain ${actor.captain} of the ${actor.name}` : actor.name}, ${towKills(actor)} enemy hull${towKills(actor) === 1 ? '' : 's'} destroyed.`),
+        ownTowKills ? `Your direct tow collision kills across command ships: ${ownTowKills}.` : null,
+        towCredits.length ? 'Tow collision credit is included in this report; ace and vendetta tallies count weapon kills.' : null,
         punished?.shotsTaken ? `Heaviest punishment taken: ${punished.name} absorbed ${punished.shotsTaken} volleys.` : null,
         clumsy?.collisions ? `Most collisions: ${clumsy.name} with ${clumsy.collisions}.` : null,
         command
-          ? `Your record, Captain Jason of the ${command.name}: ${command.kills} kills from ${command.shotsFired} volleys fired, ${command.shotsTaken} absorbed.`
+          ? `Your record, Captain Jason of the ${command.name}: ${creditedKills(command)} kills${towKills(command) ? ` (${towKills(command)} from direct tow collisions)` : ''} from ${command.shotsFired} volleys fired, ${command.shotsTaken} absorbed.`
           : null,
       ].filter(Boolean),
     };

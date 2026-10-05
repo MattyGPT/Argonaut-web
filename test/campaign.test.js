@@ -475,7 +475,7 @@ test('headless auto-resolve streams complete unique records without retaining un
     onRecords: (records, engagement) => received.push({ records, engagement }),
   });
   const disabled = autoResolveNode(campaign, nodeId, { maxStardates: 100, recordBattles: false });
-  assert.deepEqual(stripBattleRecordMetadata(enabled), disabled);
+  assert.deepEqual(stripBattleRecordMetadata(enabled), stripBattleRecordMetadata(disabled));
   const main = received.filter((batch) => batch.engagement.kind === 'node');
   assert.ok(main.length > 0);
   assert.ok(main.every((batch) => batch.engagement.battleId === 'campaign-stream' && batch.engagement.nodeId === nodeId));
@@ -496,7 +496,7 @@ test('offscreen garrison raids expose their own battle stream without a tactical
   for (let turn = 1; turn <= 40 && batches.length === 0; turn += 1) {
     const input = { ...staged, turn };
     const resolved = resolveStrategy(input, { onRecords: (records, engagement) => batches.push({ records, engagement }) });
-    assert.deepEqual(stripBattleRecordMetadata(resolved), resolveStrategy(input, { recordBattles: false }));
+    assert.deepEqual(stripBattleRecordMetadata(resolved), stripBattleRecordMetadata(resolveStrategy(input, { recordBattles: false })));
   }
   assert.ok(batches.length > 0);
   assert.ok(batches.every((batch) => batch.engagement.kind === 'garrison'));

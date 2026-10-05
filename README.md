@@ -317,6 +317,12 @@ cede the system without ending the entire campaign. Inspect the campaign
 report for battle results, holdings, credits, prizes, and surviving aces.
 Campaign progress autosaves separately from the ordinary-war slot.
 
+Each engagement now has a reopenable debrief: survivors, losses, prizes,
+new damage, system disposition, and actual credit changes. Expand a hull's
+service record to follow its identity, captures, repairs, and confirmed
+milestones across battles; the memorial retains lost hulls without assuming
+their captains died. Detailed history is bounded, with lifetime counts retained.
+
 ## Mechanics notes
 
 The remake follows the manual's rules and the behavior confirmed in the
@@ -527,6 +533,19 @@ the round replay.
   Phaser and ion beams follow the displayed hulls during movement and stack
   separation; their visual endpoints never change the combat result.
 
+## Practice and first orders
+
+Start optional **first-order hints** from the user guide in either ruleset.
+They point to your current ship, ordinary controls, and the confirmed result
+in **Your ship**. Dismiss or restart them without changing the war.
+
+Choose **Practice Reimagined tactics** in New game or the guide for four
+small exercises: rescue and repair, directed towing, disabling and boarding
+a prize, and holding a relay. Each uses the real rules and discloses its
+staged setup. Retry resets the fixture; real-time exercises begin paused.
+Practice saves separately, and **Return to previous game** restores your
+prior war or campaign without transferring practice hulls or credits.
+
 ## Quality of life
 
 - **User guide** — the top-bar button opens an illustrated in-game guide: how the
@@ -552,6 +571,9 @@ the round replay.
 - **Impact juice** — phaser hits flash where they land and the map shakes when a
   volley lands on your command ship. Both are suppressed under
   `prefers-reduced-motion`, and nothing in the rules reads them.
+- **Tow collision credit** — the battle report includes enemy hulls destroyed
+  by direct tow collisions, retaining the issuing ship's identity after a
+  command transfer. These report credits do not change ace bonuses or damage.
 - **Battle playback** — **Compact** groups routine losses from one resolution
   into a short presentation while keeping critical events prominent.
   **Full sequence** presents losses individually. Expand the retained detail

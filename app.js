@@ -26,6 +26,10 @@ import { restoreCommandHistory } from './ui/command-history.js';
 import { appendRecords, createJournal, restoreJournal } from './ui/battle-journal.js';
 import { enableBattleRecords } from './game/battle-records.js';
 import { createHelpState } from './ui/help-state.js';
+import { PRACTICE_EXERCISES, createPracticeGame, updatePractice, restartPractice, dismissPracticeHints, practiceProgress } from './game/practice.js';
+import { practicePanelMarkup, practiceChooserMarkup } from './ui/practice.js';
+import { ingestBattleServiceRecords } from './game/service-records.js';
+import { createWalkthrough, advanceWalkthrough, walkthroughMarkup } from './ui/walkthrough.js';
 
 const SAVE_KEY = 'argonaut-web-save-v1';
 // The sector campaign (round 26c) saves under its own key beside the untouched
@@ -33,6 +37,12 @@ const SAVE_KEY = 'argonaut-web-save-v1';
 // saves load into single-war mode untouched. A campaign save owns the session
 // when present; starting a new game of either kind retires the other.
 const CAMPAIGN_SAVE_KEY = 'argonaut-web-save-campaign-v1';
+const PRACTICE_SAVE_KEY = 'argonaut-web-save-practice-v1';
+let practiceSession = null;
+try {
+  const saved = JSON.parse(localStorage.getItem(PRACTICE_SAVE_KEY));
+  if (saved?.version === 1 && saved.game?.practice && Array.isArray(saved.game.ships) && saved.resume) practiceSession = saved;
+} catch { /* No resumable practice. */ }
 const newGameDialog = document.querySelector('#new-game-dialog');
 const PLAYBACK_KEY = 'argonaut-web-playback';
 let playbackMode = 'compact';
@@ -75,7 +85,10 @@ const save = () => {
   try {
     const commandHistory = { seed: game?.seed, entries: view.commandHistory ?? [] };
     const roundPlayback = view.roundPlayback;
-    if (campaign) localStorage.setItem(CAMPAIGN_SAVE_KEY, JSON.stringify({ version: 1, campaign, commandHistory, roundPlayback }));
+    if (practiceSession) {
+      practiceSession = { ...practiceSession, game, journal: view.journal, roundPlayback };
+      localStorage.setItem(PRACTICE_SAVE_KEY, JSON.stringify(practiceSession));
+    } else if (campaign) localStorage.setItem(CAMPAIGN_SAVE_KEY, JSON.stringify({ version: 1, campaign, commandHistory, roundPlayback }));
     else localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 1, game, commandHistory, journal: view.journal, roundPlayback }));
   } catch {
     /* storage unavailable */
@@ -85,26 +98,36 @@ const save = () => {
 const randomSeed = () => `war-${Math.random().toString(36).slice(2, 8)}`;
 
 /** The campaign in progress, if any. When set, it owns the session; `game` is its open battle. */
-let campaign = loadCampaignSave();
+let campaign = practiceSession ? null : loadCampaignSave();
 /** The star-chart node the side panel reads; defaults to the fleet's node. */
 let sectorSelection = null;
 
-let game = campaign ? campaign.battle?.game ?? null : loadSave() ?? createGame({ seed: randomSeed() });
+let game = practiceSession?.game ?? (campaign ? campaign.battle?.game ?? null : loadSave() ?? createGame({ seed: randomSeed() }));
 // Only resumable counters and in-flight causal identities belong in this state.
 // Raw resolution records are projected before entering the saved journal.
 if (game) game = enableBattleRecords(game);
-let view = { entries: [], camera: null, paused: false, speed: 1 };
+let view = { entries: [], camera: null, paused: Boolean(practiceSession), speed: 1 };
 if (game) view.journal = createJournal(game.battleRecordState.battleId);
 try {
-  const saved = JSON.parse(localStorage.getItem(campaign ? CAMPAIGN_SAVE_KEY : SAVE_KEY));
+  const saved = practiceSession ?? JSON.parse(localStorage.getItem(campaign ? CAMPAIGN_SAVE_KEY : SAVE_KEY));
   view.commandHistory = restoreCommandHistory(saved?.commandHistory, game?.seed);
   if (game) view.journal = restoreJournal(campaign?.battle?.journal ?? saved?.journal, game.battleRecordState.battleId, view.commandHistory);
   if (game && saved?.roundPlayback?.battleId === game.battleRecordState.battleId && Array.isArray(saved.roundPlayback.events)) view.roundPlayback = saved.roundPlayback;
 } catch { /* Old saves or unavailable storage start with an empty command record. */ }
+const WALKTHROUGH_KEY = 'argonaut-web-first-orders';
+let walkthrough = practiceSession?.resume?.walkthrough ?? createWalkthrough(practiceSession?.resume?.game ?? game);
+try {
+  const saved = JSON.parse(localStorage.getItem(WALKTHROUGH_KEY));
+  const learningGame = practiceSession?.resume?.game ?? game;
+  if (!practiceSession?.resume?.walkthrough && saved?.version === 1) walkthrough = saved.battleId === learningGame?.battleRecordState?.battleId ? saved : createWalkthrough(learningGame, { dismissed: saved.dismissed });
+} catch { /* Optional hints default to idle. */ }
 
 /** Consume once at authoritative seams, never from drawing, replay or loading. */
 let presentationRecords = [];
+let serviceRecords = [];
 const collectRecords = (records) => {
+  if (campaign?.battle && records?.length) serviceRecords.push(...records);
+  if (!practiceSession && records?.length) walkthrough = advanceWalkthrough(walkthrough, { type: 'records', records, paused: view.paused }, game);
   if (!records?.length || !view.journal) return false;
   const projected = projectPlaybackRecords(records, view.journal);
   const journal = appendRecords(view.journal, records);
@@ -125,7 +148,9 @@ const field = () => game?.gridSize ?? GRID_SIZE;
 const syncCamera = () => {
   const ship = getShip(game, game.playerShipId);
   if (!view.camera) {
-    view = { ...view, camera: makeCamera(field(), ship) };
+    const camera = makeCamera(field(), ship);
+    const objective = game.practice?.zone;
+    view = { ...view, camera: objective ? { ...camera, cx: (ship.x + 2 * objective.x) / 3, cy: (ship.y + 2 * objective.y) / 3, follow: false } : camera };
     return;
   }
   if (view.camera.follow && ship) {
@@ -162,13 +187,38 @@ const ART_KEY = 'argonaut-web-ship-art';
 let shipArtPref = 'sprites';
 try { shipArtPref = localStorage.getItem(ART_KEY) || 'sprites'; } catch { /* ignore */ }
 
-const redraw = () => renderGame(game, { ...view, playbackMode, playbackActive: Boolean(playbackSession) && !playbackSession.finished, playbackLocked: playbackLocked(), shipArt: document.body.classList.contains('classic') ? 'letters' : shipArtPref, precision: game?.precision ? precisionSettings : null });
+const drawPracticeZone = () => {
+  const map = document.querySelector('#map');
+  const zone = game?.practice?.zone;
+  let marker = map.querySelector('.practice-zone');
+  if (!zone) { marker?.remove(); return; }
+  if (!marker) {
+    marker = document.createElement('div');
+    marker.className = 'practice-zone';
+    marker.setAttribute('aria-label', 'Practice destination');
+    marker.textContent = 'Destination';
+    map.appendChild(marker);
+  }
+  const win = currentWindow();
+  marker.style.cssText = `left:${100 * (zone.x - zone.radius - win.minX) / win.size}%;top:${100 * (zone.y - zone.radius - win.minY) / win.size}%;width:${200 * zone.radius / win.size}%;height:${200 * zone.radius / win.size}%`;
+};
+const redraw = () => {
+  const progress = practiceProgress(game);
+  const report = view.report ?? (progress ? { title: 'Practice objective', lines: [progress.objective, progress.message ?? 'Use the normal commands. Retry or return whenever you wish.'] } : null);
+  renderGame(game, { ...view, report, playbackMode, playbackActive: Boolean(playbackSession) && !playbackSession.finished, playbackLocked: playbackLocked(), shipArt: document.body.classList.contains('classic') ? 'letters' : shipArtPref, precision: game?.precision ? precisionSettings : null });
+  if (progress && progress.status !== 'active') document.querySelectorAll('[data-command]').forEach((button) => {
+    if (!['rollcall', 'statistics', 'shots', 'fullmap', 'fleet', 'replay'].includes(button.dataset.command)) button.disabled = true;
+  });
+  drawPracticeZone();
+};
 
 /** Whether the star chart is up: a campaign is active and no battle is open. */
 const sectorMode = () => campaign !== null && !campaign.battle;
 
 /** Keep the campaign container pointing at the live battle game it wraps. */
 const syncCampaign = () => {
+  if (campaign?.battle && game && serviceRecords.length) game = ingestBattleServiceRecords(game, serviceRecords);
+  serviceRecords = [];
   if (campaign?.battle && game && (campaign.battle.game !== game || campaign.battle.journal !== view.journal)) {
     campaign = { ...campaign, battle: { ...campaign.battle, game, journal: view.journal } };
   }
@@ -180,6 +230,25 @@ const syncCampaign = () => {
  * Abandon engagement until the fight concludes, Return to sector map after — and
  * reads the campaign state; a single war never shows it.
  */
+let practiceMarkup = null;
+let previousWalkthroughMarkup = null;
+const renderWalkthrough = () => {
+  const panel = document.querySelector('#walkthrough-panel');
+  if (!practiceSession) walkthrough = advanceWalkthrough(walkthrough, { type: 'sync', paused: view.paused }, game);
+  panel.hidden = Boolean(practiceSession || !game || ['idle', 'dismissed'].includes(walkthrough.stage));
+  document.body.classList.toggle('learning', !panel.hidden);
+  if (!panel.hidden) {
+    const markup = walkthroughMarkup(walkthrough, game, { paused: view.paused });
+    if (previousWalkthroughMarkup !== markup) {
+      const focus = panel.contains(document.activeElement) ? document.activeElement.dataset.walkthroughAction : null;
+      panel.innerHTML = markup;
+      previousWalkthroughMarkup = markup;
+      if (focus) (panel.querySelector(`[data-walkthrough-action="${focus}"]`) ?? panel.querySelector('button'))?.focus({ preventScroll: true });
+    }
+    panel.querySelectorAll('button').forEach((button) => { button.disabled = playbackLocked(); });
+  }
+  if (!practiceSession) try { localStorage.setItem(WALKTHROUGH_KEY, JSON.stringify(walkthrough)); } catch { /* Optional UI preference. */ }
+};
 const showScreens = () => {
   const sector = sectorMode();
   document.querySelector('#game-root').hidden = sector;
@@ -187,6 +256,26 @@ const showScreens = () => {
   // Round 31: the stylesheet kills the stardate glide while a real-time war's
   // sim clock is the motion.
   document.body.classList.toggle('realtime', Boolean(game?.realtime));
+  document.body.classList.toggle('practicing', Boolean(practiceSession));
+  const practicePanel = document.querySelector('#practice-panel');
+  practicePanel.hidden = !practiceSession;
+  document.querySelector('#new-game').disabled = Boolean(practiceSession);
+  document.querySelectorAll('[data-practice-start]').forEach((button) => { button.disabled = Boolean(practiceSession); });
+  document.querySelectorAll('[data-walkthrough-action="start"]').forEach((button) => { button.disabled = Boolean(!game || practiceSession); });
+  renderWalkthrough();
+  if (practiceSession) {
+    const markup = practicePanelMarkup(game);
+    if (practiceMarkup !== markup) {
+      const focused = practicePanel.contains(document.activeElement) ? document.activeElement.dataset.practiceAction : null;
+      const expanded = practicePanel.querySelector('details')?.open;
+      practicePanel.innerHTML = markup;
+      practiceMarkup = markup;
+      if (expanded) practicePanel.querySelector('details').open = true;
+      if (focused) practicePanel.querySelector(`[data-practice-action="${focused}"]`)?.focus({ preventScroll: true });
+    }
+    document.querySelector('#mode-readout').textContent = 'REIMAGINED PRACTICE';
+    practicePanel.querySelectorAll('button').forEach((button) => { button.disabled = playbackLocked(); });
+  }
   syncTimeControls();
   const bar = document.querySelector('#campaign-bar');
   bar.hidden = campaign === null;
@@ -204,7 +293,8 @@ const showScreens = () => {
   }
 };
 
-const refresh = () => {
+const refresh = ({ persist = true } = {}) => {
+  if (practiceSession) game = updatePractice(game);
   syncCampaign();
   if (game) {
     syncCamera();
@@ -213,7 +303,7 @@ const refresh = () => {
     warnOnRedAlert();
   }
   showScreens();
-  save();
+  if (persist) save();
 };
 
 /** Sounds the klaxon on the transition into RED, not on every frame spent there. */
@@ -393,6 +483,7 @@ const playTrajectory = () => new Promise((resolve) => {
 const runComputer = async () => {
   if (game.phase === 'computer' && !game.outcome) {
     game = resolveComputerTurns(game, { onRecords: collectRecords });
+    if (practiceSession) game = updatePractice(game, { boundary: true });
     view = { ...view, entries: [] };
     // A real-time war flies the stardate first, so the boundary's events are
     // presented on hulls standing where the resolution actually put them.
@@ -520,13 +611,14 @@ const renderFrame = () => {
   // visible on the header without a full re-render.
   const readout = document.querySelector('#turn-readout');
   if (readout) readout.textContent = `Stardate ${simTimeOf(game).toFixed(1)}`;
+  drawPracticeZone();
 };
 
 const simLoop = (now) => {
   requestAnimationFrame(simLoop);
   const dt = lastFrameAt === null ? 0 : Math.min(250, now - lastFrameAt);
   lastFrameAt = now;
-  if (!game?.realtime || game.outcome || sectorMode() || playbackLocked() || help.active || newGameDialog.open || view.paused) return;
+  if (!game?.realtime || game.outcome || (practiceSession && game.practice.status !== 'active') || sectorMode() || playbackLocked() || help.active || newGameDialog.open || view.paused) return;
   const subtickMs = REALTIME.msPerStardate / REALTIME.ticksPerStardate;
   simAccumulator += dt * (view.speed ?? 1);
   let budget = Math.floor(simAccumulator / subtickMs);
@@ -550,11 +642,13 @@ const simLoop = (now) => {
     const step = stepContinuum(game);
     journalChanged = collectRecords(step.records) || journalChanged;
     game = step.game;
+    if (practiceSession) game = updatePractice(game, { boundary: step.crossed });
     prevPositions = snapshot;
     prevOrdnance = ordnanceSnapshot;
     frameEvents.push(...step.events.map((event) => ({ ...event, resolutionId: simTimeOf(step.game) })));
     crossed = step.crossed;
     consumed += 1;
+    if (practiceSession && game.practice.status !== 'active') break;
   }
   // Unspent sub-ticks stay in the accumulator: the core never loses or gains
   // time to a frame rate.
@@ -581,7 +675,7 @@ const syncTimeControls = () => {
   const pause = document.querySelector('#pause-button');
   if (pause) {
     pause.textContent = help.pausesBattle || view.paused ? 'Resume' : 'Pause';
-    pause.disabled = help.active || Boolean(game?.outcome);
+    pause.disabled = help.active || Boolean(game?.outcome) || Boolean(practiceSession && game.practice.status !== 'active');
   }
   for (const selector of ['#time-pause-status', '#help-pause-status']) {
     const status = document.querySelector(selector);
@@ -602,7 +696,7 @@ const resetSimClock = () => {
   prevOrdnance = null;
 };
 const setPaused = (paused) => {
-  if (help.active) return;
+  if (help.active || (practiceSession && game.practice.status !== 'active')) return;
   view = { ...view, paused };
   resetSimClock();
   syncTimeControls();
@@ -642,13 +736,17 @@ document.addEventListener('keydown', (event) => {
 });
 
 let spectating = false;
+let sessionGeneration = 0;
 const spectate = () => {
+  if (practiceSession) return;
   // A real-time war spectates on the sim clock below — the autopilot conn
   // decides at each boundary there, exactly as it does for the AI alliances.
   if (game?.realtime) return;
   if (spectating) return;
   spectating = true;
+  const generation = sessionGeneration;
   const step = async () => {
+    if (generation !== sessionGeneration) return;
     if (help.active || newGameDialog.open) {
       setTimeout(step, SPECTATOR_TICK_MS);
       return;
@@ -675,12 +773,14 @@ const dispatch = async (action) => {
   // and the star chart has no war to command. A real-time spectator war takes
   // no commands at all — the autopilot conn flies it on the sim clock.
   if (!game || spectating || playbackLocked() || help.active || (game.realtime && isSpectator(game))) return;
+  if (practiceSession && game.practice.status !== 'active' && !['map-select', 'menu-close', 'rollcall', 'statistics', 'shots', 'fullmap', 'fleet', 'replay'].includes(action.type)) return;
   if (action.type === 'map-select') {
     const ship = game.ships.find((entry) => entry.id === action.targetId);
     if (!ship || ship.status === 'destroyed') return;
     // Clicking a hull opens the context menu that grows out of it; clicking the
     // same hull again puts the menu away.
     view = { ...view, contextShipId: view.contextShipId === ship.id ? null : ship.id };
+    if (!practiceSession && view.contextShipId) walkthrough = advanceWalkthrough(walkthrough, { type: ship.id === game.playerShipId && walkthrough.stage === 'locate' ? 'locate' : 'inspect', shipId: ship.id, paused: view.paused }, game);
     refresh();
     return;
   }
@@ -823,7 +923,12 @@ const dispatch = async (action) => {
   }
 
   if (action.type === 'move' && action.dx === undefined) {
-    const values = await promptForCoordinates('Engine maneuver', ['Δ X', 'Δ Y']);
+    const pending = promptForCoordinates('Engine maneuver', ['Δ X', 'Δ Y']);
+    if (!practiceSession) {
+      walkthrough = advanceWalkthrough(walkthrough, { type: 'inspect', shipId: game.playerShipId, paused: view.paused }, game);
+      renderWalkthrough();
+    }
+    const values = await pending;
     if (values) dispatch({ type: 'move', dx: values[0], dy: values[1] });
     return;
   }
@@ -1118,6 +1223,7 @@ document.addEventListener('click', (event) => {
 }, true);
 
 document.querySelector('#new-game').addEventListener('click', whenPlaybackUnlocked(playbackLocked, () => {
+  if (practiceSession) { document.querySelector('#practice-return')?.focus(); return; }
   document.querySelector('#new-seed').value = randomSeed();
   document.querySelector('#regional').checked = game?.regional ?? false;
   document.querySelector('#sound').checked = game?.sound ?? false;
@@ -1149,6 +1255,95 @@ document.querySelector('#new-game').addEventListener('click', whenPlaybackUnlock
 }));
 
 newGameDialog.addEventListener('close', resetSimClock);
+
+/** Practice owns its own save; session switches never invoke New game's deletion path. */
+const resetPresentationSession = () => {
+  sessionGeneration += 1;
+  spectating = false;
+  presentationRecords = [];
+  serviceRecords = [];
+  playbackSession = null;
+  presentingTerminalEvents = replayingRound = playingTrajectory = false;
+  lastCondition = null;
+  document.querySelector('#map svg.fx-layer')?.remove();
+  resetSimClock();
+};
+const showPracticeGame = (next) => {
+  resetPresentationSession();
+  campaign = null;
+  sectorSelection = null;
+  game = next;
+  precisionSettings = { power: 100, focus: null };
+  view = { entries: [], camera: null, paused: true, speed: 1, journal: createJournal(game.battleRecordState.battleId) };
+  primeMoveMemory(game);
+  refresh();
+  document.querySelector('#practice-panel').focus();
+};
+document.querySelector('#practice-chooser').innerHTML = practiceChooserMarkup();
+document.querySelector('#guide-practice-chooser').innerHTML = practiceChooserMarkup();
+document.addEventListener('click', async (event) => {
+  const button = event.target.closest('[data-walkthrough-action]');
+  if (!button || !game || practiceSession || playbackLocked()) return;
+  const action = button.dataset.walkthroughAction;
+  if (action === 'start') {
+    const guide = document.querySelector('#guide-dialog');
+    if (guide.open) await new Promise((resolve) => { guide.addEventListener('close', resolve, { once: true }); guide.close(); });
+  }
+  if (help.active) return;
+  if (action === 'pause') setPaused(true);
+  if (action === 'locate') {
+    recenter();
+    view = { ...view, contextShipId: game.playerShipId };
+  }
+  if (action === 'inspect') { dispatch({ type: 'move' }); return; }
+  if (action === 'inspect-result') {
+    const card = [...document.querySelectorAll('#command-log [data-journal-id]')].find((node) => node.dataset.journalId === `your-ship:${walkthrough.actionId}`);
+    if (!card) return;
+    const details = card.querySelector('details');
+    if (details) details.open = true;
+    card.scrollIntoView({ block: 'center' });
+    card.querySelector('summary')?.focus({ preventScroll: true });
+  }
+  walkthrough = advanceWalkthrough(walkthrough, { type: action, paused: view.paused, shipId: game.playerShipId, actionId: walkthrough.actionId }, game);
+  renderWalkthrough();
+  if (action === 'locate') refresh();
+  if (action === 'start') document.querySelector('#walkthrough-panel').focus();
+});
+document.addEventListener('click', async (event) => {
+  const start = event.target.closest('[data-practice-start]');
+  if (start) {
+    if (playbackLocked() || practiceSession) return;
+    const realtime = start.closest('#new-game-dialog') ? isReimaginedSelected() && document.querySelector('#realtime').checked : Boolean(game?.realtime);
+    const guide = document.querySelector('#guide-dialog');
+    if (guide.open) await new Promise((resolve) => { guide.addEventListener('close', resolve, { once: true }); guide.close(); });
+    if (newGameDialog.open) newGameDialog.close();
+    practiceSession = { version: 1, resume: { game, campaign, view, precisionSettings, sectorSelection, walkthrough } };
+    showPracticeGame(createPracticeGame(start.dataset.practiceStart, { realtime }));
+    return;
+  }
+  const button = event.target.closest('[data-practice-action]');
+  if (!button || !practiceSession || playbackLocked() || help.active) return;
+  const action = button.dataset.practiceAction;
+  if (action === 'return') {
+    const resume = practiceSession.resume;
+    resetPresentationSession();
+    practiceSession = null;
+    try { localStorage.removeItem(PRACTICE_SAVE_KEY); } catch { /* unavailable storage */ }
+    ({ game, campaign, view, precisionSettings, sectorSelection } = resume);
+    walkthrough = resume.walkthrough ?? createWalkthrough(game);
+    if (game) primeMoveMemory(game);
+    refresh({ persist: false });
+    document.querySelector('#new-game').focus();
+    if (game && isSpectator(game) && !game.outcome) spectate();
+  } else if (action === 'retry') showPracticeGame(restartPractice(game));
+  else if (action === 'next') {
+    const index = PRACTICE_EXERCISES.findIndex((exercise) => exercise.id === game.practice.id);
+    showPracticeGame(createPracticeGame(PRACTICE_EXERCISES[(index + 1) % PRACTICE_EXERCISES.length].id, { realtime: game.realtime }));
+  } else if (action === 'hints') {
+    game = dismissPracticeHints(game, !game.practice.hintsDismissed);
+    refresh();
+  }
+});
 
 document.querySelector('#ruleset').addEventListener('change', syncRulesetAvailability);
 
@@ -1184,6 +1379,7 @@ document.querySelector('#new-game-form').addEventListener('submit', (event) => {
   event.preventDefault();
   if (event.submitter?.value === 'cancel') { newGameDialog.close(); return; }
   if (event.submitter?.value !== 'confirm' || playbackLocked()) return;
+  if (practiceSession) return;
   const seedValue = document.querySelector('#new-seed').value || 'xanadu';
   const options = normalizeNewGameOptions({
     ruleset: document.querySelector('#ruleset').value,

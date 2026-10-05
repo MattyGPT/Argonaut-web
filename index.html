@@ -29,6 +29,8 @@
       <button id="abandon-engagement" class="secondary tiny" type="button">Abandon engagement</button>
       <button id="return-to-sector" class="tiny" type="button" hidden>Return to sector map</button>
     </div>
+    <section id="practice-panel" class="learning-panel" aria-label="Guided practice" tabindex="-1" hidden></section>
+    <section id="walkthrough-panel" class="learning-panel" aria-label="First-order hints" tabindex="-1" hidden></section>
     <main id="game-root">
       <section class="map-panel panel" aria-label="Tactical map">
         <div class="panel-title">
@@ -259,6 +261,7 @@
             <p class="dialog-note" id="ruleset-note">Classic preserves the calibrated original game. Reimagined adds fleet orders, scenarios, and a wider battlefield with new combat systems.</p>
             <p class="dialog-note"><a href="#guide-start">Ruleset and option help</a> · <a href="#guide-precision">Precision fire help</a></p>
             <p class="dialog-note">The same seed and options reproduce the opening position; your orders determine what follows. Starting a new war or campaign replaces the other save.</p>
+            <details class="practice-entry"><summary>Practice Reimagined tactics</summary><p class="dialog-note">Small exercises use the real rules and preserve your current war or campaign. Real-time practice begins paused.</p><div id="practice-chooser"></div></details>
           </div>
           <fieldset id="reimagined-options" class="ruleset-options" hidden disabled>
             <legend>Reimagined options</legend>
@@ -324,6 +327,7 @@
           <a href="#guide-reimagined">Reimagined tactics</a>
           <a href="#guide-realtime">Real-time play</a>
           <a href="#guide-campaign">Sector campaign</a>
+          <a href="#guide-practice">Practice</a>
           <a href="#guide-comfort">Accessibility</a>
           <a href="#guide-save">Save and resume</a>
           <a href="#guide-troubleshooting">Troubleshooting</a>
@@ -332,6 +336,7 @@
         <div class="guide-body">
           <section id="guide-war" aria-labelledby="guide-first-orders">
             <h3 id="guide-first-orders">First orders</h3>
+            <p><button type="button" class="secondary" data-walkthrough-action="start">Start first-order hints</button> Optional hints use your current battle and ordinary commands. Dismiss or restart them at any time.</p>
             <p>You command the Federation ship named in the command console, initially <b>Argo</b>. Choose <a href="#guide-start">Classic or Reimagined</a> in <b>New game</b>. Classic is turn-based; Reimagined offers turn-based battles, pausable real-time movement, and a sector campaign. These contents links change only the reference you are reading.</p>
             <h4>Start a turn-based battle — either ruleset</h4>
             <ol>
@@ -451,7 +456,7 @@
               <li><b>Shields and systems:</b> damage past shields can kill crew and disable hardware. Fewer live units reduce the affected system's performance. Zero crew can leave a vacant frame; destruction leaves an unboardable wreck.</li>
               <li><b>Command loss:</b> losing your command ship transfers command to a surviving Federation hull where possible. With no Federation command left, you watch other alliances finish. Resigning hands play to autopilot.</li>
               <li><b>Tractor lock:</b> a held ship cannot maneuver or dock. Its cyan pip and console identify the hold; a hidden source may read “an unseen hull.” Hyperspace or destruction of the holder ends the lock. A tow can cause a collision.</li>
-              <li><b>Collisions:</b> overlapping hulls can destroy one and cripple the other. Ordered rams, tractor slams, and hyperspace arrivals are dangerous even when guns are not involved.</li>
+              <li><b>Collisions:</b> overlapping hulls can destroy one and cripple the other. Ordered rams, tractor slams, and hyperspace arrivals are dangerous even when guns are not involved. In Reimagined, the end-game report credits enemy kills caused directly by an active tow, including after command transfer. A crippled survivor is not a kill; these report credits do not increase ace or vendetta bonuses.</li>
               <li><b>Endings:</b> standard wars resolve surviving alliances, surrender, and stranded-fleet draws. Reimagined objectives can also decide the war. A battle outcome is distinct from a campaign outcome.</li>
               <li><b>Playback:</b> <b>Compact</b> groups consecutive routine losses from one resolution for 700 ms; your ship, objectives, alliance surrender, and battle completion receive 2000 ms. <b>Full sequence</b> shows each terminal card for 2500 ms. Expand the latest resolution to read every member, or use the journal for earlier events. <b>Finish presentation</b> ends a display or historical replay, retaining the journal and your paused state. <b>Replay round</b> uses frozen available facts; commands stay locked during playback.</li>
             </ul>
@@ -475,6 +480,7 @@
             <h4>Repair and refit during a battle</h4>
             <p>Bring an active friendly ship inside an allied Xanadu dockyard ring and let a stardate boundary resolve. Docking gradually recovers shields and crew, and repairs a unit of its worst-damaged subsystem. Confirm recovery in the narrative and condition report. Starbases, drones, and tractor-held ships do not dock. The base must be active, friendly, and have at least <span data-guide-percent="DOCKING.minBaseCondition">50%</span> of its shield capacity; a heavily damaged base cannot provide repairs or refits.</p>
             <p>Inside the ring, the friendly hull menu offers a free refit once per hull per battle: <b>Re-arm</b>, <b>Overcharge</b>, <b>Tune drive</b>, <b>Deep sensors</b>, or <b>Reactor upgrade</b>, subject to hardware limits. The result confirms the added units. This differs from <a href="#guide-campaign">paid between-battle campaign services</a>.</p>
+            <p><button type="button" class="secondary tiny" data-practice-start="rescue-repair">Practice rescue and repair</button></p>
             <h4>Read captains and doctrines</h4>
             <p>Scan hulls to learn their captains. Kills can make a captain an ace, marked by a star; an experienced vendetta hunter becomes more dangerous. Enemy alliances have distinct doctrines: Axis closes aggressively, Bloc favors phaser distance, and Cabal favors tractor tactics. The fleet report helps you follow your own captains and orders.</p>
             <h4>Choose a scenario</h4>
@@ -501,10 +507,12 @@
               <li><b>Ion storm:</b> the core jams weapons and radio; the outer ring worsens firing accuracy and reduces radio reach. Engines and tractor still allow an escape.</li>
               <li><b>Relay:</b> an eligible hull inside at stardate end holds the node for its alliance, increasing its reactor budgets. Tractor-held hulls cannot claim it. Competing alliances contest the node; leaving relinquishes it. The colored ownership ring is public information.</li>
             </ul>
+            <p><button type="button" class="secondary tiny" data-practice-start="hold-relay">Practice holding a relay</button></p>
             <h4>Tow, board, and reinforce</h4>
-            <p>Choose <b>Direct tow…</b> from an eligible enemy's menu to aim your tractor pull at coordinates or another hull. You choose direction, not extra pulling distance. It costs the normal tractor action or real-time cycle. Immovable hulls, broken tractor hardware, and range can prevent the order. A friendly distress hull can also be towed home.</p>
+            <p>Choose <b>Direct tow…</b> from an eligible enemy or friendly distress hull's menu to aim your tractor pull at coordinates or another hull. You choose direction, not extra pulling distance. It costs the normal tractor action or real-time cycle. Immovable hulls, broken tractor hardware, and range can prevent the order. A friendly distress hull can also be towed home.</p>
             <p>Use <b>Transport</b> (<kbd>8</kbd>), <b>Board ship</b> on a vacant hull, or <b>Transport crew</b> on a friendly one. The transporter must work and reach the target; send a positive whole crew amount while leaving crew on your source ship. A live enemy cannot be boarded directly, except a neutral merchant that can be seized. Wrecks and drones cannot be occupied.</p>
             <p>For autonomous boarding, give a friendly hull <b>Board…</b> with a valid vacant target. It approaches and sends its own party when eligible. In Reimagined a captured prize receives a captain and Withdraw order; the fleet report and gold pip identify it. A skeleton crew weakens engines and weapons until you reinforce or dock it. If its crew is lost, the frame can become vacant and be captured again. Enemy captains also race for prizes.</p>
+            <p><button type="button" class="secondary tiny" data-practice-start="tow-position">Practice towing</button> <button type="button" class="secondary tiny" data-practice-start="disable-capture">Practice taking a prize</button></p>
             <h4>Use new hulls and weapons</h4>
             <p>Interceptors favor speed; artillery favors powerful long-range fire; carriers provide crew, towing, and a drone bay. Hardware determines which weapons appear. <b>Ion</b> (<kbd>I</kbd>) consumes shields and burns subsystem units without killing crew; a disabled hull may become a prize. <b>Spread</b> (<kbd>T</kbd>) hits its primary target and splashes nearby hulls with damage decreasing by distance. The shooter is spared, but its allies are not. A missed salvo produces no splash. In real time, spread damage waits for the ballistic impact.</p>
             <p>Flying a carrier, <b>Launch drones</b> (<kbd>D</kbd>) spends an action or cycle to release its wing. A carrier's Launch drones standing order waits until an enemy closes. The wing escorts its carrier and engages threats; you can give drones standing orders. Drones are uncrewed, unboardable, and excluded from victory counts. They can fight after losing the carrier, but go dark when their alliance has no crewed hull left.</p>
@@ -533,11 +541,19 @@
             <h4>Understand what carries forward</h4>
             <p>After a finished engagement, return with the displayed sector control. Surviving fleet hulls carry shields, crew, damaged systems, prizes, captains, kills, and spent drone bays forward. Orders, power allocations, stance, facing, and positions reset for the next engagement. Read the veteran fleet condition and campaign report before fighting again.</p>
             <p>Capturing an enemy system earns credits; carrying out a new prize earns its one-time class bounty. Capturing the enemy home objective wins the campaign. Losing the entire carried fleet or losing Xanadu in a defense ends it.</p>
+            <p>After returning, expand the <b>Debrief</b> to compare entering condition with new damage, survivors, losses, prizes, and the actual credit change. <b>Reopen engagement debriefs</b> reads saved results without awarding anything again. Under <b>Your fleet</b>, expand a ship’s service record for confirmed milestones. The <b>Campaign memorial</b> retains lost hulls; a lost hull does not establish its captain’s fate.</p>
+            <p>The latest 50 engagement details and 24 milestones per hull are retained alongside lifetime counts and final losses. Older or unavailable detail is labelled explicitly. Docking alone is not recorded as a rescue.</p>
             <h4>Buy dockyard services</h4>
-            <p>At Xanadu or another Federation-held system, inspect <b>Dockyard</b> offers between engagements. Each lists its credit cost: shield repair, crew replenishment, system overhaul, refits, spent drone-bay rebuilds, and new commissions. Select an affordable eligible offer and check the changed credit balance and hull condition. Refits can be purchased again within hardware limits; commissions are limited by the purchase point budget, while prizes do not spend it. Paid services do not consume a battle stardate.</p>
+            <p>At Xanadu or another Federation-held system, expand <b>Dockyard offers</b> between engagements. Each lists its credit cost: shield repair, crew replenishment, system overhaul, refits, spent drone-bay rebuilds, and new commissions. Select an affordable eligible offer and check the changed credit balance and hull condition. Refits can be purchased again within hardware limits; commissions are limited by the purchase point budget, while prizes do not spend it. Paid services do not consume a battle stardate.</p>
             <h4>Draws, abandonment, and raids</h4>
             <p>A draw or retreat at an enemy system leaves that system in enemy hands and carries out surviving hulls in their end condition. <b>Abandon engagement</b> confirms leaving the battle; abandoning a defense cedes the friendly node to its attacker. A drawn or stalled defense holds the friendly node if the fleet survives; losing or abandoning Xanadu's defense ends the campaign.</p>
             <p>Enemy alliances also contest systems, occupy empty ones, and raid yours as campaign turns advance. A raid at your fleet's system becomes a defensive engagement; a strike on Xanadu recalls the fleet home. Resolve that defense before traveling. Garrisons resolve raids elsewhere. The <b>campaign report</b> tracks outcomes, holdings, credits, prizes, and aces.</p>
+          </section>
+          <section id="guide-practice">
+            <h3>Practice Reimagined tactics</h3>
+            <p>Choose an exercise here or under <b>New game → Practice Reimagined tactics</b>. Each small, staged situation uses ordinary Reimagined commands. Read its objective and disclosed setup, inspect the named ship, then act. Hints follow confirmed progress and can be dismissed.</p>
+            <div id="guide-practice-chooser"></div>
+            <p><b>Retry</b> restores the exercise's opening, including its random sequence. Success offers the next exercise; <b>Return to previous game</b> restores your prior war or campaign. Practice has a separate save: reloading resumes the exercise, and no practice prize or credit enters a campaign. In real time, issue a course while paused, then use <b>Resume</b> to let it run.</p>
           </section>
           <section id="guide-comfort">
             <h3>Accessibility and appearance</h3>

@@ -35,7 +35,7 @@ import {
 import { createRng } from './rng.js';
 import { noteFieldCollision, withFieldAction } from './field-diagnostics.js';
 import { simTimeOf } from './realtime.js';
-import { battleActionOf, emitBattleRecord, shipConsequences, snapshotShip, withBattleAction } from './battle-records.js';
+import { activeTowCause, battleActionOf, creditTowCollision, emitBattleRecord, recordAceCrossing, shipConsequences, snapshotShip, withBattleAction, withBattleCause } from './battle-records.js';
 import {
   alertLevel,
   applyHeading,
@@ -192,14 +192,14 @@ const usableActor = (game) => {
 const seededRng = (game) => createRng(`${game.seed}:${game.randomStep ?? 0}`);
 const advanceRandom = (game) => ({ ...game, randomStep: (game.randomStep ?? 0) + 1 });
 
-const consequenceMilestones = (game, actor, target, consequences, cause) => {
+const consequenceMilestones = (game, actor, target, consequences, cause, details = {}) => {
   if (!consequences) return game;
   let next = game;
   const { before, after } = consequences;
   if (before.status !== after.status && ['destroyed', 'vacant'].includes(after.status)) {
     next = emitBattleRecord(next, {
       kind: after.status === 'destroyed' ? 'destruction' : 'vacancy', actor, target,
-      payload: { cause, status: after.status },
+      payload: { cause, status: after.status, ...details },
     });
   }
   const disabled = Object.keys(before.systems ?? {}).filter((name) => before.systems[name] > 0 && after.systems?.[name] === 0);
@@ -221,7 +221,7 @@ const resolvedDamage = (game, actor, before, after, cause, details = {}) => {
   return consequenceMilestones(emitBattleRecord(game, {
     kind: 'damage', actor: creditedActor, target: before,
     payload: { cause, ...details, consequences },
-  }), creditedActor, before, consequences, cause);
+  }), creditedActor, before, consequences, cause, cause === 'tractor-collision' ? details : {});
 };
 
 // Record only execution inputs, never menu state, DOM nodes or presentation data.
@@ -840,7 +840,7 @@ const weaponAction = (game, action, actor, type) => {
     events.push(terminalEvent('destruction', type, victim, { attacker: actor }));
   }
   const powerNote = power !== 100 ? ` at ${power}% power` : '';
-  return result(resolvedWeapon(updated, actor, found.target, type, 'hit', {
+  return result(resolvedWeapon(recordAceCrossing(updated, actor, shooter), actor, found.target, type, 'hit', {
     damage, arc, focus, power, consequences: shipConsequences(found.target, victim),
     actorConsequences: shipConsequences(actor, shooter),
   }), [
@@ -950,7 +950,7 @@ export const spreadSplashAt = (game, actor, target, impact, full, rng, creditSho
   const ships = splashed.map((ship) => (ship.id === actor.id
     ? { ...ship, ...(creditShooter ? { shotsFired: ship.shotsFired + 1 } : {}), kills: ship.kills + kills }
     : ship));
-  return { game: { ...recorded, ships }, messages, events, kills };
+  return { game: recordAceCrossing({ ...recorded, ships }, getShip(game, actor.id), ships.find((ship) => ship.id === actor.id)), messages, events, kills };
 };
 
 /**
@@ -1031,7 +1031,13 @@ const cripple = (ship, rng) => {
   return damageShip(ship, ship.shields + Math.ceil(internals * CRIPPLE.fraction), rng);
 };
 
-const oneCollision = (game, first, second) => {
+const oneCollision = (game, first, second, towCauses = {}) => {
+  const causes = [first, second].flatMap((ship) => {
+    const cause = activeTowCause(game, ship, towCauses[ship.id]);
+    return towCauses[ship.id] && cause ? [{ cause, shipId: ship.id }] : [];
+  });
+  // Two independently moving tows do not establish a single responsible beam.
+  const tow = causes.length === 1 ? causes[0] : null;
   const rng = seededRng(game);
   const destroyedId = rng.pick([first.id, second.id]);
   const destroyed = collided(destroyedShip(getShip(game, destroyedId)));
@@ -1044,12 +1050,22 @@ const oneCollision = (game, first, second) => {
     { kind: 'explosion', fromId: survivor.id, toId: destroyed.id, x1: destroyed.x, y1: destroyed.y, x2: destroyed.x, y2: destroyed.y, hit: true },
     terminalEvent('destruction', 'collision', destroyed, { attacker: survivor }),
   ];
-  updated = emitBattleRecord(updated, {
-    kind: 'collision', actor: first, target: second,
-    payload: { destroyedId: destroyed.id, survivorId: survivor.id },
+  const recorded = withBattleCause(updated, tow?.cause, (prepared) => {
+    let next = emitBattleRecord(prepared, {
+      kind: 'collision', actor: tow?.cause.actor ?? first, target: second,
+      payload: { destroyedId: destroyed.id, survivorId: survivor.id, firstId: first.id, secondId: second.id,
+        ...(tow ? { cause: 'tractor-collision', towTargetId: tow.shipId } : {}) },
+    });
+    const cause = tow ? 'tractor-collision' : 'collision';
+    for (const [before, other] of [[first, second], [second, first]]) {
+      const after = getShip(next, before.id);
+      const details = tow ? { towTargetId: tow.shipId, issuingShipId: tow.cause.issuingShipId,
+        creditedKill: after.status === 'destroyed' && before.faction !== tow.cause.actor.faction } : {};
+      next = resolvedDamage(next, tow?.cause.actor ?? other, before, after, cause, details);
+    }
+    return { game: tow ? creditTowCollision(next, tow.cause, destroyed) : next };
   });
-  updated = resolvedDamage(updated, second, first, getShip(updated, first.id), 'collision');
-  updated = resolvedDamage(updated, first, second, getShip(updated, second.id), 'collision');
+  updated = recorded.game;
   noteFieldCollision(game, updated, first, second);
   return {
     game: updated,
@@ -1064,7 +1080,7 @@ const oneCollision = (game, first, second) => {
  * others passed through the second; and a hull destroyed in the first impact
  * cannot collide again.
  */
-export const resolveCollision = (game, actor) => {
+export const resolveCollision = (game, actor, { towCauses = {} } = {}) => {
   const messages = [];
   const events = [];
   let next = game;
@@ -1073,7 +1089,7 @@ export const resolveCollision = (game, actor) => {
     if (other.id === current.id || !isActive(current)) continue;
     const victim = getShip(next, other.id);
     if (!isActive(victim) || distance(current, victim) >= 1) continue;
-    const resolved = oneCollision(next, current, victim);
+    const resolved = oneCollision(next, current, victim, towCauses);
     next = resolved.game;
     messages.push(...resolved.messages);
     events.push(...resolved.events);
@@ -1217,7 +1233,8 @@ const tractorAction = (game, action, actor) => {
     const towed = {
       ...facePoint(game, found.target, position.x, position.y),
       tractorBy: actor.id,
-      tow: { x: position.x, y: position.y, rate: pull / REALTIME.ticksPerStardate, remaining: pull },
+      tow: { x: position.x, y: position.y, rate: pull / REALTIME.ticksPerStardate, remaining: pull,
+        ...(game.reimagined && battleActionOf(game) ? { causal: battleActionOf(game) } : {}) },
     };
     return result(emitBattleRecord(completeTurn(replaceShip(game, towed)), {
       kind: 'tractor-lock', actor, target: found.target,
@@ -1235,7 +1252,8 @@ const tractorAction = (game, action, actor) => {
     kind: 'tractor-lock', actor, target: found.target,
     payload: { pull, result: 'pulled', destination: position, distressTow: rescueTow, consequences: shipConsequences(found.target, pulled) },
   });
-  const collision = resolveCollision(locked, pulled);
+  const moved = pulled.x !== found.target.x || pulled.y !== found.target.y;
+  const collision = resolveCollision(locked, pulled, { towCauses: moved ? { [pulled.id]: battleActionOf(game) } : {} });
   // A tow that ends inside an asteroid field exposes the victim to a rock strike
   // (15c) — towing an enemy into the rocks is a deliberate weapon.
   const strike = resolveAsteroidStrike(collision.game, pulled);
@@ -1484,7 +1502,7 @@ export const detonate = (game, actor) => {
     recorded = resolvedDamage(recorded, actor, fact.before, ships.find((ship) => ship.id === fact.before.id), 'self-destruct',
       fact.damage === undefined ? {} : { damage: fact.damage });
   }
-  return { game: advanceRandom({ ...recorded, ships }), messages, events };
+  return { game: recordAceCrossing(advanceRandom({ ...recorded, ships }), getShip(game, actor.id), ships.find((ship) => ship.id === actor.id)), messages, events };
 };
 
 const selfDestructAction = (game, actor) => {

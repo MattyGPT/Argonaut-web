@@ -5,7 +5,7 @@ import { advanceSubtick, integrateStardate, positionsOf, simTimeOf, SUBTICK } fr
 import { createRng } from './rng.js';
 import { scenarioOutcome } from './scenarios.js';
 import { withFieldAction, withFieldSweep } from './field-diagnostics.js';
-import { beginBattleResolution, finishBattleResolution, emitBattleRecord, snapshotKnowledge, snapshotShip, shipConsequences, withBattleAction, withBattleCause } from './battle-records.js';
+import { activeTowCause, battleActionOf, beginBattleResolution, finishBattleResolution, emitBattleRecord, recordAceCrossing, snapshotKnowledge, snapshotShip, shipConsequences, withBattleAction, withBattleCause } from './battle-records.js';
 import {
   appendLog,
   applyHeading,
@@ -306,7 +306,7 @@ const executeAiAction = (startGame, shipId, action, plotDest = false) => {
       events.push(terminalEvent('destruction', action.type, victim, { attacker: actor }));
     }
     return {
-      game: recordVolley(updated, target, action.type, 'hit', { damage: amount, arc }, victim),
+      game: recordVolley(recordAceCrossing(updated, actor, shooter), target, action.type, 'hit', { damage: amount, arc }, victim),
       messages: [
         `${actor.name} fires ${action.type} at ${target.name}.`,
         ...(kill ? killLines(game, actor, victim) : []),
@@ -409,7 +409,8 @@ const executeAiAction = (startGame, shipId, action, plotDest = false) => {
       const towed = {
         ...facePoint(game, target, position.x, position.y),
         tractorBy: actor.id,
-        tow: { x: position.x, y: position.y, rate: pull / REALTIME.ticksPerStardate, remaining: pull },
+        tow: { x: position.x, y: position.y, rate: pull / REALTIME.ticksPerStardate, remaining: pull,
+          ...(game.reimagined && battleActionOf(game) ? { causal: battleActionOf(game) } : {}) },
       };
       return {
         game: emitBattleRecord(replaceShip(game, towed), {
@@ -430,7 +431,8 @@ const executeAiAction = (startGame, shipId, action, plotDest = false) => {
       kind: 'tractor-lock', target: snapshotShip(target),
       payload: { pull, result: 'pulled', destination: position, distressTow: target.encounter?.type === 'distress' && target.faction === actor.faction, consequences: shipConsequences(target, pulled) },
     });
-    const collision = resolveCollision(locked, pulled);
+    const moved = pulled.x !== target.x || pulled.y !== target.y;
+    const collision = resolveCollision(locked, pulled, { towCauses: moved ? { [pulled.id]: battleActionOf(game) } : {} });
     // A tow that ends inside an asteroid field exposes the victim to a rock strike
     // (15c) — the Cabal's tractor-ram can now dump a hull into the rocks as well.
     const strike = resolveAsteroidStrike(collision.game, pulled);
@@ -1165,7 +1167,7 @@ const closestApproach = (a0, a1, b0, b1) => {
  * consuming the main stream like every other combat roll, then separates the
  * survivors so one meeting is one collision.
  */
-const sweepCollisions = (game, prev) => {
+const sweepCollisions = (game, prev, towCauses = {}) => {
   let next = game;
   const messages = [];
   const events = [];
@@ -1194,7 +1196,7 @@ const sweepCollisions = (game, prev) => {
           return ship;
         }),
       };
-      const resolved = withFieldSweep(staged, [a.id, b.id], contact, () => resolveCollision(staged, getShip(staged, a.id)));
+      const resolved = withFieldSweep(staged, [a.id, b.id], contact, () => resolveCollision(staged, getShip(staged, a.id), { towCauses }));
       next = separateOverlaps(resolved.game);
       messages.push(...resolved.messages);
       events.push(...(resolved.events ?? []));
@@ -1278,7 +1280,7 @@ const resolveWarheadImpactRules = (game, warhead) => {
       events.push(terminalEvent('destruction', 'photons', victim, { attacker: actor }));
     }
     return {
-      game: recordImpact(updated, warhead, target, 'hit', { damage, arc }, victim),
+      game: recordImpact(recordAceCrossing(updated, actor, shooter), warhead, target, 'hit', { damage, arc }, victim),
       messages: [
         `${actor.name}'s photons hit ${target.name} for ${damage} damage.`,
         ...(arc && hit.arcs ? [`The hit lands on ${target.name}'s ${arc} arc.`] : []),
@@ -1408,7 +1410,12 @@ const stepContinuumRules = (game) => {
     messages.push(...strike.messages);
     events.push(...(strike.events ?? []));
   }
-  const swept = sweepCollisions(next, prev);
+  const towCauses = Object.fromEntries(game.ships.flatMap((before) => {
+    const after = getShip(step.game, before.id);
+    const cause = activeTowCause(game, before);
+    return cause && before.tow.remaining > 0 && (before.x !== after.x || before.y !== after.y) ? [[before.id, cause]] : [];
+  }));
+  const swept = sweepCollisions(next, prev, towCauses);
   next = swept.game;
   messages.push(...swept.messages);
   events.push(...swept.events);

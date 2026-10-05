@@ -4,6 +4,7 @@
  * the outer boundary. Their Symbols survive immutable engine spreads, not JSON.
  */
 import { distance, getShip, inRadioContact, isActive, isSpectator, nebulaHides, radioIntegrity, sensorRange } from './state.js';
+import { ACE_KILLS } from './constants.js';
 
 const COLLECTOR = Symbol('battle resolution collector');
 const ACTION = Symbol('battle action context');
@@ -33,7 +34,8 @@ export const snapshotShip = (ship) => ship ? freeze(copy(Object.fromEntries(
 ))) : null;
 
 const condition = (ship) => ship ? Object.fromEntries(
-  ['shields', 'crew', 'systems', 'arcs', 'status', 'faction', 'x', 'y', 'tractorBy', 'kills', 'shotsFired', 'shotsTaken', 'dest', 'tow'].filter((key) => ship[key] !== undefined).map((key) => [key, copy(ship[key])]),
+  ['shields', 'crew', 'systems', 'arcs', 'status', 'faction', 'x', 'y', 'tractorBy', 'kills', 'shotsFired', 'shotsTaken', 'dest', 'tow'].filter((key) => ship[key] !== undefined).map((key) => [key,
+    key === 'tow' && ship.tow ? copy(Object.fromEntries(Object.entries(ship.tow).filter(([name]) => name !== 'causal'))) : copy(ship[key])]),
 ) : null;
 
 /** Actual before/after facts; signed deltas mean after minus before. No rolls. */
@@ -118,6 +120,37 @@ export const allocateAction = (game, { actor, source = 'manual', command } = {})
 
 export const battleActionOf = (game) => game?.[ACTION] ?? null;
 
+/** Observe the existing counter increment while the credited captain's identity
+ * is still present. A later capture must not rewrite this threshold crossing.
+ */
+export const recordAceCrossing = (game, before, after) => {
+  const beforeKills = before?.kills ?? 0;
+  const kills = after?.kills ?? 0;
+  if (!game.reimagined || before?.id !== after?.id || beforeKills >= ACE_KILLS || kills < ACE_KILLS) return game;
+  return emitBattleRecord(game, { kind: 'ace', actor: after, payload: { beforeKills, kills } });
+};
+
+/** A tow is causal only while its original caster still owns an active beam.
+ * Callers must additionally prove this hull moved by that tow this resolution.
+ */
+export const activeTowCause = (game, ship, cause = ship?.tow?.causal) => {
+  const caster = getShip(game, ship?.tractorBy);
+  return game.reimagined && cause?.actor?.id === ship?.tractorBy && isActive(caster)
+    && caster.faction === cause.actor.faction && caster.systems?.tractor > 0 ? cause : null;
+};
+
+/** Report credit is separate from ship.kills, which controls ace/vendetta buffs.
+ * Keep one bounded terminal fact per destroyed hull, including launch identity.
+ */
+export const creditTowCollision = (game, cause, victim) => {
+  if (!game.battleRecordState || !cause || victim.status !== 'destroyed' || victim.faction === cause.actor.faction) return game;
+  const credits = game.battleRecordState.towCollisionCredits ?? [];
+  if (credits.some((entry) => entry.target.id === victim.id)) return game;
+  const credit = freeze(copy({ actor: snapshotShip(cause.actor), target: snapshotShip(victim),
+    actionId: cause.actionId, source: cause.source, issuingShipId: cause.issuingShipId }));
+  return { ...game, battleRecordState: { ...game.battleRecordState, towCollisionCredits: [...credits, credit] } };
+};
+
 /** Resume a saved launch cause without allocating another accepted action. */
 export const withBattleCause = (game, cause, resolve) => {
   if (!game.battleRecordState || !cause) return resolve(game);
@@ -175,6 +208,6 @@ export const stripBattleRecordMetadata = (value) => {
   if (Array.isArray(value)) return value.map(stripBattleRecordMetadata);
   if (!value || typeof value !== 'object') return value;
   return Object.fromEntries(Object.entries(value)
-    .filter(([key]) => !['battleRecordState', 'battleId', 'causal'].includes(key))
+    .filter(([key]) => !['battleRecordState', 'battleId', 'causal', 'campaignShipId', 'serviceRecords', 'serviceRecordState'].includes(key))
     .map(([key, entry]) => [key, stripBattleRecordMetadata(entry)]));
 };

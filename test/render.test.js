@@ -1185,6 +1185,7 @@ test('a distressed hull wears its blinker and tells the rescue in its menu', () 
   assert.match(field, /distress-pip/, 'the amber blinker is drawn');
   assert.match(field, /broadcasting distress/, 'and named in the hull title');
   assert.match(read('#ship-menu').innerHTML, /Broadcasting distress: engines gone/, 'the menu tells the rescue');
+  assert.match(read('#ship-menu').innerHTML, /data-ship-command="tractor-direct"/, 'friendly distress offers the directed tow needed to choose its safe destination');
   assert.match(read('#map-legend').innerHTML, /legend-swatch pip-distress/, 'the legend keys the call');
   // A classic legend grows neither chip.
   elements.clear();
