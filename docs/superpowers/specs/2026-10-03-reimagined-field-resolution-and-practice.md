@@ -2,11 +2,11 @@
 
 Implementation plan: [Field resolution and practice tasks](../plans/2026-10-03-reimagined-field-resolution-and-practice.md).
 
-Status: **DESIGN DRAFT, 2026-10-03.** Covers proposals 5 and 6 in the
+Specification: **Approved direction, 2026-10-03.** Covers proposals 5 and 6 in the
 [player experience roadmap](2026-10-03-player-experience-roadmap.md). New
 navigation rules, exhaustion rules, and practice objectives are explicitly
-Reimagined-only. Classic keeps its current rules and AI. Extended is being
-retired as a new-game mode under
+Reimagined-only. Classic keeps its current rules and AI. Extended was
+removed as a new-game mode under
 [Mode consolidation](2026-10-03-mode-consolidation.md), without a legacy
 rules path to maintain.
 

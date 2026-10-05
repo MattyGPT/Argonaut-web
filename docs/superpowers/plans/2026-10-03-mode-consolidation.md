@@ -145,6 +145,6 @@ fixture includes a positive detonation control.
 The final Extended search leaves only historical calibration comments,
 retired-mode rejection/absence assertions, and preserved guide anchors.
 The repository description already accurately names Classic and Reimagined
-and needs no change. Screenshot recapture remains G5; the obsolete chooser
-figure was removed from the guide meanwhile. Existing unrelated local
+and needed no change. This delivery removed the obsolete chooser figure;
+G5 subsequently shipped refreshed screenshots in PR #95 (`4ef834c`). Unrelated local
 roadmap and README edits remain outside this delivery.

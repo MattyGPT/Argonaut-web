@@ -10,14 +10,19 @@ sampled wars. No exhaustion rule or grace period has been selected.
 The first navigation candidate
 was rejected after paired tests; live rules remain unchanged. The linked
 plan tracks practice, first-order hints, campaign records, and direct tow
-collision report credit merged in PR #94 (`0fdaf31`), plus the remaining
-screenshots, novice observation, and cross-feature acceptance;
-its report totals do not change combat or ace/vendetta bonuses.
+collision report credit merged in PR #94 (`0fdaf31`). G5 illustrations, README
+corrections, and automated G6 reference checks shipped in PR #95 (`4ef834c`).
+Tow report totals do not change combat or ace/vendetta bonuses. Remaining
+work is explicit rescue attribution, the discovered campaign bounty identity
+bug, guide-only/novice observation, native browser 200-percent zoom, and P2
+combined acceptance. The bounty correction is a discovered follow-up, not a
+completed part of the history feature. See the plan’s current status table.
 
-Status: **DESIGN DRAFT, 2026-10-03.** Matt approved the direction of all
+Specification: **Approved direction, 2026-10-03.** Matt approved the direction of all
 eight play-test proposals and added a thorough user-guide and tutorial
-review. Detailed behavior below is proposed for implementation; it is not
-a claim that these features have shipped. The beam, recent-command, and
+review. The requirements below retain the approved scope; the implementation
+status above and linked task plans distinguish shipped work, open acceptance,
+and rejected or deferred experiments. The beam, recent-command, and
 target-menu fixes shipped separately in [PR #84](https://github.com/MattyGPT/Argonaut-web/pull/84).
 
 ## Purpose

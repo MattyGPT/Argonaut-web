@@ -2,10 +2,11 @@
 
 Implementation plan: [Mode consolidation tasks](../plans/2026-10-03-mode-consolidation.md).
 
-Status: **DESIGN DRAFT, 2026-10-03.** Matt's direction is to deprecate
-Extended as a separate play mode and make Reimagined the sole home for its
-gameplay additions. This specifies that transition; the current build
-still offers Extended. Part of the
+Implementation status: **Complete.** M1–M4 shipped in [PR #87](https://github.com/MattyGPT/Argonaut-web/pull/87) (`7881c67`).
+New games offer only Classic and Reimagined. Extended has been removed as a
+separate ruleset; its gameplay additions are retained in Reimagined.
+
+Specification: **Approved direction, 2026-10-03.** Part of the
 [player experience roadmap](2026-10-03-player-experience-roadmap.md).
 
 ## Decision and scope

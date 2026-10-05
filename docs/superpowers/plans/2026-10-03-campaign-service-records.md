@@ -1,5 +1,7 @@
 # Campaign service records implementation plan
 
+**Current status (2026-10-05):** H1/H3 and implemented H2/H4 portions shipped in PR #94 (`0fdaf31`); G5 campaign illustrations shipped in PR #95 (`4ef834c`). H2 qualifying-rescue attribution and H4 unfamiliar-player observation remain open. The discovered bounty identity bug is tracked separately below.
+
 **Spec:** [Campaign service records and debrief](../specs/2026-10-03-campaign-service-records.md).
 **Goal:** Preserve a truthful history of each campaign hull and explain the
 material consequences of each engagement without adding progression rules.
@@ -55,10 +57,12 @@ at existing action/docking resolution seams rather than parsing prose.
 - [x] Consume typed records as they resolve, before C3's 500-event tactical
   truncation. Keep the reducer usable in played and headless battles; no UI
   imports or dependence on the currently selected command ship.
-- [ ] Record supported milestones: joining, capture/recapture, crossing the
-  existing ace threshold, explicit qualifying rescue, relevant paid repair,
-  and loss. Preserve historical labels and ownership. Do not infer rescue
-  from proximity or kill credit from a final damage snapshot.
+- [x] Record joining, capture/recapture, crossing the existing ace threshold,
+  relevant paid repair, and loss, preserving historical labels and ownership.
+  Confirmed direct-tow destruction totals are also retained separately.
+- [ ] Emit and record explicit qualifying-rescue milestones. Do not infer
+  rescue from proximity or ordinary docking, or reconstruct kill credit
+  from a final damage snapshot.
 - [x] Wire `resolveNodeBattle`, `autoResolveNode`, `abandonEngagement`, and
   the defensive/strategic paths that produce player-relevant results through
   consistent summary creation. If a path lacks detailed events, mark detail
@@ -150,4 +154,13 @@ enlarged grayscale presentation. Stable identities include later encounters,
 including a captured hull lost before finalization. Existing credits, bounty
 eligibility, combat, and strategic progression are preserved; the recycled-slot
 bounty suppression edge is documented separately. Novice evaluation remains
-pending, and G5 should use the reproducible campaign browser fixtures.
+pending. G5 used reproducible campaign fixtures for the illustrations
+shipped in PR #95.
+
+## Discovered follow-up: bounty identity
+
+- [ ] Correct the pre-existing bounty suppression case where a new prize
+  reuses the tactical slot of a previously lost, paid prize. Key entitlement
+  to stable hull identity, preserve one payment per hull, and verify repeat
+  finalization/reloads cannot award duplicates. This is a separate Reimagined
+  campaign bug fix; the history delivery did not change the reward ledger.

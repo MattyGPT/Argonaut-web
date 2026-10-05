@@ -1,6 +1,7 @@
 # Guide illustrations and reference polish — 2026-10-05
 
-Based on PR #94, merged as `0fdaf31`. This delivery refreshes the guide after
+Merged in [PR #95](https://github.com/MattyGPT/Argonaut-web/pull/95) as `4ef834c`,
+based on PR #94 (`0fdaf31`). This delivery refreshed the guide after
 the console, journal, practice, and campaign record interfaces shipped.
 Gameplay and campaign economy are unchanged.
 

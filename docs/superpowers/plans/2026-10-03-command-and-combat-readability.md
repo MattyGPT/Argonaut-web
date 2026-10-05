@@ -1,5 +1,7 @@
 # Command and combat readability implementation plan
 
+**Current status (2026-10-05):** C1–C6 implementation is complete through PR #93 (`7146f75`). Earlier delivery notes below describe their own checkpoints; later sections supersede their then-pending work. Final combined acceptance remains P2.
+
 **Spec:** [Command and combat readability](../specs/2026-10-03-command-and-combat-readability.md).
 **Goal:** Keep important commands reachable and their consequences readable
 through busy battles without altering rules or revealing hidden facts.
@@ -234,7 +236,8 @@ Merged in [PR #89](https://github.com/MattyGPT/Argonaut-web/pull/89) (`371bce5`)
 The [record contract](../reviews/2026-10-03-battle-record-contract.md) documents
 identities, observation snapshots, source boundaries, delayed attribution,
 campaign callbacks, and the retention boundary for C3. Raw records remain
-ephemeral; the visible journal and campaign service records remain pending.
+ephemeral. The then-pending visible journal shipped in PR #90, and campaign
+service records shipped in PR #94 with the H2 rescue-source gap still open.
 
 Full suite: 661/661 passing. Independent review closed event-time knowledge,
 confirmed free-command results, AI tractor consequences, abandonment versus
@@ -257,7 +260,8 @@ reader anchoring, unread state, desktop controls, and narrow/enlarged layouts.
 The existing combat-feedback, compact-console, and new-game checks pass.
 Complete 250-seed reports in Classic, Reimagined, and real time match PR #89.
 F1 also verifies state-by-state diagnostic parity in 500 paired wars.
-C4–C6 remain pending; this delivery changes presentation and observation only.
+At this checkpoint C4–C6 were pending; they subsequently shipped in PRs
+#91–#93. This delivery changed presentation and observation only.
 ## C4 delivery evidence — 2026-10-04
 
 Merged in [PR #91](https://github.com/MattyGPT/Argonaut-web/pull/91) (`900dcf3`), based on PR #90 (`404bc45`).
@@ -285,7 +289,8 @@ Validation: 743 tests pass; 24 browser layout/art/zoom combinations plus
 grayscale, keyboard target/sector navigation, and dense-cluster checks pass.
 Existing live/replay beam alignment and command-history regressions pass.
 All three complete 250-seed simulation reports match PR #91 exactly. No
-engine content changed. C6 pacing and later integration remain pending.
+engine content changed. C6 pacing subsequently shipped in PR #93; final
+combined acceptance remains tracked under P2.
 
 ## C6 delivery evidence — 2026-10-05
 

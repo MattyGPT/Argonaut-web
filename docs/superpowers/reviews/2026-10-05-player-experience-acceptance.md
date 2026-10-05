@@ -1,18 +1,20 @@
 # Player experience acceptance audit — 2026-10-05
 
 This maps G6 and P2 to the October 3 specifications and the implementation
-through PR #94 (`0fdaf31`). It distinguishes source and scripted evidence
+through PR #95 (`4ef834c`), including the PR #94 gameplay-interface baseline.
+It distinguishes source and scripted evidence
 from an unfamiliar player's understanding. **No novice observation has been
 performed for this audit. G6 human evaluation and P2 overall acceptance are
 not complete.** G5 refreshed captures, source review, and image inspection
-are delivered for review on `codex/guide-illustrations-acceptance`; final
-illustrated-reference browser validation passes.
+shipped in [PR #95](https://github.com/MattyGPT/Argonaut-web/pull/95) (`4ef834c`);
+final illustrated-reference browser validation passes.
 
-The audit reads the current working-tree README, `index.html`, the October
+The audit reviewed the delivery’s README, `index.html`, the October
 specifications/plans, the checked-in checks, and the delivery reviews linked
 below. A named check is an available reproducible check; its prior pass is
 attributed to its delivery review, not represented as a fresh execution here.
-Fresh branch verification is recorded separately below.
+PR #95 verification is recorded separately below; this status reconciliation
+does not claim a new execution of those browser or gameplay checks.
 No engine, economy, physics, damage, AI, or RNG change is proposed by this
 acceptance work.
 
@@ -175,8 +177,8 @@ first-order hint button is correctly disabled in practice and sector view;
 its explanation could say it needs an ordinary active battle, but no clickable
 silent failure was found.
 
-The README audit identified the following corrections. The owner has applied
-them in the current working tree alongside G5; source review confirms the
+The README audit identified the following corrections. They shipped
+in PR #95 alongside G5; source review confirms the
 corrected scope and wording:
 
 - Qualify circles/initials as glyph view; modern Ship art uses hull sprites.
