@@ -2039,8 +2039,13 @@ dialog.guide {
   scroll-behavior: smooth;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .guide-body { scroll-behavior: auto; }
+}
+
 .guide-body section {
   display: grid;
+  min-width: 0;
   gap: .7rem;
   scroll-margin-top: .5rem;
 }
@@ -2072,7 +2077,7 @@ dialog.guide {
 
 .guide-cols {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
 }
@@ -2080,11 +2085,20 @@ dialog.guide {
 .guide-figure {
   margin: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: .45rem;
+  width: fit-content;
+  max-width: 100%;
+  justify-self: center;
 }
 
 .guide-figure img {
-  width: 100%;
+  display: block;
+  justify-self: center;
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #06101e;
@@ -2095,6 +2109,13 @@ dialog.guide {
   font-size: .7rem;
   line-height: 1.5;
 }
+
+.guide-figure figcaption a { color: var(--cyan); }
+
+.guide-examples { min-width: 0; }
+.guide-examples > summary { cursor: pointer; color: var(--cyan); font-size: .8rem; }
+.guide-examples[open] > summary { margin-bottom: .8rem; }
+.guide-examples .guide-figure + .guide-figure { margin-top: 1rem; }
 
 .guide-keys {
   width: 100%;

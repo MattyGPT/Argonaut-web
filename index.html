@@ -334,8 +334,8 @@
           <a href="#guide-about">Provenance</a>
         </nav>
         <div class="guide-body">
-          <section id="guide-war" aria-labelledby="guide-first-orders">
-            <h3 id="guide-first-orders">First orders</h3>
+          <section id="guide-war" aria-labelledby="guide-first-orders" tabindex="-1">
+            <h3 id="guide-first-orders" tabindex="-1">First orders</h3>
             <p><button type="button" class="secondary" data-walkthrough-action="start">Start first-order hints</button> Optional hints use your current battle and ordinary commands. Dismiss or restart them at any time.</p>
             <p>You command the Federation ship named in the command console, initially <b>Argo</b>. Choose <a href="#guide-start">Classic or Reimagined</a> in <b>New game</b>. Classic is turn-based; Reimagined offers turn-based battles, pausable real-time movement, and a sector campaign. These contents links change only the reference you are reading.</p>
             <h4>Start a turn-based battle — either ruleset</h4>
@@ -353,8 +353,19 @@
               <li>Press <b>Resume</b> to let the drive fly there. Pause again to inspect targets, range, or damage. Fire an available weapon when the shared command cycle is ready.</li>
               <li>Read your accepted command result and the later battle narrative separately: a launched torpedo may still be traveling. See <a href="#guide-realtime">real-time play</a> for readiness and automatic conn.</li>
             </ol>
+            <p>Illustrations use staged example battles to make the controls easy to see. Your fleet, targets, and available commands may differ; follow the live names and readiness shown in your game.</p>
+            <details class="guide-examples"><summary>Examples: find your ship and controls</summary>
+            <figure class="guide-figure">
+              <img src="assets/guide/overview.png" width="1366" height="900" alt="The battle journal sits left of the tactical map; the command console sits to the right and the mission report below." loading="lazy">
+              <figcaption>Screen orientation: use the map to choose a contact, the console to issue orders, and Your ship to recover your result. <a href="assets/guide/overview.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
+            </figure>
+            <figure class="guide-figure">
+              <img src="assets/guide/console.png" width="776" height="1011" alt="The console names Argo and shows primary movement and weapon buttons above the expanded Systems and commands." loading="lazy">
+              <figcaption>Movement and primary weapons stay close at hand. Expand Systems and commands for reports and the full command set. <a href="assets/guide/console.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
+            </figure>
+            </details>
           </section>
-          <section id="guide-start">
+          <section id="guide-start" tabindex="-1">
             <h3>Modes and options</h3>
             <p><b>New game</b> suspends the current battle while the setup panel is open. Choose a seed, <b>Ruleset</b>, and options, then <b>Begin</b>. Starting a new war or campaign replaces the current saved session. <b>Cancel</b> or <kbd>Escape</kbd> keeps it and restores its previous running or paused state.</p>
             <ul>
@@ -366,8 +377,14 @@
               <li><b>Classic view</b> changes the visual theme; <b>Ship art</b> changes modern map artwork. Neither selects Classic rules. See <a href="#guide-comfort">accessibility and appearance</a>.</li>
             </ul>
             <p>The same seed and options reproduce the opening. Later outcomes depend on your action sequence and, in real time, when you issue orders in simulation time. Matching only the seed does not guarantee the same result.</p>
+            <details class="guide-examples"><summary>Example: Reimagined setup</summary>
+            <figure class="guide-figure">
+              <img src="assets/guide/new-game.png" width="772" height="1034" alt="The new-game dialog shows the Ruleset selector, separate real-time and campaign options, and Federation force controls." loading="lazy">
+              <figcaption>Choose the ruleset first, then its options. Begin starts the selected game; Cancel preserves the current session. <a href="assets/guide/new-game.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
+            </figure>
+            </details>
           </section>
-          <section id="guide-map">
+          <section id="guide-map" tabindex="-1">
             <h3>Map and targets</h3>
             <p>Alliance badges use shape as well as color: <b>■ Federation</b>, <b>▲ Axis</b>, <b>◆ Bloc</b>, and <b>● Cabal</b>. A hollow circle marks a neutral contact. The badge beside a hull and its minimap marker show current allegiance, including after capture. Historical journal entries keep the allegiance reported when the event occurred. Threat rings, selection, stance, and prize markers are separate cues. Crowded markers spread apart for readability; dotted tethers lead back to their actual positions. Minimap symbols also separate slightly. Neither display offset changes coordinates, range, or combat results.</p>
             <p>Use the <b>legend under the map</b> to match alliance colors, range rings, threats, and status markers. Modern <b>Ship art</b> shows hull sprites; glyph view shows initials, with <b>+</b> for a destroyed wreck and <b>D</b> for a drone. A vacant hull has a surviving frame without a crew; it can be boarded. A wreck cannot. A captured Reimagined prize wears a gold pip.</p>
@@ -381,18 +398,24 @@
             </ul>
             <h4>Navigate the wider Reimagined field</h4>
             <p>Wheel zooms toward the cursor; arrow keys pan. Drag the minimap to recenter the viewport. The camera follows your command ship until you pan or zoom; <b>⌖</b> restores following. The on-screen <b>+</b> and <b>−</b> buttons zoom. The keyboard <kbd>-</kbd> key opens <b>Hyperspace</b>, so use the displayed zoom buttons for zooming.</p>
+            <details class="guide-examples"><summary>Examples: glyph view and a target menu</summary>
             <div class="guide-cols">
               <figure class="guide-figure">
-                <img src="assets/guide/map.png" width="1460" height="1288" alt="Glyph map example: alliance-colored ships surround the command ship's dashed movement and weapon rings; some enemies have red threat outlines." loading="lazy">
-                <figcaption>Glyph map example. Your rings measure your reach; an enemy's red outline describes its threat to you. Sprite view uses hull artwork for the same contacts.</figcaption>
-              </figure>
+              <img src="assets/guide/map.png" width="776" height="731" alt="Glyph contacts use initials and alliance badges at the same positions as sprite contacts." loading="lazy">
+              <figcaption>Glyph view changes the artwork. The badges, range rings, and actual positions keep the same meaning. <a href="assets/guide/map.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
+            </figure>
               <figure class="guide-figure">
-                <img src="assets/guide/ship-menu.png" width="1460" height="1288" alt="An enemy hull menu offers Fire phasers, Tractor beam, and Scan for this example's range and hardware." loading="lazy">
-                <figcaption>Clicking a contact opens its target menu. This example's choices are situational; your current hull may offer different commands.</figcaption>
-              </figure>
+              <img src="assets/guide/ship-menu.png" width="776" height="731" alt="The selected enemy menu shows distance, exposed arc, and available target actions beside the hull." loading="lazy">
+              <figcaption>Inspect a contact before issuing an order. Available choices depend on current range, hardware, status, and readiness. <a href="assets/guide/ship-menu.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
+            </figure>
             </div>
+            </details>
+            <figure class="guide-figure">
+              <img src="assets/guide/map-sprites.png" width="776" height="731" alt="Hull sprites have alliance badges; range rings surround Argo and red threat outlines surround nearby enemies." loading="lazy">
+              <figcaption>Sprite view: your rings measure your reach. An enemy threat outline describes its reach toward you; it does not promise a valid shot back. <a href="assets/guide/map-sprites.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
+            </figure>
           </section>
-          <section id="guide-commands">
+          <section id="guide-commands" tabindex="-1">
             <h3>Commands and time</h3>
             <p>The console keeps movement, primary weapons, passing or holding, and autopilot close at hand. Expand <b>Systems and commands</b> for the complete command set. Keyboard shortcuts work during play; dialogs own the keyboard. Menu commands can preselect the hull you clicked.</p>
             <p>Target menus and weapon prompts show known distance, weapon reach, and an explanation when an action is unavailable. In real time, a spent shared command cycle is separate from a target being out of range. The selected hull is checked again on confirmation; if it moves out of reach or disappears, choose another target explicitly.</p>
@@ -445,11 +468,11 @@
             <p><kbd>Tab</kbd> passes only when focus is away from interactive controls; on a button, link, or form it navigates normally. Use <kbd>P</kbd> for a deliberate pass. Hyperspace, self-destruct, and resign require confirmation. <b>Cancel</b> closes a prompt without accepting an action.</p>
             <p>The <b>Battle journal</b> keeps your last twelve command cards in <b>Your ship</b>, independently of fleet traffic. Expand a card for its confirmed consequences; traveling ordnance stays pending until its later result arrives. <b>Battle developments</b> highlights observable milestones. Expand <b>Fleet traffic</b> for other available reports or <b>Full available journal</b> to filter retained events. While reading older entries, new arrivals are counted; <b>Return to latest</b> brings you back. The journal is saved with the battle and reports when older detail has been discarded. Information reports appear in the mission panel.</p>
             <figure class="guide-figure">
-              <img src="assets/guide/report.png" width="2174" height="938" alt="A roll call report lists hull names with positions, distance, status, shields, and crew." loading="lazy">
-              <figcaption>Roll call example. Read the status alongside crew and shields to distinguish an active hull, a vacant frame, and a destroyed wreck.</figcaption>
+              <img src="assets/guide/report.png" width="776" height="190" alt="Roll call lists hull names with coordinates, distance, status, shields, and crew." loading="lazy">
+              <figcaption>Read status alongside crew and shields: a vacant frame can be boarded; a destroyed wreck cannot. <a href="assets/guide/report.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
             </figure>
           </section>
-          <section id="guide-combat">
+          <section id="guide-combat" tabindex="-1">
             <h3>Understanding combat</h3>
             <p>A valid shot can miss. Damage varies with the weapon, surviving units, and ruleset; Reimagined power, stance, terrain, and crew condition also matter. Read the result for hit or miss and damage rather than treating range or readiness as a hit prediction.</p>
             <ul>
@@ -461,19 +484,23 @@
               <li><b>Playback:</b> <b>Compact</b> groups consecutive routine losses from one resolution for 700 ms; your ship, objectives, alliance surrender, and battle completion receive 2000 ms. <b>Full sequence</b> shows each terminal card for 2500 ms. Expand the latest resolution to read every member, or use the journal for earlier events. <b>Finish presentation</b> ends a display or historical replay, retaining the journal and your paused state. <b>Replay round</b> uses frozen available facts; commands stay locked during playback.</li>
             </ul>
             <p><b>Classic tactics:</b> enemy fleets concentrate on a shared target; a vendetta ship hunts you personally. Concentrating your own fire and preserving usable engines are useful responses. These are tactical choices, not requirements for a legal command.</p>
-            <section id="guide-precision">
+            <section id="guide-precision" tabindex="-1">
               <h4>Precision fire — optional in either ruleset</h4>
               <p>Enable <b>Precision fire</b> in New game. The phaser prompt adds <b>Called system</b> and <b>Phaser power</b>. Standard targeting damages normally. A called shot trades general damage for damage to the selected subsystem without crew casualties; shields still protect the target. Lower power can leave a surviving frame rather than destroying it. The enemy continues using standard volleys.</p>
             <p>With Precision fire or Reimagined rules, a crewed hull stripped of engines, phasers, and photons can strike its colors at the stardate boundary and become vacant. Starbases, neutral merchants, and your command ship while you retain command are exempt. Confirm vacant status before trying to board.</p>
               <figure class="guide-figure">
-                <img src="assets/guide/precision.png" width="708" height="672" alt="Phaser prompt with Called system set to Standard targeting and Phaser power set to full; these controls allow a called subsystem shot or reduced power." loading="lazy">
-                <figcaption>The optional phaser controls. This example is still set to Standard targeting at full power; selecting a subsystem changes the shot.</figcaption>
-              </figure>
+              <img src="assets/guide/precision.png" width="420" height="406" alt="The phaser prompt selects Engines and 50 percent power for a called shot." loading="lazy">
+              <figcaption>This example targets Engines at half power. Shields still protect the target, and neither accuracy nor a surviving prize is guaranteed. <a href="assets/guide/precision.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
+            </figure>
             </section>
+            <figure class="guide-figure">
+              <img src="assets/guide/combat.png" width="774" height="150" alt="An expanded Your ship card confirms Argo’s phaser hit on Firebreather and the resulting shield and fore-arc damage." loading="lazy">
+              <figcaption>Read the confirmed consequence in your own command card: this hit removed four shields from the target’s fore arc. Fleet activity cannot evict your last twelve command cards. <a href="assets/guide/combat.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
+            </figure>
           </section>
-          <section id="guide-fleet">
+          <section id="guide-fleet" tabindex="-1">
             <h3>Reimagined fleet command</h3>
-            <p id="guide-extended">The former fleet-command reference is now part of <a href="#guide-fleet">Reimagined fleet command</a>. Choose Reimagined in New game to use these systems.</p>
+            <p id="guide-extended" tabindex="-1">The former fleet-command reference is now part of <a href="#guide-fleet">Reimagined fleet command</a>. Choose Reimagined in New game to use these systems.</p>
             <h4>Give a standing order</h4>
             <p>Click a friendly active hull and choose <b>Focus with fleet</b>, <b>Hold position</b>, <b>Withdraw</b>, <b>Escort…</b>, <b>Screen…</b>, or <b>Intercept…</b>. Escort follows a friendly ward; Screen protects one against nearby threats; Intercept pursues a named enemy. Board and Launch drones are available for suitable targets or carriers. Targeted choices ask for the target.</p>
             <p>Orders are free and persist until changed. In radio contact, the hull acknowledges immediately; out of contact, the result says the order will arrive next stardate. Check <b>Fleet orders</b> (<kbd>F</kbd>) for pending or current orders. Your own hull follows its standing order when autopilot has the conn. Without Xanadu, Withdraw heads toward the fleet rather than a base.</p>
@@ -490,8 +517,14 @@
               <li><b>Hunt the hunter:</b> scan the hull commanded by your named hunter before it leaves the fight, then end the vendetta by destruction, surrender, or capture. If it leaves before you identify it, the opportunity is lost.</li>
             </ul>
             <p>The mission panel shows objective progress. Standard war endings can resolve before the scenario objective, so protect the fleet as well as the objective.</p>
+            <details class="guide-examples"><summary>Example: a friendly hull’s standing orders</summary>
+            <figure class="guide-figure">
+              <img src="assets/guide/fleet-orders.png" width="257" height="566" alt="A friendly hull menu lists standing orders including Hold position, Withdraw, Escort, Screen, and Intercept." loading="lazy">
+              <figcaption>Choose an order for this hull, then check its acknowledgement or pending delivery in Fleet orders. <a href="assets/guide/fleet-orders.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
+            </figure>
+            </details>
           </section>
-          <section id="guide-reimagined">
+          <section id="guide-reimagined" tabindex="-1">
             <h3>Reimagined tactics</h3>
             <h4>Allocate reactor power</h4>
             <p>Expand <b>Reactor power</b> in the console. The spent / budget readout limits your allocation across <b>shields, weapons, engines, sensors, and tractor</b>; use each sink's minus and plus pips. Setting power is free and saved. Lower another allocation if the reactor cannot spare the power. Reactor damage reduces the budget; docking and Reactor upgrade can restore or increase it.</p>
@@ -519,8 +552,14 @@
             <p>A carrier launches one complement during a battle; the battle dockyard cannot refill it. A captured carrier brings its existing wing. Campaign dockyards can sell a bay rebuild <em>between battles</em>.</p>
             <h4>Respond to encounters</h4>
             <p>Derelicts offer vacant frames to board. A friendly distress hull can be towed toward home or helped by transferring crew; remember that a tractor-held hull cannot receive docking recovery. Leave it too long and its crew abandons it. Neutral merchants avoid warships and depart after a limited visit. They do not count toward victory or relay control; a transporter party can seize one as a prize.</p>
+            <details class="guide-examples"><summary>Example: a relay changes the reactor budget</summary>
+            <figure class="guide-figure">
+              <img src="assets/guide/relay-power.png" width="776" height="681" alt="The expanded Reactor power panel shows sink allocations, their effects, and the budget with a Federation relay held." loading="lazy">
+              <figcaption>An uncontested held relay adds reactor capacity. Spend within the displayed budget and check the resulting engine, sensor, weapon, and tractor effects. <a href="assets/guide/relay-power.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
+            </figure>
+            </details>
           </section>
-          <section id="guide-realtime">
+          <section id="guide-realtime" tabindex="-1">
             <h3>Real-time play — Reimagined</h3>
             <h4>Pause, plan, and resume</h4>
             <p>Use <b>Pause / Resume</b> above the map, or <kbd>Space</kbd> while focus is away from controls. Commands remain available while paused, subject to readiness. Use the speed buttons or <kbd>,</kbd> / <kbd>.</kbd> to change pacing; speed changes how quickly simulation time passes, not weapon damage.</p>
@@ -533,8 +572,18 @@
             <p>Photons and spread torpedoes travel through space before detonating. A launched shot is not a confirmed hit: a moving target can evade, and a warhead can arrive in empty space. Its command card in <b>Your ship</b> links the later impact and its time. An unobserved result reads <b>outcome unknown</b>. Phasers and ion resolve as instant beams. Tractor tows move smoothly; a tow or ordered ram can collide during travel.</p>
             <h4>Take back the conn</h4>
             <p><b>Autopilot</b> (<kbd>`</kbd>) toggles automatic conn: the captain chooses your ship's orders at stardate boundaries. A manual burn or volley takes control back. Other captains, docking, regeneration, relay ownership, and encounters still resolve at boundaries while hulls move between them.</p>
+            <figure class="guide-figure">
+              <img src="assets/guide/realtime.png" width="776" height="735" alt="The tactical map header shows Paused, Resume, and the 1×, 2×, and 4× speed controls." loading="lazy">
+              <figcaption>Pause before planning. Resume advances simulation time; speed controls change its pace. A plotted course needs running time to reach its destination. <a href="assets/guide/realtime.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
+            </figure>
+            <details class="guide-examples"><summary>Example: command readiness while paused</summary>
+            <figure class="guide-figure">
+              <img src="assets/guide/realtime-console.png" width="776" height="547" alt="The real-time console shows a spent shared command cycle, Hold position, and Automatic conn." loading="lazy">
+              <figcaption>The prior shot spent the shared cycle. Plotting a course is free, but the timer cannot recharge while paused. Hold position cancels the course; Automatic conn lets your captain choose orders. <a href="assets/guide/realtime-console.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
+            </figure>
+            </details>
           </section>
-          <section id="guide-campaign">
+          <section id="guide-campaign" tabindex="-1">
             <h3>Sector campaign — Reimagined</h3>
             <h4>Travel and enter a battle</h4>
             <p>Choose <b>Sector campaign</b> in New game. On the sector screen, click a system to inspect it and follow connected bright routes using <b>Travel</b>. At an enemy system choose <b>Engage</b> to command the turn-based battle yourself or <b>Auto-resolve</b> to let your captains fight it. Auto-resolve applies real losses and gains to your campaign fleet. Travel can be blocked by an engagement or defensive raid awaiting resolution.</p>
@@ -548,14 +597,40 @@
             <h4>Draws, abandonment, and raids</h4>
             <p>A draw or retreat at an enemy system leaves that system in enemy hands and carries out surviving hulls in their end condition. <b>Abandon engagement</b> confirms leaving the battle; abandoning a defense cedes the friendly node to its attacker. A drawn or stalled defense holds the friendly node if the fleet survives; losing or abandoning Xanadu's defense ends the campaign.</p>
             <p>Enemy alliances also contest systems, occupy empty ones, and raid yours as campaign turns advance. A raid at your fleet's system becomes a defensive engagement; a strike on Xanadu recalls the fleet home. Resolve that defense before traveling. Garrisons resolve raids elsewhere. The <b>campaign report</b> tracks outcomes, holdings, credits, prizes, and aces.</p>
+            <figure class="guide-figure">
+              <img src="assets/guide/campaign-route.png" width="776" height="527" alt="The sector chart places the fleet at Xanadu and shows linked routes through friendly, unclaimed, and hostile systems." loading="lazy">
+              <figcaption>Select a connected system to inspect it before travel. Engagements and defensive raids can block the next move. <a href="assets/guide/campaign-route.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
+            </figure>
+            <details class="guide-examples"><summary>Examples: debrief, veteran, and paid dockyard services</summary>
+            <figure class="guide-figure">
+              <img src="assets/guide/campaign-debrief.png" width="774" height="507" alt="The debrief lists survivors and a captured prize, condition changes, milestones, and the actual credit change." loading="lazy">
+              <figcaption>Use the debrief to distinguish new damage from the condition you brought into battle. Reopening it awards no additional credits. <a href="assets/guide/campaign-debrief.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
+            </figure>
+            <figure class="guide-figure">
+              <img src="assets/guide/campaign-veteran.png" width="750" height="178" alt="An expanded service record lists a hull’s identity, lifetime totals, joining event, and a paid systems repair." loading="lazy">
+              <figcaption>A hull keeps its identity across engagements. This record confirms a paid repair; losing the hull does not establish its captain’s fate. <a href="assets/guide/campaign-veteran.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
+            </figure>
+            <figure class="guide-figure">
+              <img src="assets/guide/campaign-dockyard.png" width="774" height="1302" alt="Expanded Dockyard offers list repairs, refits, commissions, and their credit costs." loading="lazy">
+              <figcaption>These are paid services between engagements. Inspect the cost and eligibility before purchase; battle docking follows separate recovery rules. <a href="assets/guide/campaign-dockyard.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
+            </figure>
+            </details>
           </section>
-          <section id="guide-practice">
+          <section id="guide-practice" tabindex="-1">
             <h3>Practice Reimagined tactics</h3>
             <p>Choose an exercise here or under <b>New game → Practice Reimagined tactics</b>. Each small, staged situation uses ordinary Reimagined commands. Read its objective and disclosed setup, inspect the named ship, then act. Hints follow confirmed progress and can be dismissed.</p>
             <div id="guide-practice-chooser"></div>
             <p><b>Retry</b> restores the exercise's opening, including its random sequence. Success offers the next exercise; <b>Return to previous game</b> restores your prior war or campaign. Practice has a separate save: reloading resumes the exercise, and no practice prize or credit enters a campaign. In real time, issue a course while paused, then use <b>Resume</b> to let it run.</p>
+            <figure class="guide-figure">
+              <img src="assets/guide/practice.png" width="775" height="1035" alt="The tow practice briefing describes its setup and objective above the marked destination on the tactical map." loading="lazy">
+              <figcaption>Read the exercise goal and marked destination before acting. Retry restores the setup; Return to previous game restores your war or campaign. <a href="assets/guide/practice.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
+            </figure>
+            <figure class="guide-figure">
+              <img src="assets/guide/practice-complete.png" width="776" height="150" alt="The tow exercise confirms completion and offers Retry exercise, Next exercise, and Return to previous game." loading="lazy">
+              <figcaption>Two ordinary directed tows reached the marked zone in this example. The completion panel confirms the objective; it does not transfer ships or rewards to your saved game. <a href="assets/guide/practice-complete.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
+            </figure>
           </section>
-          <section id="guide-comfort">
+          <section id="guide-comfort" tabindex="-1">
             <h3>Accessibility and appearance</h3>
             <ul>
               <li><b>Classic view</b> switches to a black phosphor theme with glyphs. <b>Ship art</b> selects hull sprites in modern view. Both preferences persist; the ruleset stays selected separately in New game.</li>
@@ -564,15 +639,15 @@
               <li>These written procedures contain the essential instructions; images are optional examples. Use <a href="#guide-first-orders">First orders</a> as a short introduction, then follow the contents to the task you need.</li>
             </ul>
             <figure class="guide-figure">
-              <img src="assets/guide/classic.png" width="2880" height="2840" alt="A battle in the black and green phosphor theme uses letter glyphs for ships and the same map, narrative, and controls." loading="lazy">
-              <figcaption>Classic view is an appearance preference. It can display either ruleset in phosphor and glyphs.</figcaption>
+              <img src="assets/guide/classic.png" width="776" height="731" alt="The Reimagined tactical map uses green phosphor and letter glyphs with range rings and its legend." loading="lazy">
+              <figcaption>Classic view changes appearance. This example still uses Reimagined rules. <a href="assets/guide/classic.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
             </figure>
           </section>
-          <section id="guide-save">
+          <section id="guide-save" tabindex="-1">
             <h3>Save and resume</h3>
             <p>The game autosaves in this browser's local storage. Reload to resume the saved war or campaign; accepted-command history is saved alongside it. Starting a new war or campaign retires the other session. A different browser, browser profile, or cleared site storage will not contain that save. Keep the current session if you want to preserve its progress.</p>
           </section>
-          <section id="guide-troubleshooting">
+          <section id="guide-troubleshooting" tabindex="-1">
             <h3>Find why an order is unavailable</h3>
             <ul>
               <li><b>No target command:</b> check the command ship's hardware, target status, distance, and Reimagined storm jamming. A red enemy outline describes its threat to you, not your firing eligibility.</li>
@@ -584,7 +659,7 @@
             </ul>
             <p>If an instruction still fails, <a href="https://github.com/MattyGPT/Argonaut-web/issues" target="_blank" rel="noopener">report an issue</a> with the seed, ruleset, options, command, and observed result. Those details make an opening reproducible; real-time reports also need the simulation timing of the order.</p>
           </section>
-          <section id="guide-about">
+          <section id="guide-about" tabindex="-1">
             <h3>Provenance, maintenance, and contact</h3>
             <p>The original <b>Argonaut</b> is a tactical space-war game for DOS, released in 1992 and originally (c) 1988, 1992 by <b>Jim Chen</b>. This web remake is newly written HTML, CSS, and JavaScript; the supplied DOS manual was used only as a behavioral reference, and the program includes no original <code>.COM</code>, screenshots, or other original assets. Captain names, fleet orders, alliance doctrines, the Xanadu dockyard, the scenarios, and the Reimagined narrative are original to this remake.</p>
             <p>The remake is maintained today by <b>MattyGPT</b> as an open-source project. The full source, issue tracker, and release history live in the public repository, and the game you are playing is deployed straight from it:</p>

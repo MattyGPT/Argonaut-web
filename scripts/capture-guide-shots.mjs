@@ -1,144 +1,92 @@
-// Regenerates the user-guide screenshots in assets/guide/ by driving the running
-// game in headless Edge: it stages deterministic wars through the game's own state
-// module, flies a few autopilot turns, and photographs each scene.
-// Setup: npm install --no-save puppeteer-core && npm start
-// Run:   node scripts/capture-guide-shots.mjs
-// puppeteer-core stays out of package.json so the game itself keeps zero deps.
-import { mkdir } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import puppeteer from 'puppeteer-core';
-
-const EDGE = process.env.EDGE_PATH || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
-const APP_URL = 'http://localhost:8080';
-const OUT = fileURLToPath(new URL('../assets/guide/', import.meta.url));
-
-const browser = await puppeteer.launch({
-  executablePath: EDGE,
-  headless: true,
-  args: ['--force-device-scale-factor=1', '--hide-scrollbars'],
-});
-const page = await browser.newPage();
-await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 2 });
-await mkdir(OUT, { recursive: true });
-
-/** Stages a war in localStorage using the game's own state module, then reloads. */
-const stage = async (options, arrange) => {
-  await page.goto(APP_URL, { waitUntil: 'networkidle0' });
-  await page.evaluate(async (options, arrangeSource) => {
-    const { createGame } = await import('/game/state.js');
-    const game = createGame(options);
-    // The source is an arrow function, so wrap it in a return to get it back.
-    if (arrangeSource) new Function(`return (${arrangeSource})`)()(game);
-    localStorage.setItem('argonaut-web-save-v1', JSON.stringify({ version: 1, game }));
-  }, options, arrange ? arrange.toString() : null);
-  await page.reload({ waitUntil: 'networkidle0' });
-  // Figures should hug their content, not stretch to the console's grid row.
-  await page.addStyleTag({ content: '.map-panel { align-self: start; }' });
-  await page.evaluate(() => document.fonts.ready);
-};
-
-/** Pulls the named hulls to within phaser reach of the player, facing off. */
-const skirmish = (game) => {
-  const clamp = (v) => Math.min(94, Math.max(6, v));
-  const player = game.ships.find((s) => s.id === game.playerShipId);
-  player.x = 44; player.y = 38; // center the coming fight on the map
-  const near = (faction, dx, dy) => game.ships
-    .filter((s) => s.faction === faction && s.id !== player.id)
-    .slice(0, 2)
-    .forEach((s, i) => { s.x = clamp(player.x + dx + i * 6); s.y = clamp(player.y + dy + i * 4); });
-  near('Axis', 18, -6);
-  near('Bloc', -20, 8);
-  const friendly = game.ships.find((s) => s.faction === 'Federation' && s.id !== player.id);
-  if (friendly) { friendly.x = clamp(player.x + 8); friendly.y = clamp(player.y + 10); }
-};
-
-/** Waits out terminal-event playback and the computer phase between turns. */
-const settle = async () => {
-  for (let i = 0; i < 20; i++) {
-    const free = await page.evaluate(() => !document.querySelector('[data-command="pass"]').disabled);
-    if (free) return;
-    await new Promise((r) => setTimeout(r, 700));
+/** npm start; PLAYWRIGHT_MODULE may point to an existing playwright-core installation. */
+import { createRequire } from 'node:module';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import assert from 'node:assert/strict';
+import { GUIDE_SCENES, stageGuideScene } from './guide-scenes.mjs';
+const require = createRequire(import.meta.url);
+let chromium;
+try { ({ chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core')); }
+catch { throw new Error('Use an installed playwright-core package via PLAYWRIGHT_MODULE; no browser dependency is installed by this script.'); }
+const output = resolve(process.env.GUIDE_OUTPUT || 'assets/guide');
+const selected = process.env.GUIDE_SCENES?.split(',');
+const scenes = GUIDE_SCENES.filter((scene) => !selected || selected.includes(scene.file));
+assert.ok(scenes.length, 'No guide scenes selected');
+await mkdir(output, { recursive: true });
+const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const assets = [];
+async function ready(page) {
+  await page.waitForFunction(() => typeof window.__guideCaptureSnapshot === 'function' && !window.__guideCaptureSnapshot().playback);
+  await page.evaluate(async () => { await document.fonts.ready; await Promise.all([...document.images].filter((image) => image.getClientRects().length).map((image) => image.decode().catch(() => {}))); await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))); });
+}
+async function open(page, selector) {
+  const target = page.locator(selector);
+  if (!await target.evaluate((element) => element.open)) await target.locator(':scope > summary').click();
+}
+try {
+  for (const scene of scenes) {
+    const context = await browser.newContext({ viewport: scene.viewport, deviceScaleFactor: scene.scale, reducedMotion: 'reduce' });
+    try {
+      const page = await context.newPage();
+      const errors = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+      // Read-only observation plus the real Pause button before the first animation frame.
+      await page.route('**/app.js', async (route) => {
+        const response = await route.fetch();
+        await route.fulfill({ response, body: await response.text() + '\nif (game?.realtime && !view.paused) document.querySelector("#pause-button").click();\nwindow.__guideCaptureSnapshot = () => ({seed:game?.seed,phase:game?.phase,simTime:game?.simTime,paused:view.paused,playback:playbackLocked(),theme,art:shipArtPref,practice:game?.practice,campaign:Boolean(campaign),campaignSeed:campaign?.seed,currentNode:campaign?.currentNode,options:game?Object.fromEntries(["reimagined","precision","realtime","regional","sound","scenario"].map(key=>[key,game[key]])):null});\n' });
+      });
+      await page.goto(process.env.GAME_URL || 'http://localhost:8080');
+      await ready(page);
+      const facts = await page.evaluate(stageGuideScene, scene);
+      await page.reload();
+      await ready(page);
+      switch (scene.interaction) {
+        case 'console': await open(page, 'details[data-console-key="systems"]'); break;
+        case 'power': await open(page, 'details[data-console-key="power"]'); break;
+        case 'chooser': await page.locator('#new-game').click(); await page.locator('#ruleset').selectOption('reimagined'); await page.locator('#new-seed').fill(scene.seed); break;
+        case 'enemy-menu': await page.locator('.ship[data-ship-id="axis-flagship"]').click(); break;
+        case 'friendly-menu':
+          await page.locator('.ship[data-ship-id="fed-cruiser-1"]').click();
+          await page.locator('#ship-menu .menu-sub').filter({ hasText: 'Standing orders' }).evaluate((element) => { element.parentElement.scrollTop = element.offsetTop - 12; });
+          break;
+        case 'precision':
+          await page.locator('[data-command="phasers"]').click();
+          await page.locator('#target-select').selectOption('axis-flagship');
+          await page.locator('#focus-select').selectOption('engines');
+          await page.locator('#phaser-power').evaluate((input) => { input.value = '50'; input.dispatchEvent(new Event('input', { bubbles: true })); });
+          break;
+        case 'journal':
+          for (const detail of await page.locator('#command-history details').all()) if (!await detail.evaluate((element) => element.open)) await detail.locator(':scope > summary').click();
+          break;
+        case 'debrief': await open(page, '.engagement-debrief'); break;
+        case 'veteran': await open(page, `#service-${facts.veteranId}`); break;
+        case 'dockyard': await open(page, '#sector-dockyard'); break;
+        case 'practice':
+          for (const detail of await page.locator('#practice-panel details').all()) if (!await detail.evaluate((element) => element.open)) await detail.locator(':scope > summary').click();
+          break;
+        case 'report': await open(page, 'details[data-console-key="systems"]'); await page.locator('[data-command="rollcall"]').click(); break;
+      }
+      await ready(page);
+      const selector = scene.selector === 'veteran' ? `#service-${facts.veteranId}` : scene.selector;
+      const target = selector ? page.locator(selector) : page.locator('body');
+      if (scene.expected) assert.match(await target.innerText(), new RegExp(scene.expected, 'i'), scene.file);
+      const path = resolve(output, scene.file);
+      if (scene.crop) {
+        const boxes = await Promise.all(scene.crop.map((selector) => page.locator(selector).boundingBox()));
+        const x = Math.min(...boxes.map((box) => box.x)); const y = Math.min(...boxes.map((box) => box.y));
+        await page.screenshot({ path, animations: 'disabled', clip: { x, y, width: Math.max(...boxes.map((box) => box.x + box.width)) - x, height: Math.max(...boxes.map((box) => box.y + box.height)) - y } });
+      } else if (selector) await target.screenshot({ path, animations: 'disabled' });
+      else await page.screenshot({ path, animations: 'disabled' });
+      assert.deepEqual(errors, [], scene.file);
+      const observed = await page.evaluate(() => window.__guideCaptureSnapshot());
+      if (scene.options.realtime) assert.equal(observed.paused, true, scene.file);
+      const png = await readFile(path);
+      assets.push({ ...scene, width: png.readUInt32BE(16), height: png.readUInt32BE(20), bytes: png.length, sha256: createHash('sha256').update(png).digest('hex'), facts, observed });
+      console.log(`${scene.file}: ${assets.at(-1).width}x${assets.at(-1).height}, ${png.length} bytes`);
+    } finally { await context.close(); }
   }
-};
-
-/** Lets the autopilot fly a few turns so the narrative and trails have history. */
-const flyTurns = async (count) => {
-  for (let i = 0; i < count; i++) {
-    await settle();
-    await page.evaluate(() => document.querySelector('[data-command="autopilot"]').click());
-    await new Promise((r) => setTimeout(r, 1200));
-  }
-  await settle();
-  await new Promise((r) => setTimeout(r, 900));
-};
-
-const shot = async (name, selector) => {
-  const target = selector ? await page.$(selector) : null;
-  if (selector && !target) throw new Error(`missing ${selector} for ${name}`);
-  await (target ? target.screenshot({ path: `${OUT}${name}.png` }) : page.screenshot({ path: `${OUT}${name}.png`, fullPage: true }));
-  console.log(`captured ${name}`);
-};
-
-// 1. Classic war, skirmish staged, modern theme.
-await stage({ seed: 'guide-overview' }, skirmish);
-await new Promise((r) => setTimeout(r, 900)); // let ship glide transitions settle
-await shot('map', '.map-panel');
-await shot('console', '#console');
-
-// 2. Ship context menu on an enemy hull inside weapon range. The Axis hull sits
-// right of the player, so the menu opens toward the map edge, not over the conn.
-await page.evaluate(() => document.querySelector('.ship.Axis.threat').click());
-await new Promise((r) => setTimeout(r, 300));
-await shot('ship-menu', '.map-panel');
-
-// 3. Roll call report.
-await page.keyboard.press('Escape');
-await page.evaluate(() => document.querySelector('[data-command="rollcall"]').click());
-await new Promise((r) => setTimeout(r, 200));
-await shot('report', '#report');
-
-// 4. A few flown turns give the narrative and trails history for the overview.
-await flyTurns(3);
-await page.evaluate(() => document.querySelector('[data-command="rollcall"]').click());
-await new Promise((r) => setTimeout(r, 200));
-await shot('overview');
-
-// 5. New game dialog.
-await page.evaluate(() => document.querySelector('#new-game').click());
-await new Promise((r) => setTimeout(r, 300));
-await shot('new-game', '#new-game-dialog');
-await page.evaluate(() => document.querySelector('#new-game-dialog').close());
-
-// 6. Classic CRT view.
-await page.evaluate(() => document.querySelector('#theme-toggle').click());
-await new Promise((r) => setTimeout(r, 300));
-await shot('classic');
-await page.evaluate(() => document.querySelector('#theme-toggle').click()); // back to modern
-
-// 7. Precision fire prompt — precision war, enemy staged inside phaser range.
-await stage({ seed: 'guide-precision', precision: true }, skirmish);
-await new Promise((r) => setTimeout(r, 900));
-await page.evaluate(() => document.querySelector('[data-command="phasers"]').click());
-await page.waitForSelector('#target-dialog[open]', { timeout: 3000 });
-await new Promise((r) => setTimeout(r, 200));
-await shot('precision', '#target-dialog');
-
-// 8. Phaser beam in flight — confirm the volley and grab the map mid-effect.
-await page.evaluate(() => {
-  const form = document.querySelector('#target-form');
-  form.querySelector('button[value="confirm"]').click();
-});
-await shot('combat', '.map-panel');
-
-// 9. Reimagined fleet orders — click a friendly hull to show standing orders.
-await stage({ seed: 'guide-orders', reimagined: true }, skirmish);
-await new Promise((r) => setTimeout(r, 900));
-await page.evaluate(() => {
-  const friendlies = [...document.querySelectorAll('.ship.Federation')];
-  friendlies[1].click();
-});
-await new Promise((r) => setTimeout(r, 300));
-await shot('fleet-orders', '.map-panel');
-
-await browser.close();
-console.log('done —', OUT);
+  let previous = [];
+  if (selected) try { previous = JSON.parse(await readFile(resolve(output, 'manifest.json'), 'utf8')).assets.filter((asset) => !assets.some((current) => current.file === asset.file)); } catch {}
+  await writeFile(resolve(output, 'manifest.json'), JSON.stringify({ version: 1, sceneVersion: 2, browser: 'Microsoft Edge via optional Playwright', url: process.env.GAME_URL || 'http://localhost:8080', scale: 1, reducedMotion: 'reduce', assets: [...previous, ...assets] }, null, 2) + '\n');
+} finally { await browser.close(); }

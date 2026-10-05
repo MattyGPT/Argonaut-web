@@ -42,3 +42,36 @@ Audit date: 2026-10-03. This inventory records the pre-consolidation source base
 - The inventory describes current source baseline. Mode consolidation, guide restructuring, screenshot recapture and pause behavior are concurrent changes. Reconcile any row against final implementation before marking correct; this file makes no claim those changes have landed.
 
 Repository metadata was checked during M4 on 2026-10-03: “Browser remake of the 1992 Argonaut space-war game: Classic turn-based tactics and opt-in Reimagined fleets, pausable real-time combat, and sector campaigns. Vanilla JS/HTML/CSS; no runtime dependencies.” This accurately describes the supported modes and needs no update.
+
+## Reconciliation after PR #94 — 2026-10-05
+
+The rows above retain the original audit, not the current implementation
+status. Mode consolidation, task-based guide structure, help pause and focus,
+context links, the optional walkthrough, isolated practice, the journal,
+faction cues, and campaign histories have shipped through PR #94 (`0fdaf31`).
+The current source audit found no remaining must-fix guide procedure claim;
+README corrections address glyph/sprite scope, captain identity, observable
+replay, standard victory precedence, ace versus tow credit, precision-fire
+uncertainty, and the screenshot tool. The repository description was checked
+again and remains accurate.
+
+G5 replaces all ten original PNGs with captures of the current UI. No legacy
+image is retained merely because it exists. `map.png` is the glyph example;
+`classic.png` is the phosphor theme example. `combat.png` now shows one
+confirmed command card rather than a transient beam. The chooser exposes the
+two supported rulesets. The console, menu, report, precision, fleet-order,
+and overview images show the current controls.
+
+Ten additional used figures cover sprite identity, real-time map controls
+and command readiness, relay power, campaign routes/debrief/veteran/dockyard,
+and practice briefing/completion. All 20 figures have useful alt text, dimensions, captions, and
+reproducible scene/manifest entries. The guide content check also rejects
+unused PNGs and mismatched capture hashes. See the
+[illustration review](2026-10-05-guide-illustrations.md).
+
+The [acceptance matrix and worksheet](2026-10-05-player-experience-acceptance.md)
+maps every specification acceptance item to available behavior checks and
+remaining observation. Automated completion does not close guide-only novice
+tasks. Human understanding, native browser zoom, and the other explicitly
+listed human checks remain pending; rescue milestone source and the existing
+bounty edge remain separate implementation gaps.
