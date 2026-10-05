@@ -73,11 +73,20 @@
             <span id="log-meta">Newest first</span>
           </span>
         </div>
+        <div class="playback-controls">
+          <label for="playback-mode">Terminal playback</label>
+          <select id="playback-mode"><option value="compact">Compact</option><option value="full">Full sequence</option></select>
+          <button id="finish-playback" class="secondary tiny" type="button" disabled>Finish presentation</button>
+        </div>
         <p id="journal-history-status" class="journal-note" hidden>Historical replay · journal records remain frozen</p>
         <section id="command-history" aria-labelledby="command-history-title" hidden>
           <h2 id="command-history-title">Your ship</h2>
           <ol id="command-log" tabindex="0" aria-label="Your last 12 commands, newest first"></ol>
           <ol id="your-ship-effects" tabindex="0" aria-label="Effects received by your ship, newest first" hidden></ol>
+        </section>
+        <section id="terminal-playback" aria-label="Latest resolution terminal events" hidden>
+          <div id="terminal-current"></div>
+          <details id="terminal-members"><summary>All terminal events from this resolution</summary><ol id="terminal-members-list" tabindex="0" aria-label="All terminal events from the latest resolution, in order"></ol></details>
         </section>
         <section id="battle-developments" aria-labelledby="battle-developments-title" hidden>
           <h2 id="battle-developments-title">Battle developments</h2>
@@ -444,7 +453,7 @@
               <li><b>Tractor lock:</b> a held ship cannot maneuver or dock. Its cyan pip and console identify the hold; a hidden source may read “an unseen hull.” Hyperspace or destruction of the holder ends the lock. A tow can cause a collision.</li>
               <li><b>Collisions:</b> overlapping hulls can destroy one and cripple the other. Ordered rams, tractor slams, and hyperspace arrivals are dangerous even when guns are not involved.</li>
               <li><b>Endings:</b> standard wars resolve surviving alliances, surrender, and stranded-fleet draws. Reimagined objectives can also decide the war. A battle outcome is distinct from a campaign outcome.</li>
-              <li><b>Playback:</b> terminal destruction or surrender pauses for its event display, then continues automatically. <b>Replay round</b> in the battle narrative replays a recorded computer phase when available; commands stay locked until playback finishes.</li>
+              <li><b>Playback:</b> <b>Compact</b> groups consecutive routine losses from one resolution for 700 ms; your ship, objectives, alliance surrender, and battle completion receive 2000 ms. <b>Full sequence</b> shows each terminal card for 2500 ms. Expand the latest resolution to read every member, or use the journal for earlier events. <b>Finish presentation</b> ends a display or historical replay, retaining the journal and your paused state. <b>Replay round</b> uses frozen available facts; commands stay locked during playback.</li>
             </ul>
             <p><b>Classic tactics:</b> enemy fleets concentrate on a shared target; a vendetta ship hunts you personally. Concentrating your own fire and preserving usable engines are useful responses. These are tactical choices, not requirements for a legal command.</p>
             <section id="guide-precision">
@@ -553,7 +562,7 @@
               <li><b>No target command:</b> check the command ship's hardware, target status, distance, and Reimagined storm jamming. A red enemy outline describes its threat to you, not your firing eligibility.</li>
               <li><b>No movement:</b> check engines and tractor hold. Turn-based exact displacements must fit current reach and remain on the map; real-time courses wait for Resume to fly.</li>
               <li><b>No boarding:</b> the target may still have hostile crew, be a wreck or drone, lie outside transporter reach, or require more crew than your source can spare.</li>
-              <li><b>Commands locked:</b> close or submit an open dialog, or wait for a terminal-event display or replay to finish automatically. In real time also check the shared command cycle. A completed battle cannot accept new orders.</li>
+              <li><b>Commands locked:</b> close or submit an open dialog, wait for terminal playback or replay, or choose <b>Finish presentation</b> in the journal. In real time also check the shared command cycle. A completed battle cannot accept new orders.</li>
               <li><b>No docking or purchase:</b> battle recovery needs a friendly base with enough shields, a ship within range that is not tractor-held, and a stardate boundary; paid campaign services need a friendly system, an eligible offer, and enough credits.</li>
               <li><b>A command seems lost:</b> read <b>Your ship</b> for acceptance or the refusal message for rejection. A plotted course and a launched torpedo can have consequences later than their accepted order.</li>
             </ul>

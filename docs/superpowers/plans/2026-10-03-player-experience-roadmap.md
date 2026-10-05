@@ -9,12 +9,18 @@ as `371bce5`. C3 journal and F1 collision diagnostics shipped in
 [PR #90](https://github.com/MattyGPT/Argonaut-web/pull/90), merged as `404bc45`.
 C4 target explanations, F2 exhaustion diagnostics, and the wider New Game
 setup dialog shipped in [PR #91](https://github.com/MattyGPT/Argonaut-web/pull/91),
-merged as `900dcf3`. C5 faction recognition is in delivery review on
-`codex/faction-navigation`. F3's projected-separation candidate was rejected:
+merged as `900dcf3`. C5 faction recognition shipped in
+[PR #92](https://github.com/MattyGPT/Argonaut-web/pull/92), merged as `9961edd`.
+F3's projected-separation candidate was rejected:
 friendly contacts fell, but timeouts and faction outcomes failed the gate.
 Its [review and inactive reproduction](../reviews/2026-10-05-navigation-experiment.md)
-are retained; live navigation is unchanged. C6, F4–F6, H1–H4, G4–G6, and
-P2 cross-feature acceptance remain pending. A narrower navigation investigation
+are retained; live navigation is unchanged. C6 compact playback is in delivery
+review on `codex/playback-exhaustion`. F4's separate settlement and NPC surrender
+experiments are complete and deferred: neither activated in the samples, so
+there is no demonstrated benefit to shipping them. Their
+[review and reproduction](../reviews/2026-10-05-exhaustion-experiments.md) are retained.
+F5–F6, H1–H4, G4–G6, and P2 cross-feature acceptance remain pending.
+A narrower navigation investigation
 must establish its own evidence before any rule change is accepted.
 **Spec:** [Player experience roadmap](../specs/2026-10-03-player-experience-roadmap.md).
 **Goal:** Deliver all six October 3 specifications in small, verifiable

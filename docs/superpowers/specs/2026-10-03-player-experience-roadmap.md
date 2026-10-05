@@ -3,8 +3,11 @@
 Implementation plan: [Delivery sequence and verification](../plans/2026-10-03-player-experience-roadmap.md).
 
 Implementation update, 2026-10-05: mode consolidation, console, journal,
-target explanations, and diagnostic groundwork are merged through PR #91.
-Faction recognition is in delivery review. The first navigation candidate
+target explanations, faction recognition, and diagnostic groundwork are merged
+through PR #92. Compact playback is in delivery review; separate exhaustion
+experiments are complete and deferred because neither rule activated in the
+sampled wars. No exhaustion rule or grace period has been selected.
+The first navigation candidate
 was rejected after paired tests; live rules remain unchanged. The linked
 plan tracks remaining pacing, exhaustion, practice, campaign records, and
 guide acceptance work.

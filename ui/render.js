@@ -244,9 +244,10 @@ export const commandReadiness = (game, view = {}) => {
 const consoleSection = (key, label, content) => content
   ? `<details class="console-section" data-console-key="${key}"><summary>${label}</summary>${content}</details>` : '';
 
-const terminalHeading = (event) => event.kind === 'destruction' ? 'SHIP DESTROYED' : 'SHIP SURRENDERED';
+const terminalHeading = (event) => event.kind === 'destruction' ? 'SHIP DESTROYED' : event.kind === 'surrender' ? 'SHIP SURRENDERED' : event.kind === 'battle-outcome' ? 'BATTLE COMPLETED' : 'COMMAND LOST';
 
 const terminalDescription = (event) => {
+  if (event.message) return event.message;
   const victim = `${event.shipName} · ${event.faction}`;
   if (event.kind === 'surrender') {
     return event.surrenderedTo ? `${victim} — surrendered to ${event.surrenderedTo}.` : `${victim} — surrendered.`;
@@ -292,7 +293,13 @@ const DRONE_SPRITE_FACTIONS = new Set(['Federation', 'Axis', 'Bloc', 'Cabal']);
 
 export const terminalNarrative = (event) => {
   if (!event) return '';
-  return `<li class="terminal-event ${event.faction}"><strong>${terminalHeading(event)}</strong><span>${factionBadgeHtml(event.faction)} · ${terminalDescription(event)}</span></li>`;
+  return `<li class="terminal-event ${event.faction ?? ''}"><strong>${terminalHeading(event)}${event.importance ? ` · ${escapeJournal(event.importance)}` : ''}</strong><span>${event.faction ? `${factionBadgeHtml(event.faction)} · ` : ''}${escapeJournal(terminalDescription(event))}</span></li>`;
+};
+
+export const terminalGroupNarrative = (group) => {
+  if (!group) return '';
+  if (group.members.length === 1) return `<ol>${terminalNarrative(group.members[0])}</ol>`;
+  return `<p class="terminal-summary"><strong>${group.members.length} routine losses</strong> · Details below retain every event in order.</p>`;
 };
 
 const ORDER_BUTTONS = Object.freeze([
@@ -1114,11 +1121,21 @@ export const renderGame = (game, view = {}) => {
   const journalAnnouncement = renderBattleJournal(view.journal);
   const historical = document.querySelector('#journal-history-status');
   if (historical) historical.hidden = !view.journalHistorical;
+  const playback = document.querySelector('#terminal-playback');
+  if (playback) playback.hidden = !view.terminalDetails?.length && !view.terminalGroup;
+  const currentTerminal = document.querySelector('#terminal-current');
+  if (currentTerminal) currentTerminal.innerHTML = terminalGroupNarrative(view.terminalGroup);
+  const members = document.querySelector('#terminal-members-list');
+  if (members) updateScrolledContent(members, (view.terminalDetails ?? []).map(terminalNarrative).join(''));
+  const finish = document.querySelector('#finish-playback');
+  if (finish) finish.disabled = !view.playbackActive;
+  const preference = document.querySelector('#playback-mode');
+  if (preference) preference.disabled = Boolean(view.playbackLocked);
   if (!view.journal && commandHistory && commandLog) {
     commandHistory.hidden = !view.commandHistory?.length;
     updateScrolledContent(commandLog, commandHistoryHtml(view.commandHistory));
   }
-  updateScrolledContent(log, terminalNarrative(view.terminalEvent) + narrated.slice().reverse().map((entry) => `<li>${entry}</li>`).join(''));
+  updateScrolledContent(log, (view.terminalGroup ? '' : terminalNarrative(view.terminalEvent)) + narrated.slice().reverse().map((entry) => `<li>${entry}</li>`).join(''));
   document.querySelector('#log-meta').textContent = integrity >= 1
     ? 'Newest first'
     : `Newest first · radio at ${Math.round(integrity * 100)}%, traffic abbreviated`;
@@ -1131,6 +1148,7 @@ export const renderGame = (game, view = {}) => {
   const status = document.querySelector('#sr-status');
   if (status) {
     const announcement = view.journal ? [
+      view.terminalGroup?.kind === 'critical' ? terminalDescription(view.terminalGroup.members[0]) : null,
       game.outcome?.message ?? null,
       view.report?.title ?? null,
       journalAnnouncement,

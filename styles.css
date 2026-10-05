@@ -973,11 +973,11 @@ body.classic .legend-swatch.stance-evasive { background: #40e0ff; box-shadow: no
   fill: none;
   stroke: currentColor;
   stroke-width: 3;
-  animation: fx-terminal-destruction 2.5s ease-out forwards;
+  animation: fx-terminal-destruction var(--terminal-duration, 2500ms) ease-out forwards;
 }
 
 .fx-terminal-surrender {
-  animation: fx-terminal-surrender 2.5s ease-out forwards;
+  animation: fx-terminal-surrender var(--terminal-duration, 2500ms) ease-out forwards;
 }
 
 .fx-terminal-surrender circle {
@@ -2306,3 +2306,15 @@ body.classic .guide-body b {
     grid-template-areas: "map" "side" "log";
   }
 }
+.playback-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; padding: .5rem 1rem; }
+.playback-controls select { width: auto; min-width: 9rem; }
+#terminal-playback { font-size: .77rem; margin: .25rem 1rem .75rem; padding: .6rem; border: 1px solid var(--line); border-radius: .4rem; }
+#terminal-current ol, #terminal-members-list { padding-left: 1.25rem; }
+#terminal-members-list { max-height: 16rem; overflow: auto; }
+#terminal-members-list .terminal-event { margin-bottom: .5rem; }
+#terminal-members-list .terminal-event > span, #terminal-current .terminal-event > span { display: block; }
+#terminal-members summary { cursor: pointer; }
+.fx-historical-position { fill: none; stroke: var(--cyan); stroke-width: 1; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; }
+.fx-historical-label { fill: var(--cyan); }
+
+@media (max-width: 1100px), (max-height: 619px) { #terminal-members-list { max-height: none; overflow: visible; } }

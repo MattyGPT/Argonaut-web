@@ -435,10 +435,10 @@ commands and calibrated behavior.
 - **Replay the round.** The button in the battle narrative header plays the last
   computer phase back on the map — every alliance's beams, torpedoes, and kills,
   not just the ones that touched you — with that round's narrative beside it.
-  Terminal markers and unabridged ship-loss or surrender cards replay from the
-  same stored events, even through a damaged radio. Commands stay locked until
-  the final replay effect or card completes. Twenty autopilot decisions no
-  longer arrive as one wall of text.
+  Terminal presentations replay stored facts using your Compact or Full
+  sequence preference. Commands stay locked during playback; **Finish presentation** ends
+  the presentation without discarding journal records or changing a paused
+  battle to running.
 - **Three ways to fight.** The New game panel picks a scenario, and the mission
   panel carries its brief and live progress:
   - *Cease hostilities* — the original objective. Destroy the opposing fleets
@@ -552,9 +552,12 @@ the round replay.
 - **Impact juice** — phaser hits flash where they land and the map shakes when a
   volley lands on your command ship. Both are suppressed under
   `prefers-reduced-motion`, and nothing in the rules reads them.
-- **Terminal events** — every ship loss and surrender receives an automatically
-  paced, faction-labelled map marker and unabridged narrative card for 2.5
-  seconds, then combat resumes without a click.
+- **Battle playback** — **Compact** groups routine losses from one resolution
+  into a short presentation while keeping critical events prominent.
+  **Full sequence** presents losses individually. Expand the retained detail
+  to inspect every member, or choose **Finish presentation** to end the display.
+  These preferences change display time only; journal records and combat
+  results remain intact.
 - **Screen readers** — the page is no longer one big live region, which announced
   the entire board on every keystroke. A single concise status line reports your
   condition, position, and the newest narrative entry instead.

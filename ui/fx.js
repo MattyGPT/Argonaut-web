@@ -52,6 +52,30 @@ const displayedPoint = (map, svg, id, fallback) => {
 };
 
 const drawBeam = (svg, e, map) => {
+  if (e.historical) {
+    const size = Number(svg.getAttribute('viewBox')?.split(/\s+/)[2]);
+    const box = svg.getBoundingClientRect?.();
+    const sx = size / (box?.width || 800);
+    const sy = size / (box?.height || 800);
+    for (const [x, y, name, role] of [[e.x1, e.y1, e.actorName ?? 'Shooter', 'origin'], [e.x2, e.y2, e.targetName ?? 'Target', e.hit ? 'target' : 'aim']]) {
+    const marker = document.createElementNS(SVG_NS, 'ellipse');
+    marker.setAttribute('class', 'fx-historical-position');
+    marker.setAttribute('cx', x);
+    marker.setAttribute('cy', y);
+    marker.setAttribute('rx', 4 * sx);
+    marker.setAttribute('ry', 4 * sy);
+    const label = document.createElementNS(SVG_NS, 'text');
+    label.setAttribute('class', 'fx-historical-label');
+    label.setAttribute('x', 6);
+    label.setAttribute('y', -5);
+    label.setAttribute('transform', `translate(${x} ${y}) scale(${sx} ${sy})`);
+    label.setAttribute('font-size', 12);
+    label.textContent = `${name} · recorded ${role}`;
+    svg.appendChild(marker);
+    svg.appendChild(label);
+    setTimeout(() => { marker.remove(); label.remove(); }, 420);
+    }
+  }
   const line = document.createElementNS(SVG_NS, 'line');
   // Ion/EMP (round 22a) draws as its own arc-colored beam; phasers keep theirs.
   const beam = e.kind === 'ion' ? 'fx-ion' : 'fx-phaser';
@@ -62,8 +86,8 @@ const drawBeam = (svg, e, map) => {
   const flash = e.hit ? drawImpact(svg, { x: e.x2, y: e.y2 }) : null;
   const started = performance.now();
   const anchor = () => {
-    const from = displayedPoint(map, svg, e.fromId, { x: e.x1, y: e.y1 });
-    const target = displayedPoint(map, svg, e.toId, { x: e.x2, y: e.y2 });
+    const from = e.historical ? { x: e.x1, y: e.y1 } : displayedPoint(map, svg, e.fromId, { x: e.x1, y: e.y1 });
+    const target = e.historical ? { x: e.x2, y: e.y2 } : displayedPoint(map, svg, e.toId, { x: e.x2, y: e.y2 });
     const to = endpoint({ ...e, x1: from.x, y1: from.y, x2: target.x, y2: target.y });
     line.setAttribute('x1', from.x);
     line.setAttribute('y1', from.y);
@@ -164,6 +188,7 @@ const drawSpread = (svg, e) => {
 const drawTerminal = (svg, event) => {
   const marker = document.createElementNS(SVG_NS, event.kind === 'destruction' ? 'circle' : 'g');
   marker.setAttribute('class', `fx-terminal-${event.kind}${event.faction ? ` ${event.faction}` : ''}`);
+  marker.style?.setProperty('--terminal-duration', `${event.presentationDuration ?? TERMINAL_EFFECT_MS}ms`);
   if (event.kind === 'destruction') {
     marker.setAttribute('cx', event.x);
     marker.setAttribute('cy', event.y);
@@ -182,7 +207,7 @@ const drawTerminal = (svg, event) => {
     marker.appendChild(flag);
   }
   svg.appendChild(marker);
-  setTimeout(() => marker.remove(), TERMINAL_EFFECT_MS);
+  setTimeout(() => marker.remove(), event.presentationDuration ?? TERMINAL_EFFECT_MS);
 };
 
 const draw = (svg, e, map) => {

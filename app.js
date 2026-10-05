@@ -10,6 +10,10 @@ import { cameraWindow, centerOn, clampCamera, fieldTransform, makeCamera, panBy,
 import { renderSectorScreen } from './ui/sector.js';
 import {
   ordinaryBattleEvents,
+  createPlaybackSession,
+  groupBattleEvents,
+  freezeResolutionEvents,
+  projectPlaybackRecords,
   playReplayEvents,
   playTerminalEvents,
   whenPlaybackUnlocked,
@@ -30,7 +34,9 @@ const SAVE_KEY = 'argonaut-web-save-v1';
 // when present; starting a new game of either kind retires the other.
 const CAMPAIGN_SAVE_KEY = 'argonaut-web-save-campaign-v1';
 const newGameDialog = document.querySelector('#new-game-dialog');
-const TERMINAL_EVENT_MS = 2500;
+const PLAYBACK_KEY = 'argonaut-web-playback';
+let playbackMode = 'compact';
+try { if (localStorage.getItem(PLAYBACK_KEY) === 'full') playbackMode = 'full'; } catch { /* unavailable storage */ }
 
 const loadSave = () => {
   try {
@@ -68,8 +74,9 @@ const clearCampaignSave = () => {
 const save = () => {
   try {
     const commandHistory = { seed: game?.seed, entries: view.commandHistory ?? [] };
-    if (campaign) localStorage.setItem(CAMPAIGN_SAVE_KEY, JSON.stringify({ version: 1, campaign, commandHistory }));
-    else localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 1, game, commandHistory, journal: view.journal }));
+    const roundPlayback = view.roundPlayback;
+    if (campaign) localStorage.setItem(CAMPAIGN_SAVE_KEY, JSON.stringify({ version: 1, campaign, commandHistory, roundPlayback }));
+    else localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 1, game, commandHistory, journal: view.journal, roundPlayback }));
   } catch {
     /* storage unavailable */
   }
@@ -92,13 +99,17 @@ try {
   const saved = JSON.parse(localStorage.getItem(campaign ? CAMPAIGN_SAVE_KEY : SAVE_KEY));
   view.commandHistory = restoreCommandHistory(saved?.commandHistory, game?.seed);
   if (game) view.journal = restoreJournal(campaign?.battle?.journal ?? saved?.journal, game.battleRecordState.battleId, view.commandHistory);
+  if (game && saved?.roundPlayback?.battleId === game.battleRecordState.battleId && Array.isArray(saved.roundPlayback.events)) view.roundPlayback = saved.roundPlayback;
 } catch { /* Old saves or unavailable storage start with an empty command record. */ }
 
 /** Consume once at authoritative seams, never from drawing, replay or loading. */
+let presentationRecords = [];
 const collectRecords = (records) => {
   if (!records?.length || !view.journal) return false;
+  const projected = projectPlaybackRecords(records, view.journal);
   const journal = appendRecords(view.journal, records);
   if (journal === view.journal) return false;
+  presentationRecords.push(...projected);
   view = { ...view, journal };
   return true;
 };
@@ -151,7 +162,7 @@ const ART_KEY = 'argonaut-web-ship-art';
 let shipArtPref = 'sprites';
 try { shipArtPref = localStorage.getItem(ART_KEY) || 'sprites'; } catch { /* ignore */ }
 
-const redraw = () => renderGame(game, { ...view, shipArt: document.body.classList.contains('classic') ? 'letters' : shipArtPref, precision: game?.precision ? precisionSettings : null });
+const redraw = () => renderGame(game, { ...view, playbackMode, playbackActive: Boolean(playbackSession) && !playbackSession.finished, playbackLocked: playbackLocked(), shipArt: document.body.classList.contains('classic') ? 'letters' : shipArtPref, precision: game?.precision ? precisionSettings : null });
 
 /** Whether the star chart is up: a campaign is active and no battle is open. */
 const sectorMode = () => campaign !== null && !campaign.battle;
@@ -240,21 +251,54 @@ let presentingTerminalEvents = false;
 let replayingRound = false;
 let playingTrajectory = false;
 const playbackLocked = () => presentingTerminalEvents || replayingRound || playingTrajectory;
-const wait = (duration) => new Promise((resolve) => setTimeout(resolve, duration));
+let playbackSession = null;
 const clearTerminalPresentation = () => {
-  view = { ...view, terminalEvent: null, battlePaused: replayingRound };
-  refresh();
+  view = { ...view, terminalEvent: null, terminalGroup: null, battlePaused: replayingRound };
 };
 
-const presentTerminalEvents = (events) => withPlaybackLock(
-  (locked) => { presentingTerminalEvents = locked; },
-  () => playTerminalEvents(events, (terminalEvent) => {
-    if (terminalEvent) playEffects([terminalEvent], document.querySelector('#map'), game.playerShipId, currentWindow());
-    view = { ...view, terminalEvent, battlePaused: Boolean(terminalEvent) || replayingRound };
+/** Freeze only already-public terminal facts and filtered milestones at resolution. */
+const freezePresentation = (events) => {
+  const records = presentationRecords.filter((event) => event.battleId === view.journal?.battleId);
+  presentationRecords = [];
+  return freezeResolutionEvents(events, records, { playerShipId: game.playerShipId, objectiveShipId: game.scanned?.[game.objectiveShipId] ? game.objectiveShipId : undefined });
+};
+
+const showTerminalGroup = (group) => {
+  view = { ...view, terminalGroup: group, terminalEvent: group?.members[0] ?? null, battlePaused: Boolean(group) || replayingRound };
+  refresh();
+  if (group) playEffects(group.members.filter((event) => ['destruction', 'surrender'].includes(event.kind) && Number.isFinite(event.x)).map((event) => ({ ...event, presentationDuration: group.duration })), document.querySelector('#map'), game.playerShipId, currentWindow());
+};
+
+const presentTerminalEvents = async (events, { round = false } = {}) => {
+  const frozen = freezePresentation(events);
+  if (game.realtime) view = { ...view, roundPending: [...(view.roundPending ?? []), ...frozen] };
+  if (round) view = { ...view, roundPlayback: { battleId: view.journal.battleId, events: game.realtime ? view.roundPending : frozen }, roundPending: [] };
+  const groups = groupBattleEvents(frozen, { mode: playbackMode }).filter((group) => group.kind !== 'effect');
+  if (!groups.length) return;
+  view = { ...view, terminalDetails: groups.flatMap((group) => group.members) };
+  const session = createPlaybackSession();
+  playbackSession = session;
+  try {
+    await withPlaybackLock((locked) => { presentingTerminalEvents = locked; },
+      () => playTerminalEvents(frozen, showTerminalGroup, (duration) => session.wait(duration), { mode: playbackMode, session }), clearTerminalPresentation);
+  } catch (error) { console.error('Terminal playback failed', error); }
+  finally {
+    session.finish();
+    if (playbackSession === session) playbackSession = null;
+    clearTerminalPresentation();
     refresh();
-  }, () => wait(TERMINAL_EVENT_MS)),
-  clearTerminalPresentation,
-);
+  }
+};
+
+document.querySelector('#finish-playback').addEventListener('click', () => {
+  playbackSession?.finish();
+  document.querySelector('#map svg.fx-layer')?.remove();
+});
+document.querySelector('#playback-mode').value = playbackMode;
+document.querySelector('#playback-mode').addEventListener('change', (event) => {
+  playbackMode = event.target.value === 'full' ? 'full' : 'compact';
+  try { localStorage.setItem(PLAYBACK_KEY, playbackMode); } catch { /* unavailable storage */ }
+});
 
 // Minimap decluttering follows the same visible, interpolated positions as the
 // tactical map. A departing ship must not keep its old cluster offset.
@@ -354,7 +398,7 @@ const runComputer = async () => {
     // presented on hulls standing where the resolution actually put them.
     await playTrajectory();
     showEvents(game.events);
-    await presentTerminalEvents(game.events);
+    await presentTerminalEvents(game.events, { round: true });
   }
 };
 
@@ -508,7 +552,7 @@ const simLoop = (now) => {
     game = step.game;
     prevPositions = snapshot;
     prevOrdnance = ordnanceSnapshot;
-    frameEvents.push(...step.events);
+    frameEvents.push(...step.events.map((event) => ({ ...event, resolutionId: simTimeOf(step.game) })));
     crossed = step.crossed;
     consumed += 1;
   }
@@ -522,8 +566,8 @@ const simLoop = (now) => {
     prevOrdnance = Object.fromEntries((game.ordnance ?? []).map((warhead) => [warhead.id, { x: warhead.x, y: warhead.y }]));
     view = { ...view, entries: [] };
     showEvents(frameEvents);
-    presentTerminalEvents(frameEvents);
-    refresh();
+    presentTerminalEvents(frameEvents, { round: crossed });
+    if (!presentingTerminalEvents) refresh();
     return;
   }
   renderFrame();
@@ -688,26 +732,35 @@ const dispatch = async (action) => {
       refresh();
       return;
     }
-    replayingRound = true;
+    const frozen = view.roundPlayback?.battleId === view.journal?.battleId ? view.roundPlayback.events
+      : round.events.filter((event) => ['destruction', 'surrender'].includes(event.kind)).map(({ x, y, attackerName, attackerFaction, attackerId, ...event }) => ({ ...event, critical: true, importance: 'Historical loss' }));
+    const session = createPlaybackSession();
+    playbackSession = session;
     try {
-      view = {
-        ...view,
-        entries: round.entries ?? [],
-        report: null,
-        contextShipId: null,
-        battlePaused: true,
-        journalHistorical: true,
-      };
-      refresh();
-      await playReplayEvents(
-        round.events,
-        (event) => replayEffects([event], document.querySelector('#map'), undefined, currentWindow()),
-        (event) => presentTerminalEvents([event]),
-        wait,
-      );
-    } finally {
-      replayingRound = false;
-      view = { ...view, terminalEvent: null, battlePaused: false, journalHistorical: false };
+      await withPlaybackLock((locked) => { replayingRound = locked; }, async () => {
+        view = {
+          ...view,
+          entries: round.entries ?? [],
+          report: null,
+          contextShipId: null,
+          battlePaused: true,
+          journalHistorical: true,
+          terminalDetails: frozen.filter((event) => ['destruction', 'surrender', 'command-loss', 'battle-outcome'].includes(event.kind)),
+        };
+        refresh();
+        await playReplayEvents(
+          frozen,
+          (event) => event.kind === 'unavailable-effect' ? 0 : replayEffects([event], document.querySelector('#map'), undefined, currentWindow()),
+          async (group) => { showTerminalGroup(group); await session.wait(group.duration); showTerminalGroup(null); },
+          (duration) => session.wait(duration),
+          { mode: playbackMode, session },
+        );
+      }, clearTerminalPresentation);
+    } catch (error) { console.error('Replay failed', error); }
+    finally {
+      session.finish();
+      if (playbackSession === session) playbackSession = null;
+      view = { ...view, terminalEvent: null, terminalGroup: null, battlePaused: false, journalHistorical: false };
       refresh();
     }
     return;
