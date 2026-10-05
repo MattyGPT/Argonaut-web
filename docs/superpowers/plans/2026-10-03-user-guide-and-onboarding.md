@@ -114,22 +114,22 @@ C6 so neither feature introduces a second incompatible pause controller.
 **Modify:** `app.js`, `index.html`, `styles.css`, contextual guide links.
 **Depends on:** C2 accepted-action records, C3 journal, C1 stable controls.
 
-- [ ] Define a small state machine: locate your ship; inspect movement or
+- [x] Define a small state machine: locate your ship; inspect movement or
   an available target; issue a valid order; locate its confirmed result.
   Real time first introduces pause and command readiness.
-- [ ] Advance from accepted actions/confirmed records, never merely from
+- [x] Advance from accepted actions/confirmed records, never merely from
   a clicked button. Accept other valid commands and adapt when there is no
   weapon target in range, the command ship changes, or the battle ends.
-- [ ] Offer Start, Dismiss, and Restart explicitly. Save dismissal as a UI
+- [x] Offer Start, Dismiss, and Restart explicitly. Save dismissal as a UI
   preference; a new browser does not automatically launch a mandatory tutorial.
-- [ ] Use inline hints or anchored callouts that do not cover the primary
+- [x] Use inline hints or anchored callouts that do not cover the primary
   control being taught. Preserve keyboard focus and provide a text-only path.
-- [ ] Give no free move, hidden scan, bonus damage, altered AI, or special
+- [x] Give no free move, hidden scan, bonus damage, altered AI, or special
   outcome. Keep practice entry separate: its new objectives belong to F5/F6.
-- [ ] Test alternate valid actions, invalid/rejected commands, no-target
+- [x] Test alternate valid actions, invalid/rejected commands, no-target
   openings, reload/dismissal, and each timing model. Confirm identical
   gameplay and RNG whether hints are visible or disabled.
-- [ ] Link each Reimagined practice exercise from its relevant guide topic
+- [x] Link each Reimagined practice exercise from its relevant guide topic
   only once F6 is available; until then, do not show a broken practice link.
 
 **Verify:** Walkthrough reducer tests and real browser first-order tasks.
@@ -226,3 +226,16 @@ issue at 390px; the corrected inner-content bounds now have a regression
 assertion and the recaptured narrow guide was inspected. G4 walkthrough,
 practice integration, final G5 captures, and G6 novice/cross-feature acceptance
 remain pending. No unfamiliar player participated in this delivery.
+
+## G4 delivery evidence — 2026-10-05
+
+Optional first-order guidance is implemented on a branch based on PR #93 (7146f75), in delivery
+review. It is never started automatically and cannot issue a free action.
+Seven reducer tests cover real accepted records, rejected/automatic commands,
+identity/command changes, delayed consequences, and missing-target openings.
+The actual-app check compares full game state and RNG with hints on/off in
+all three modes, rejects invalid movement, reads the matching confirmed
+journal card, and preserves dismissal. Practice links now open isolated
+exercises from the matching guide topics. Active hint progress survives a
+practice entry/reload/return. G5 illustrations and G6 novice evaluation remain
+pending; see the [delivery review](../reviews/2026-10-05-practice-and-service-records.md).

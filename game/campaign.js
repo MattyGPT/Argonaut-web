@@ -19,7 +19,8 @@ import { FACTIONS, ACE_KILLS, ION, LOADOUT, POWER, REFITS, REFIT_OVER_TEMPLATE, 
 import { createRng } from './rng.js';
 import { arcSplit, createGame, defaultLoadout, fleetCost, isActive, isDrone, isImmovable, isNeutral, normalizeFleetSpec } from './state.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from './turns.js';
-import { enableBattleRecords, withBattleRecords } from './battle-records.js';
+import { allocateBattleId, enableBattleRecords, withBattleRecords } from './battle-records.js';
+import { ensureCampaignServiceRecords, finalizeCampaignServiceRecords, ingestBattleServiceRecords, prepareCampaignBattle, recordDockyardService, recordFleetJoining } from './service-records.js';
 
 /** The per-battle seed derivation (round 26 decision 5): one deliberate rule. */
 export const battleSeed = (seed, nodeId) => `${String(seed)}:battle:${nodeId}`;
@@ -159,6 +160,7 @@ export const fleetRecordsFrom = (game) => (game?.ships ?? [])
     && ship.className !== 'Merchant')
   .map((ship) => ({
     id: ship.id,
+    ...(ship.campaignShipId ? { campaignShipId: ship.campaignShipId } : {}),
     name: ship.name,
     kind: KIND_BY_CLASS[ship.className] ?? 'cruiser',
     className: ship.className,
@@ -212,7 +214,7 @@ export const createCampaign = ({ seed = 'sector-1', loadout = null } = {}) => {
     reimagined: true,
     loadout: loadout ?? defaultLoadout(),
   });
-  return {
+  const campaign = {
     seed: campaignSeed,
     sector,
     fleet: carriedFleetFrom(muster),
@@ -237,6 +239,7 @@ export const createCampaign = ({ seed = 'sector-1', loadout = null } = {}) => {
     earned: 0,
     spent: 0,
   };
+  return recordFleetJoining(campaign, campaign.fleet.map((ship) => ship.id));
 };
 
 /**
@@ -280,6 +283,7 @@ export const travelTo = (campaign, nodeId) => {
  */
 export const startNodeBattle = (campaign, nodeId, { player = true, recordBattles = true, battleId } = {}) => {
   if (!engageableHere(campaign) || nodeId !== campaign.currentNode) return campaign;
+  campaign = ensureCampaignServiceRecords(campaign);
   const node = nodeById(campaign.sector, nodeId);
   const threat = campaign.threat && campaign.threat.nodeId === nodeId ? campaign.threat : null;
   const isHome = node.id === homeNodeOf(campaign.sector)?.id;
@@ -300,10 +304,12 @@ export const startNodeBattle = (campaign, nodeId, { player = true, recordBattles
         xanadu: false,
       },
   });
-  const game = recordBattles ? enableBattleRecords(created, { battleId }) : created;
+  const engagementId = battleId ?? allocateBattleId();
+  const prepared = prepareCampaignBattle(campaign, recordBattles ? enableBattleRecords(created, { battleId: engagementId }) : created, engagementId);
+  const game = prepared.game;
   return {
-    ...campaign,
-    battle: { nodeId, player, game, ...(game.battleRecordState ? { battleId: game.battleRecordState.battleId } : {}), ...(threat ? { defense: true, attacker: threat.attacker } : {}) },
+    ...prepared.campaign,
+    battle: { nodeId, player, game, battleId: engagementId, ...(threat ? { defense: true, attacker: threat.attacker } : {}) },
   };
 };
 
@@ -325,7 +331,10 @@ export const startNodeBattle = (campaign, nodeId, { player = true, recordBattles
  */
 export const resolveNodeBattle = (campaign, { abandoned = false, strategy = true, onRecords, recordBattles = true } = {}) => {
   if (!campaign.battle) return campaign;
-  const { nodeId, game, defense = false, attacker = null } = campaign.battle;
+  const { nodeId, defense = false, attacker = null } = campaign.battle;
+  const game = ingestBattleServiceRecords(campaign.battle.game);
+  const engagementId = campaign.battle.battleId ?? game.battleRecordState?.battleId ?? game.serviceRecordState?.battleId;
+  if (engagementId && campaign.results.some((entry) => entry.battleId === engagementId)) return { ...campaign, battle: null };
   const node = nodeById(campaign.sector, nodeId);
   const fleet = carriedFleetFrom(game);
   const kind = abandoned ? 'abandoned' : (game.outcome?.kind ?? 'timeout');
@@ -357,7 +366,7 @@ export const resolveNodeBattle = (campaign, { abandoned = false, strategy = true
     : 'retreated';
   const result = {
     nodeId,
-    ...(game.battleRecordState ? { battleId: game.battleRecordState.battleId } : {}),
+    battleId: engagementId ?? allocateBattleId(),
     name: node?.name ?? nodeId,
     turn: campaign.turn + 1,
     outcome,
@@ -379,7 +388,7 @@ export const resolveNodeBattle = (campaign, { abandoned = false, strategy = true
     : campaign.sector;
   const victory = captured && node?.column === SECTOR.columns - 1;
   const gain = (captured ? (SECTOR.captureCredits[node?.type] ?? 0) : 0) + bounty;
-  const resolved = {
+  const resolved = finalizeCampaignServiceRecords(campaign, {
     ...campaign,
     sector,
     fleet,
@@ -392,7 +401,7 @@ export const resolveNodeBattle = (campaign, { abandoned = false, strategy = true
     battle: null,
     threat: null,
     status: fleet.length === 0 || homeLost ? 'defeat' : victory ? 'victory' : 'active',
-  };
+  }, result, game);
   return strategy && resolved.status === 'active' ? resolveStrategy(resolved, { onRecords, recordBattles }) : resolved;
 };
 
@@ -431,7 +440,7 @@ const resolveCampaignRound = (game, onRecords, engagement) => {
     return resolveComputerTurns(auto.game);
   });
   if (resolved.records.length) onRecords?.(resolved.records, { ...engagement, battleId: resolved.result.battleRecordState.battleId });
-  return resolved.result;
+  return ingestBattleServiceRecords(resolved.result, resolved.records);
 };
 
 // --- Round 27a: the between-battles dockyard and the credit economy ---
@@ -622,7 +631,7 @@ export const buyDockyard = (campaign, offerId) => {
       return record;
     });
   }
-  return { ...campaign, fleet, credits: campaign.credits - offer.cost, spent: (campaign.spent ?? 0) + offer.cost, purchased, purchases };
+  return recordDockyardService(campaign, { ...campaign, fleet, credits: campaign.credits - offer.cost, spent: (campaign.spent ?? 0) + offer.cost, purchased, purchases }, offer);
 };
 
 // --- Round 27b: the enemy strategic layer, home defense, and the report ---
@@ -652,11 +661,12 @@ const garrisonHolds = (campaign, node, attacker, { onRecords, recordBattles = tr
       xanadu: false,
     },
   });
-  if (recordBattles) game = enableBattleRecords(game);
+  const battleId = allocateBattleId();
+  if (recordBattles) game = enableBattleRecords(game, { battleId });
   while (!game.outcome && game.turn < 600) {
     game = resolveCampaignRound(game, onRecords, { nodeId: node.id, kind: 'garrison' });
   }
-  return (game.outcome?.kind ?? 'timeout') === 'federation-win';
+  return { holds: (game.outcome?.kind ?? 'timeout') === 'federation-win', game, battleId };
 };
 
 /**
@@ -722,14 +732,18 @@ export const resolveStrategy = (campaign, { onRecords, recordBattles = true } = 
         : `${attacker} raid ${node.name} — the fleet stands to defend it.`,
     );
   }
-  const holds = garrisonHolds(campaign, node, attacker, { onRecords, recordBattles });
-  return withNews(
+  const { holds, game, battleId } = garrisonHolds(campaign, node, attacker, { onRecords, recordBattles });
+  const resolved = withNews(
     holds ? campaign : { ...campaign, sector: withOwner(campaign, node.id, attacker) },
     turn,
     holds
       ? `The garrison of ${node.name} beats off the ${attacker} raid.`
       : `${attacker} take ${node.name} from its garrison.`,
   );
+  return finalizeCampaignServiceRecords(campaign, resolved, {
+    nodeId: node.id, name: node.name, turn, battleId, defense: true,
+    kind: game.outcome?.kind ?? 'timeout', outcome: holds ? 'held' : 'lost', bounty: 0, stardates: game.turn,
+  }, game, { scope: 'garrison' });
 };
 
 /**

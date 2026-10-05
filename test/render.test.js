@@ -504,6 +504,24 @@ test('the war concluded panel carries a battle report and roll call', () => {
   assert.match(panel, /Roll call/);
 });
 
+test('battle reports use the current Reimagined captain and retain Jason in Classic', () => {
+  const base = createGame({ seed: 'report-captain', reimagined: true });
+  const emeka = withFlagship(base, { captain: 'Emeka', kills: 9 });
+  const lines = reportFor(emeka, 'battle-report').lines;
+  assert.ok(lines.some((line) => line.startsWith('Top gun: Captain Emeka of the Argo, 9 credited kills')));
+  assert.ok(lines.some((line) => line.startsWith('Your record, Captain Emeka of the Argo: 9 kills')));
+  assert.ok(lines.every((line) => !line.includes('Captain Jason')));
+
+  const next = base.ships.find((ship) => ship.faction === 'Federation' && ship.id !== base.playerShipId);
+  const transferred = { ...emeka, playerShipId: next.id, ships: emeka.ships.map((ship) => ship.id === next.id ? { ...ship, captain: 'Amina' } : ship) };
+  assert.ok(reportFor(transferred, 'battle-report').lines.some((line) => line.startsWith(`Your record, Captain Amina of the ${next.name}:`)));
+
+  const unnamed = withFlagship(emeka, { captain: undefined });
+  assert.ok(reportFor(unnamed, 'battle-report').lines.some((line) => line.startsWith('Your record, Argo:')));
+  const classic = createGame({ seed: 'report-captain' });
+  assert.ok(reportFor(classic, 'battle-report').lines.some((line) => line.startsWith('Your record, Captain Jason of the Argo:')));
+});
+
 test('a scanned ace wears a star; an unscanned one does not', () => {
   const base = createGame({ seed: 'ace-mark', reimagined: true });
   const aced = {
@@ -1185,6 +1203,7 @@ test('a distressed hull wears its blinker and tells the rescue in its menu', () 
   assert.match(field, /distress-pip/, 'the amber blinker is drawn');
   assert.match(field, /broadcasting distress/, 'and named in the hull title');
   assert.match(read('#ship-menu').innerHTML, /Broadcasting distress: engines gone/, 'the menu tells the rescue');
+  assert.match(read('#ship-menu').innerHTML, /data-ship-command="tractor-direct"/, 'friendly distress offers the directed tow needed to choose its safe destination');
   assert.match(read('#map-legend').innerHTML, /legend-swatch pip-distress/, 'the legend keys the call');
   // A classic legend grows neither chip.
   elements.clear();

@@ -12,6 +12,72 @@
 import { ACE_KILLS, SECTOR } from '../game/constants.js';
 import { atDockyard, campaignReport, dockyardOffers, engageableHere, linksFrom, nodeById } from '../game/campaign.js';
 import { factionBadgeHtml, factionBadgeSvg, factionText } from './faction-identity.js';
+import { campaignMemorial, latestEngagement, serviceRecordFor } from '../game/service-records.js';
+
+const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+const serviceAnchor = (id) => `service-${encodeURIComponent(id)}`;
+const debriefAnchor = (id) => `debrief-${encodeURIComponent(id)}`;
+const presentedEngagement = (campaign) => latestEngagement(campaign, { scope: 'fleet' }) ?? latestEngagement(campaign);
+
+export const serviceMilestoneText = (fact, campaign) => {
+  const place = nodeById(campaign.sector, fact.nodeId)?.name ?? fact.nodeId ?? 'unknown system';
+  const lead = `Turn ${fact.turn} · ${fact.name}`;
+  switch (fact.kind) {
+    case 'joined': return `${lead}: joined the fleet at ${place}${fact.reason === 'commission' ? ' as a new commission' : ''}.`;
+    case 'captured': return `${lead}: taken from ${fact.fromFaction ?? 'unknown allegiance'} at ${place}.`;
+    case 'recaptured': return `${lead}: retaken from ${fact.fromFaction ?? 'unknown allegiance'} at ${place}.`;
+    case 'ace': return `${lead}: reached the existing ace threshold (${fact.kills} kills) at ${place}.`;
+    case 'repair': return `${lead}: ${fact.service} service at ${place}, ${fact.cost} credits${fact.delta?.shields > 0 ? `; shields +${fact.delta.shields}` : ''}${fact.delta?.crew > 0 ? `; crew +${fact.delta.crew}` : ''}${fact.service === 'systems' ? `; systems +${Object.values(fact.delta?.systems ?? {}).reduce((sum, value) => sum + value, 0)} units` : ''}${fact.service === 'bay' ? '; drone complement rebuilt' : ''}.`;
+    case 'rescue': return `${lead}: recorded rescue of ${fact.rescued?.name ?? 'a hull'} at ${place}.`;
+    case 'loss': return `${lead}: ${fact.reason === 'destroyed' ? 'hull destroyed' : fact.reason === 'captured' ? 'lost to capture' : fact.reason === 'vacant' ? 'left vacant' : 'not carried home'} at ${place}.${fact.evidence ? ` Recorded cause: ${fact.evidence.cause}${fact.evidence.actor ? `; acting hull ${fact.evidence.actor.name} (${fact.evidence.actor.faction})` : ''}.` : ''} Captain’s fate unknown.`;
+    default: return `${lead}: recorded ${fact.kind} at ${place}.`;
+  }
+};
+
+export const serviceHistoryHtml = (campaign, id) => {
+  const record = serviceRecordFor(campaign, id);
+  if (!record) return '<p class="menu-sub">Service history unavailable for this hull.</p>';
+  const current = campaign.fleet.find((ship) => ship.campaignShipId === id) ?? record.current;
+  return `<details class="service-history" id="${escape(serviceAnchor(id))}"><summary>Inspect ${escape(record.name)} · service record</summary>`
+    + `<p>${escape(record.className)} · ${factionBadgeHtml(record.faction)} · captain ${escape(record.captain ?? 'not assigned')} · ${record.survived} engagements survived</p>`
+    + (current ? `<p>Recorded totals: ${current.kills ?? 0} weapon kills · ${record.directTowKills ?? 0} confirmed direct tow kills · ${current.shotsFired ?? 0} shots fired.</p>` : '')
+    + (record.origin ? `<p>Known origin: ${escape(serviceMilestoneText(record.origin, campaign))}</p>` : '')
+    + (!record.historyAvailable ? '<p class="menu-sub">Earlier service history unavailable; existing ship statistics remain authoritative.</p>' : '')
+    + (record.aceDetailUnavailable ? '<p class="menu-sub">Ace threshold event details unavailable; captain and allegiance at that event cannot be reconstructed.</p>' : '')
+    + (record.olderMilestones ? `<p class="menu-sub">${record.olderMilestones} older milestones summarized; lifetime totals retained.</p>` : '')
+    + `<p>Lifetime confirmed milestones: ${escape(Object.entries(record.counts).map(([kind, count]) => `${kind} ${count}`).join(' · ') || 'none')}.</p>`
+    + `<ul>${record.milestones.map((fact) => `<li>${escape(serviceMilestoneText(fact, campaign))} ${factionBadgeHtml(fact.faction)}${fact.captain ? ` · captain ${escape(fact.captain)}` : ''}</li>`).join('') || '<li>No confirmed milestones recorded yet.</li>'}</ul>`
+    + (record.finalLoss && !record.milestones.some((fact) => fact.kind === 'loss') ? `<p>${escape(serviceMilestoneText(record.finalLoss, campaign))}</p>` : '') + '</details>';
+};
+
+export const engagementDebriefHtml = (campaign, engagement = presentedEngagement(campaign), { open = false } = {}) => {
+  if (!engagement) return '<p class="menu-sub">No engagement debrief yet.</p>';
+  const nameFor = (id) => [...engagement.afterFleet, ...engagement.beforeFleet].find((ship) => ship.campaignShipId === id)?.name ?? serviceRecordFor(campaign, id)?.name ?? id;
+  const hullList = (ids) => ids.length ? ids.map((id) => `<a href="#${escape(serviceAnchor(id))}">${escape(nameFor(id))}</a>`).join(', ') : 'none';
+  const deltas = engagement.deltas.map((delta) => {
+    const entering = engagement.beforeFleet.find((ship) => ship.campaignShipId === delta.campaignShipId);
+    const final = engagement.afterFleet.find((ship) => ship.campaignShipId === delta.campaignShipId);
+    const systems = Object.entries(delta.systems).filter(([, value]) => value < 0).map(([system, value]) => `${system} ${value}`).join(', ');
+    return `<li>${escape(nameFor(delta.campaignShipId))}: entered with shields ${entering.shields}, crew ${entering.crew}; engagement change shields ${delta.shields > 0 ? '+' : ''}${delta.shields}, crew ${delta.crew > 0 ? '+' : ''}${delta.crew}${systems ? `; new system damage ${escape(systems)}` : ''}${delta.droneBaySpent ? '; drone complement spent' : ''}${final ? `; returned with shields ${final.shields}, crew ${final.crew}${Object.entries(final.systems ?? {}).some(([, units]) => units === 0) ? `; disabled ${escape(Object.entries(final.systems).filter(([, units]) => units === 0).map(([system]) => system).join(', '))}` : ''}` : ''}.</li>`;
+  });
+  const available = atDockyard(campaign);
+  const overhauls = available ? dockyardOffers(campaign).filter((offer) => offer.kind === 'systems') : [];
+  return `<details class="engagement-debrief" id="${escape(debriefAnchor(engagement.battleId))}"${open ? ' open' : ''}><summary>Debrief · ${escape(engagement.name)} · ${escape(engagement.outcome)}</summary>`
+    + `<p>Turn ${engagement.turn}: ${escape(engagement.kind)} · system ${escape(engagement.outcome)}; now held by ${factionBadgeHtml(engagement.disposition.afterOwner ?? 'Unowned')}.</p>`
+    + (engagement.scope === 'garrison' ? '<p>Offscreen garrison engagement; the carried fleet did not participate. Individual garrison service details unavailable.</p>' : `<p>Survivors: ${hullList(engagement.survivors)}. Losses: ${hullList(engagement.losses)}. Newly carried prizes: ${hullList(engagement.prizes)}.</p>`)
+    + (!engagement.entryAvailable ? '<p class="menu-sub">Entering condition unavailable for this older engagement; new damage cannot be reconstructed.</p>' : '')
+    + (!engagement.detailAvailable ? '<p class="menu-sub">Detailed event history unavailable; recorded final conditions and economy are shown.</p>' : '')
+    + (deltas.length ? `<ul>${deltas.join('')}</ul>` : '')
+    + (engagement.milestones.length ? `<p>Confirmed milestones</p><ul>${engagement.milestones.map((fact) => `<li>${escape(serviceMilestoneText(fact, campaign))}</li>`).join('')}</ul>` : '')
+    + `<p>Capture reward ${engagement.credits.reward} cr · bounty ${engagement.credits.bounty} cr · balance ${engagement.credits.before} → ${engagement.credits.after} cr. Current balance ${campaign.credits} cr.</p>`
+    + `<p><a href="#sector-fleet-records">Inspect veterans</a> · <a href="#sector-map">Return to routes</a>${available ? ' · <a href="#sector-dockyard">Dockyard offers</a>' : ' · dockyard available on Federation-held ground'}.</p>`
+    + overhauls.map((offer) => `<p>${escape(offer.label)} · ${offer.cost} cr${offer.cost > campaign.credits ? ' — cannot afford this overhaul; travel remains available when route rules allow' : ''}.</p>`).join('') + '</details>';
+};
+
+export const campaignMemorialHtml = (campaign) => {
+  const lost = campaignMemorial(campaign);
+  return `<details class="campaign-memorial" id="campaign-memorial"><summary>Campaign memorial · ${lost.length} lost hull${lost.length === 1 ? '' : 's'}</summary>${lost.length ? lost.map((record) => serviceHistoryHtml(campaign, record.campaignShipId)).join('') : '<p>No recorded hull losses.</p>'}</details>`;
+};
 
 /** The star chart's drawing box, in SVG user units. */
 export const SECTOR_VIEW = Object.freeze({ width: 760, height: 420, marginX: 72, marginY: 30 });
@@ -86,7 +152,7 @@ export const sectorSvg = (campaign, { selectedId = null } = {}) => {
   return `<svg viewBox="0 0 ${view.width} ${view.height}" role="group" aria-label="Sector systems and routes">${links.join('')}${glyphs.join('')}</svg>`;
 };
 
-const recordLine = (record) => {
+const recordLine = (record, campaign) => {
   const marks = [
     record.prize ? 'prize' : null,
     record.kills >= ACE_KILLS ? `ace ★${record.kills}` : record.kills ? `${record.kills} kills` : null,
@@ -94,7 +160,7 @@ const recordLine = (record) => {
   ].filter(Boolean);
   // Carried fleet records are Federation-owned by the campaign contract;
   // prize.from is origin history, never the current allegiance.
-  return `<li><b>${record.name}</b> ${factionBadgeHtml('Federation')} <i>${record.className}</i> — shields ${record.shields}, crew ${record.crew}${marks.length ? ` · ${marks.join(' · ')}` : ''}${record.prize?.from ? ` · taken from ${factionBadgeHtml(record.prize.from)}` : ''}${record.captain ? ` · ${record.captain}` : ''}</li>`;
+  return `<li><b>${escape(record.name)}</b> ${factionBadgeHtml('Federation')} <i>${escape(record.className)}</i> — shields ${record.shields}, crew ${record.crew}${marks.length ? ` · ${marks.join(' · ')}` : ''}${record.prize?.from ? ` · taken from ${factionBadgeHtml(record.prize.from)}` : ''}${record.captain ? ` · ${escape(record.captain)}` : ''}${serviceHistoryHtml(campaign, record.campaignShipId)}</li>`;
 };
 
 /**
@@ -120,6 +186,7 @@ export const sectorSideHtml = (campaign, selectedId = null) => {
     lines.push(`<p class="sector-banner threat">${factionBadgeHtml(campaign.threat.attacker)} raid ${target?.name ?? campaign.threat.nodeId} — resolve the defense before travelling.</p>`);
   }
   const buttons = [];
+  if (!campaign.battle && presentedEngagement(campaign)) lines.push(engagementDebriefHtml(campaign, presentedEngagement(campaign), { open: true }));
   if (adjacent && active && !campaign.threat) buttons.push(`<button type="button" class="secondary tiny" data-sector-action="travel" data-node="${node.id}">Travel here</button>`);
   if (here && active && engageableHere(campaign)) {
     buttons.push(`<button type="button" class="tiny" data-sector-action="engage" data-node="${node.id}">Engage</button>`);
@@ -132,14 +199,16 @@ export const sectorSideHtml = (campaign, selectedId = null) => {
   // a stale click can never spend credits the panel did not show.
   if (atDockyard(campaign)) {
     const offers = dockyardOffers(campaign);
-    lines.push(`<p class="menu-sub">Dockyard — ${campaign.credits} credits to spend</p>`);
+    lines.push(`<details class="campaign-dockyard" id="sector-dockyard"><summary>Dockyard offers · ${campaign.credits} credits to spend</summary>`);
     lines.push(offers.length
       ? `<div class="sector-actions dockyard">${offers.map((offer) => `<button type="button" class="secondary tiny" data-sector-action="buy" data-offer="${offer.id}"${offer.cost > campaign.credits ? ' disabled' : ''} title="${offer.cost} credits">${offer.label} · ${offer.cost} cr</button>`).join('')}</div>`
       : '<p class="menu-sub">The fleet is in perfect order — nothing to buy.</p>');
+    lines.push('</details>');
   }
   const wounded = campaign.fleet.length;
-  lines.push(`<p class="menu-sub">Your fleet — ${wounded} hull${wounded === 1 ? '' : 's'}, ${campaign.credits} credits</p>`);
-  lines.push(`<ul class="sector-fleet">${campaign.fleet.map(recordLine).join('')}</ul>`);
+  lines.push(`<p class="menu-sub" id="sector-fleet-records">Your fleet — ${wounded} hull${wounded === 1 ? '' : 's'}, ${campaign.credits} credits</p>`);
+  lines.push(`<ul class="sector-fleet">${campaign.fleet.map((record) => recordLine(record, campaign)).join('')}</ul>`);
+  lines.push(campaignMemorialHtml(campaign));
   lines.push(sectorReportHtml(campaign));
   return lines.join('');
 };
@@ -158,9 +227,10 @@ export const sectorReportHtml = (campaign) => {
     `Fleet ${report.hulls} hull${report.hulls === 1 ? '' : 's'}${report.aces.length ? ` · aces: ${report.aces.join(', ')}` : ''}`,
   ];
   const news = (campaign.news ?? []).slice(-6);
-  return `<p class="menu-sub">Campaign report</p><ul class="sector-fleet report">${lines.map((line) => `<li>${line}</li>`).join('')}</ul>`
+  return `<p class="menu-sub">Campaign report</p><ul class="sector-fleet report">${lines.map((line) => `<li>${escape(line)}</li>`).join('')}</ul>`
+    + `<details class="campaign-debrief-archive" id="campaign-debrief-archive"><summary>Reopen engagement debriefs</summary>${campaign.serviceRecords?.olderEngagements ? `<p>${campaign.serviceRecords.olderEngagements} older engagements summarized; lifetime totals retained.</p>` : ''}${(campaign.serviceRecords?.engagements ?? []).slice().reverse().map((entry) => `<a href="#${escape(debriefAnchor(entry.battleId))}">${escape(entry.name)} · turn ${entry.turn}</a>${entry === presentedEngagement(campaign) ? '' : engagementDebriefHtml(campaign, entry)}`).join('') || '<p>No detailed engagement debriefs available.</p>'}</details>`
     + (news.length
-      ? `<p class="menu-sub">Sector news</p><ul class="sector-fleet news">${news.map((entry) => `<li>Turn ${entry.turn}: ${entry.text}</li>`).join('')}</ul>`
+      ? `<p class="menu-sub">Sector news</p><ul class="sector-fleet news">${news.map((entry) => `<li>Turn ${entry.turn}: ${escape(entry.text)}</li>`).join('')}</ul>`
       : '');
 };
 
@@ -171,6 +241,7 @@ export const sectorResultsHtml = (campaign) => (campaign.results.length
 
 /** Paints the sector screen. The only document-touching export, mirroring `renderGame`. */
 export const renderSectorScreen = (campaign, { selectedId = null } = {}) => {
+  const pageScroll = globalThis.window ? { x: window.scrollX, y: window.scrollY } : null;
   const legend = document.querySelector('#sector-legend');
   if (legend) legend.innerHTML = ['Federation', 'Axis', 'Bloc', 'Cabal', 'Unowned'].map((faction) => factionBadgeHtml(faction)).join('')
     + '<span>◉ home · ◆ supply objective · ● garrison · ○ empty</span><span class="legend-note">Dashed ring: your fleet · bright routes: reachable systems</span>';
@@ -179,7 +250,20 @@ export const renderSectorScreen = (campaign, { selectedId = null } = {}) => {
   const map = document.querySelector('#sector-map');
   if (map) map.innerHTML = sectorSvg(campaign, { selectedId });
   const side = document.querySelector('#sector-side');
-  if (side) side.innerHTML = sectorSideHtml(campaign, selectedId);
+  if (side) {
+    // Native inspection is read-only. Keep the reader's place across a repaint.
+    const previous = new Map(Array.from(side.querySelectorAll?.('details[id]') ?? [], (detail) => [detail.id, detail.open]));
+    const focused = document.activeElement;
+    const focusedDetail = focused?.tagName === 'SUMMARY' && side.contains?.(focused) ? focused.parentElement?.id : null;
+    const scrollTop = side.scrollTop;
+    side.innerHTML = sectorSideHtml(campaign, selectedId);
+    for (const detail of side.querySelectorAll?.('details[id]') ?? []) {
+      if (previous.has(detail.id)) detail.open = previous.get(detail.id);
+      if (detail.id === focusedDetail) detail.querySelector('summary')?.focus({ preventScroll: true });
+    }
+    if (scrollTop !== undefined) side.scrollTop = scrollTop;
+  }
   const results = document.querySelector('#sector-results');
   if (results) results.innerHTML = sectorResultsHtml(campaign);
+  if (pageScroll) window.scrollTo(pageScroll.x, pageScroll.y);
 };

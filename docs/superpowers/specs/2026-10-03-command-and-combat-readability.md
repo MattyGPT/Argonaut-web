@@ -2,7 +2,7 @@
 
 Implementation plan: [Console and combat readability tasks](../plans/2026-10-03-command-and-combat-readability.md).
 
-Implementation status: C1–C5 are merged through PR #92 (`9961edd`). C6 pacing is in delivery review. Public surrender and battle-completion milestones are prominent; the engine has no separate public annihilation-only alliance-defeat announcement to present. See the implementation plan for evidence and this source limitation.
+Implementation status: C1–C5 are merged through PR #92 (`9961edd`). C6 pacing is merged in PR #93 (`7146f75`). Public surrender and battle-completion milestones are prominent; the engine has no separate public annihilation-only alliance-defeat announcement to present. See the implementation plan for evidence and this source limitation.
 
 Status: **DESIGN DRAFT, 2026-10-03.** Covers approved proposals 1, 2, 3, 4,
 and 7 in the [player experience roadmap](2026-10-03-player-experience-roadmap.md).

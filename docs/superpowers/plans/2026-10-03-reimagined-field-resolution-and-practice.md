@@ -153,26 +153,26 @@ parity; both Reimagined runs. Publish rules only after the evidence gate.
 Reuse existing actions and scenario evaluation without changing ordinary
 war victory rules.
 
-- [ ] Define practice metadata with an explicit exercise ID, independent
+- [x] Define practice metadata with an explicit exercise ID, independent
   battle identity, objective state, briefing, and hint progress. Build each
   fixture through `createGame({ reimagined: true, ... })` and disclosed
   deterministic setup changes. Keep practice outside campaign economy.
-- [ ] Add four exercises: rescue/repair the designated hull, tow it to a
+- [x] Add four exercises: rescue/repair the designated hull, tow it to a
   marked zone, disable and capture the designated enemy, and hold the named
   relay for three consecutive boundaries. Loss of the objective hull or
   available force produces the failure specified by the design.
-- [ ] Write a headless reference solution and reasonable alternative for
+- [x] Write a headless reference solution and reasonable alternative for
   each fixture, using actual commands and real resolution. Verify failure
   and early-exit paths. Avoid success requiring a lucky subsystem hit;
   redesign the fixture rather than altering damage or RNG behind the player.
-- [ ] Resolve exercise success/failure in the practice controller, not in
+- [x] Resolve exercise success/failure in the practice controller, not in
   Classic or the campaign victory detector. Reset every fixture and RNG
   state on retry. Begin real-time practice paused.
-- [ ] Route practice persistence to its own key. Existing ordinary/campaign
+- [x] Route practice persistence to its own key. Existing ordinary/campaign
   New game handlers deliberately remove the other save, so entering practice
   must not call those destructive handlers. Retain the active session and
   its save bytes until the player returns.
-- [ ] Make hint advancement observe accepted actions or confirmed results.
+- [x] Make hint advancement observe accepted actions or confirmed results.
   Permit alternative valid solutions, dismissal, and restart without
   granting credits, hulls, or tutorial bonuses.
 
@@ -185,22 +185,22 @@ RNG or changes ordinary outcome rules.
 **Create:** `scripts/check-practice.mjs`. **Modify:** `app.js`,
 `ui/practice.js`, guide content, and browser test fixtures.
 
-- [ ] Add optional practice entry from New game and relevant guide sections,
+- [x] Add optional practice entry from New game and relevant guide sections,
   with visible objective, hints, retry, next exercise, and return controls.
   Practice is never required for normal play or campaign entry.
-- [ ] Test entry from a standalone war and from a campaign separately.
+- [x] Test entry from a standalone war and from a campaign separately.
   Complete one exercise, fail another, retry, reload, and return; compare
   both original save values byte-for-byte and verify the resumed state.
-- [ ] Check transitions while paused, during help, and after a terminal
+- [x] Check transitions while paused, during help, and after a terminal
   presentation. Do not leave animation locks or simulation accumulators
   attached to the previous practice attempt.
-- [ ] Re-run fixture solutions after accepted F3/F4 rule changes. Add new
+- [x] Re-run fixture solutions after accepted F3/F4 rule changes. Add new
   solution failures to the same fixture tests rather than maintaining a
   private tutorial version of combat rules.
 - [ ] Observe an unfamiliar player attempting each concept. Record confusing
   labels, failed assumptions, retry causes, and completion time. Tune hint
   wording and setup from those observations, not by adding hidden assistance.
-- [ ] Update guide sections and hand final practice scenes to G5 capture.
+- [x] Update guide sections and hand final practice scenes to G5 capture.
 
 **Verify:** Practice tests, browser lifecycle check, full suite, and supported
 baseline comparisons for any shared engine changes. Keep F5/F6 independent
@@ -247,3 +247,16 @@ or new prizes to inspect. Both candidates are deferred because their benefit
 gate is unmet. A combined arm and alternate grace periods are not justified
 by two inactive arms. CALIBRATION records this decision without new baseline
 rows. No live engine or save field changed; F5–F6 can use the current rules.
+
+## F5/F6 delivery evidence — 2026-10-05
+
+Implemented on a branch based on merged PR #93 (7146f75); in delivery review. The
+[practice and service-record review](../reviews/2026-10-05-practice-and-service-records.md)
+records fixture rules, controller boundaries, save isolation, and limitations.
+Twenty-three practice tests verify reference and alternative solutions for all
+four exercises in both timing modes, failures, retries, and hint progression.
+The actual-app browser check covers both prior save keys, war/campaign runtime
+restoration, reload, active walkthrough preservation, real-time pause/help, and
+a destination marker clear of the minimap at desktop/narrow/enlarged sizes.
+Novice observation remains pending; final teaching claims and G5 illustrations
+must follow that evaluation. No ordinary victory or combat rule changed.

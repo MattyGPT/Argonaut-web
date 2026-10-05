@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FACTIONS, SECTOR } from '../game/constants.js';
-import { createCampaign, nodeById, travelTo } from '../game/campaign.js';
-import { renderSectorScreen, sectorLayout, sectorResultsHtml, sectorSideHtml, sectorSvg, SECTOR_VIEW } from '../ui/sector.js';
+import { createCampaign, nodeById, travelTo, startNodeBattle, resolveNodeBattle } from '../game/campaign.js';
+import { engagementDebriefHtml, serviceHistoryHtml, campaignMemorialHtml, renderSectorScreen, sectorLayout, sectorResultsHtml, sectorSideHtml, sectorSvg, SECTOR_VIEW } from '../ui/sector.js';
 import { factionBadgeHtml, factionIdentity } from '../ui/faction-identity.js';
 
 // sector.js only touches the document inside renderSectorScreen, so the same
@@ -28,6 +28,40 @@ const campaignAtEnemy = () => {
   }
   throw new Error('no seed produced an enemy-held first-column node');
 };
+
+test('debrief explains inherited and new damage, actual credits and affordable choices without mutation', () => {
+  const campaign = campaignAtEnemy();
+  campaign.fleet[0].shields = 100;
+  const started = startNodeBattle(campaign, campaign.currentNode, { battleId: 'ui-debrief' });
+  const game = { ...started.battle.game, outcome: { kind: 'federation-win' }, ships: started.battle.game.ships.map((ship) => ship.campaignShipId === campaign.fleet[0].campaignShipId ? { ...ship, shields: 70, systems: { ...ship.systems, engines: 0 } } : ship) };
+  const resolved = resolveNodeBattle({ ...started, battle: { ...started.battle, game } }, { strategy: false });
+  const before = JSON.stringify(resolved);
+  const html = engagementDebriefHtml(resolved);
+  assert.match(html, /entered with shields 100/); assert.match(html, /engagement change shields -30/);
+  assert.match(html, /new system damage engines -5/); assert.match(html, /cannot afford this overhaul/);
+  assert.match(html, /travel remains available when route rules allow/);
+  assert.match(html, new RegExp(`balance 0 → ${resolved.credits} cr`));
+  assert.match(html, /href="#sector-dockyard"/); assert.match(html, /href="#sector-map"/);
+  assert.equal(JSON.stringify(resolved), before);
+});
+
+test('veteran and memorial preserve historical text and escape names and captains', () => {
+  const campaign = campaignAtEnemy(); const victim = campaign.fleet[0];
+  const started = startNodeBattle(campaign, campaign.currentNode);
+  const game = { ...started.battle.game, outcome: { kind: 'federation-win' }, ships: started.battle.game.ships.map((ship) => ship.campaignShipId === victim.campaignShipId ? { ...ship, status: 'destroyed', name: '<script>bad</script>', captain: '<img src=x>' } : ship) };
+  const resolved = resolveNodeBattle({ ...started, battle: { ...started.battle, game } }, { strategy: false });
+  const html = campaignMemorialHtml(resolved);
+  assert.match(html, /1 lost hull/); assert.match(html, /Captain’s fate unknown/);
+  assert.match(html, /&lt;script&gt;bad&lt;\/script&gt;/); assert.doesNotMatch(html, /<script>/);
+  assert.match(html, new RegExp(victim.name));
+  assert.match(serviceHistoryHtml(resolved, victim.campaignShipId), /0 engagements survived/);
+});
+
+test('debrief and service absence are explicit for old saves', () => {
+  const campaign = createCampaign(); delete campaign.serviceRecords;
+  assert.match(engagementDebriefHtml(campaign), /No engagement debrief yet/);
+  assert.match(serviceHistoryHtml(campaign, 'unknown'), /Service history unavailable/);
+});
 
 test('the layout places every node, columns left to right, without overlap', () => {
   const campaign = createCampaign({ seed: 'layout' });
@@ -120,7 +154,7 @@ test('the side panel shows the dockyard only on Federation-held ground', () => {
   const home = { ...createCampaign({ seed: 'dock-ui' }), credits: 60 };
   const wounded = { ...home, fleet: home.fleet.map((record) => (record.id === 'vet-fed-flagship' ? { ...record, shields: 50 } : record)) };
   const html = sectorSideHtml(wounded, 'home');
-  assert.ok(html.includes('Dockyard —'));
+  assert.ok(html.includes('Dockyard offers ·'));
   assert.ok(html.includes('data-sector-action="buy"'));
   assert.ok(html.includes('data-offer="shields:vet-fed-flagship"'));
   const poorHtml = sectorSideHtml({ ...wounded, credits: 1 }, 'home');
@@ -128,7 +162,7 @@ test('the side panel shows the dockyard only on Federation-held ground', () => {
   const perfect = sectorSideHtml({ ...home, credits: 60 }, 'home');
   assert.ok(perfect.includes('Commission'), 'commissions are offered even to a fleet in perfect order');
   const atEnemy = campaignAtEnemy();
-  assert.ok(!sectorSideHtml(atEnemy, atEnemy.currentNode).includes('Dockyard —'), 'no dockyard on enemy ground');
+  assert.ok(!sectorSideHtml(atEnemy, atEnemy.currentNode).includes('Dockyard offers ·'), 'no dockyard on enemy ground');
 });
 
 test('the side panel raises the threat banner, hides travel, and grades the run', () => {

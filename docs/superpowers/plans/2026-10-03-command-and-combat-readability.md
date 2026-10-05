@@ -289,7 +289,7 @@ engine content changed. C6 pacing and later integration remain pending.
 
 ## C6 delivery evidence — 2026-10-05
 
-Implemented on merged PR #92 (9961edd); awaiting delivery review.
+Merged in [PR #93](https://github.com/MattyGPT/Argonaut-web/pull/93) (`7146f75`), based on PR #92 (`9961edd`).
 The [compact playback review](../reviews/2026-10-05-compact-playback.md)
 records grouping, cancellation, frozen knowledge, timing, and source limits.
 Compact uses 700 ms routine groups and 2000 ms critical cards; Full sequence

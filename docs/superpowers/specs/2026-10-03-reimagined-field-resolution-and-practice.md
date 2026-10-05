@@ -10,7 +10,7 @@ retired as a new-game mode under
 [Mode consolidation](2026-10-03-mode-consolidation.md), without a legacy
 rules path to maintain.
 
-Implementation status: F1–F2 diagnostics are merged through PR #91 (`900dcf3`). The F3 navigation candidate was tested and rejected: fewer friendly collisions came with new timeouts and material faction shifts. The [navigation review](../reviews/2026-10-05-navigation-experiment.md) preserves its evidence. F4 settlement and NPC surrender were separately tested and deferred because neither activated in the paired samples; the [exhaustion review](../reviews/2026-10-05-exhaustion-experiments.md) retains their inactive reproduction. F5–F6 practice remains planned; no new navigation or surrender rule is active.
+Implementation status: F1–F2 diagnostics are merged through PR #91 (`900dcf3`). The F3 navigation candidate was tested and rejected: fewer friendly collisions came with new timeouts and material faction shifts. The [navigation review](../reviews/2026-10-05-navigation-experiment.md) preserves its evidence. F4 settlement and NPC surrender were separately tested and deferred because neither activated in the paired samples; the [exhaustion review](../reviews/2026-10-05-exhaustion-experiments.md) retains their inactive reproduction. F5/F6 practice is implemented and in delivery review; automated solvability and save-isolation checks pass, while novice teaching evaluation remains pending. No new navigation or surrender rule is active.
 
 ## Purpose and relationship to earlier work
 
