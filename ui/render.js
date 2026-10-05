@@ -1270,6 +1270,7 @@ export const reportFor = (game, type) => {
   if (type === 'battle-report') {
     const survivors = game.ships.filter((ship) => ship.status !== 'destroyed');
     const command = getShip(game, game.playerShipId);
+    const commandCaptain = game.reimagined ? command?.captain : 'Jason';
     const federation = game.ships.filter((ship) => ship.faction === FACTIONS.FEDERATION);
     const losses = federation.filter((ship) => ship.status === 'destroyed').length;
     const best = (list, pick) => list.reduce((top, ship) => (!top || pick(ship) > pick(top) ? ship : top), null);
@@ -1308,7 +1309,7 @@ export const reportFor = (game, type) => {
         punished?.shotsTaken ? `Heaviest punishment taken: ${punished.name} absorbed ${punished.shotsTaken} volleys.` : null,
         clumsy?.collisions ? `Most collisions: ${clumsy.name} with ${clumsy.collisions}.` : null,
         command
-          ? `Your record, Captain Jason of the ${command.name}: ${creditedKills(command)} kills${towKills(command) ? ` (${towKills(command)} from direct tow collisions)` : ''} from ${command.shotsFired} volleys fired, ${command.shotsTaken} absorbed.`
+          ? `Your record, ${commandCaptain ? `Captain ${commandCaptain} of the ${command.name}` : command.name}: ${creditedKills(command)} kills${towKills(command) ? ` (${towKills(command)} from direct tow collisions)` : ''} from ${command.shotsFired} volleys fired, ${command.shotsTaken} absorbed.`
           : null,
       ].filter(Boolean),
     };
