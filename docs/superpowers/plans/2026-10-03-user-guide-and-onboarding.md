@@ -1,5 +1,7 @@
 # User guide and onboarding implementation plan
 
+**Current status (2026-10-05):** G1–G5 implementation and automated G6 checks are merged through PR #95 (`4ef834c`). G6 guide-only observation, native browser 200-percent zoom, and novice evaluation remain open. Historical delivery notes retain their original validation counts.
+
 **Spec:** [User guide and onboarding](../specs/2026-10-03-user-guide-and-onboarding.md).
 **Goal:** Make the guide accurate, searchable by task through clear contents
 and links, illustrated where useful, and safe to read during a battle.
@@ -209,7 +211,8 @@ tasks, has separate first-order paths and timing/campaign references, and
 keeps legacy anchors. New-game links open contextual help without changing
 options. Unsupported tractor-release and terminal-skip instructions caught
 during independent review were removed. Five retained illustrations have
-qualified captions and verified dimensions; final replacement captures are G5.
+qualified captions and verified dimensions; G5 replaced them with current
+captures in PR #95.
 
 `check-guide-content.mjs` verifies local anchors, image files/alt/dimensions,
 31 command types and their ruleset/timing scope, real-time cooldown membership,
@@ -223,9 +226,10 @@ Escape/shortcuts, turn-based, completed, sector, and playback-lock states.
 Desktop/narrow/200-percent-equivalent guide checks run with images unavailable
 and reduced motion. Screenshot review caught an inner grid-width clipping
 issue at 390px; the corrected inner-content bounds now have a regression
-assertion and the recaptured narrow guide was inspected. G4 walkthrough,
-practice integration, final G5 captures, and G6 novice/cross-feature acceptance
-remain pending. No unfamiliar player participated in this delivery.
+assertion and the recaptured narrow guide was inspected. At that checkpoint
+G4, practice, and G5 were pending; they subsequently shipped in PRs #94–#95.
+G6 human tasks and P2 overall acceptance remain open. No unfamiliar player
+participated in this delivery.
 
 ## G4 delivery evidence — 2026-10-05
 
@@ -236,12 +240,13 @@ The actual-app check compares full game state and RNG with hints on/off in
 all three modes, rejects invalid movement, reads the matching confirmed
 journal card, and preserves dismissal. Practice links now open isolated
 exercises from the matching guide topics. Active hint progress survives a
-practice entry/reload/return. G5 illustrations and G6 novice evaluation remain
-pending; see the [delivery review](../reviews/2026-10-05-practice-and-service-records.md).
+practice entry/reload/return. G5 illustrations subsequently shipped in PR #95;
+G6 novice evaluation remains pending. See the [delivery review](../reviews/2026-10-05-practice-and-service-records.md).
 
 ## G5 delivery evidence — 2026-10-05
 
-Based on merged PR #94 (`0fdaf31`), the guide now uses 20 current browser
+Merged in [PR #95](https://github.com/MattyGPT/Argonaut-web/pull/95) (`4ef834c`),
+based on PR #94 (`0fdaf31`). The guide uses 20 current browser
 captures with explicit scene definitions and an asset manifest. The optional
 Playwright/installed Edge script uses isolated contexts, actual commands and
 record reducers, font/render conditions, and disclosed staged examples. All

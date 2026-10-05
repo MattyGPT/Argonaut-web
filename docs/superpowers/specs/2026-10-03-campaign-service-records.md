@@ -2,13 +2,14 @@
 
 Implementation plan: [Campaign record and debrief tasks](../plans/2026-10-03-campaign-service-records.md).
 
-Status: **DESIGN DRAFT, 2026-10-03.** Covers proposal 8 in the
+Specification: **Approved direction, 2026-10-03.** Covers proposal 8 in the
 [player experience roadmap](2026-10-03-player-experience-roadmap.md).
 Campaigns are Reimagined-only. This work adds history and explanation,
 without changing campaign economy, combat, officers, morale, or rewards.
 
-Implementation status: H1–H4 identity, bounded history, debriefs, and automated
-integration shipped in PR #94 (`0fdaf31`). See the [delivery review](../reviews/2026-10-05-practice-and-service-records.md).
+Implementation status: H1/H3 and the implemented H2/H4 portions (identity,
+bounded history, debriefs, and automated integration) shipped in PR #94
+(`0fdaf31`). See the [delivery review](../reviews/2026-10-05-practice-and-service-records.md).
 Novice evaluation and an explicit qualifying-rescue source remain pending;
 ordinary docking does not fabricate rescue credit. The existing recycled-slot
 bounty suppression edge is documented and unchanged.

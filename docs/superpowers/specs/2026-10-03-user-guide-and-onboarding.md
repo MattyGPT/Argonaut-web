@@ -2,9 +2,9 @@
 
 Implementation plan: [Guide and onboarding tasks](../plans/2026-10-03-user-guide-and-onboarding.md).
 
-Implementation status: G1 inventory and G2–G3 task-based guide/help pause are implemented. G4 optional walkthrough and practice integration shipped in PR #94 (`0fdaf31`). G5 now has 20 refreshed, reproducible illustrations in delivery review. Automated reference checks and source audit are recorded separately from pending novice acceptance. See the implementation plan for delivery evidence.
+Implementation status: G1 inventory and G2–G3 task-based guide/help pause are implemented. G4 optional walkthrough and practice integration shipped in PR #94 (`0fdaf31`). G5’s 20 refreshed illustrations and automated G6 reference checks shipped in [PR #95](https://github.com/MattyGPT/Argonaut-web/pull/95) (`4ef834c`). Guide-only task observation, native browser 200-percent zoom, and novice acceptance remain open; automated results do not close those tasks. See the implementation plan for delivery evidence.
 
-Status: **DESIGN DRAFT, 2026-10-03.** Covers Matt's added request for a
+Specification: **Approved direction, 2026-10-03.** Covers Matt's added request for a
 thorough guide review, screenshots, tutorial assessment, README, and
 repository description. Part of the
 [player experience roadmap](2026-10-03-player-experience-roadmap.md).

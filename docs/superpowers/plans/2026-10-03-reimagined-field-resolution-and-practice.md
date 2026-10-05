@@ -1,5 +1,7 @@
 # Reimagined field resolution and practice implementation plan
 
+**Current status (2026-10-05):** F1–F2 diagnostics and F5–F6 practice implementation/automated checks are shipped. F3 was tested and rejected; F4 was tested and deferred, with neither rule active. F6 unfamiliar-player observation remains open. Practice illustrations shipped in PR #95 (`4ef834c`).
+
 **Spec:** [Field resolution and guided practice](../specs/2026-10-03-reimagined-field-resolution-and-practice.md).
 **Goal:** Diagnose accidental collisions and exhausted battles, test narrow
 improvements, and teach existing systems through four optional exercises.
@@ -258,5 +260,7 @@ four exercises in both timing modes, failures, retries, and hint progression.
 The actual-app browser check covers both prior save keys, war/campaign runtime
 restoration, reload, active walkthrough preservation, real-time pause/help, and
 a destination marker clear of the minimap at desktop/narrow/enlarged sizes.
-Novice observation remains pending; final teaching claims and G5 illustrations
-must follow that evaluation. No ordinary victory or combat rule changed.
+Novice observation remains pending; teaching-effectiveness claims require
+that evaluation. G5 captured the shipped briefing and actual completion in
+PR #95 without claiming novice success. No ordinary victory or combat rule
+changed.

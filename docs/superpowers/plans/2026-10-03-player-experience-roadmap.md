@@ -1,6 +1,10 @@
 # Player experience implementation plan
 
-**Status:** Implementation started after merging PR #86 (`dc63b81`). P0 and
+**Current status (2026-10-05):** Most implementation is merged through
+[PR #95](https://github.com/MattyGPT/Argonaut-web/pull/95) (`4ef834c`). Final
+acceptance and the engineering follow-ups below remain open.
+
+Implementation started after merging PR #86 (`dc63b81`). P0 and
 M1–M4 and G1 shipped in [PR #87](https://github.com/MattyGPT/Argonaut-web/pull/87),
 merged as `7881c67`. C1 and G2–G3 shipped in
 [PR #88](https://github.com/MattyGPT/Argonaut-web/pull/88), merged as `9b5bed3`.
@@ -19,23 +23,60 @@ are retained; live navigation is unchanged. C6 compact playback shipped in
 experiments are complete and deferred: neither activated in the samples, so
 there is no demonstrated benefit to shipping them. Their
 [review and reproduction](../reviews/2026-10-05-exhaustion-experiments.md) are retained.
-F5/F6 practice, G4 first-order hints, and H1–H4 automated campaign history
+F5/F6 practice implementation, G4 first-order hints, and campaign history
+(H1/H3 and the implemented H2/H4 portions)
 shipped in [PR #94](https://github.com/MattyGPT/Argonaut-web/pull/94), merged
 as `0fdaf31`; see the
 [implementation evidence](../reviews/2026-10-05-practice-and-service-records.md).
 Direct tow collision report credit is included under the user's October 5
 request; [attribution evidence](../reviews/2026-10-05-tow-collision-credit.md)
 distinguishes report credit from gameplay kill bonuses.
-G5 illustrations and automated G6 reference checks are in delivery review;
+G5 illustrations and automated G6 reference checks shipped in
+[PR #95](https://github.com/MattyGPT/Argonaut-web/pull/95) (`4ef834c`);
 see the [guide review](../reviews/2026-10-05-guide-illustrations.md) and
 [acceptance matrix](../reviews/2026-10-05-player-experience-acceptance.md).
-F6/H4 novice observation, the missing explicit rescue service event, G6 human
-evaluation, and P2 overall cross-feature acceptance remain pending.
+F6/H4 novice observation, H2’s explicit rescue event, G6 guide-only/human
+evaluation and native browser zoom, and P2 overall acceptance remain pending.
+The pre-existing reused-slot bounty suppression bug is also open as a
+discovered campaign follow-up; it was documented, not fixed, in PR #94.
 A narrower navigation investigation
 must establish its own evidence before any rule change is accepted.
 **Spec:** [Player experience roadmap](../specs/2026-10-03-player-experience-roadmap.md).
 **Goal:** Deliver all six October 3 specifications in small, verifiable
 changes, preserving Classic while making Reimagined the sole expansion.
+
+## Current completion and remaining work
+
+| Track | Current disposition | Evidence / remaining work |
+| --- | --- | --- |
+| P0 baseline; M1–M4 mode consolidation | Complete | PR #87; Classic/Reimagined supported, Extended retired |
+| C1–C6 console and combat readability | Complete implementation | PRs #88–#93; no new public annihilation-only faction announcement invented |
+| F1–F2 collision/exhaustion diagnostics | Complete | PRs #90–#91; live rules unchanged |
+| F3 navigation candidate | Tested and rejected | Fewer friendly contacts but unacceptable timeouts/faction shifts; no active correction |
+| F4 settlement / NPC surrender candidates | Tested and deferred | Neither activated in the paired samples; no active rule or selected grace period |
+| F5–F6 practice | Implementation and automated checks complete | PR #94; unfamiliar-player teaching observation open |
+| G1–G5 guide and onboarding | Complete implementation | PRs #87, #88, #94, #95; 20 current illustrations |
+| G6 reference acceptance | Automated/source checks complete; human tasks open | PR #95; guide-only tasks, novice observation, native browser 200% zoom remain |
+| H1–H4 campaign records | Implemented except qualifying-rescue milestone; human acceptance open | PR #94; H2 rescue source and H4 unfamiliar-player observation remain |
+| P2 combined acceptance | Open | Individual checks have evidence; the final combined journey and human sign-off are not complete |
+
+Next closure work:
+
+- [ ] Define and emit authoritative qualifying-rescue facts, then record them
+  in campaign service histories. Docking/proximity alone must not earn credit.
+- [ ] Fix the discovered bounty identity bug: a new prize reusing a lost
+  prize’s tactical slot can miss its bounty. Preserve one payment per hull
+  and test repeated finalization. This is a Reimagined campaign follow-up.
+- [ ] Complete the P2 combined journeys and reconcile their results against
+  the [acceptance matrix](../reviews/2026-10-05-player-experience-acceptance.md).
+- [ ] Observe unfamiliar players using first orders, practice, guide lookups,
+  and campaign records; record understanding and revise failed explanations.
+- [ ] Verify native browser 200-percent zoom. The automated 800×500/DPR2
+  reflow fixtures are not native browser zoom evidence.
+
+PR #95 validation: 812 tests; 28 local guide links, 20 image references and
+31 command types; seven browser layout variants plus help behavior checks.
+These are recorded results, not a new test run during this status update.
 
 ## Plan coverage and dependency order
 
@@ -97,38 +138,41 @@ mode commands avoid silently changing the comparison set during removal.
 No Extended save migration, compatibility engine, or new calibration run
 for preserving that retired ruleset is required.
 
-## P1 Execute and close each delivery
+## P1 Execute and close each delivery (recurring procedure)
+
+These are standing delivery rules, not unfinished feature tasks. Apply them
+to each future change; past evidence is linked above.
 
 **Modify:** Only files listed by the active feature task, plus clearly
 necessary dependencies found during implementation. Proposed new module
 and test names in these plans are intentional creation targets, not claims
 that those files already exist.
 
-- [ ] Implement one behavioral slice at a time. For new rules, metadata
+- Implement one behavioral slice at a time. For new rules, metadata
   invariants, or asynchronous control flow, add focused tests that expose
   the relevant failure before changing the implementation.
-- [ ] Use targeted checks for pure prose, CSS, and other low-impact edits;
+- Use targeted checks for pure prose, CSS, and other low-impact edits;
   do not add tests that simply repeat markup or mirror helper internals.
-- [ ] Run the task's focused checks, then `npm test` at its delivery boundary.
+- Run the task's focused checks, then `npm test` at its delivery boundary.
   Run the supported-mode simulations for shared engine changes and at each
   completed presentation delivery. Once checks pass, repeat only if another
   change or unresolved concern justifies it.
-- [ ] For presentation or mode consolidation, compare complete supported
+- For presentation or mode consolidation, compare complete supported
   harness outputs, ignoring only an intentionally changed harness label.
   For direct state comparisons, exclude only explicitly documented
   presentation metadata and the retired `extended` flag; do not omit RNG,
   ships, orders, time, ordnance, or outcomes to manufacture parity.
-- [ ] For F3/F4 rule candidates, keep Classic identical and report paired
+- For F3/F4 rule candidates, keep Classic identical and report paired
   Reimagined changes, tails, and balance effects. Accepted rule changes
   establish the next baseline; later UI work compares against that revision.
-- [ ] Run `git diff --check`, review the staged diff, and record validation
+- Run `git diff --check`, review the staged diff, and record validation
   evidence. Commit only the slice's files with `git commit -F <message-file>`.
-- [ ] Use a separate reviewable PR per delivery or tightly related task
+- Use a separate reviewable PR per delivery or tightly related task
   group. Include what changed, why, tests, browser evidence when relevant,
   and any unresolved experiment. Check CI against the exact head commit.
   Do not infer permission to merge future implementation PRs from the
   already-completed request to merge the specification PR.
-- [ ] Update the relevant guide content with visible changes. Mark task
+- Update the relevant guide content with visible changes. Mark task
   checkboxes complete only when implementation and its checks are complete;
   record actual commit/PR references rather than predicted identifiers.
 
@@ -153,9 +197,9 @@ tests created by these plans.
   Extended rules path or hidden option combination.
 - [ ] Exercise help-pause, replay, skip, and nested dialogs together. Confirm
   one owner releases each lock and no wall-time catch-up burst occurs.
-- [ ] Run a campaign through two engagements and a dockyard visit. Check
+- [x] Run a campaign through two engagements and a dockyard visit. Check
   veteran identity, credit accuracy, loss records, and repeat debrief reads.
-- [ ] Enter practice from an existing session, retry, reload, and leave.
+- [x] Enter practice from an existing session, retry, reload, and leave.
   Ensure practice never overwrites the active war or campaign. This tests
   newly created sessions; it does not introduce a legacy-save migration task.
 - [ ] Test 1366×768 and 1600×1000 viewports, narrow layout, 200 percent zoom,
@@ -164,14 +208,22 @@ tests created by these plans.
 - [ ] Complete G6 novice tasks and record observations separately from
   automation. Mark human evaluation pending if no novice has participated;
   do not substitute the implementer's familiarity for learning evidence.
-- [ ] Confirm every spec acceptance item is mapped to a completed task and
-  recorded check. Update implementation status in the specs and roadmap.
+- [x] Map every spec acceptance item to recorded evidence or an explicit
+  remaining task in the acceptance matrix; reconcile merged implementation
+  status through PR #95. Mapping is complete, not overall acceptance.
+- [ ] Close the remaining acceptance items with completed tasks and checks.
+
+The checked campaign and practice items are backed by PR #94’s actual-app
+checks (including staged outcomes disclosed in its review). They were not
+rerun during this documentation update. Other unchecked combined tasks must
+not be inferred complete from separate unit tests or screenshot captures.
 
 ## Decisions that remain evidence dependent
 
 The mode decision and absence of Extended compatibility are settled.
-Presentation storage budgets and timing values are proposed starting
-points from the specs and must be checked under load. Collision strategy,
+The implemented journal/history budgets and playback timings have recorded
+validation in the C3/C6 and H3 delivery evidence. Further changes to them
+require fresh checks under the relevant load. Collision strategy,
 exhaustion recovery predicate, and any material balance shift require the
 diagnostic evidence described in F1–F4. A failed experiment is not a reason
 to invent a winner, adjust Classic, or conceal the result in a UI change.
