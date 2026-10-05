@@ -9,9 +9,9 @@ experiments are complete and deferred because neither rule activated in the
 sampled wars. No exhaustion rule or grace period has been selected.
 The first navigation candidate
 was rejected after paired tests; live rules remain unchanged. The linked
-plan tracks practice, first-order hints, and campaign records now in delivery
-review, plus the remaining screenshots, novice observation, and cross-feature
-acceptance. Direct tow collision report credit is included in this delivery;
+plan tracks practice, first-order hints, campaign records, and direct tow
+collision report credit merged in PR #94 (`0fdaf31`), plus the remaining
+screenshots, novice observation, and cross-feature acceptance;
 its report totals do not change combat or ace/vendetta bonuses.
 
 Status: **DESIGN DRAFT, 2026-10-03.** Matt approved the direction of all

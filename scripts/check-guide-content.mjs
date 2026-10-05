@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as constants from '../game/constants.js';
@@ -46,6 +47,10 @@ for (const anchor of outline) {
 assert(/id="guide-extended"[^>]*>[\s\S]*?<a href="#guide-fleet"/.test(guide), 'Legacy fleet anchor must link to Reimagined fleet command');
 
 let images = 0;
+const usedImages = new Set();
+const manifest = JSON.parse(await readFile(resolve(root, 'assets/guide/manifest.json'), 'utf8'));
+const captures = new Map(manifest.assets.map((asset) => [`assets/guide/${asset.file}`, asset]));
+assert.equal(captures.size, manifest.assets.length, 'Capture manifest contains duplicate images');
 for (const [tag] of guide.matchAll(/<img\b[^>]*>/g)) {
   const src = attribute(tag, 'src');
   assert(src && !/^(?:https?:|data:)/.test(src), 'Guide illustrations must reference local files');
@@ -54,7 +59,17 @@ for (const [tag] of guide.matchAll(/<img\b[^>]*>/g)) {
   assert.equal(bytes.subarray(1, 4).toString(), 'PNG', `Unexpected guide image format: ${src}`);
   assert.equal(Number(attribute(tag, 'width')), bytes.readUInt32BE(16), `Image width missing or stale: ${src}`);
   assert.equal(Number(attribute(tag, 'height')), bytes.readUInt32BE(20), `Image height missing or stale: ${src}`);
+  const capture = captures.get(src);
+  assert(capture, `Guide image has no reproducible capture: ${src}`);
+  assert.equal(capture.width, bytes.readUInt32BE(16), `Capture manifest width is stale: ${src}`);
+  assert.equal(capture.height, bytes.readUInt32BE(20), `Capture manifest height is stale: ${src}`);
+  assert.equal(capture.sha256, createHash('sha256').update(bytes).digest('hex'), `Image changed without updating capture evidence: ${src}`);
+  usedImages.add(src);
   images += 1;
+}
+for (const src of captures.keys()) assert(usedImages.has(src), `Unused production capture: ${src}`);
+for (const file of await readdir(resolve(root, 'assets/guide'))) {
+  if (file.endsWith('.png')) assert(usedImages.has(`assets/guide/${file}`), `Unused production image: ${file}`);
 }
 
 const documented = new Set([...guide.matchAll(/data-guide-command="([^"]+)"/g)].flatMap(([, names]) => names.split(/\s+/)));

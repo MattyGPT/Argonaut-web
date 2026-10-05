@@ -143,27 +143,27 @@ references, alt text, and captions. **Create:**
 `scripts/guide-scenes.mjs` for fixture definitions and a capture manifest
 if that keeps seeds and expected states explicit.
 
-- [ ] Consolidate capture tooling on the existing optional Playwright/Edge
+- [x] Consolidate capture tooling on the existing optional Playwright/Edge
   approach used by the feedback checks, or keep Puppeteer if that avoids
   unnecessary churn. Document the chosen setup and executable/module override;
   no browser package enters runtime dependencies and no install is implicit.
-- [ ] Run captures in a fresh browser context, separate from the user's live
+- [x] Run captures in a fresh browser context, separate from the user's live
   profile. Define seed, options, fixture modifications, viewport, device
   scale, theme/art, pause state, and expected visible elements for every scene.
-- [ ] Replace arbitrary sleeps with render-state, font, and transition
+- [x] Replace arbitrary sleeps with render-state, font, and transition
   completion checks. Use an explicit reproducible moment for beam/impact
   captures; do not paint an effect into a screenshot afterward.
-- [ ] Capture overview/console, two-mode chooser, map/menu in art and glyph
+- [x] Capture overview/console, two-mode chooser, map/menu in art and glyph
   views, causal combat result, real-time controls, focused power/arc/relay or
   prize views, campaign route/debrief/veteran/dockyard, practice, and phosphor.
   Reuse correct existing figures where they still teach the intended topic.
-- [ ] Crop to the concept and inspect at the actual rendered guide size.
+- [x] Crop to the concept and inspect at the actual rendered guide size.
   Give image dimensions, useful alt text, and a caption telling the reader
   what to notice. Keep all essential steps in HTML text.
-- [ ] Review every generated image visually for state correctness, clipping,
+- [x] Review every generated image visually for state correctness, clipping,
   unreadable labels, accidental menus, and stale mode names. Fix the fixture
   or UI and recapture; do not retouch controls into an impossible arrangement.
-- [ ] Keep only used production images and reproducible fixture sources.
+- [x] Keep only used production images and reproducible fixture sources.
   Exclude raw browser profiles and redundant evidence captures from deployment.
 
 **Verify:** Run the capture script against `npm start`, inspect its manifest
@@ -177,7 +177,7 @@ references, duplicate IDs, and complete scoped command coverage. Reuse
 `scripts/check-guide.mjs` for interactive behavior. **Modify:** Inventory
 with outcomes and any remaining gaps.
 
-- [ ] Check every internal link and image reference, including the relocated
+- [x] Check every internal link and image reference, including the relocated
   fleet-command anchor. Add focused checks for selected numeric constants or
   shared command metadata where deriving them prevents documented drift.
 - [ ] Follow all spec tasks in Classic, Reimagined turn-based, real time,
@@ -190,9 +190,9 @@ with outcomes and any remaining gaps.
   Record time, wrong turns, questions, and whether the result was understood.
   Revise the specific failed explanation and repeat that task. Do not claim
   a universal learning-time improvement from one observation.
-- [ ] Check README and repository description for shipped-only claims after
+- [x] Check README and repository description for shipped-only claims after
   all deliveries. Keep rights and provenance intact and runtime setup simple.
-- [ ] Run `git diff --check`, affected tests, and the content/browser checks.
+- [x] Run `git diff --check`, affected tests, and the content/browser checks.
   Documentation-only edits do not require rerunning simulations; G3/G4
   behavior changes follow the shared P1 verification rules.
 
@@ -229,8 +229,7 @@ remain pending. No unfamiliar player participated in this delivery.
 
 ## G4 delivery evidence — 2026-10-05
 
-Optional first-order guidance is implemented on a branch based on PR #93 (7146f75), in delivery
-review. It is never started automatically and cannot issue a free action.
+Optional first-order guidance shipped in PR #94 (`0fdaf31`). It is never started automatically and cannot issue a free action.
 Seven reducer tests cover real accepted records, rejected/automatic commands,
 identity/command changes, delayed consequences, and missing-target openings.
 The actual-app check compares full game state and RNG with hints on/off in
@@ -239,3 +238,30 @@ journal card, and preserves dismissal. Practice links now open isolated
 exercises from the matching guide topics. Active hint progress survives a
 practice entry/reload/return. G5 illustrations and G6 novice evaluation remain
 pending; see the [delivery review](../reviews/2026-10-05-practice-and-service-records.md).
+
+## G5 delivery evidence — 2026-10-05
+
+Based on merged PR #94 (`0fdaf31`), the guide now uses 20 current browser
+captures with explicit scene definitions and an asset manifest. The optional
+Playwright/installed Edge script uses isolated contexts, actual commands and
+record reducers, font/render conditions, and disclosed staged examples. All
+20 PNGs were visually inspected; the production set totals 3,515,128 bytes.
+Focused single-column figures retain their aspect ratio; secondary examples
+can be expanded. Reduced-motion guide navigation no longer smooth-scrolls.
+
+The content check validates manifest hashes/dimensions and rejects unused
+production images, alongside 28 local links and 31 command types. Full suite:
+812 tests pass. README factual corrections and accurate existing repository
+description were reviewed. See the [illustration review](../reviews/2026-10-05-guide-illustrations.md)
+and [acceptance matrix](../reviews/2026-10-05-player-experience-acceptance.md).
+Novice comprehension and native browser zoom remain explicit human tasks.
+
+Final illustrated-reference browser check: seven layout variants, 20 images,
+14 contents plus two contextual targets per layout, actual reader/figure
+captures, keyboard full-size image opening, focus return, reduced motion,
+failed-image fallback, and unchanged saved battle all pass. The two enlarged
+variants use 800×500 CSS viewport/device scale 2, not native browser zoom.
+The existing help behavior regression also passes its actual eight-second
+paused interval and no-catch-up assertions. G6’s combined layout task remains
+open for native 200-percent zoom; its novice and guide-only observation tasks
+remain open.

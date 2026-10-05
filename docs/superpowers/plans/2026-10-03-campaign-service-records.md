@@ -137,7 +137,7 @@ morale, medals with bonuses, new rewards, or economy rebalance are included.
 ## H1–H4 delivery evidence — 2026-10-05
 
 Identity, bounded history, debrief/service/memorial views, and automated
-integration are implemented on a branch based on PR #93 (7146f75), in delivery review. See the
+integration shipped in PR #94 (`0fdaf31`). See the
 [delivery evidence and source limits](../reviews/2026-10-05-practice-and-service-records.md).
 H2's milestone item remains partially open: joining, capture/recapture, factual
 ace crossings, paid repair, and loss are recorded, but no explicit qualifying

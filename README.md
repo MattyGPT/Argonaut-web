@@ -66,6 +66,15 @@ See [CALIBRATION.md](CALIBRATION.md) for measured baselines and the
 [player experience roadmap](docs/superpowers/specs/2026-10-03-player-experience-roadmap.md)
 for planned polish. Design drafts describe future work, not shipped features.
 
+To refresh the illustrated guide, run `npm start`, then
+`node scripts/capture-guide-shots.mjs`. This optional developer tool uses
+an installed Edge browser and `playwright-core`; set `PLAYWRIGHT_MODULE`
+to an existing module installation. It never installs packages or uses your
+live browser profile. `GAME_URL` selects another running server. Scene
+definitions and the capture manifest record each staged example. Inspect the
+new images, then run `node scripts/check-guide-content.mjs` and
+`node scripts/check-guide-reference.mjs` with the same browser setup.
+
 ## First orders
 
 1. Open **New game** and choose your options. A seed and the same options
@@ -411,7 +420,7 @@ commands and calibrated behavior.
   is for, and it makes screening Xanadu worth a ship.
 - **The war ends with a battle report**: stardates elapsed, Federation losses,
   the top gun of any alliance, the hull that absorbed the most punishment, the
-  clumsiest captain by collisions, and your own record as Captain Jason.
+  clumsiest captain by collisions, and your current command ship's record.
 - **Each alliance fights its own way.** In the original every autopilot ran the
   same doctrine. In Reimagined: **Axis** swarms the nearest hull and refuses
   to give ground, refits late, and — only as a last stand when all but destroyed
@@ -426,7 +435,7 @@ commands and calibrated behavior.
 - **Enemy captains look after themselves now.** They flush engines into shields
   and withdraw when mauled, so a fleet you have hurt can slip away instead of
   fighting to the last point of shield. The vendetta ship is exempt: it still
-  comes for Captain Jason through any amount of fire.
+  comes for your command ship through any amount of fire.
 - Doctrine applies only to hulls you have not ordered — your orders always
   outrank your own captains' instincts.
 - **Every hull has a captain, and you have to earn their names.** A new Reimagined
@@ -434,13 +443,15 @@ commands and calibrated behavior.
   which ship they command. Scanning a hull reveals who captains it, so finding
   your hunter means getting inside scanner range of the enemy fleet. That is what
   makes the scanner worth its hardware.
-- **Aces and a deepening vendetta.** Two credited kills make a captain an ace, and
-  a scanned ace wears a ★ on the map. Every third kill the vendetta captain scores
+- **Aces and a deepening vendetta.** Two weapon or self-destruct kills make a
+  captain an ace, and a scanned ace wears a ★ on the map. Every third kill the vendetta captain scores
   makes its volleys against your command ship bite 25% harder, so ignoring that
-  hull gets worse the longer you leave it alive.
-- **Replay the round.** The button in the battle narrative header plays the last
-  computer phase back on the map — every alliance's beams, torpedoes, and kills,
-  not just the ones that touched you — with that round's narrative beside it.
+  hull gets worse the longer you leave it alive. Direct tow collision credits
+  appear in reports separately and do not advance these bonuses.
+- **Replay the round.** The battle journal button replays the last computer
+  phase's available frozen events. This is historical playback: it does not
+  reveal hidden events or advance the game. Older saves without those facts
+  can show only the retained losses.
   Terminal presentations replay stored facts using your Compact or Full
   sequence preference. Commands stay locked during playback; **Finish presentation** ends
   the presentation without discarding journal records or changing a paused
@@ -457,7 +468,8 @@ commands and calibrated behavior.
     your hunter before you have identified them, you lose: you never learned who
     was coming for you. It is a race, and the scanner is the whole game.
 
-  Wiping out an alliance still wins outright under any scenario.
+  The standard last-alliance-standing outcome takes precedence over a scenario
+  objective; eliminating just one of several enemies does not win the war.
 - **The dockyard rebuilds hardware.** A hull inside the ring recovers shield power,
   transferred crew, and one unit of its most-damaged subsystem each stardate — so a
   burnt-out mapper is a wound now, not a permanent amputation.
@@ -478,9 +490,9 @@ in any war — gives your phaser volleys two dials in the firing prompt:
   intact, crew alive.
 - **Phaser power.** A 0–100 slider on every phaser volley, defaulting to full.
   Output already scales with your live phaser units, so the dial is a fraction
-  of what your banks can currently put out. Its use is the finishing blow: a
-  throttled volley never carries the overkill that shatters a hull, so a
-  measured finish leaves a boardable prize instead of wreckage.
+  of what your banks can currently put out. Lower power can reduce overkill
+  and improve the chance of leaving a boardable frame; the resolved damage
+  still determines vacancy or destruction.
 
 A hull with crew left but no engines, phasers, or photons strikes its colors at
 stardate end — crew away in escape pods, hull left adrift for your transporter
@@ -499,8 +511,8 @@ the round replay.
 - Ships glide between stardates instead of teleporting, and leave a fading dashed
   trail, so you can watch the computer phase reposition the fleets. Both are
   suppressed under `prefers-reduced-motion`.
-- Each ship is drawn as a circle bearing its initial (A=Argo, X=Xanadu,
-  +=wreck), colored by alliance.
+- Modern Ship art uses hull sprites. Glyph view uses circles bearing initials
+  (A=Argo, X=Xanadu, +=wreck), with alliance badges alongside the contacts.
 - Dashed rings around your ship show phaser (red), photon (yellow), and engine
   (cyan) reach. Enemies that can reach you are outlined in red.
 - The visual map is limited by your mapper (fog of war). `Backspace` shows the
@@ -552,9 +564,8 @@ prior war or campaign without transferring practice hulls or credits.
   war works, the tactical map, every command and key, combat mechanics, the
   fleet command, precision fire, Reimagined, real-time movement, the campaign,
   the comforts, and the game's provenance,
-  maintainer, and where to reach out. Its screenshots are regenerated with
-  `npm install --no-save puppeteer-core` followed by
-  `node scripts/capture-guide-shots.mjs` against a running `npm start`.
+  maintainer, and where to reach out. Reproducible browser captures illustrate
+  the current controls; see [Test it](#test-it) for the optional tooling.
 - **Save/resume** — the war autosaves to your browser (localStorage) after every
   action and resumes where you left off when you reload. `New game` starts fresh.
 - **Classic view** — the top-bar toggle switches to a black phosphor CRT theme

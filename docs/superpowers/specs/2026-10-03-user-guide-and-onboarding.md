@@ -2,7 +2,7 @@
 
 Implementation plan: [Guide and onboarding tasks](../plans/2026-10-03-user-guide-and-onboarding.md).
 
-Implementation status: G1 inventory and G2–G3 task-based guide/help pause are implemented. G4 optional walkthrough and practice integration are in delivery review. Final screenshot refresh and novice acceptance remain pending. See the implementation plan for delivery evidence.
+Implementation status: G1 inventory and G2–G3 task-based guide/help pause are implemented. G4 optional walkthrough and practice integration shipped in PR #94 (`0fdaf31`). G5 now has 20 refreshed, reproducible illustrations in delivery review. Automated reference checks and source audit are recorded separately from pending novice acceptance. See the implementation plan for delivery evidence.
 
 Status: **DESIGN DRAFT, 2026-10-03.** Covers Matt's added request for a
 thorough guide review, screenshots, tutorial assessment, README, and

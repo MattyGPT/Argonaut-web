@@ -250,7 +250,7 @@ rows. No live engine or save field changed; F5–F6 can use the current rules.
 
 ## F5/F6 delivery evidence — 2026-10-05
 
-Implemented on a branch based on merged PR #93 (7146f75); in delivery review. The
+Shipped in PR #94 (`0fdaf31`). The
 [practice and service-record review](../reviews/2026-10-05-practice-and-service-records.md)
 records fixture rules, controller boundaries, save isolation, and limitations.
 Twenty-three practice tests verify reference and alternative solutions for all

@@ -19,14 +19,18 @@ are retained; live navigation is unchanged. C6 compact playback shipped in
 experiments are complete and deferred: neither activated in the samples, so
 there is no demonstrated benefit to shipping them. Their
 [review and reproduction](../reviews/2026-10-05-exhaustion-experiments.md) are retained.
-F5/F6 practice, G4 first-order hints, and H1–H4 campaign history are in delivery
-review on `codex/practice-service-records`; see the
+F5/F6 practice, G4 first-order hints, and H1–H4 automated campaign history
+shipped in [PR #94](https://github.com/MattyGPT/Argonaut-web/pull/94), merged
+as `0fdaf31`; see the
 [implementation evidence](../reviews/2026-10-05-practice-and-service-records.md).
 Direct tow collision report credit is included under the user's October 5
 request; [attribution evidence](../reviews/2026-10-05-tow-collision-credit.md)
 distinguishes report credit from gameplay kill bonuses.
-F6/H4 novice observation, the missing explicit rescue service event, G5–G6,
-and P2 cross-feature acceptance remain pending.
+G5 illustrations and automated G6 reference checks are in delivery review;
+see the [guide review](../reviews/2026-10-05-guide-illustrations.md) and
+[acceptance matrix](../reviews/2026-10-05-player-experience-acceptance.md).
+F6/H4 novice observation, the missing explicit rescue service event, G6 human
+evaluation, and P2 overall cross-feature acceptance remain pending.
 A narrower navigation investigation
 must establish its own evidence before any rule change is accepted.
 **Spec:** [Player experience roadmap](../specs/2026-10-03-player-experience-roadmap.md).
