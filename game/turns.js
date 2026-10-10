@@ -6,6 +6,7 @@ import { createRng } from './rng.js';
 import { scenarioOutcome } from './scenarios.js';
 import { isOperation, observeOperationActor, operationOutcome, operationVisible, recordOperationAssist, resolveOperationBoundary } from './operations.js';
 import { withFieldAction, withFieldSweep } from './field-diagnostics.js';
+import { reconcileMaintainedTow } from './maintained-tow.js';
 import { activeTowCause, battleActionOf, beginBattleResolution, finishBattleResolution, emitBattleRecord, recordAceCrossing, snapshotKnowledge, snapshotShip, shipConsequences, withBattleAction, withBattleCause } from './battle-records.js';
 import {
   appendLog,
@@ -25,6 +26,7 @@ import {
   isSpectator,
   isStranded,
   isTractorHeld,
+  maintainedTowPair,
   plotCourse,
   powerEffect,
   segmentCrossesFeature,
@@ -183,7 +185,9 @@ const resolveAiAction = (game, shipId, plotDest = false) => {
   game = observeOperationActor(game, shipId);
   const actor = getShip(game, shipId);
   if (!isActive(actor)) return { game, messages: [], type: 'pass', records: [] };
-  const action = chooseAiAction(game, shipId);
+  let action = chooseAiAction(game, shipId);
+  const pair = maintainedTowPair(game);
+  if (pair?.target.id === shipId && !['phasers', 'photons', 'spread', 'ion', 'shields', 'pass'].includes(action.type)) action = { type: 'pass' };
   return withFieldAction(game, actor, action, shipId === game.playerShipId ? 'auto-conn' : 'fleet-ai', () => withBattleAction(game, {
     actor,
     source: shipId === game.playerShipId ? 'auto-conn' : 'fleet-ai',
@@ -874,6 +878,7 @@ const resolveEncountersRules = (game) => {
   // in the deep field can never hold its alliance in the war forever.
   const waiting = game.ships.map((ship) => {
     if (ship.encounter?.type !== 'distress' || !isActive(ship) || systemUnits(ship, 'engines') > 0) return ship;
+    if (maintainedTowPair(game)?.target.id === ship.id) return ship;
     if (game.turn - (ship.encounter.turn ?? game.turn) < ENCOUNTERS.distressPatience) return ship;
     messages.push(`Nobody came for the ${ship.name}. Its crew takes to the pods, and the hull goes dark.`);
     return { ...ship, status: 'vacant', crew: 0, tractorBy: null };
@@ -941,6 +946,7 @@ const warSignature = (game) => game.ships
 export const resolveAutopilotTurn = (game) => recordedObject(game, resolveAutopilotTurnRules);
 
 const resolveAutopilotTurnRules = (game) => {
+  if (maintainedTowPair(game)) return { game, messages: ['Release the maintained tow before handing conn to autopilot.'], events: [] };
   // Real-time movement (Phase 8, round 30): snapshot where every hull stands
   // BEFORE this stardate's burns resolve — the trajectory `resolveComputerTurns`
   // builds at the boundary starts here. Pure presentation data; no rule reads it.
@@ -985,7 +991,7 @@ const resolveComputerTurnsRules = (initialGame) => {
 export const resolveStardateChain = (startGame, log, events, options = {}) => isOperation(startGame) && startGame.operation.result ? startGame : recordedGame(startGame, (prepared) => resolveStardateChainRules(prepared, log, events), options);
 
 const resolveStardateChainRules = (startGame, log, events) => {
-  let game = startGame;
+  let game = reconcileMaintainedTow(startGame);
   const darkened = darkenOrphanDrones(game);
   game = darkened.game;
   log.push(...darkened.messages);
@@ -1020,6 +1026,7 @@ const resolveStardateChainRules = (startGame, log, events) => {
   game = resolveOperationBoundary(game);
   const transfer = isOperation(game) ? { game, message: null } : transferCommandIfNeeded(game);
   game = transfer.game;
+  game = reconcileMaintainedTow(game);
   if (transfer.message) log.push(transfer.message);
   const surrender = isOperation(game) ? { game, events: [] } : applySurrender(game);
   game = surrender.game;
@@ -1378,11 +1385,17 @@ const advanceOrdnance = (game, prev) => {
 export const stepContinuum = (game) => recordedObject(game, stepContinuumRules);
 
 const stepContinuumRules = (game) => {
+  game = reconcileMaintainedTow(game);
   const prev = positionsOf(game);
   const step = advanceSubtick(game);
   let next = step.game;
   const messages = [];
   const events = [];
+  if (step.towBlocked) {
+    const tug = getShip(next, game.maintainedTow.tugId);
+    next = emitBattleRecord({ ...next, towNotice: step.towBlocked }, { kind: 'maintained-tow-blocked', actor: tug, target: tug, payload: { cause: step.towBlocked } });
+    messages.push(step.towBlocked);
+  }
   // Completion is a rule fact at this sub-tick's endpoint. Captains may plot
   // another destination at the boundary; that does not erase this arrival.
   for (const [kind, ids] of [['arrival', step.arrived], ['tow-complete', step.towsDone]]) {
@@ -1422,7 +1435,7 @@ const stepContinuumRules = (game) => {
     return cause && before.tow.remaining > 0 && (before.x !== after.x || before.y !== after.y) ? [[before.id, cause]] : [];
   }));
   const swept = sweepCollisions(next, prev, towCauses);
-  next = swept.game;
+  next = reconcileMaintainedTow(swept.game);
   messages.push(...swept.messages);
   events.push(...swept.events);
   if (messages.length) next = { ...next, log: appendLog(next.log, messages) };

@@ -4,7 +4,7 @@ import { actionAvailability, applyPlayerAction } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { createGame, distance, engineCapacity, getShip, movementCapacity, powerEffect, sensorRange } from '../game/state.js';
 import { evaluateOutcome, resolveComputerTurns, resolveStardateChain } from '../game/turns.js';
-import { createOperationGame, finishOperation, observeOperationActor, OPERATION_SEEDS, operationExtraction, operationResultExplanation, operationVisible, resolveOperationBoundary, validOperationSave } from '../game/operations.js';
+import { createOperationGame, finishOperation, observeOperationActor, OPERATION_SEEDS, operationExtraction, operationResultExplanation, operationVisible, resolveOperationBoundary, upgradeOperationGame, validOperationSave } from '../game/operations.js';
 import { operationPanelMarkup } from '../ui/operations.js';
 import { appendRecords, createJournal, formatJournalEvent, journalView, restoreJournal } from '../ui/battle-journal.js';
 
@@ -144,15 +144,19 @@ test('boundary extraction requires crew, survival and no hostile tow, but permit
   }
 });
 
-test('rescue at elapsed 16 succeeds; a later arrival cannot undo expiration', () => {
+test('elapsed 16 is an on-time target; late rescue remains possible until final evacuation', () => {
   const atDeadline = { ...fresh(), turn: 16 };
   atDeadline.operation = { ...atDeadline.operation, elapsed: 15, lastBoundary: 15 };
   assert.equal(resolveOperationBoundary(edit(atDeadline, 'op-sentinel', { x: 38, y: 160 })).operation.primary, 'secured');
   const missed = resolveOperationBoundary(atDeadline);
-  assert.equal(missed.operation.primary, 'expired');
+  assert.equal(missed.operation.primary, 'pending');
+  assert.equal(missed.operation.rescueDelayed, true);
+  assert.equal(missed.operation.facts.filter((fact) => fact.kind === 'rescue-delayed').length, 1);
   const late = resolveOperationBoundary(edit({ ...missed, turn: 17 }, 'op-sentinel', { x: 38, y: 160 }));
-  assert.equal(late.operation.primary, 'expired');
-  assert.equal(late.operation.extracted.length, 0);
+  assert.equal(late.operation.primary, 'secured');
+  assert.equal(late.operation.rescuedAt, 17);
+  assert.equal(finishOperation(late).operation.result.rescueTiming, 'late');
+  assert.match(operationResultExplanation(finishOperation(late)), /recovered late/);
 });
 
 test('loss, last-enemy destruction and early withdrawal cannot fabricate rescue success', () => {
@@ -199,7 +203,7 @@ test('a rescue tug inside the beacon stays until Sentinel can extract, including
   assert.equal(rescued.operation.result.returned.length, 4);
 });
 
-test('rescue hold ends after expiry or target loss and never shields a tug from damage', () => {
+test('single-pull hold ends after final expiry or target loss and never shields a tug from damage', () => {
   let game = edit(fresh(), 'op-command', { x: 38, y: 160 });
   game = edit(game, 'op-sentinel', { x: 65, y: 160, tractorBy: 'op-command' });
   for (const primary of ['expired', 'lost']) {
@@ -265,7 +269,7 @@ test('versioned saves reject incompatible definitions and preserve facts/results
   assert.equal(validOperationSave(saved), true);
   const restored = JSON.parse(JSON.stringify(saved));
   assert.deepEqual(finishOperation(restored.game), game);
-  restored.game.operation.revision = 2;
+  restored.game.operation.revision = 999;
   assert.equal(validOperationSave(restored), false);
   assert.equal(validOperationSave({ version: 1, game: {}, resume: {} }), false);
   assert.match(operationPanelMarkup(game), /Left behind: Argonaut, Swift, Bulwark, Sentinel/);
@@ -291,6 +295,86 @@ test('deadline finalization and recaptured hull accounting are explicit and idem
   assert.ok(game.operation.result.lost.some((ship) => ship.id === 'op-sentinel'));
   assert.strictEqual(resolveStardateChain(game, [], []), game);
   assert.strictEqual(finishOperation(game), game);
+});
+
+for (const elapsed of [3, 15, 16, 21]) test(`maintained pair evacuates together when only the tug reaches the beacon at elapsed ${elapsed + 1}`, () => {
+  let game = edit(fresh(), 'op-command', { x: 58, y: 160 });
+  game = edit(game, 'op-sentinel', { x: 85, y: 160 });
+  game = applyPlayerAction(game, { type: 'tow-start', targetId: 'op-sentinel' }).game;
+  game = { ...game, phase: 'player', turn: elapsed + 1, operation: { ...game.operation, elapsed, lastBoundary: elapsed } };
+  game = JSON.parse(JSON.stringify(game));
+  game = command(game, { type: 'move', dx: -8, dy: 0 });
+  assert.equal(game.operation.rescuedAt, elapsed + 1);
+  assert.equal(game.operation.primary, 'secured');
+  assert.equal(getShip(game, 'op-command'), undefined);
+  assert.equal(getShip(game, 'op-sentinel'), undefined);
+  const returned = game.operation.extracted;
+  assert.ok(distance(returned.find((ship) => ship.id === 'op-sentinel'), game.operation.exit) > 16, 'The passenger does not need separate coordinate alignment.');
+  assert.equal(returned.filter((ship) => ['op-command', 'op-sentinel'].includes(ship.id)).length, 2);
+  assert.equal(game.maintainedTow, undefined);
+  assert.match(game.towNotice, /both ships evacuated together/);
+  const final = finishOperation(game);
+  assert.equal(final.operation.result.primary, 'success');
+  assert.equal(final.operation.result.rescueTiming, elapsed < 16 ? 'on-time' : 'late');
+  assert.strictEqual(resolveOperationBoundary(final), final);
+});
+
+test('linked extraction requires an intact maintained connection after damage, not just an old tractor issuer', () => {
+  let game = edit(fresh(), 'op-command', { x: 38, y: 160 });
+  game = edit(game, 'op-sentinel', { x: 65, y: 160 });
+  game = applyPlayerAction(game, { type: 'tow-start', targetId: 'op-sentinel' }).game;
+  assert.deepEqual(operationExtraction(game).linked.map((ship) => ship.id), ['op-command', 'op-sentinel']);
+  for (const patch of [{ tractorBy: 'op-guard' }, { status: 'destroyed', crew: 0 }, { faction: 'Axis' }, { x: 90 }]) {
+    const disrupted = edit(game, 'op-sentinel', patch);
+    assert.equal(operationExtraction(disrupted).linked.length, 0);
+    const boundary = resolveOperationBoundary(disrupted);
+    assert.equal(boundary.operation.extracted.some((ship) => ship.id === 'op-sentinel'), false);
+  }
+  const tug = getShip(game, 'op-command');
+  const damaged = resolveOperationBoundary(edit(game, tug.id, { systems: { ...tug.systems, tractor: 0 } }));
+  assert.equal(damaged.operation.extracted.some((ship) => ship.id === 'op-sentinel'), false);
+});
+
+test('missing final evacuation fails once; a completed failure cannot later be changed into a rescue', () => {
+  let game = { ...fresh(), turn: 22 };
+  game = { ...game, operation: { ...game.operation, elapsed: 21, lastBoundary: 21 } };
+  const ended = resolveOperationBoundary(game);
+  assert.equal(ended.operation.primary, 'expired');
+  assert.equal(ended.operation.result.primary, 'failure');
+  assert.match(operationResultExplanation(ended), /final deadline.*22/);
+  const altered = edit(ended, 'op-sentinel', { x: 38, y: 160 });
+  assert.strictEqual(resolveOperationBoundary(altered), altered);
+});
+
+test('unfinished revision-1 saves upgrade explicitly, while completed results stay unchanged', () => {
+  let old = fresh();
+  old = { ...old, operation: { ...old.operation, revision: 1, elapsed: 17, primary: 'expired', phase: 'withdrawal' } };
+  assert.equal(validOperationSave({ version: 1, game: old, resume: { game: createGame(), view: {} } }), true);
+  const upgraded = upgradeOperationGame(JSON.parse(JSON.stringify(old)));
+  assert.equal(upgraded.operation.revision, 2);
+  assert.equal(upgraded.operation.primary, 'pending');
+  assert.deepEqual(upgraded.ships, old.ships);
+  assert.equal(upgraded.randomStep, old.randomStep);
+  assert.match(operationPanelMarkup(upgraded), /Prototype rules updated/);
+  assert.match(operationPanelMarkup(upgraded), /Rescue is still possible/);
+  assert.strictEqual(upgradeOperationGame(upgraded), upgraded);
+  const ended = finishOperation(old);
+  assert.strictEqual(upgradeOperationGame(ended), ended);
+  assert.match(operationResultExplanation(ended), /previous prototype rules.*Retry uses updated rules/);
+});
+
+test('a leading maintained passenger takes its tug out with it and the journal preserves late recovery', () => {
+  let game = edit(fresh(), 'op-command', { x: 65, y: 160 });
+  game = edit(game, 'op-sentinel', { x: 38, y: 160 });
+  game = applyPlayerAction(game, { type: 'tow-start', targetId: 'op-sentinel' }).game;
+  game = { ...game, turn: 18, operation: { ...game.operation, elapsed: 17, lastBoundary: 17 } };
+  let records;
+  const next = resolveStardateChain(game, [], [], { onRecords: (batch) => { records = batch; } });
+  assert.equal(next.operation.extracted.filter((ship) => ['op-command', 'op-sentinel'].includes(ship.id)).length, 2);
+  const journal = appendRecords(createJournal(game.battleRecordState.battleId), records);
+  const restored = restoreJournal(JSON.parse(JSON.stringify(journal)), game.battleRecordState.battleId);
+  assert.match(restored.events.map(formatJournalEvent).join('\n'), /Sentinel recovered late/);
+  assert.match(restored.events.map(formatJournalEvent).join('\n'), /both ships evacuated together/);
 });
 
 test('extraction, rescue and command transfer facts survive journal projection and reload once', () => {

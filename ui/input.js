@@ -322,12 +322,21 @@ export const promptForConfirmation = (title, message) => new Promise((resolve) =
   dialog.showModal();
 });
 
-export const promptForCoordinates = (title, labels) => new Promise((resolve) => {
+export const promptForCoordinates = (title, labels, options = {}) => new Promise((resolve) => {
   const dialog = document.querySelector('#coordinate-dialog');
   const form = document.querySelector('#coordinate-form');
   document.querySelector('#coordinate-title').textContent = title;
   document.querySelector('#first-coordinate-label').childNodes[0].textContent = labels[0];
   document.querySelector('#second-coordinate-label').childNodes[0].textContent = labels[1];
+  const preview = document.querySelector('#coordinate-preview');
+  const refresh = () => {
+    if (!preview) return;
+    preview.hidden = !options.preview;
+    preview.textContent = options.preview?.(Number(document.querySelector('#first-coordinate').value), Number(document.querySelector('#second-coordinate').value)) ?? '';
+  };
+  document.querySelector('#first-coordinate').oninput = refresh;
+  document.querySelector('#second-coordinate').oninput = refresh;
+  refresh();
 
   let resolved = false;
   form.onsubmit = (event) => {

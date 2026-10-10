@@ -4,6 +4,8 @@ Date: 2026-10-06. Status: **First manual rescue prototype implemented; human pla
 
 ## Purpose
 
+**October 10 playtest follow-up:** repeated pulls and accidental tug collisions led to [maintained towing](2026-10-10-maintained-towing.md), now implemented for the prototype and ordinary Reimagined in both timing models. See its [implementation and playtest plan](../plans/2026-10-10-maintained-towing.md). Human acceptance remains open; the next session should compare one connection plus normal movement with the previous single-pull route before advancing autonomous rescue orders. Classic is unchanged.
+
 Make Reimagined produce memorable command decisions: rescue a ship under pressure, give up a tempting prize, create a passage through a blockade, and carry the consequences into the next campaign decision. The first playable delivery is **Rescue at the Belt**, a standalone prototype that tests whether enough operational space exists for these decisions. Mission variety and campaign integration follow evidence from that prototype.
 
 Classic retains its existing gameplay, AI, random streams, information limits, and outcomes. Shared presentation can improve without changing those contracts. Classic rules and the classic presentation remain independent choices. Reimagined operations do not become a third ruleset.

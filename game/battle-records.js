@@ -82,7 +82,7 @@ export const snapshotKnowledge = (game, { actor, target, kind } = {}) => {
     ownAction: actor?.id === game.playerShipId,
     actor: shipKnowledge(actor), target: shipKnowledge(target),
     globalTerminal: ['destruction', 'surrender', 'battle-outcome', 'command-loss'].includes(kind)
-      || Boolean(game.operation && ['hull-extracted', 'rescue-completed', 'rescue-lost', 'rescue-expired', 'operation-notice', 'operation-resolved', 'command-transfer'].includes(kind)),
+      || Boolean(game.operation && ['hull-extracted', 'rescue-completed', 'rescue-lost', 'rescue-delayed', 'rescue-expired', 'operation-notice', 'operation-resolved', 'command-transfer'].includes(kind)),
   });
 };
 

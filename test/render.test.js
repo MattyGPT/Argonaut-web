@@ -6,6 +6,7 @@ import { actionAvailability, applyPlayerAction, launchDrones } from '../game/act
 import { commandReadiness, fanOutOffsets, journalCardsHtml, markerFanOptions, renderGame, reportFor, targetExplanation, targetGeometryKnown, terminalNarrative } from '../ui/render.js';
 import { createJournal } from '../ui/battle-journal.js';
 import { factionBadgeHtml, factionIdentity } from '../ui/faction-identity.js';
+import { createOperationGame } from '../game/operations.js';
 
 // render.js only touches the document inside renderGame, so a bare element stub
 // is enough to exercise it under node --test, keeping the suite dependency-free.
@@ -35,6 +36,24 @@ const withPair = (game, firstId, first, secondId, second) => ({
 });
 
 const TRAFFIC = 'Firebreather fires phasers at Bonhomme for 32 damage.';
+
+test('maintained towing renders actionable status for ordinary wars and operation delivery', () => {
+  for (const original of [createGame({ seed: 'tow-render', reimagined: true }), createOperationGame({ seed: 'rescue-1' })]) {
+    elements.clear();
+    const targetId = original.operation ? 'op-sentinel' : 'fed-cruiser-1';
+    const tugId = original.playerShipId;
+    const positioned = withPair(original, tugId, { x: 100, y: 100 }, targetId, { x: 117, y: 120 });
+    renderGame(positioned, { contextShipId: targetId });
+    assert.match(read('#ship-menu').innerHTML, /Maintain tow/);
+    const connected = applyPlayerAction(positioned, { type: 'tow-start', targetId }).game;
+    renderGame({ ...connected, phase: 'player' }, {});
+    const console = read('#console').innerHTML;
+    assert.match(console, /Towing.*Release tow/s);
+    assert.match(console, /Speed 15 units\/stardate/);
+    assert.match(console, original.operation ? /either ship to evacuate together/ : /Release for dockyard repairs/);
+    assert.match(console, /Release tow first/);
+  }
+});
 
 const projectedJournal = (events) => ({
   ...createJournal('render-journal'),

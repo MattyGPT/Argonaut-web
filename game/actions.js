@@ -1,4 +1,5 @@
 import { isOperation, operationVisible, recordOperationAssist } from './operations.js';
+import { endMaintainedTow, maintainedTowMove, maintainedTowStartReason, reconcileMaintainedTow } from './maintained-tow.js';
 import {
   ACE_KILLS,
   ARC,
@@ -53,6 +54,7 @@ import {
   dockedAt,
   dronesOf,
   movementCapacity,
+  maintainedTowPair,
   facePoint,
   facingOf,
   getLivingShips,
@@ -256,12 +258,12 @@ const hostileTarget = (game, action, actor) => {
   return found;
 };
 
-const TARGET_ACTIONS = new Set(['phasers', 'photons', 'spread', 'ion', 'tractor', 'scan', 'transport']);
+const TARGET_ACTIONS = new Set(['phasers', 'photons', 'spread', 'ion', 'tractor', 'scan', 'transport', 'tow-start']);
 const ACTION_SYSTEM = { phasers: 'phasers', photons: 'photons', spread: 'spread', ion: 'ion', tractor: 'tractor', scan: 'scanner', transport: 'transporter', move: 'engines', disengage: 'engines', hyperspace: 'engines', map: 'mapper', radio: 'radio' };
 const unavailable = (reasonCode, error, extra = {}) => ({ reasonCode, error, ...extra });
 const actionRange = (game, actor, type) => type === 'scan' || type === 'transport'
   ? sensorRange(game, actor, ACTION_SYSTEM[type])
-  : RANGES[type] ?? null;
+  : type === 'tow-start' ? RANGES.tractor : RANGES[type] ?? null;
 
 /** Pure own-ship checks, in the same order as command execution. */
 const actionHardware = (game, action, actor) => {
@@ -276,6 +278,9 @@ const actionHardware = (game, action, actor) => {
 };
 
 const ownActionEligibility = (game, action, actor) => {
+  if (['tow-start', 'tow-release'].includes(action.type) && !game.reimagined) return unavailable('mode-unavailable', 'Maintained towing is only available in Reimagined.');
+  if (action.type === 'tow-release' && (!game.maintainedTow || game.maintainedTow.tugId !== actor.id)) return unavailable('no-tow', 'No maintained tow is attached to your command ship.');
+  if (maintainedTowPair(game) && ['tractor', 'hyperspace', 'disengage', 'autopilot'].includes(action.type)) return unavailable('tow-attached', 'Release the maintained tow before using that command.');
   const hardware = actionHardware(game, action, actor);
   if (hardware.error) return hardware;
   if (action.type === 'radio' && ionStormZone(game, actor) === 'core') return unavailable('ion-storm', `${actor.name}'s radio is offline in the ion storm.`);
@@ -288,6 +293,10 @@ const ownActionEligibility = (game, action, actor) => {
     if (hasLaunchedDrones(game, actor)) return unavailable('bay-empty', `${actor.name}'s bay is empty — its drones are already away.`);
   }
   if (action.type === 'move' && isTractorHeld(game, actor)) return unavailable('tractor-held', `${actor.name} cannot move while held by a tractor lock. Hyperspace shakes it off.`);
+  if (action.type === 'move' && action.dx !== undefined && action.dy !== undefined) {
+    const plan = maintainedTowMove(game, Number(action.dx), Number(action.dy), { course: game.realtime });
+    if (plan?.error) return unavailable('tow-move-blocked', plan.error);
+  }
   if (action.type === 'disengage') {
     if (isTractorHeld(game, actor)) return unavailable('tractor-held', `${actor.name} cannot disengage while held by a tractor lock.`);
     if (!nearestThreat(game, actor)) return unavailable('no-threat', `${actor.name} has no enemy to disengage from.`);
@@ -307,6 +316,10 @@ const targetEligibility = (game, action, actor) => {
     ? hostileTarget(game, action, actor) : targetFor(game, action, actor);
   if (found.error) return found;
   const target = found.target;
+  if (type === 'tow-start') {
+    const error = maintainedTowStartReason(game, actor, target);
+    return error ? unavailable('tow-unavailable', error) : found;
+  }
   if (type === 'tractor') {
     if (isOperation(game) && action.towardId) {
       const destination = getShip(game, action.towardId);
@@ -1145,6 +1158,8 @@ const moveAction = (game, action, actor) => {
   const grid = game.gridSize ?? GRID_SIZE;
   const x = actor.x + dx;
   const y = actor.y + dy;
+  const towPlan = maintainedTowMove(game, dx, dy, { course: game.realtime });
+  if (towPlan?.error) return invalid(game, towPlan.error);
   // Round 31: a real-time burn plots a destination — the integrator flies it,
   // early arrivals hold, and the boundary resolves what the arrival meets. No
   // capacity gate: speed limits the motion, not the order.
@@ -1160,6 +1175,24 @@ const moveAction = (game, action, actor) => {
   const capacity = movementCapacity(game, actor);
   if (displacement > capacity) return invalid(game, `Movement exceeds engine capacity of ${capacity}.`);
   if (x < 0 || x > grid || y < 0 || y > grid) return invalid(game, 'Movement would leave the tactical map.');
+  if (towPlan) {
+    const movedTug = applyHeading(game, actor, x, y);
+    const movedTarget = applyHeading(game, towPlan.target, towPlan.targetEnd.x, towPlan.targetEnd.y);
+    let next = replaceShip(replaceShip(game, movedTug), movedTarget);
+    next = emitBattleRecord(next, { kind: 'maintained-tow-move', actor, target: towPlan.target,
+      payload: { destination: towPlan.targetEnd, consequences: shipConsequences(towPlan.target, movedTarget) } });
+    const events = [], messages = [`${actor.name} moves to ${x}, ${y}, towing ${towPlan.target.name} to ${towPlan.targetEnd.x}, ${towPlan.targetEnd.y}.`];
+    for (const id of [actor.id, towPlan.target.id]) {
+      const ship = getShip(next, id);
+      if (!isActive(ship)) continue;
+      const collision = resolveCollision(next, ship);
+      const strike = resolveAsteroidStrike(collision.game, getShip(collision.game, id));
+      next = strike.game;
+      messages.push(...collision.messages, ...strike.messages);
+      events.push(...collision.events, ...strike.events);
+    }
+    return result(completeTurn(reconcileMaintainedTow(next)), messages, { events });
+  }
   // Round 23: the move implies the heading — a Reimagined hull ends the burn
   // facing the direction it traveled (inert elsewhere, so parity holds).
   const movedActor = applyHeading(game, actor, x, y);
@@ -1811,6 +1844,21 @@ const applyCommand = (game, action = {}) => {
   if (own.error) return invalid(game, own.error);
 
   switch (action.type) {
+    case 'tow-start': {
+      const found = targetEligibility(game, action, actor);
+      if (found.error) return invalid(game, found.error, found.requiresTarget);
+      const target = found.target;
+      const attached = { ...target, tractorBy: actor.id, tow: null, dest: null };
+      const next = { ...replaceShip(game, attached), maintainedTow: { tugId: actor.id, targetId: target.id, offsetX: target.x - actor.x, offsetY: target.y - actor.y }, towNotice: null,
+        ...(game.realtime ? { autoConn: false } : {}) };
+      // Starting a tow stops an existing real-time course; the captain chooses
+      // a new course with the passenger and reduced speed now visible.
+      const stopped = game.realtime ? replaceShip(next, { ...actor, dest: null }) : next;
+      return result(emitBattleRecord(completeTurn(stopped), { kind: 'maintained-tow-started', actor, target,
+        payload: { cause: 'Maintained tow established. Move normally to carry the passenger; Release tow detaches it.' } }),
+      `${actor.name} establishes a maintained tow on ${target.name}. Normal movement now carries both ships at up to ${movementCapacity(stopped, actor)} units per stardate.`);
+    }
+    case 'tow-release': return result(completeTurn(endMaintainedTow(game, 'Maintained tow released by the captain.')), `${actor.name} releases the maintained tow.`);
     case 'shields': {
       const flushed = flushShields(actor, game);
       return result(emitBattleRecord(completeTurn(replaceShip(game, flushed.ship)), {
@@ -1897,7 +1945,7 @@ const applyCommand = (game, action = {}) => {
  * is not here: re-destination is free, because the drive, not the order book,
  * limits how fast a hull can go.
  */
-const REALTIME_COOLDOWN = new Set(['shields', 'phasers', 'photons', 'spread', 'ion', 'tractor', 'hyperspace', 'transport', 'launch', 'self-destruct']);
+const REALTIME_COOLDOWN = new Set(['shields', 'phasers', 'photons', 'spread', 'ion', 'tractor', 'hyperspace', 'transport', 'launch', 'self-destruct', 'tow-start', 'tow-release']);
 export { REALTIME_COOLDOWN };
 
 /** Manual burns and volleys take the conn back from a real-time autopilot. */
@@ -1932,6 +1980,7 @@ export const applyPlayerAction = (game, action = {}) => withFieldAction(game, ga
   let outcome = applyManualCommand(prepared, action);
   outcome = { ...outcome, game: recordOperationAssist(prepared, outcome.game, prepared.playerShipId, action) };
   if (outcome.game === prepared) return outcome;
+  outcome = { ...outcome, game: reconcileMaintainedTow(outcome.game) };
   const issuer = getShip(prepared, prepared.playerShipId);
   const subjectId = action.shipId ?? prepared.playerShipId;
   const subjectBefore = getShip(prepared, subjectId);

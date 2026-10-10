@@ -1,6 +1,7 @@
 import { ARCS, DOCKING, FACTIONS, GRID_SIZE, POWER_SINKS, PRIZE, RANGES, REFITS, STANCES, TERRAIN } from '../game/constants.js';
 import { actionAvailability, canLaunchDrones, REALTIME_COOLDOWN } from '../game/actions.js';
 import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
+import { isOperation } from '../game/operations.js';
 import { cameraWindow, fieldTransform, viewportFromWorld } from './camera.js';
 import { drawMove } from './fx.js';
 import {
@@ -13,6 +14,7 @@ import {
   distance,
   dockedAt,
   movementCapacity,
+  maintainedTowPair,
   facingOf,
   getShip,
   hasArcs,
@@ -384,7 +386,13 @@ const menuCommands = (game, actor, ship) => {
   if (game.reimagined && systemUnits(actor, 'ion') > 0) commands.splice(2, 0, ['ion', 'Fire ion']);
   if (!isDrone(ship)) commands.push(['transport', ship.status === 'vacant' ? 'Board ship' : isNeutral(ship) ? 'Seize merchant' : 'Transport crew']);
   if (game.reimagined && isActive(ship) && (ship.faction !== actor?.faction || ship.encounter?.type === 'distress')) commands.push(['tractor-direct', 'Direct tow…']);
-  if (isRescueTowTarget(game, ship.id) && isActive(ship)) return [['tractor-direct', 'Tow toward extraction…'], ...commands.filter(([type]) => !['tractor', 'tractor-direct'].includes(type))];
+  const pair = maintainedTowPair(game);
+  if (pair?.target.id === ship.id) return [['tow-release', 'Release tow'], ...commands];
+  if (game.reimagined && isActive(ship) && ship.faction === actor?.faction && !isDrone(ship)) {
+    const towing = [['tow-start', 'Maintain tow']];
+    if (isRescueTowTarget(game, ship.id)) return [...towing, ['tractor-direct', 'Single pull toward extraction…'], ...commands.filter(([type]) => !['tractor', 'tractor-direct'].includes(type))];
+    return [...towing, ...commands];
+  }
   return commands;
 };
 
@@ -467,7 +475,7 @@ const shipMenu = (game, actor, ship) => {
       ? ['An unarmed neutral merchant — it will run from warships, and a transporter party can seize it whole.']
       : []),
     ...(ship.encounter?.type === 'distress' && isActive(ship) && systemUnits(ship, 'engines') === 0
-      ? [game.operation ? 'Broadcasting distress: engines gone — tow Sentinel to the extraction beacon at 38, 160 before elapsed stardate 16.' : 'Broadcasting distress: engines gone — tow it home to Xanadu and the dockyard will return it to the fight.']
+      ? [game.operation ? 'Broadcasting distress: engines gone — maintain tow and reach the beacon at 38, 160. Aim for elapsed 16; final evacuation is 22.' : 'Broadcasting distress: engines gone — tow it home to Xanadu and the dockyard will return it to the fight.']
       : []),
     // Directional shields (round 23): the arc breakdown and heading are readable
     // combat intel on any hull — which arc you would hit, and which way its bow
@@ -1073,16 +1081,23 @@ export const renderGame = (game, view = {}) => {
   }
 
   const condition = alertLevel(actor);
+  const towPair = maintainedTowPair(game);
   const availableCommands = commandList(game, actor);
   const primary = new Set(['move', 'phasers', 'photons', 'spread', 'ion', 'pass', 'autopilot']);
   const button = ([type, label, key]) => {
-    const result = targetedCommands.has(type) ? actionAvailability(game, { type }) : null;
-    const reason = view.battlePaused ? 'Resolving orders — command unavailable.' : isSpectator(game) ? 'Observing — command unavailable.' : result && !result.available && !result.requiresTarget ? result.reason : '';
+    const result = targetedCommands.has(type) || (towPair && ['autopilot', 'hyperspace', 'disengage'].includes(type)) ? actionAvailability(game, { type }) : null;
+    const reason = view.battlePaused ? 'Resolving orders — command unavailable.' : isSpectator(game) ? 'Observing — command unavailable.' : result && !result.available && !result.requiresTarget ? result.reasonCode === 'tow-attached' ? 'Release tow first.' : result.reason : '';
     const disabled = game.phase !== 'player' || game.outcome || isSpectator(game) || view.battlePaused || Boolean(reason);
     const id = `command-${type}-reason`;
     return `<div class="command-control" data-console-key="command-${type}"><button data-command="${type}" ${disabled ? 'disabled' : ''}${result ? ` aria-describedby="${id}"` : ''}>${game.realtime && type === 'pass' ? 'Hold position' : game.realtime && type === 'autopilot' ? 'Automatic conn' : label}<kbd>${key}</kbd></button>${result ? `<span id="${id}" class="action-explanation"${reason ? '' : ' hidden'}>${escapeJournal(reason)}</span>` : ''}</div>`;
   };
   const gridOf = (list) => `<div class="command-grid">${list.map(button).join('')}</div>`;
+  const releaseReady = actionAvailability(game, { type: 'tow-release' }).available && !view.battlePaused;
+  const towStatus = towPair ? `<div class="maintained-tow-status" data-console-key="tow-status"><div class="tow-status-heading"><b>Towing ${escapeJournal(towPair.target.name)}</b><button data-command="tow-release"${releaseReady ? '' : ' disabled'}>Release tow</button></div>
+    <p>Speed ${Number(movementCapacity(game, actor).toFixed(1))} units/stardate · separation ${Number(distance(towPair.tug, towPair.target).toFixed(1))}. Move normally to carry both ships. ${isOperation(game) ? 'Enter the beacon with either ship to evacuate together. Keep the tow attached.' : 'Release for dockyard repairs.'}</p>
+    <p id="tow-move-preview" class="dialog-note">Hover over the map or use Engines to preview both destinations.</p>
+    ${game.towNotice ? `<p>${escapeJournal(game.towNotice)}</p>` : ''}</div>`
+    : game.reimagined && game.towNotice ? `<p class="maintained-tow-status" data-console-key="tow-status">${escapeJournal(game.towNotice)}</p>` : '';
   updateConsole(consoleRoot, `
     <div class="panel-title" data-console-key="title"><span>Command console</span><span class="alert-${condition.toLowerCase()}">Condition: ${condition}</span></div>
     <div class="status" data-console-key="status">
@@ -1096,6 +1111,7 @@ export const renderGame = (game, view = {}) => {
     <p id="command-readiness" class="console-readiness">${commandReadiness(game, view)}</p>
     <div class="console-primary" data-console-key="primary" role="group" aria-label="Movement and weapons">${gridOf(availableCommands.filter(([type]) => primary.has(type)))}</div>
     <div class="console-secondary" data-console-key="secondary" role="region" aria-label="Additional command controls" tabindex="0">
+      ${towStatus}
       ${consoleSection('systems', 'Systems and commands', `<div class="system-grid">${Object.entries(actor.systems).map(([name, amount]) => `<span>${cap(name)} <b>${amount}</b></span>`).join('')}</div>${gridOf(availableCommands.filter(([type]) => !primary.has(type) && type !== 'fleet'))}`)}
       ${consoleSection('power', 'Reactor power', powerBar(game, actor, view))}
       ${consoleSection('helm', 'Helm and shield focus', `${helmBar(game, actor, view)}${arcReadout(game, actor) ? `<div class="status-row arc-status"><span>Shield arcs</span><b class="arc-readout">${arcReadout(game, actor)}</b></div>` : ''}`)}
