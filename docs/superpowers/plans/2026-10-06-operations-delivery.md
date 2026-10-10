@@ -29,6 +29,7 @@ The first playable work is the rescue prototype. Art concepts and campaign ident
 - [x] R1–R3 playable manual prototype, six variants, isolated saves and browser lifecycle verification.
 - [x] Corrected maintained-tow rescue completed by Matt, with positive towing-pace feedback.
 - [x] R5 observation tools and first 30-seed, six-profile, eight-policy matrix; retained tuning decision and limitations.
+- [x] First R6 slice: [delegated prototype Rescue](../specs/2026-10-10-delegated-rescue.md), explicit tug ownership, progress/blocker reports, 60 scripted runs and actual browser completion after reload. Recover prize and human delegated acceptance remain open.
 - [ ] M1 human player observation and acceptance (R4).
 - [ ] M2 accepted operational profile and delegation.
 - [ ] M3 production art and in-game visual acceptance.

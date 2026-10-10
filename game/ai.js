@@ -2,6 +2,7 @@ import { AI_PURSUIT, DRONE, ENCOUNTERS, FLEET_ORDER_TUNING, GRID_SIZE, PERSONALI
 import { canLaunchDrones, flushShields, tractorLock } from './actions.js';
 import { createRng } from './rng.js';
 import { isOperation, operationVisible } from './operations.js';
+import { rescueDecision } from './operation-orders.js';
 import { noteFieldDecision } from './field-diagnostics.js';
 import {
   blastRadius,
@@ -449,8 +450,16 @@ const operationAction = (game, actor) => {
   // Only direct sightings enter combat helpers. Radio memories can direct a
   // search, but never give a shot at an unseen hull's updated coordinates.
   const local = { ...game, ships: game.ships.filter((ship) => ship.faction === actor.faction || operationVisible(game, actor, ship)) };
+  const rescue = actor.faction === 'Federation' ? rescueDecision(game, actor.id) : null;
+  if (rescue) {
+    if (rescue.phase === 'blocked') {
+      const threat = nearestTo(actor, enemiesOf(local, actor));
+      return (threat && engage(local, actor, threat.ship, threat.range, true)) || rescue.action;
+    }
+    return rescue.action;
+  }
   const order = orderFor(game, actor.id);
-  if (order && order.type !== 'focus') {
+  if (order && order.type !== 'focus' && order.type !== 'rescue') {
     const ordered = orderedAction(local, actor, order);
     if (ordered) return ordered;
   }

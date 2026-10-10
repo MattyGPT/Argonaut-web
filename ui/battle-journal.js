@@ -4,7 +4,7 @@ export const JOURNAL_EVENT_LIMIT = 500;
 export const JOURNAL_COMMAND_LIMIT = 12;
 const VERSION = 1;
 const groups = ['your-ship', 'battle-developments', 'fleet-traffic'];
-const operationCritical = new Set(['hull-extracted', 'rescue-completed', 'rescue-lost', 'rescue-delayed', 'rescue-expired', 'operation-resolved', 'operation-notice']);
+const operationCritical = new Set(['hull-extracted', 'rescue-completed', 'rescue-lost', 'rescue-delayed', 'rescue-expired', 'operation-resolved', 'operation-notice', 'rescue-order']);
 const critical = new Set(['destruction', 'surrender', 'capture', 'vacancy', 'command-loss', 'command-transfer', 'battle-outcome', 'relay-change', 'encounter-arrival', 'maintained-tow-ended', 'maintained-tow-blocked', ...operationCritical]);
 const number = (value) => Number.isFinite(value) ? value : undefined;
 const text = (value) => typeof value === 'string' ? value.slice(0, 400) : undefined;
@@ -102,6 +102,7 @@ export const projectJournalRecord = (raw, pending = null) => {
     if (own || received) event.cause = text(payload.cause);
     if (raw.kind === 'battle-outcome') event.outcome = pick(payload.outcome, ['winner', 'reason', 'type', 'kind', 'message', 'faction']);
     if (raw.kind === 'operation-notice') event.cause = text(payload.message);
+    if (raw.kind === 'rescue-order') event.cause = text(payload.cause);
     if (raw.kind === 'rescue-completed') event.rescueTiming = text(payload.timing);
     if (raw.kind === 'operation-resolved') event.result = text(payload.result?.primary) ?? 'resolved';
   } else if (raw.kind === 'action-resolution') {
@@ -268,6 +269,7 @@ export const formatJournalEvent = (event) => {
     case 'capture': return `${actor} captured ${target}${event.toFaction ? ` for ${event.toFaction}` : ''}${suffix}.`;
     case 'command-transfer': return `Command transferred from ${actor} to ${target}${suffix}.`;
     case 'maintained-tow-started': return `${actor} established a maintained tow on ${target}. Move normally to carry both ships.`;
+    case 'rescue-order': return `${event.actor?.name ?? event.target?.name ?? 'Rescue captain'}: ${event.cause ?? 'Rescue order updated.'}`;
     case 'maintained-tow-move': return `${actor} towed ${target}${event.destination ? ` to ${event.destination.x}, ${event.destination.y}` : ''}.`;
     case 'maintained-tow-ended':
     case 'maintained-tow-blocked': return event.cause ?? 'Maintained tow interrupted.';
