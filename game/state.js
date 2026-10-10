@@ -182,7 +182,7 @@ const resolveLoadout = (seed, loadout, factions) => {
   return { budgets, fleets };
 };
 
-const createShip = ({ id, name, faction, kind, x, y, reimagined }) => {
+export const createShip = ({ id, name, faction, kind, x, y, reimagined }) => {
   const template = SHIP_TEMPLATES[kind];
   // A Reimagined hull carries a reactor subsystem; a classic one does
   // not, so their damage lottery — and every calibrated figure — is untouched. The
@@ -789,6 +789,15 @@ export const systemRange = (ship, system) => systemUnits(ship, system) * (SYSTEM
  * multiplier for the engines sink (1 outside a Reimagined war, so parity holds).
  */
 export const engineCapacity = (ship, gridSize = GRID_SIZE, enginesEff = 1) => systemUnits(ship, 'engines') * ENGINE_MOVE_PER_UNIT * (gridSize / GRID_SIZE) * enginesEff;
+
+/** Operations decouple engine travel from world bounds; ordinary rules stay exact. */
+export const movementCapacity = (game, ship) => {
+  const effectiveness = powerEffect(game, ship, 'engines');
+  if (game.reimagined && game.operation?.version === 1) {
+    return systemUnits(ship, 'engines') * ENGINE_MOVE_PER_UNIT * game.operation.movementScale * effectiveness;
+  }
+  return engineCapacity(ship, game.gridSize ?? GRID_SIZE, effectiveness);
+};
 
 /**
  * Self-destruct blast radius; the Xanadu starbase's is doubled. A Reimagined

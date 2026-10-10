@@ -1,5 +1,7 @@
 # Argonaut player experience roadmap
 
+Follow-on direction, 2026-10-06: [Reimagined operations and consequences](2026-10-06-operations-and-consequences-roadmap.md) specifies a rescue prototype, operational space, terrain art and later campaign missions. It does not close the remaining acceptance or follow-ups recorded below.
+
 Implementation plan: [Delivery sequence and verification](../plans/2026-10-03-player-experience-roadmap.md).
 
 Implementation update, 2026-10-05: mode consolidation, console, journal,

@@ -28,6 +28,8 @@ import { enableBattleRecords } from './game/battle-records.js';
 import { createHelpState } from './ui/help-state.js';
 import { PRACTICE_EXERCISES, createPracticeGame, updatePractice, restartPractice, dismissPracticeHints, practiceProgress } from './game/practice.js';
 import { practicePanelMarkup, practiceChooserMarkup } from './ui/practice.js';
+import { createOperationGame, finishOperation, validOperationSave } from './game/operations.js';
+import { operationPanelMarkup } from './ui/operations.js';
 import { ingestBattleServiceRecords } from './game/service-records.js';
 import { createWalkthrough, advanceWalkthrough, walkthroughMarkup } from './ui/walkthrough.js';
 
@@ -38,10 +40,21 @@ const SAVE_KEY = 'argonaut-web-save-v1';
 // when present; starting a new game of either kind retires the other.
 const CAMPAIGN_SAVE_KEY = 'argonaut-web-save-campaign-v1';
 const PRACTICE_SAVE_KEY = 'argonaut-web-save-practice-v1';
+const OPERATION_SAVE_KEY = 'argonaut-web-save-operation-v1';
+let operationSession = null;
+let operationLoadNotice = null;
+try {
+  const raw = localStorage.getItem(OPERATION_SAVE_KEY);
+  if (raw) {
+    const saved = JSON.parse(raw);
+    if (validOperationSave(saved)) operationSession = saved;
+    else operationLoadNotice = 'The rescue prototype save is incompatible. Your previous game has been loaded; start a new prototype when ready.';
+  }
+} catch { operationLoadNotice = 'The rescue prototype save could not be read. Your previous game has been loaded.'; }
 let practiceSession = null;
 try {
   const saved = JSON.parse(localStorage.getItem(PRACTICE_SAVE_KEY));
-  if (saved?.version === 1 && saved.game?.practice && Array.isArray(saved.game.ships) && saved.resume) practiceSession = saved;
+  if (!operationSession && saved?.version === 1 && saved.game?.practice && Array.isArray(saved.game.ships) && saved.resume) practiceSession = saved;
 } catch { /* No resumable practice. */ }
 const newGameDialog = document.querySelector('#new-game-dialog');
 const PLAYBACK_KEY = 'argonaut-web-playback';
@@ -85,7 +98,10 @@ const save = () => {
   try {
     const commandHistory = { seed: game?.seed, entries: view.commandHistory ?? [] };
     const roundPlayback = view.roundPlayback;
-    if (practiceSession) {
+    if (operationSession) {
+      operationSession = { ...operationSession, game, journal: view.journal, commandHistory, roundPlayback };
+      localStorage.setItem(OPERATION_SAVE_KEY, JSON.stringify(operationSession));
+    } else if (practiceSession) {
       practiceSession = { ...practiceSession, game, journal: view.journal, roundPlayback };
       localStorage.setItem(PRACTICE_SAVE_KEY, JSON.stringify(practiceSession));
     } else if (campaign) localStorage.setItem(CAMPAIGN_SAVE_KEY, JSON.stringify({ version: 1, campaign, commandHistory, roundPlayback }));
@@ -98,28 +114,28 @@ const save = () => {
 const randomSeed = () => `war-${Math.random().toString(36).slice(2, 8)}`;
 
 /** The campaign in progress, if any. When set, it owns the session; `game` is its open battle. */
-let campaign = practiceSession ? null : loadCampaignSave();
+let campaign = practiceSession || operationSession ? null : loadCampaignSave();
 /** The star-chart node the side panel reads; defaults to the fleet's node. */
 let sectorSelection = null;
 
-let game = practiceSession?.game ?? (campaign ? campaign.battle?.game ?? null : loadSave() ?? createGame({ seed: randomSeed() }));
+let game = operationSession?.game ?? practiceSession?.game ?? (campaign ? campaign.battle?.game ?? null : loadSave() ?? createGame({ seed: randomSeed() }));
 // Only resumable counters and in-flight causal identities belong in this state.
 // Raw resolution records are projected before entering the saved journal.
 if (game) game = enableBattleRecords(game);
-let view = { entries: [], camera: null, paused: Boolean(practiceSession), speed: 1 };
+let view = { entries: [], camera: null, paused: Boolean(practiceSession || operationSession), speed: 1 };
 if (game) view.journal = createJournal(game.battleRecordState.battleId);
 try {
-  const saved = practiceSession ?? JSON.parse(localStorage.getItem(campaign ? CAMPAIGN_SAVE_KEY : SAVE_KEY));
+  const saved = operationSession ?? practiceSession ?? JSON.parse(localStorage.getItem(campaign ? CAMPAIGN_SAVE_KEY : SAVE_KEY));
   view.commandHistory = restoreCommandHistory(saved?.commandHistory, game?.seed);
   if (game) view.journal = restoreJournal(campaign?.battle?.journal ?? saved?.journal, game.battleRecordState.battleId, view.commandHistory);
   if (game && saved?.roundPlayback?.battleId === game.battleRecordState.battleId && Array.isArray(saved.roundPlayback.events)) view.roundPlayback = saved.roundPlayback;
 } catch { /* Old saves or unavailable storage start with an empty command record. */ }
 const WALKTHROUGH_KEY = 'argonaut-web-first-orders';
-let walkthrough = practiceSession?.resume?.walkthrough ?? createWalkthrough(practiceSession?.resume?.game ?? game);
+let walkthrough = operationSession?.resume?.walkthrough ?? practiceSession?.resume?.walkthrough ?? createWalkthrough(practiceSession?.resume?.game ?? game);
 try {
   const saved = JSON.parse(localStorage.getItem(WALKTHROUGH_KEY));
-  const learningGame = practiceSession?.resume?.game ?? game;
-  if (!practiceSession?.resume?.walkthrough && saved?.version === 1) walkthrough = saved.battleId === learningGame?.battleRecordState?.battleId ? saved : createWalkthrough(learningGame, { dismissed: saved.dismissed });
+  const learningGame = operationSession?.resume?.game ?? practiceSession?.resume?.game ?? game;
+  if (!operationSession?.resume?.walkthrough && !practiceSession?.resume?.walkthrough && saved?.version === 1) walkthrough = saved.battleId === learningGame?.battleRecordState?.battleId ? saved : createWalkthrough(learningGame, { dismissed: saved.dismissed });
 } catch { /* Optional hints default to idle. */ }
 
 /** Consume once at authoritative seams, never from drawing, replay or loading. */
@@ -127,7 +143,7 @@ let presentationRecords = [];
 let serviceRecords = [];
 const collectRecords = (records) => {
   if (campaign?.battle && records?.length) serviceRecords.push(...records);
-  if (!practiceSession && records?.length) walkthrough = advanceWalkthrough(walkthrough, { type: 'records', records, paused: view.paused }, game);
+  if (!operationSession && !practiceSession && records?.length) walkthrough = advanceWalkthrough(walkthrough, { type: 'records', records, paused: view.paused }, game);
   if (!records?.length || !view.journal) return false;
   const projected = projectPlaybackRecords(records, view.journal);
   const journal = appendRecords(view.journal, records);
@@ -149,6 +165,7 @@ const syncCamera = () => {
   const ship = getShip(game, game.playerShipId);
   if (!view.camera) {
     const camera = makeCamera(field(), ship);
+    if (operationSession) { view = { ...view, camera: { ...camera, cx: field() / 2, cy: field() / 2, zoom: 1, follow: false } }; return; }
     const objective = game.practice?.zone;
     view = { ...view, camera: objective ? { ...camera, cx: (ship.x + 2 * objective.x) / 3, cy: (ship.y + 2 * objective.y) / 3, follow: false } : camera };
     return;
@@ -189,27 +206,42 @@ try { shipArtPref = localStorage.getItem(ART_KEY) || 'sprites'; } catch { /* ign
 
 const drawPracticeZone = () => {
   const map = document.querySelector('#map');
-  const zone = game?.practice?.zone;
+  const zone = game?.operation?.exit ?? game?.practice?.zone;
   let marker = map.querySelector('.practice-zone');
   if (!zone) { marker?.remove(); return; }
   if (!marker) {
     marker = document.createElement('div');
     marker.className = 'practice-zone';
-    marker.setAttribute('aria-label', 'Practice destination');
-    marker.textContent = 'Destination';
+    marker.setAttribute('aria-label', operationSession ? 'Extraction beacon, 38, 160, radius 16' : 'Practice destination');
+    marker.textContent = operationSession ? 'Extract' : 'Destination';
     map.appendChild(marker);
   }
   const win = currentWindow();
   marker.style.cssText = `left:${100 * (zone.x - zone.radius - win.minX) / win.size}%;top:${100 * (zone.y - zone.radius - win.minY) / win.size}%;width:${200 * zone.radius / win.size}%;height:${200 * zone.radius / win.size}%`;
 };
+const drawOperationBriefing = () => {
+  const map = document.querySelector('#map');
+  map.querySelectorAll('.operation-waypoint').forEach((marker) => marker.remove());
+  if (!operationSession || game.operation.result) return;
+  const win = currentWindow();
+  for (const point of game.operation.briefingPoints ?? []) {
+    const marker = document.createElement('span');
+    marker.className = 'operation-waypoint';
+    marker.textContent = `◇ ${point.label}`;
+    marker.title = `Initial briefing location: ${point.x}, ${point.y}. This marker does not track the ship.`;
+    marker.style.cssText = `left:${100 * (point.x - win.minX) / win.size}%;top:${100 * (point.y - win.minY) / win.size}%`;
+    map.appendChild(marker);
+  }
+};
 const redraw = () => {
   const progress = practiceProgress(game);
-  const report = view.report ?? (progress ? { title: 'Practice objective', lines: [progress.objective, progress.message ?? 'Use the normal commands. Retry or return whenever you wish.'] } : null);
+  const report = view.report ?? (operationSession ? { title: 'Rescue at the Belt', lines: ['Recover Sentinel and withdraw through 38, 160. See the operation briefing above the map.', 'The beacon is an extraction area, with no repairs or protection. Wayfarer is optional.'] } : progress ? { title: 'Practice objective', lines: [progress.objective, progress.message ?? 'Use the normal commands. Retry or return whenever you wish.'] } : null);
   renderGame(game, { ...view, report, playbackMode, playbackActive: Boolean(playbackSession) && !playbackSession.finished, playbackLocked: playbackLocked(), shipArt: document.body.classList.contains('classic') ? 'letters' : shipArtPref, precision: game?.precision ? precisionSettings : null });
   if (progress && progress.status !== 'active') document.querySelectorAll('[data-command]').forEach((button) => {
     if (!['rollcall', 'statistics', 'shots', 'fullmap', 'fleet', 'replay'].includes(button.dataset.command)) button.disabled = true;
   });
   drawPracticeZone();
+  drawOperationBriefing();
 };
 
 /** Whether the star chart is up: a campaign is active and no battle is open. */
@@ -231,11 +263,12 @@ const syncCampaign = () => {
  * reads the campaign state; a single war never shows it.
  */
 let practiceMarkup = null;
+let operationMarkup = null;
 let previousWalkthroughMarkup = null;
 const renderWalkthrough = () => {
   const panel = document.querySelector('#walkthrough-panel');
-  if (!practiceSession) walkthrough = advanceWalkthrough(walkthrough, { type: 'sync', paused: view.paused }, game);
-  panel.hidden = Boolean(practiceSession || !game || ['idle', 'dismissed'].includes(walkthrough.stage));
+  if (!operationSession && !practiceSession) walkthrough = advanceWalkthrough(walkthrough, { type: 'sync', paused: view.paused }, game);
+  panel.hidden = Boolean(operationSession || practiceSession || !game || ['idle', 'dismissed'].includes(walkthrough.stage));
   document.body.classList.toggle('learning', !panel.hidden);
   if (!panel.hidden) {
     const markup = walkthroughMarkup(walkthrough, game, { paused: view.paused });
@@ -247,7 +280,7 @@ const renderWalkthrough = () => {
     }
     panel.querySelectorAll('button').forEach((button) => { button.disabled = playbackLocked(); });
   }
-  if (!practiceSession) try { localStorage.setItem(WALKTHROUGH_KEY, JSON.stringify(walkthrough)); } catch { /* Optional UI preference. */ }
+  if (!operationSession && !practiceSession) try { localStorage.setItem(WALKTHROUGH_KEY, JSON.stringify(walkthrough)); } catch { /* Optional UI preference. */ }
 };
 const showScreens = () => {
   const sector = sectorMode();
@@ -259,9 +292,32 @@ const showScreens = () => {
   document.body.classList.toggle('practicing', Boolean(practiceSession));
   const practicePanel = document.querySelector('#practice-panel');
   practicePanel.hidden = !practiceSession;
-  document.querySelector('#new-game').disabled = Boolean(practiceSession);
-  document.querySelectorAll('[data-practice-start]').forEach((button) => { button.disabled = Boolean(practiceSession); });
-  document.querySelectorAll('[data-walkthrough-action="start"]').forEach((button) => { button.disabled = Boolean(!game || practiceSession); });
+  const operationPanel = document.querySelector('#operation-panel');
+  operationPanel.hidden = !operationSession;
+  document.querySelector('#operation-start').disabled = Boolean(practiceSession || operationSession || playbackLocked());
+  if (operationSession) {
+    const markup = operationPanelMarkup(game);
+    if (markup !== operationMarkup) {
+      const focused = operationPanel.contains(document.activeElement) ? document.activeElement.dataset.operationAction : null;
+      const expanded = operationPanel.querySelector('details')?.open;
+      const seed = operationPanel.querySelector('#operation-seed')?.value;
+      operationPanel.innerHTML = markup;
+      operationMarkup = markup;
+      if (expanded) operationPanel.querySelector('details').open = true;
+      if (seed) operationPanel.querySelector('#operation-seed').value = seed;
+      if (focused) operationPanel.querySelector(`[data-operation-action="${focused}"]`)?.focus({ preventScroll: true });
+    }
+    operationPanel.querySelectorAll('button, select').forEach((control) => { control.disabled = playbackLocked(); });
+    document.querySelector('#mode-readout').textContent = 'REIMAGINED OPERATION';
+  }
+  if (operationLoadNotice) {
+    document.querySelector('#sr-status').textContent = operationLoadNotice;
+    operationPanel.hidden = false;
+    operationPanel.textContent = operationLoadNotice;
+  }
+  document.querySelector('#new-game').disabled = Boolean(practiceSession || operationSession);
+  document.querySelectorAll('[data-practice-start]').forEach((button) => { button.disabled = Boolean(practiceSession || operationSession); });
+  document.querySelectorAll('[data-walkthrough-action="start"]').forEach((button) => { button.disabled = Boolean(!game || practiceSession || operationSession); });
   renderWalkthrough();
   if (practiceSession) {
     const markup = practicePanelMarkup(game);
@@ -738,7 +794,7 @@ document.addEventListener('keydown', (event) => {
 let spectating = false;
 let sessionGeneration = 0;
 const spectate = () => {
-  if (practiceSession) return;
+  if (practiceSession || operationSession) return;
   // A real-time war spectates on the sim clock below — the autopilot conn
   // decides at each boundary there, exactly as it does for the AI alliances.
   if (game?.realtime) return;
@@ -780,7 +836,7 @@ const dispatch = async (action) => {
     // Clicking a hull opens the context menu that grows out of it; clicking the
     // same hull again puts the menu away.
     view = { ...view, contextShipId: view.contextShipId === ship.id ? null : ship.id };
-    if (!practiceSession && view.contextShipId) walkthrough = advanceWalkthrough(walkthrough, { type: ship.id === game.playerShipId && walkthrough.stage === 'locate' ? 'locate' : 'inspect', shipId: ship.id, paused: view.paused }, game);
+    if (!operationSession && !practiceSession && view.contextShipId) walkthrough = advanceWalkthrough(walkthrough, { type: ship.id === game.playerShipId && walkthrough.stage === 'locate' ? 'locate' : 'inspect', shipId: ship.id, paused: view.paused }, game);
     refresh();
     return;
   }
@@ -924,7 +980,7 @@ const dispatch = async (action) => {
 
   if (action.type === 'move' && action.dx === undefined) {
     const pending = promptForCoordinates('Engine maneuver', ['Δ X', 'Δ Y']);
-    if (!practiceSession) {
+    if (!operationSession && !practiceSession) {
       walkthrough = advanceWalkthrough(walkthrough, { type: 'inspect', shipId: game.playerShipId, paused: view.paused }, game);
       renderWalkthrough();
     }
@@ -1223,6 +1279,7 @@ document.addEventListener('click', (event) => {
 }, true);
 
 document.querySelector('#new-game').addEventListener('click', whenPlaybackUnlocked(playbackLocked, () => {
+  if (operationSession) { document.querySelector('#operation-panel').focus(); return; }
   if (practiceSession) { document.querySelector('#practice-return')?.focus(); return; }
   document.querySelector('#new-seed').value = randomSeed();
   document.querySelector('#regional').checked = game?.regional ?? false;
@@ -1280,10 +1337,56 @@ const showPracticeGame = (next) => {
   document.querySelector('#practice-panel').focus();
 };
 document.querySelector('#practice-chooser').innerHTML = practiceChooserMarkup();
+const showOperationGame = (next) => {
+  operationMarkup = null;
+  operationLoadNotice = null;
+  showPracticeGame(next);
+  document.querySelector('#operation-panel').focus();
+};
+document.querySelector('#operation-start').addEventListener('click', () => {
+  if (practiceSession || operationSession || playbackLocked() || help.active || newGameDialog.open) return;
+  // The existing save stays untouched throughout the isolated operation.
+  operationSession = { version: 1, resume: { game, campaign, view, precisionSettings, sectorSelection, walkthrough } };
+  showOperationGame(createOperationGame());
+});
+document.querySelector('#operation-panel').addEventListener('click', async (event) => {
+  const button = event.target.closest('[data-operation-action]');
+  if (!button || !operationSession || playbackLocked() || help.active) return;
+  const action = button.dataset.operationAction;
+  const seed = document.querySelector('#operation-seed').value;
+  if (action === 'overview') {
+    view = { ...view, camera: { ...view.camera, cx: field() / 2, cy: field() / 2, zoom: 1, follow: false } };
+    refresh();
+  } else if (action === 'follow') {
+    view = { ...view, camera: makeCamera(field(), getShip(game, game.playerShipId)) };
+    refresh();
+  }
+  else if (action === 'end') {
+    if (!await promptForConfirmation('End operation?', 'Only ships already extracted will return. Every friendly hull still on the map will be listed as left behind.')) return;
+    game = finishOperation(game, 'withdrawal', { onRecords: collectRecords });
+    view = { ...view, report: null };
+    refresh();
+  } else if (action === 'retry') {
+    if (!game.operation.result && !await promptForConfirmation('Restart rescue prototype?', 'Discard this attempt and start the selected variation. Your previous game remains saved.')) return;
+    showOperationGame(createOperationGame({ seed }));
+  } else if (action === 'return') {
+    if (!game.operation.result && !await promptForConfirmation('Leave the rescue prototype?', 'Discard this attempt and return to your previous game exactly where you left it.')) return;
+    const resume = operationSession.resume;
+    resetPresentationSession();
+    operationSession = null;
+    operationMarkup = null;
+    try { localStorage.removeItem(OPERATION_SAVE_KEY); } catch { /* unavailable storage */ }
+    ({ game, campaign, view, precisionSettings, sectorSelection, walkthrough } = resume);
+    if (game) primeMoveMemory(game);
+    refresh({ persist: false });
+    document.querySelector('#operation-start').focus();
+    if (game && isSpectator(game)) spectate();
+  }
+});
 document.querySelector('#guide-practice-chooser').innerHTML = practiceChooserMarkup();
 document.addEventListener('click', async (event) => {
   const button = event.target.closest('[data-walkthrough-action]');
-  if (!button || !game || practiceSession || playbackLocked()) return;
+  if (!button || !game || practiceSession || operationSession || playbackLocked()) return;
   const action = button.dataset.walkthroughAction;
   if (action === 'start') {
     const guide = document.querySelector('#guide-dialog');
@@ -1312,7 +1415,7 @@ document.addEventListener('click', async (event) => {
 document.addEventListener('click', async (event) => {
   const start = event.target.closest('[data-practice-start]');
   if (start) {
-    if (playbackLocked() || practiceSession) return;
+    if (playbackLocked() || practiceSession || operationSession) return;
     const realtime = start.closest('#new-game-dialog') ? isReimaginedSelected() && document.querySelector('#realtime').checked : Boolean(game?.realtime);
     const guide = document.querySelector('#guide-dialog');
     if (guide.open) await new Promise((resolve) => { guide.addEventListener('close', resolve, { once: true }); guide.close(); });
@@ -1379,7 +1482,7 @@ document.querySelector('#new-game-form').addEventListener('submit', (event) => {
   event.preventDefault();
   if (event.submitter?.value === 'cancel') { newGameDialog.close(); return; }
   if (event.submitter?.value !== 'confirm' || playbackLocked()) return;
-  if (practiceSession) return;
+  if (practiceSession || operationSession) return;
   const seedValue = document.querySelector('#new-seed').value || 'xanadu';
   const options = normalizeNewGameOptions({
     ruleset: document.querySelector('#ruleset').value,

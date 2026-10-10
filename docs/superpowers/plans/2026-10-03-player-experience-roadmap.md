@@ -1,5 +1,7 @@
 # Player experience implementation plan
 
+Follow-on plan, 2026-10-06: [Operations and consequences delivery](2026-10-06-operations-delivery.md) starts with a playable rescue prototype and preserves this plan's open closure work.
+
 **Current status (2026-10-05):** Most implementation is merged through
 [PR #95](https://github.com/MattyGPT/Argonaut-web/pull/95) (`4ef834c`). Final
 acceptance and the engineering follow-ups below remain open.

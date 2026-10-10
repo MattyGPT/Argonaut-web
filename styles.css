@@ -2360,3 +2360,12 @@ body.practicing #game-root { height: auto; min-height: 38rem; }
 body.learning #game-root { height: auto; min-height: 38rem; }
 #sector-side { min-width: 0; }
 @media (min-width: 961px) { #sector-root { grid-template-columns: minmax(0, 1.6fr) minmax(0, .8fr); } }
+/* The isolated operation remains readable above either presentation theme. */
+.operation-heading, .operation-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .7rem; }
+.operation-heading { justify-content: space-between; }
+.operation-heading h2 { margin: 0; }
+.operation-objective { font-weight: 600; }
+.operation-controls { margin-top: .8rem; }
+.operation-controls label { display: inline-flex; align-items: center; gap: .4rem; }
+.operation-debrief { border-top: 1px solid currentColor; margin-top: .8rem; }
+.operation-waypoint { position: absolute; transform: translate(-50%, 1.6rem); color: #c6deea; border-bottom: 1px dotted currentColor; font-size: 11px; white-space: nowrap; pointer-events: none; z-index: 2; }

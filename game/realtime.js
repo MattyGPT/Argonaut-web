@@ -20,7 +20,7 @@
 
 import { GRID_SIZE, REALTIME } from './constants.js';
 import { noteFieldMovement } from './field-diagnostics.js';
-import { engineCapacity, isActive, isSpectator, isTractorHeld, powerEffect } from './state.js';
+import { movementCapacity, isActive, isSpectator, isTractorHeld } from './state.js';
 
 /** Where every hull stands right now — the pre-resolution snapshot a stardate's trajectory starts from. */
 export const positionsOf = (game) => Object.fromEntries(game.ships.map((ship) => [ship.id, { x: ship.x, y: ship.y }]));
@@ -49,7 +49,7 @@ export const integrateStardate = (game, start) => {
       // displacement no engine could make (a tractor slam, a hyperspace jump)
       // simply lands on the boundary tick. A hull that cannot burn at all
       // (engines gone) is towed or jumped: same boundary arrival.
-      const speed = engineCapacity(ship, game.gridSize ?? GRID_SIZE, powerEffect(game, ship, 'engines'));
+      const speed = movementCapacity(game, ship);
       const arriveAt = speed > 0
         ? Math.min(ticks, Math.max(1, Math.ceil(span / (speed / ticks))))
         : ticks;
@@ -131,7 +131,7 @@ export const advanceSubtick = (game) => {
   for (const ship of game.ships) {
     const dest = ship.dest;
     if (!dest || !isActive(ship) || isTractorHeld(game, ship)) continue;
-    const speed = engineCapacity(ship, grid, powerEffect(game, ship, 'engines'));
+    const speed = movementCapacity(game, ship);
     if (speed <= 0) continue;
     const dx = dest.x - ship.x;
     const dy = dest.y - ship.y;

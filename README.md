@@ -28,6 +28,13 @@ called subsystem shots. **Classic view** and **Ship art** are presentation
 choices, independent of the rules. A modern-looking war can still use
 Classic rules, and a Reimagined war can use phosphor letters.
 
+**Rescue prototype (turn-based)** in the top bar opens a separate Reimagined
+operation: recover a disabled ship, consider an optional prize, and extract
+the fleet. It has its own save and returns to your previous game. Start with
+the Reference variation and read the briefing above the map. This is the
+first manual playtest, before automated rescue orders and the terrain art pass;
+see the [implementation and playtest record](docs/superpowers/reviews/2026-10-06-rescue-prototype.md).
+
 For the controls and illustrated reference, open **User guide** in the
 game's top bar. The sections below cover [controls](#controls),
 [Reimagined](#argonaut-reimagined), [real-time play](#real-time-movement),

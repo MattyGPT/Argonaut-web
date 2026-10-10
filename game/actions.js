@@ -1,3 +1,4 @@
+import { isOperation, operationVisible, recordOperationAssist } from './operations.js';
 import {
   ACE_KILLS,
   ARC,
@@ -51,7 +52,7 @@ import {
   distance,
   dockedAt,
   dronesOf,
-  engineCapacity,
+  movementCapacity,
   facePoint,
   facingOf,
   getLivingShips,
@@ -243,6 +244,7 @@ const targetFor = (game, action, actor) => {
   const target = getShip(game, action.targetId);
   if (!target || target.status === 'destroyed') return { reasonCode: 'target-unavailable', error: 'That target is no longer available.' };
   if (target.id === actor.id) return { reasonCode: 'self-target', error: 'A ship cannot target itself.' };
+  if (isOperation(game) && target.faction !== actor.faction && !operationVisible(game, actor, target)) return { reasonCode: 'target-hidden', error: 'That contact is outside local sensor visibility.' };
   return { target };
 };
 
@@ -306,6 +308,10 @@ const targetEligibility = (game, action, actor) => {
   if (found.error) return found;
   const target = found.target;
   if (type === 'tractor') {
+    if (isOperation(game) && action.towardId) {
+      const destination = getShip(game, action.towardId);
+      if (!destination || (destination.faction !== actor.faction && !operationVisible(game, actor, destination))) return unavailable('target-hidden', 'The tow destination is not in local sensor contact.');
+    }
     const rescueTow = target.encounter?.type === 'distress' && target.faction === actor.faction;
     if (target.faction === actor.faction && !rescueTow) return unavailable('wrong-allegiance', 'Weapons cannot fire on a friendly target.');
     if (!isActive(target)) return unavailable('wrong-status', 'That target is not an active enemy ship.');
@@ -338,6 +344,7 @@ const commandEligibility = (game, action) => {
     if (ready > simTimeOf(game)) return unavailable('cooldown', `${getShip(game, game.playerShipId)?.name ?? 'Your ship'} is still cycling — ready again at stardate ${Math.floor(ready) + 1}.`);
   }
   if (!game || !action.type) return unavailable('command-required', 'Choose a command.');
+  if (isOperation(game) && action.type === 'resign') return unavailable('operation-withdrawal', 'Use End operation to withdraw and account for ships left behind.');
   if (game.outcome || game.phase === 'ended') return unavailable('battle-ended', 'The war has already ended.');
   if (game.phase !== 'player') return unavailable('not-player-turn', 'Wait for the player turn.');
   const usable = usableActor(game);
@@ -563,7 +570,7 @@ export const maneuverTo = (game, x, y) => {
     const grid = game.gridSize ?? GRID_SIZE;
     return { dx: Math.max(0, Math.min(grid, x)) - actor.x, dy: Math.max(0, Math.min(grid, y)) - actor.y };
   }
-  const capacity = engineCapacity(actor, game.gridSize ?? GRID_SIZE, powerEffect(game, actor, 'engines'));
+  const capacity = movementCapacity(game, actor);
   const reach = Math.min(capacity, span);
   let moveX = Math.round((dx / span) * reach);
   let moveY = Math.round((dy / span) * reach);
@@ -1150,7 +1157,7 @@ const moveAction = (game, action, actor) => {
     }), [`${actor.name} sets course for ${Math.round(x)},${Math.round(y)}.`]);
   }
   const displacement = Math.hypot(dx, dy);
-  const capacity = engineCapacity(actor, game.gridSize ?? GRID_SIZE, powerEffect(game, actor, 'engines'));
+  const capacity = movementCapacity(game, actor);
   if (displacement > capacity) return invalid(game, `Movement exceeds engine capacity of ${capacity}.`);
   if (x < 0 || x > grid || y < 0 || y > grid) return invalid(game, 'Movement would leave the tactical map.');
   // Round 23: the move implies the heading — a Reimagined hull ends the burn
@@ -1316,7 +1323,7 @@ export const captureHull = (game, boarder, target, party) => {
       orders: { ...(next.orders ?? {}), [captured.id]: { type: 'withdraw', targetId: null } },
     };
     const base = getShip(game, 'xanadu');
-    const dest = base && isActive(base) && base.faction === boarder.faction ? `toward ${base.name}` : 'toward the fleet';
+    const dest = isOperation(game) ? 'toward the extraction beacon' : base && isActive(base) && base.faction === boarder.faction ? `toward ${base.name}` : 'toward the fleet';
     messages.push(
       `${captured.name} is taken as a prize of the ${boarder.faction} — Captain ${captain} commands her now, and she withdraws ${dest}.`,
       ...(times > 1 ? [`${captured.name} has changed hands ${times} times.`] : []),
@@ -1767,7 +1774,7 @@ const nearestThreat = (game, actor) => game.ships
 const disengageAction = (game, actor) => {
   const threat = nearestThreat(game, actor);
   const grid = game.gridSize ?? GRID_SIZE;
-  const capacity = engineCapacity(actor, grid, powerEffect(game, actor, 'engines'));
+  const capacity = movementCapacity(game, actor);
   const span = distance(actor, threat) || 1;
   const x = Math.max(0, Math.min(grid, Math.round(actor.x + ((actor.x - threat.x) / span) * capacity)));
   const y = Math.max(0, Math.min(grid, Math.round(actor.y + ((actor.y - threat.y) / span) * capacity)));
@@ -1922,7 +1929,8 @@ const confirmedCommandState = (game, ship) => ({
 export const applyPlayerAction = (game, action = {}) => withFieldAction(game, game ? getShip(game, game.playerShipId) : null, action, 'manual', () => withBattleAction(game, {
   actor: game ? getShip(game, game.playerShipId) : null, source: 'manual', command: action.type, request: commandRequest(action),
 }, (prepared) => {
-  const outcome = applyManualCommand(prepared, action);
+  let outcome = applyManualCommand(prepared, action);
+  outcome = { ...outcome, game: recordOperationAssist(prepared, outcome.game, prepared.playerShipId, action) };
   if (outcome.game === prepared) return outcome;
   const issuer = getShip(prepared, prepared.playerShipId);
   const subjectId = action.shipId ?? prepared.playerShipId;
