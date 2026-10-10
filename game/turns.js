@@ -6,7 +6,8 @@ import { createRng } from './rng.js';
 import { scenarioOutcome } from './scenarios.js';
 import { isOperation, observeOperationActor, operationOutcome, operationVisible, recordOperationAssist, resolveOperationBoundary } from './operations.js';
 import { withFieldAction, withFieldSweep } from './field-diagnostics.js';
-import { reconcileMaintainedTow } from './maintained-tow.js';
+import { establishMaintainedTow, maintainedTowMove, reconcileMaintainedTow } from './maintained-tow.js';
+import { prepareRescuePower, updateRescueReports } from './operation-orders.js';
 import { activeTowCause, battleActionOf, beginBattleResolution, finishBattleResolution, emitBattleRecord, recordAceCrossing, snapshotKnowledge, snapshotShip, shipConsequences, withBattleAction, withBattleCause } from './battle-records.js';
 import {
   appendLog,
@@ -27,6 +28,7 @@ import {
   isStranded,
   isTractorHeld,
   maintainedTowPair,
+  maintainedTowPairs,
   plotCourse,
   powerEffect,
   segmentCrossesFeature,
@@ -182,12 +184,13 @@ const faceThreat = (game, actor, action) => {
 };
 
 const resolveAiAction = (game, shipId, plotDest = false) => {
+  if (isOperation(game)) game = updateRescueReports(reconcileMaintainedTow(game));
   game = observeOperationActor(game, shipId);
   const actor = getShip(game, shipId);
   if (!isActive(actor)) return { game, messages: [], type: 'pass', records: [] };
   let action = chooseAiAction(game, shipId);
-  const pair = maintainedTowPair(game);
-  if (pair?.target.id === shipId && !['phasers', 'photons', 'spread', 'ion', 'shields', 'pass'].includes(action.type)) action = { type: 'pass' };
+  const pair = maintainedTowPair(game, shipId);
+  if (maintainedTowPairs(game).some((link) => link.target.id === shipId) && !['phasers', 'photons', 'spread', 'ion', 'shields', 'pass'].includes(action.type)) action = { type: 'pass' };
   return withFieldAction(game, actor, action, shipId === game.playerShipId ? 'auto-conn' : 'fleet-ai', () => withBattleAction(game, {
     actor,
     source: shipId === game.playerShipId ? 'auto-conn' : 'fleet-ai',
@@ -212,6 +215,18 @@ const resolveAiAction = (game, shipId, plotDest = false) => {
     let next = result.game;
     const moved = getShip(next, shipId);
     if (plotDest || result.type !== 'move' || !isActive(moved)) return result;
+    if (pair) {
+      const messages = [...result.messages], events = [...(result.events ?? [])];
+      for (const id of [shipId, pair.target.id]) {
+        if (!isActive(getShip(next, id))) continue;
+        const collision = resolveCollision(next, getShip(next, id));
+        const strike = resolveAsteroidStrike(collision.game, getShip(collision.game, id));
+        next = strike.game;
+        messages.push(...collision.messages, ...strike.messages);
+        events.push(...collision.events, ...strike.events);
+      }
+      return { ...result, game: reconcileMaintainedTow(next), messages, events };
+    }
     const collision = resolveCollision(next, moved);
     next = collision.game;
     if (next.reimagined) next = separateOverlaps(next);
@@ -242,6 +257,11 @@ const executeAiAction = (startGame, shipId, action, plotDest = false) => {
     // a plotted destination left standing would carry the hull on.
     const holding = plotDest && actor.dest ? replaceShip(game, { ...actor, dest: null }) : game;
     return { game: holding, messages: [`${actor.name} holds position.`], type: action.type };
+  }
+  if (action.type === 'tow-start') {
+    const target = getShip(game, action.targetId);
+    const connection = establishMaintainedTow(game, actor, target, { delegated: true });
+    return { game: connection.game, messages: [connection.error ?? `${actor.name} establishes a maintained rescue tow on ${target.name}.`], type: connection.error ? 'pass' : 'tow-start' };
   }
   if (action.type === 'shields') {
     const flushed = flushShields(actor, game);
@@ -493,6 +513,15 @@ const executeAiAction = (startGame, shipId, action, plotDest = false) => {
     };
   }
   if (action.type === 'move') {
+    const tow = maintainedTowMove(game, action.dx, action.dy, { tugId: shipId });
+    if (tow?.error) return { game, messages: [tow.error], type: 'pass' };
+    if (tow) {
+      const movedTarget = applyHeading(game, tow.target, tow.targetEnd.x, tow.targetEnd.y);
+      const moved = replaceShip(replaceShip(game, movedTarget), applyHeading(game, actor, tow.tugEnd.x, tow.tugEnd.y));
+      return { game: emitBattleRecord(moved, { kind: 'maintained-tow-move', actor, target: tow.target,
+        payload: { destination: tow.targetEnd, consequences: shipConsequences(tow.target, movedTarget) } }),
+      messages: [`${actor.name} hauls ${tow.target.name} toward extraction.`], type: 'move' };
+    }
     const grid = game.gridSize ?? GRID_SIZE;
     const x = Math.max(0, Math.min(grid, actor.x + action.dx));
     const y = Math.max(0, Math.min(grid, actor.y + action.dy));
@@ -1021,12 +1050,13 @@ const resolveStardateChainRules = (startGame, log, events) => {
   log.push(...colors.messages);
   events.push(...colors.events);
   const relay = relayOrders(game);
-  game = relay.game;
+  game = prepareRescuePower(relay.game);
   log.push(...relay.messages);
   game = resolveOperationBoundary(game);
   const transfer = isOperation(game) ? { game, message: null } : transferCommandIfNeeded(game);
   game = transfer.game;
   game = reconcileMaintainedTow(game);
+  game = updateRescueReports(game);
   if (transfer.message) log.push(transfer.message);
   const surrender = isOperation(game) ? { game, events: [] } : applySurrender(game);
   game = surrender.game;

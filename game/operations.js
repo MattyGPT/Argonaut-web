@@ -1,5 +1,5 @@
 import { FACTIONS } from './constants.js';
-import { arcSplit, createGame, createShip, distance, getShip, inRadioContact, isActive, maintainedTowPair, nebulaHides, sensorRange, systemUnits } from './state.js';
+import { arcSplit, createGame, createShip, distance, getShip, inRadioContact, isActive, maintainedTowPair, maintainedTowPairs, nebulaHides, sensorRange, systemUnits } from './state.js';
 import { reconcileMaintainedTow } from './maintained-tow.js';
 import { createRng } from './rng.js';
 import { allocateBattleId, emitBattleRecord, enableBattleRecords, snapshotShip, withBattleRecords } from './battle-records.js';
@@ -83,7 +83,7 @@ const fact = (game, kind, target, payload = {}) => {
 
 /** Confirmed displacement is captured at the action seam, before journal truncation. */
 export const recordOperationAssist = (before, after, actorId, action) => {
-  const targetId = action.type === 'move' ? maintainedTowPair(before)?.target.id : action.type === 'tractor' ? action.targetId : null;
+  const targetId = action.type === 'move' ? maintainedTowPair(before, actorId)?.target.id : action.type === 'tractor' ? action.targetId : null;
   if (!isOperation(after) || targetId !== after.operation.targetId) return after;
   const first = getShip(before, targetId);
   const last = getShip(after, targetId);
@@ -98,9 +98,8 @@ export const operationFieldFleet = (game) => game.ships.filter((ship) => isActiv
 export const operationExtraction = (game) => {
   if (!isOperation(game)) return { ready: [], heldTugs: [], linked: [] };
   const op = game.operation;
-  const pair = maintainedTowPair(game);
-  const linked = pair && op.elapsed <= op.withdrawalDeadline && [pair.tug, pair.target].some((ship) => distance(ship, op.exit) <= op.exit.radius)
-    ? [pair.tug, pair.target] : [];
+  const linked = maintainedTowPairs(game).flatMap((pair) => op.elapsed <= op.withdrawalDeadline && [pair.tug, pair.target].some((ship) => distance(ship, op.exit) <= op.exit.radius)
+    ? [pair.tug, pair.target] : []);
   const candidates = operationFieldFleet(game).filter((ship) => (distance(ship, op.exit) <= op.exit.radius || linked.includes(ship))
     && (ship.id !== op.targetId || (op.primary === 'pending' && op.elapsed <= op.withdrawalDeadline))
     && ship.crew > 0 && (!ship.tractorBy || getShip(game, ship.tractorBy)?.faction === FED));
@@ -232,6 +231,27 @@ export const upgradeOperationGame = (game) => {
     ...(reopen ? { primary: 'pending', phase: 'recovery', rescueDelayed: true } : {}) } };
 };
 
+const validRescueOrderState = (game) => {
+  const op = game.operation;
+  const ids = new Set([...game.ships, ...op.extracted].map((s) => s.id));
+  const used = new Set(game.maintainedTow ? [game.maintainedTow.tugId, game.maintainedTow.targetId] : []);
+  for (const key of ['tows', 'rescueReports']) {
+    const map = op[key];
+    if (map === undefined) continue;
+    if (!map || typeof map !== 'object' || Array.isArray(map) || Object.keys(map).length > ids.size) return false;
+    for (const [id, value] of Object.entries(map)) {
+      if (!ids.has(id) || !value || value.targetId !== op.targetId) return false;
+      if (key === 'tows') {
+        if (value.tugId !== id || id === value.targetId || used.has(id) || used.has(value.targetId)
+          || !Number.isFinite(value.offsetX) || !Number.isFinite(value.offsetY)) return false;
+        used.add(id); used.add(value.targetId);
+      } else if (!['approaching', 'connecting', 'hauling', 'blocked', 'awaiting-extraction', 'withdrawing', 'completed', 'failed', 'ended', 'cancelled'].includes(value.phase)
+        || typeof value.reason !== 'string' || value.reason.length > 400 || !Number.isInteger(value.elapsed) || value.elapsed < 0) return false;
+    }
+  }
+  return true;
+};
+
 export const validOperationSave = (saved) => Boolean(saved?.version === 1 && saved.resume && isOperation(saved.game)
   && [1, 2].includes(saved.game.operation.revision) && !saved.game.realtime && [0.75, 1, 1.5].includes(saved.game.operation.movementScale)
   && Array.isArray(saved.game.ships) && Array.isArray(saved.game.operation.extracted) && Array.isArray(saved.game.operation.facts)
@@ -243,4 +263,5 @@ export const validOperationSave = (saved) => Boolean(saved?.version === 1 && sav
   && saved.game.operation.deadline === 16 && saved.game.operation.withdrawalDeadline === 22
   && ['pending', 'secured', 'lost', 'expired'].includes(saved.game.operation.primary)
   && ['x', 'y', 'radius'].every((key) => Number.isFinite(saved.game.operation.exit?.[key]))
+  && validRescueOrderState(saved.game)
   && (saved.resume.game === null || Array.isArray(saved.resume.game?.ships)) && saved.resume.view);

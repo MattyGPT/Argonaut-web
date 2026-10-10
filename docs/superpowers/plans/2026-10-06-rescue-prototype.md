@@ -104,13 +104,15 @@ If slower travel allows shield regeneration to trivialize threats or towing beco
 
 ## R6 Add dependable delegation
 
+**October 10 first slice implemented:** [Delegated Rescue contract and evidence](../specs/2026-10-10-delegated-rescue.md). Select another fleet captain → Rescue Sentinel. Per-actor tow ownership, normal action budgets, radio delivery/cancellation, progress reports, bounded local steering and paired extraction are implemented. Both Bulwark and Swift complete 30 scripted seeds; the actual browser journey returned all four friendly hulls after a mid-tow reload. Matt's delegated-order checkpoint remains open. Recover prize and simultaneous autonomous recoveries are the next slice.
+
 **Spec O6. Proposed addition:** `game/operation-orders.js` if appropriate. **Inspect:** existing order validation, radio delivery, tow and boarding paths, command reports and target menus.
 
 Delivery order after the corrected manual rescue and R5 comparison: first explicit per-actor tow ownership and one prototype Rescue order with visible phases/blockers; then Recover prize and simultaneous-task cases. Keep manual routes as comparison fixtures. Do not roll terrain art, new movement tuning or ordinary autonomous dockyard recovery into the same change.
 
-- [ ] Implement Rescue phases using legal action budgets and existing action execution.
+- [x] Implement Rescue phases using legal action budgets and existing action execution (prototype only).
 - [ ] Implement Recover prize with identity continuity and explicit exit routing after capture.
-- [ ] Prioritize the assigned task over endless opportunistic firing; retain self-defense behavior as specified.
+- [x] Prioritize Rescue movement over opportunistic firing; permit visible-target self-defense while blocked. Recover prize follows separately.
 - [ ] Expose phase, subject, destination and actual blockers. Handle loss, recapture, cancellation, hardware damage and pending radio orders.
 - [ ] Solve arrival congestion narrowly. Keep deliberate rams and rejected navigation code separate. Bound attempts and report blocked recovery rather than claiming false arrival.
 

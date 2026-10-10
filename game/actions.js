@@ -1,5 +1,6 @@
 import { isOperation, operationVisible, recordOperationAssist } from './operations.js';
-import { endMaintainedTow, maintainedTowMove, maintainedTowStartReason, reconcileMaintainedTow } from './maintained-tow.js';
+import { endMaintainedTow, establishMaintainedTow, maintainedTowMove, maintainedTowStartReason, reconcileMaintainedTow } from './maintained-tow.js';
+import { prepareRescuePower, rescueOrderReason, updateRescueReports } from './operation-orders.js';
 import {
   ACE_KILLS,
   ARC,
@@ -1610,10 +1611,14 @@ const setOrder = (game, action, actor) => {
   if (ship.faction !== actor.faction) return invalid(game, 'Only Federation ships take your orders.');
   if (!isActive(ship)) return invalid(game, `${ship.name} cannot take orders.`);
   const type = action.order?.type;
-  if (!ORDER_TYPES.includes(type)) return invalid(game, `Unknown order: ${type}.`);
+  if (!ORDER_TYPES.includes(type) && type !== 'rescue') return invalid(game, `Unknown order: ${type}.`);
 
   const order = { type, targetId: null };
-  if (type === 'board') {
+  if (type === 'rescue') {
+    const reason = rescueOrderReason(game, ship);
+    if (reason) return invalid(game, reason);
+    order.targetId = game.operation.targetId;
+  } else if (type === 'board') {
     // The one targeted order whose subject is a derelict rather than an active
     // ship — and a Reimagined-war order only, so a classic war never
     // musters a boarding party (round 17).
@@ -1639,9 +1644,15 @@ const setOrder = (game, action, actor) => {
   }
 
   const label = describeOrder(game, order);
-  const ordered = { ...game, orders: { ...(game.orders ?? {}), [ship.id]: order } };
-  if (ship.id === actor.id) return result(ordered, `${ship.name} will ${label}.`);
-  if (inRadioContact(game, actor, ship)) return result(ordered, `${ship.name} acknowledges: ${label}.`);
+  let ordered = { ...game, orders: { ...(game.orders ?? {}), [ship.id]: order } };
+  if (isOperation(game) && (type === 'rescue' || game.orders?.[ship.id]?.type === 'rescue' || game.pendingOrders?.[ship.id]?.type === 'rescue')) {
+    const pendingOrders = { ...game.pendingOrders };
+    delete pendingOrders[ship.id];
+    ordered = { ...ordered, pendingOrders };
+  }
+  const delivered = () => isOperation(game) ? updateRescueReports(reconcileMaintainedTow(prepareRescuePower(ordered))) : ordered;
+  if (ship.id === actor.id) return result(delivered(), `${ship.name} will ${label}.`);
+  if (inRadioContact(game, actor, ship)) return result(delivered(), `${ship.name} acknowledges: ${label}.`);
   return result(
     { ...game, pendingOrders: { ...(game.pendingOrders ?? {}), [ship.id]: order } },
     `${ship.name} is out of radio contact; the order to ${label} will reach it next stardate.`,
@@ -1848,14 +1859,8 @@ const applyCommand = (game, action = {}) => {
       const found = targetEligibility(game, action, actor);
       if (found.error) return invalid(game, found.error, found.requiresTarget);
       const target = found.target;
-      const attached = { ...target, tractorBy: actor.id, tow: null, dest: null };
-      const next = { ...replaceShip(game, attached), maintainedTow: { tugId: actor.id, targetId: target.id, offsetX: target.x - actor.x, offsetY: target.y - actor.y }, towNotice: null,
-        ...(game.realtime ? { autoConn: false } : {}) };
-      // Starting a tow stops an existing real-time course; the captain chooses
-      // a new course with the passenger and reduced speed now visible.
-      const stopped = game.realtime ? replaceShip(next, { ...actor, dest: null }) : next;
-      return result(emitBattleRecord(completeTurn(stopped), { kind: 'maintained-tow-started', actor, target,
-        payload: { cause: 'Maintained tow established. Move normally to carry the passenger; Release tow detaches it.' } }),
+      const stopped = establishMaintainedTow(game, actor, target).game;
+      return result(completeTurn(stopped),
       `${actor.name} establishes a maintained tow on ${target.name}. Normal movement now carries both ships at up to ${movementCapacity(stopped, actor)} units per stardate.`);
     }
     case 'tow-release': return result(completeTurn(endMaintainedTow(game, 'Maintained tow released by the captain.')), `${actor.name} releases the maintained tow.`);

@@ -6,6 +6,13 @@ const names = (ships) => ships.length ? ships.map((ship) => escape(ship.name)).j
 export const operationPanelMarkup = (game) => {
   const op = game.operation;
   const result = op.result;
+  const orders = Object.entries(op.rescueReports ?? {}).map(([id, report]) => {
+    const ship = [...game.ships, ...op.extracted].find((s) => s.id === id);
+    return `<li><strong>${escape(ship?.name ?? id)} — ${escape(report.phase)}</strong>: ${escape(report.reason)} Target: Sentinel. Exit: ${op.exit.x}, ${op.exit.y}.</li>`;
+  });
+  for (const [id, order] of Object.entries(game.pendingOrders ?? {})) if (order.type === 'rescue') {
+    orders.push(`<li>${escape(game.ships.find((s) => s.id === id)?.name ?? id)} — Rescue order in radio transit; delivery next stardate.</li>`);
+  }
   const objective = result ? result.primary === 'success' ? 'Operation complete: Sentinel recovered.' : 'Operation ended: Sentinel was not recovered.'
     : op.primary === 'secured' ? 'Sentinel is safe. Bring your remaining ships home.' : op.primary === 'pending'
       ? op.elapsed >= op.deadline ? `Rescue is still possible! Bring Sentinel home before final evacuation at ${op.withdrawalDeadline}.`
@@ -19,6 +26,7 @@ export const operationPanelMarkup = (game) => {
   return `<div class="operation-heading"><h2>Rescue at the Belt <span class="mode-badge">PLAYTEST PROTOTYPE</span></h2>
     <span>Elapsed ${op.elapsed} · ${op.revision === 1 && result ? 'Previous rescue deadline' : 'On-time target'} ${op.deadline} · Final evacuation ${op.withdrawalDeadline}</span></div>
     <p class="operation-objective" role="status">${objective}</p>
+    ${orders.length ? `<div class="operation-orders" aria-label="Rescue order progress"><ul>${orders.join('')}</ul></div>` : ''}
     <p>Evacuated through beacon (removed from map): ${names(op.extracted)}${recent ? ` · ${escape(recent)}` : ''}</p>
     ${!result ? `<p class="operation-extraction">A maintained pair evacuates together when either ship enters the beacon. Departure happens after combat resolves. Rescue remains possible through elapsed stardate ${op.withdrawalDeadline}.</p>
       ${op.rulesUpdated ? '<p class="operation-warning">Prototype rules updated: the stardate-16 target no longer prevents a late rescue, and maintained pairs evacuate together.</p>' : ''}
@@ -30,7 +38,7 @@ export const operationPanelMarkup = (game) => {
     <details><summary>Briefing and prototype rules</summary><p>${RESCUE_BRIEFING}</p><p>${RESCUE_RULES}</p>
     <p>${(op.briefingPoints ?? []).map((point) => `${escape(point.label)}: ${point.x}, ${point.y}`).join(' · ')}. Diamond labels mark initial intelligence, not live ship positions.</p>
     <p>Select Sentinel → Maintain tow once, then use Engines or map movement toward the beacon. Tow speed is limited by engines and tractor power; the console and Engines preview show both destinations. Either linked ship entering the ring brings both home. Keep the tow attached for evacuation. Single pull toward extraction remains available for precise repositioning after releasing the maintained tow. Use Fleet orders → Withdraw for your other captains.</p>
-    <p>This first build tests movement, local patrols, and manual rescue. The art pass and automated rescue orders follow playtesting.</p></details>
+    <p>To delegate: select another friendly captain (for example Bulwark) → Rescue Sentinel. The captain approaches, connects once, and hauls both ships through extraction using normal turns. An unconfigured tug switches to balanced reactor power on delivery; your manual allocations are preserved. Keep commanding your own ship and advance turns normally. Progress and blockers appear above. Replace the tug’s order with Hold or Withdraw to cancel; a radio-delayed replacement takes effect on delivery. Recover prize and the art pass follow this playtest.</p></details>
     ${result ? `<div class="operation-debrief"><h3>${result.primary === 'success' ? 'Sentinel recovered' : 'Rescue unsuccessful'}</h3>
       <p class="operation-result-reason">${escape(operationResultExplanation(game))}</p>
       <p>Returned: ${names(result.returned)}. Left behind: ${names(result.abandoned)}. Lost: ${names(result.lost)}.</p>

@@ -309,6 +309,7 @@ export const terminalGroupNarrative = (group) => {
 const ORDER_BUTTONS = Object.freeze([
   ['focus', 'Focus with fleet'],
   ['hold', 'Hold position'],
+  ['rescue', 'Rescue Sentinel'],
   ['withdraw', 'Withdraw'],
   ['escort', 'Escort…'],
   ['screen', 'Screen…'],
@@ -323,6 +324,7 @@ const ORDER_BUTTONS = Object.freeze([
 
 /** The order buttons a war mode offers: `board` and `launch` are Reimagined-only. */
 const orderButtonsFor = (game, ship) => ORDER_BUTTONS.filter(([type]) => {
+  if (type === 'rescue') return game.reimagined && !game.realtime && game.operation?.primary === 'pending' && ship.id !== game.playerShipId && ship.id !== game.operation.targetId;
   if (type === 'board') return game.reimagined;
   // The bay order only appears where the rules would accept it: a Reimagined
   // carrier whose complement is still aboard.
@@ -510,6 +512,7 @@ const shipMenu = (game, actor, ship) => {
         ? 'An order is still travelling to this hull.'
         : (contact ? null : 'Out of radio contact — orders arrive one stardate late.'),
       ...(own ? ['Your own hull obeys these orders whenever the autopilot has the conn.'] : []),
+      ...(game.operation && !own && ship.id !== game.operation.targetId ? ['Rescue Sentinel uses balanced reactor power if this hull has no manual allocation; existing power settings are preserved.'] : []),
     ].filter(Boolean);
     const buttons = orderButtonsFor(game, ship)
       .map(([type, label]) => `<button data-order="${type}" data-order-ship="${ship.id}"${standing?.type === type ? ' class="current"' : ''}${disabled}>${label}</button>`)

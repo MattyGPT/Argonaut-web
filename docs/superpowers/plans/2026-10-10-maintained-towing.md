@@ -10,7 +10,7 @@ Date: 2026-10-10. Scope: [shared Reimagined specification](../specs/2026-10-10-m
 4. **Controls and journal — implemented.** Friendly ship menu entry, console status/release, reduced movement ring, both-destination previews, refusal messages and durable typed journal facts. Clarify maintained connection versus the old directed pull in the prototype briefing and guide.
 5. **Regression and browser verification — implemented; initial rescue feedback received.** PR #99 merged as `f8fa739`. See evidence below; broader human journeys remain open.
 6. **Human playtest and tuning — in progress.** Matt reports “Rescue worked; towing felt good” after the paired-extraction fix. The [R5 pacing comparison](../reviews/2026-10-10-operation-pacing.md) retains current speed, geometry and deadlines. Continue alternate-route and ordinary-mode journeys; adjust costs only with evidence.
-7. **Delegated rescue — next bounded implementation.** Start prototype Rescue order phases using the manual physical primitive, then Recover prize. An AI tug needs explicit per-actor ownership and saved order phases; do not bypass the current one-command-pair limit by forging descriptors. Compare the result with manual play before expanding autonomous recovery into ordinary games or campaigns.
+7. **Delegated rescue — first slice implemented.** [Prototype Rescue](../specs/2026-10-10-delegated-rescue.md) uses explicit per-actor ownership and saved reports alongside the command ship's manual pair. Human delegated-order acceptance is next; Recover prize follows separately. Compare the result with manual play before expanding autonomous recovery into ordinary games or campaigns.
 
 ## Verification evidence
 

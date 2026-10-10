@@ -797,17 +797,26 @@ export const movementCapacity = (game, ship) => {
   const capacity = game.reimagined && game.operation?.version === 1
     ? systemUnits(ship, 'engines') * ENGINE_MOVE_PER_UNIT * game.operation.movementScale * effectiveness
     : engineCapacity(ship, game.gridSize ?? GRID_SIZE, effectiveness);
-  const pair = maintainedTowPair(game);
+  const pair = maintainedTowPair(game, ship.id);
   return pair?.tug.id === ship.id
     ? Math.min(capacity, systemUnits(ship, 'tractor') * TRACTOR_PULL_PER_UNIT * powerEffect(game, ship, 'tractor')) : capacity;
 };
 
-/** One manually controlled friendly tow. No new fields or behavior in Classic. */
-export const maintainedTowPair = (game) => {
-  const link = game?.reimagined && game.maintainedTow;
+/** Ordinary manual ownership remains separate from prototype fleet ownership. */
+export const maintainedTowLinks = (game) => !game?.reimagined ? [] : [
+  ...(game.maintainedTow ? [game.maintainedTow] : []),
+  ...(game.operation?.version === 1 && !game.realtime ? Object.values(game.operation.tows ?? {}) : []),
+];
+
+export const maintainedTowPairs = (game) => maintainedTowLinks(game).map((link) => maintainedTowPair(game, link.tugId)).filter(Boolean);
+
+export const maintainedTowPair = (game, tugId = game?.playerShipId) => {
+  const delegated = game?.reimagined && game.operation?.version === 1 && !game.realtime && game.operation.tows?.[tugId];
+  const link = game?.reimagined && (delegated || (game.maintainedTow?.tugId === tugId ? game.maintainedTow : null));
   if (!link || !Number.isFinite(link.offsetX) || !Number.isFinite(link.offsetY)) return null;
   const tug = getShip(game, link.tugId), target = getShip(game, link.targetId);
-  if (!isActive(tug) || !isActive(target) || tug.id === target.id || tug.id !== game.playerShipId
+  if (!isActive(tug) || !isActive(target) || tug.id === target.id
+    || (delegated ? game.operation.result || tug.faction !== 'Federation' || tug.id === game.playerShipId || game.orders?.[tug.id]?.type !== 'rescue' || game.orders[tug.id].targetId !== target.id : tug.id !== game.playerShipId)
     || tug.faction !== target.faction || tug.crew <= 0 || target.crew <= 0 || isImmovable(tug) || isImmovable(target) || isDrone(tug) || isDrone(target)
     || target.tractorBy !== tug.id || isTractorHeld(game, tug) || systemUnits(tug, 'tractor') <= 0
     || powerEffect(game, tug, 'tractor') <= 0 || distance(tug, target) > RANGES.tractor + 1e-7
@@ -1372,6 +1381,7 @@ export const describeOrder = (game, order) => {
   const name = order.targetId ? getShip(game, order.targetId)?.name ?? 'that ship' : null;
   switch (order.type) {
     case 'hold': return 'hold position';
+    case 'rescue': return `rescue ${name ?? 'Sentinel'} through the extraction beacon`;
     case 'withdraw': return 'withdraw toward Xanadu';
     case 'escort': return `escort ${name}`;
     case 'intercept': return `intercept ${name}`;
