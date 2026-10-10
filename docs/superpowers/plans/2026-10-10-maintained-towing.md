@@ -8,9 +8,9 @@ Date: 2026-10-10. Scope: [shared Reimagined specification](../specs/2026-10-10-m
 2. **Turn-based movement and operation delivery — implemented and corrected after playtesting.** Translate both hulls through ordinary movement, apply collision and terrain outcomes to both, suppress independent passenger maneuvers and count actual rescue assistance. Revision 2 evacuates a valid maintained pair together when either hull reaches the beacon. Elapsed 16 is an on-time target; late rescue succeeds through the hard final boundary at 22. Preserve single-pull safeguards and release the connection after paired evacuation.
 3. **Ordinary real-time integration — implemented.** Carry the passenger through the movement integrator, share course arrival, apply existing collision rules, charge connection/release cooldowns, explain stopped courses, and preserve deterministic mid-course reload. Ordinary distress passengers remain recoverable while attached; release renews their distress window for docking.
 4. **Controls and journal — implemented.** Friendly ship menu entry, console status/release, reduced movement ring, both-destination previews, refusal messages and durable typed journal facts. Clarify maintained connection versus the old directed pull in the prototype briefing and guide.
-5. **Regression and browser verification — implemented; human acceptance pending.** See evidence below. Commit this as one bounded feature before any larger navigation or AI-order changes.
-6. **Human playtest and tuning — next.** Run the journeys below, record observations, and adjust speed/cost/feedback only with evidence. Keep current mission geometry, weapon ranges and AI budgets fixed during the first comparison.
-7. **Delegated rescue — gated.** After the manual journeys are understandable and worthwhile, implement R6 Rescue/Recover-prize order phases using the same physical primitive. An AI tug needs explicit per-actor ownership and saved order phases; do not bypass the current one-command-pair limit by forging descriptors.
+5. **Regression and browser verification — implemented; initial rescue feedback received.** PR #99 merged as `f8fa739`. See evidence below; broader human journeys remain open.
+6. **Human playtest and tuning — in progress.** Matt reports “Rescue worked; towing felt good” after the paired-extraction fix. The [R5 pacing comparison](../reviews/2026-10-10-operation-pacing.md) retains current speed, geometry and deadlines. Continue alternate-route and ordinary-mode journeys; adjust costs only with evidence.
+7. **Delegated rescue — next bounded implementation.** Start prototype Rescue order phases using the manual physical primitive, then Recover prize. An AI tug needs explicit per-actor ownership and saved order phases; do not bypass the current one-command-pair limit by forging descriptors. Compare the result with manual play before expanding autonomous recovery into ordinary games or campaigns.
 
 ## Verification evidence
 
@@ -26,7 +26,7 @@ Matt reported Argonaut disappearing while Sentinel remained at the beacon, causi
 
 Revision 2 corrects both rules and updates the briefing, console, preview, journal and debrief. Tests cover tug-first and passenger-first arrival, on-time and late rescue including the final boundary, damaged/hostile/disrupted connections, final-deadline failure, historical result immutability, active-save migration and late journal facts after reload. A browser regression put only Argonaut inside at elapsed 18 with Sentinel at 77,160 (outside the radius); the actual UI returned all four friendly hulls, reported a successful late rescue, and preserved the result after reload. Ordinary full-state parity was rechecked and matches the same digest above.
 
-Completed revision-1 failures remain historical. Unfinished revision-1 saves upgrade with a visible rules notice; no departed or lost ship is restored. The next player retry should use maintained tow and aim either hull at the beacon, without manual passenger-offset arithmetic. Human acceptance remains open despite the automated and browser results.
+Completed revision-1 failures remain historical. Unfinished revision-1 saves upgrade with a visible rules notice; no departed or lost ship is restored. Matt subsequently confirmed a completed rescue and good towing pace. This resolves the reported failed manual loop; the reply does not establish alternate-route or ordinary-mode acceptance.
 
 ## Human journeys, in order
 
@@ -45,10 +45,10 @@ Record seed, mode, power, hull/crew damage, approach, action count, first hostil
 
 - [x] Physical mechanic works in prototype and ordinary Reimagined; Classic paths remain isolated.
 - [x] Tests cover both timing models and actual six-seed operation completion.
-- [ ] Matt can connect and finish a rescue without repeatedly issuing tow commands or mistaking a pull for a connection.
+- [x] Matt confirms a completed rescue after the maintained-tow extraction fix, with towing that felt good (October 10).
 - [ ] Dockyard release and the prototype's linked evacuation are understood without coaching.
 - [ ] Ordinary turn-based and real-time towing are useful and readable under combat pressure.
-- [ ] Accept or retune speed/action cost from the above observations.
-- [ ] Only then extend autonomous rescue orders, terrain presentation and campaign consequence work under the existing operations delivery gates.
+- [x] Retain current prototype tow speed for the next tranche, supported by initial human feedback and R5 comparisons; ordinary-mode tuning remains open.
+- [ ] Implement and playtest a bounded prototype Rescue order, then Recover prize; retain separate presentation and campaign gates.
 
-This delivery does not close R4 human acceptance, R6 delegation, R7 real-time operations, M3 production terrain art, or M4 campaign rescue rewards. Shared real-time towing is a prerequisite primitive for R7, not completion of the operation lifecycle.
+The first rescue feedback does not close all R4 human journeys, R6 delegation, R7 real-time operations, M3 production terrain art, or M4 campaign rescue rewards. Shared real-time towing is a prerequisite primitive for R7, not completion of the operation lifecycle.

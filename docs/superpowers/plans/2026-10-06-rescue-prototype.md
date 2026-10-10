@@ -1,6 +1,6 @@
 # Rescue prototype implementation plan
 
-Date: 2026-10-06. Status: **R0–R3 implemented and checked; R4 human playtest pending.** See the [delivery and experiment record](../reviews/2026-10-06-rescue-prototype.md) for actual evidence, fixture choices and limitations. Spec: [Operational space and rescue](../specs/2026-10-06-operational-space-and-rescue.md). Parent: [Delivery plan](2026-10-06-operations-delivery.md).
+Date: 2026-10-06. Updated October 10. Status: **R0–R3 implemented; first corrected human rescue confirmed; R5 measurement tranche complete, broader R4/R5 comparisons open.** See the [initial delivery record](../reviews/2026-10-06-rescue-prototype.md) and [current pacing evidence](../reviews/2026-10-10-operation-pacing.md). Spec: [Operational space and rescue](../specs/2026-10-06-operational-space-and-rescue.md). Parent: [Delivery plan](2026-10-06-operations-delivery.md).
 
 The first playable milestone includes independent movement, authored deployment, minimum mission AI, manual rescue and extraction. It does not wait for automated orders, finished art or campaign rewards. Keep each task reviewable; combine them into a playable prototype only after their isolated contracts pass.
 
@@ -74,6 +74,8 @@ Store bulky simulation evidence outside deployed assets. Full mechanical-state/R
 
 **October 10 follow-up:** first user feedback identified repeated Sentinel/command-ship tractor collisions and destruction events buried in the journal. Address these control and feedback problems before interpreting that session as evidence for map-size or deadline tuning. See [the follow-up review](../reviews/2026-10-10-rescue-playtest-followup.md). M1 acceptance remains pending.
 
+**After PR #99:** Matt confirms “Rescue worked; towing felt good.” The corrected manual rescue is now supported by a completed player run. Preserve current towing speed; alternate-route, prize and ordinary-mode journeys still need feedback. The [1,440-run R5 comparison](../reviews/2026-10-10-operation-pacing.md) supports a bounded Rescue-order implementation next, not a map-size or deadline retune.
+
 - [x] Highlight confirmed ship defeats in collapsed journal command cards, including actual phaser and direct-tow kills.
 - [x] Put a directed extraction tow first in Sentinel's menu; guide keyboard tractor targeting through the same destination dialog with landing, range and collision information.
 
@@ -87,20 +89,24 @@ If no player session is available, finish independent fixtures and art concepts,
 
 ## R5 Tune operational space through paired experiments
 
-**Proposed additions:** `scripts/sim-operations.mjs`, `scripts/diagnose-operations.mjs` and observer tests. These are future tools, not runnable commands yet.
+**Implemented:** `scripts/sim-operations.mjs`, `scripts/diagnose-operations.mjs`, shared observation-only `scripts/operation-metrics.mjs`, and observer/CLI tests. Run either command with `--help`; reproduction and all 48 profile/policy groups are in the [dated pacing review](../reviews/2026-10-10-operation-pacing.md).
 
-- [ ] Add observation-only callbacks for O8 metrics and state/RNG digest comparisons. Diagnostic state stays out of saves and AI decisions.
-- [ ] Compare authored placement at legacy speed to scale 1.0 at 320, then scales 0.75/1.5. Keep weapon constants, budget and rewards fixed within each comparison.
+- [x] Add observation-only callbacks for detection, attempts, damage, concentration, travel, recovery and state/RNG digest comparisons. Diagnostic state stays out of saves and AI decisions; autonomous stuck-order duration awaits R6.
+- [x] Compare authored placement at legacy speed to scale 1.0 at 320, then scales 0.75/1.5. Keep weapon constants, budget and rewards fixed within each comparison.
 - [ ] Compare mission assignment/knowledge behavior with the integrated reference to identify its contribution to separation.
 - [ ] Only if useful decision space remains inadequate, compare 480 with speed fixed. Record actual benefit versus extra travel and camera burden.
 - [ ] Tune deadline and reinforcement schedule after selecting a useful movement/layout candidate. Preserve every rejected setting and reason.
 - [ ] Check both route viability and dominant strategies with six manual fixtures and at least 30 bounded seeded variants. Measure overcharged rushes and intentionally avoiding combat.
+
+October 10 decisions: retain 1.0/320, the current tractor cap and 16/22 boundaries. The 30-seed matrix includes all six public fixtures, both routes, prize-first, maintained versus single pulls, engine overcharge and deliberate early withdrawal; human route comparison remains open. A bounds-only 480 negative control changes no measured outcomes but does not test a wider deployment/camera burden. Stationary initial patrols eliminate hostile attempts in these scripts; a full knowledge/pursuit ablation remains open. No deadline or reinforcement tuning was warranted. Preserve these partial distinctions rather than marking all R5 gates complete.
 
 If slower travel allows shield regeneration to trivialize threats or towing becomes disproportionately fast, isolate that interaction as a new experiment. Do not quietly retune several unrelated systems at once. If no setting creates useful decisions, revise deployment/mission structure rather than endlessly enlarging the map.
 
 ## R6 Add dependable delegation
 
 **Spec O6. Proposed addition:** `game/operation-orders.js` if appropriate. **Inspect:** existing order validation, radio delivery, tow and boarding paths, command reports and target menus.
+
+Delivery order after the corrected manual rescue and R5 comparison: first explicit per-actor tow ownership and one prototype Rescue order with visible phases/blockers; then Recover prize and simultaneous-task cases. Keep manual routes as comparison fixtures. Do not roll terrain art, new movement tuning or ordinary autonomous dockyard recovery into the same change.
 
 - [ ] Implement Rescue phases using legal action budgets and existing action execution.
 - [ ] Implement Recover prize with identity continuity and explicit exit routing after capture.
@@ -131,7 +137,7 @@ Do not require byte-identical turn-based and real-time battles. Do require the s
 
 ## Play-test record template
 
-**October 10 follow-up:** use the [maintained-tow playtest plan](2026-10-10-maintained-towing.md) for the next manual session. This implements one connection plus normal movement in the prototype and ordinary Reimagined, including ordinary real-time. Retain the single-pull path as a comparison. Six authored seeds complete with one maintained connection in deterministic tests; R4 still requires human acceptance, and R6/R7 remain separately gated.
+**October 10 follow-up:** use the [maintained-tow playtest plan](2026-10-10-maintained-towing.md) for the next manual session. This implements one connection plus normal movement in the prototype and ordinary Reimagined, including ordinary real-time. Matt has confirmed a corrected rescue and good towing pace. Retain the single-pull path as a comparison; broader R4 journeys, R6 delegated acceptance and R7 remain open.
 
 | Field | Record |
 | --- | --- |

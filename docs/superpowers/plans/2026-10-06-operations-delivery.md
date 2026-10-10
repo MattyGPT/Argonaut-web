@@ -1,6 +1,6 @@
 # Operations and consequences delivery plan
 
-Date: 2026-10-06. Status: **Manual rescue prototype implemented and independently verified; first human playtest pending.** See the [delivery record](../reviews/2026-10-06-rescue-prototype.md). Parent: [Roadmap](../specs/2026-10-06-operations-and-consequences-roadmap.md).
+Date: 2026-10-06. Updated October 10. Status: **Corrected manual rescue confirmed by Matt; R5 pacing tools and first comparison delivered; delegation next.** See the [initial delivery record](../reviews/2026-10-06-rescue-prototype.md) and [current pacing review](../reviews/2026-10-10-operation-pacing.md). Parent: [Roadmap](../specs/2026-10-06-operations-and-consequences-roadmap.md).
 
 ## Delivery order and dependencies
 
@@ -20,11 +20,15 @@ The first playable work is the rescue prototype. Art concepts and campaign ident
 
 **October 10 follow-up:** first player feedback exposed repeated tow inputs and confusing delivery. Journal/extraction corrections landed in PR #98. [Maintained towing](2026-10-10-maintained-towing.md) adds a shared manual primitive to the prototype and ordinary Reimagined (turn-based and real-time). Playtest it before resuming M2 delegation or changing geometry. M1 human acceptance is still open; automated route completion is not that acceptance.
 
+**After PR #99 merged:** Matt reports “Rescue worked; towing felt good.” The next tranche adds reproducible pacing tools and 1,440 paired-profile runs, retaining current movement, tow speed and deadlines. A bounded prototype Rescue order is next, followed by Recover prize. Alternate-route/prize and ordinary-mode human checkpoints remain open; initial rescue confirmation is not acceptance of the entire milestone.
+
 - [x] Written roadmap and detailed operations/presentation contracts.
 - [x] Read-only opening audit script and dated findings on the current working tree.
 - [x] Generated and visually inspected one terrain concept, with exact prompt and limitations.
 - [x] R0 implementation baseline and paired full-state digests: 1,000 unchanged ordinary wars.
 - [x] R1–R3 playable manual prototype, six variants, isolated saves and browser lifecycle verification.
+- [x] Corrected maintained-tow rescue completed by Matt, with positive towing-pace feedback.
+- [x] R5 observation tools and first 30-seed, six-profile, eight-policy matrix; retained tuning decision and limitations.
 - [ ] M1 human player observation and acceptance (R4).
 - [ ] M2 accepted operational profile and delegation.
 - [ ] M3 production art and in-game visual acceptance.
