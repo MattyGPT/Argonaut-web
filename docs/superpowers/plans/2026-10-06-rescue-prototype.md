@@ -131,6 +131,8 @@ Do not require byte-identical turn-based and real-time battles. Do require the s
 
 ## Play-test record template
 
+**October 10 follow-up:** use the [maintained-tow playtest plan](2026-10-10-maintained-towing.md) for the next manual session. This implements one connection plus normal movement in the prototype and ordinary Reimagined, including ordinary real-time. Retain the single-pull path as a comparison. Six authored seeds complete with one maintained connection in deterministic tests; R4 still requires human acceptance, and R6/R7 remain separately gated.
+
 | Field | Record |
 | --- | --- |
 | Revision, seed, operation revision, timing, profile | |

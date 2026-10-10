@@ -119,7 +119,7 @@ try {
   await page.locator('#map .ship[data-ship-id="op-sentinel"]').click();
   assert.equal(await page.locator('[data-ship-command="tractor"][data-ship-target="op-sentinel"]').count(), 0);
   const rescueButton = page.locator('[data-ship-command="tractor-direct"][data-ship-target="op-sentinel"]');
-  assert.equal(await rescueButton.innerText(), 'Tow toward extraction…');
+  assert.equal(await rescueButton.innerText(), 'Single pull toward extraction…');
   await rescueButton.click();
   assert.equal(await page.locator('#tow-risk').isVisible(), false, 'Reopening clears the previous risky destination.');
   assert.equal(await page.locator('#tow-form button[value="confirm"]').isEnabled(), true);

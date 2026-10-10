@@ -2372,6 +2372,10 @@ body.learning #game-root { height: auto; min-height: 38rem; }
 .operation-heading { justify-content: space-between; }
 .operation-heading h2 { margin: 0; }
 .operation-objective { font-weight: 600; }
+.maintained-tow-status { padding: .6rem; border: 1px solid var(--line); color: var(--text); }
+.maintained-tow-status p { margin: .35rem 0; font-size: .76rem; }
+.tow-status-heading { display: flex; align-items: center; justify-content: space-between; gap: .4rem; flex-wrap: wrap; }
+.tow-status-heading button { padding: .3rem .45rem; font-size: .75rem; }
 .operation-warning, .operation-result-reason { border-left: 3px solid #ffcf70; padding: .4rem .65rem; background: #5c481e59; }
 body.classic .operation-warning, body.classic .operation-result-reason { border-color: currentColor; background: transparent; }
 .operation-controls { margin-top: .8rem; }

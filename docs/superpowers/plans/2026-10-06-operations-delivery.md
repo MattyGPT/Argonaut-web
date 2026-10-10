@@ -18,6 +18,8 @@ The first playable work is the rescue prototype. Art concepts and campaign ident
 
 ## Current completion record
 
+**October 10 follow-up:** first player feedback exposed repeated tow inputs and confusing delivery. Journal/extraction corrections landed in PR #98. [Maintained towing](2026-10-10-maintained-towing.md) adds a shared manual primitive to the prototype and ordinary Reimagined (turn-based and real-time). Playtest it before resuming M2 delegation or changing geometry. M1 human acceptance is still open; automated route completion is not that acceptance.
+
 - [x] Written roadmap and detailed operations/presentation contracts.
 - [x] Read-only opening audit script and dated findings on the current working tree.
 - [x] Generated and visually inspected one terrain concept, with exact prompt and limitations.

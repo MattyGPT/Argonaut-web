@@ -32,6 +32,7 @@ import {
   STARTING_FORMATIONS,
   SYSTEM_RANGE_PER_UNIT,
   TERRAIN,
+  TRACTOR_PULL_PER_UNIT,
   VENDETTA,
   XANADU_POSITION,
 } from './constants.js';
@@ -793,10 +794,26 @@ export const engineCapacity = (ship, gridSize = GRID_SIZE, enginesEff = 1) => sy
 /** Operations decouple engine travel from world bounds; ordinary rules stay exact. */
 export const movementCapacity = (game, ship) => {
   const effectiveness = powerEffect(game, ship, 'engines');
-  if (game.reimagined && game.operation?.version === 1) {
-    return systemUnits(ship, 'engines') * ENGINE_MOVE_PER_UNIT * game.operation.movementScale * effectiveness;
-  }
-  return engineCapacity(ship, game.gridSize ?? GRID_SIZE, effectiveness);
+  const capacity = game.reimagined && game.operation?.version === 1
+    ? systemUnits(ship, 'engines') * ENGINE_MOVE_PER_UNIT * game.operation.movementScale * effectiveness
+    : engineCapacity(ship, game.gridSize ?? GRID_SIZE, effectiveness);
+  const pair = maintainedTowPair(game);
+  return pair?.tug.id === ship.id
+    ? Math.min(capacity, systemUnits(ship, 'tractor') * TRACTOR_PULL_PER_UNIT * powerEffect(game, ship, 'tractor')) : capacity;
+};
+
+/** One manually controlled friendly tow. No new fields or behavior in Classic. */
+export const maintainedTowPair = (game) => {
+  const link = game?.reimagined && game.maintainedTow;
+  if (!link || !Number.isFinite(link.offsetX) || !Number.isFinite(link.offsetY)) return null;
+  const tug = getShip(game, link.tugId), target = getShip(game, link.targetId);
+  if (!isActive(tug) || !isActive(target) || tug.id === target.id || tug.id !== game.playerShipId
+    || tug.faction !== target.faction || tug.crew <= 0 || target.crew <= 0 || isImmovable(tug) || isImmovable(target) || isDrone(tug) || isDrone(target)
+    || target.tractorBy !== tug.id || isTractorHeld(game, tug) || systemUnits(tug, 'tractor') <= 0
+    || powerEffect(game, tug, 'tractor') <= 0 || distance(tug, target) > RANGES.tractor + 1e-7
+    || Math.hypot(link.offsetX, link.offsetY) < 5
+    || Math.abs(target.x - tug.x - link.offsetX) > 1e-6 || Math.abs(target.y - tug.y - link.offsetY) > 1e-6) return null;
+  return { tug, target, link };
 };
 
 /**

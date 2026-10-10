@@ -94,6 +94,8 @@ Keep `primaryResult`, `optionalResults`, `fleetDisposition`, `reason` and elapse
 
 ## O6 Reliable delegation
 
+**October 10 manual-tow implementation:** the [maintained towing contract](2026-10-10-maintained-towing.md) now supplies a shared Reimagined physical connection for manual rescue and ordinary games. Select Sentinel → Maintain tow, then maneuver normally with both hulls. Formation is preserved and speed is limited by engines and tractors. The existing single directed pull remains available. Qualifying maintained movement adds rescue assistance; Sentinel's extraction releases the connection. This does not implement the autonomous orders below, and their later ownership model must support independent fleet actors explicitly.
+
 After manual solutions pass the first play-test, implement:
 
 | Order | Phases | Completion |

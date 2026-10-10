@@ -20,7 +20,8 @@
 
 import { GRID_SIZE, REALTIME } from './constants.js';
 import { noteFieldMovement } from './field-diagnostics.js';
-import { movementCapacity, isActive, isSpectator, isTractorHeld } from './state.js';
+import { movementCapacity, isActive, isSpectator, isTractorHeld, maintainedTowPair } from './state.js';
+import { maintainedTowMove } from './maintained-tow.js';
 
 /** Where every hull stands right now — the pre-resolution snapshot a stardate's trajectory starts from. */
 export const positionsOf = (game) => Object.fromEntries(game.ships.map((ship) => [ship.id, { x: ship.x, y: ship.y }]));
@@ -185,7 +186,7 @@ export const advanceSubtick = (game) => {
   // Movement pass.
   const arrived = [];
   const towsDone = [];
-  const ships = game.ships.map((ship) => {
+  let ships = game.ships.map((ship) => {
     // Round 32: a tractor lock hauls its victim smoothly toward the point the
     // beam was laid on — the same per-stardate pull total, spread across the
     // ticks. Running out of rope finishes the tow; the continuum rolls the
@@ -234,11 +235,30 @@ export const advanceSubtick = (game) => {
       y: Math.max(0, Math.min(grid, ship.y + uy * burn.stepLen)),
     };
   });
+  let towBlocked;
+  const pair = maintainedTowPair(game);
+  if (pair) {
+    const moved = ships.find((ship) => ship.id === pair.tug.id);
+    const dx = moved.x - pair.tug.x, dy = moved.y - pair.tug.y;
+    if (dx || dy) {
+      const plan = maintainedTowMove(game, dx, dy);
+      if (plan.error) {
+        towBlocked = plan.error;
+        ships = ships.map((ship) => ship.id === pair.tug.id ? { ...pair.tug, dest: null } : ship.id === pair.target.id ? pair.target : ship);
+        const index = arrived.indexOf(pair.tug.id);
+        if (index >= 0) arrived.splice(index, 1);
+      } else {
+        ships = ships.map((ship) => ship.id === pair.target.id ? { ...ship, ...plan.targetEnd } : ship);
+        if (arrived.includes(pair.tug.id)) arrived.push(pair.target.id);
+      }
+    }
+  }
   noteFieldMovement(game, ships, burns, deflects, manualConn);
   return {
     game: { ...game, simTime, ships },
     arrived,
     towsDone,
+    ...(towBlocked ? { towBlocked } : {}),
     crossed: Math.floor(simTime) > Math.floor(before),
   };
 };

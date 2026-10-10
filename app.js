@@ -1,6 +1,6 @@
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets, REALTIME_COOLDOWN } from './game/actions.js';
 import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, REALTIME, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
-import { alertLevel, appendLog, createGame, defaultLoadout, distance, facingOf, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, nebulaHides, normalizeFleetSpec, sensorRange, systemUnits } from './game/state.js';
+import { alertLevel, appendLog, createGame, defaultLoadout, distance, facingOf, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, maintainedTowPair, nebulaHides, normalizeFleetSpec, sensorRange, systemUnits } from './game/state.js';
 import { abandonEngagement, autoResolveNode, buyDockyard, createCampaign, nodeById, resolveNodeBattle, startNodeBattle, travelTo } from './game/campaign.js';
 import { scenarioFor } from './game/scenarios.js';
 import { positionAt, positionsOf, simTimeOf } from './game/realtime.js';
@@ -30,7 +30,7 @@ import { PRACTICE_EXERCISES, createPracticeGame, updatePractice, restartPractice
 import { practicePanelMarkup, practiceChooserMarkup } from './ui/practice.js';
 import { createOperationGame, finishOperation, validOperationSave } from './game/operations.js';
 import { operationPanelMarkup } from './ui/operations.js';
-import { isRescueTowTarget, rescueTowPreview } from './ui/tow-preview.js';
+import { isRescueTowTarget, maintainedMovePreview, rescueTowPreview } from './ui/tow-preview.js';
 import { ingestBattleServiceRecords } from './game/service-records.js';
 import { createWalkthrough, advanceWalkthrough, walkthroughMarkup } from './ui/walkthrough.js';
 
@@ -985,7 +985,8 @@ const dispatch = async (action) => {
   }
 
   if (action.type === 'move' && action.dx === undefined) {
-    const pending = promptForCoordinates('Engine maneuver', ['Δ X', 'Δ Y']);
+    const pending = promptForCoordinates('Engine maneuver', ['Δ X', 'Δ Y'], maintainedTowPair(game)
+      ? { preview: (dx, dy) => maintainedMovePreview(game, dx, dy) } : {});
     if (!operationSession && !practiceSession) {
       walkthrough = advanceWalkthrough(walkthrough, { type: 'inspect', shipId: game.playerShipId, paused: view.paused }, game);
       renderWalkthrough();
@@ -1020,7 +1021,7 @@ const dispatch = async (action) => {
     return;
   }
 
-  if (action.type === 'autopilot' && !game.realtime) {
+  if (action.type === 'autopilot' && !game.realtime && !maintainedTowPair(game)) {
     const auto = resolveAutopilotTurn(game);
     collectRecords(auto.records);
     game = { ...auto.game, log: appendLog(game.log, auto.messages) };
@@ -1086,6 +1087,15 @@ const zoomBy = (factor) => { if (game?.reimagined) setCamera(zoomAt(view.camera,
 const recenter = () => { if (game?.reimagined) setCamera(centerOn(view.camera, field(), getShip(game, game.playerShipId))); };
 
 const mapEl = document.querySelector('#map');
+mapEl.addEventListener('pointermove', (event) => {
+  if (!maintainedTowPair(game)) return;
+  const preview = document.querySelector('#tow-move-preview');
+  const rect = mapEl.getBoundingClientRect(), win = currentWindow();
+  if (!preview || !rect.width || !rect.height) return;
+  const move = maneuverTo(game, win.minX + ((event.clientX - rect.left) / rect.width) * win.size,
+    win.minY + ((event.clientY - rect.top) / rect.height) * win.size);
+  if (move) preview.textContent = maintainedMovePreview(game, move.dx, move.dy);
+});
 mapEl.addEventListener('wheel', (event) => {
   if (!game?.reimagined) return;
   event.preventDefault();

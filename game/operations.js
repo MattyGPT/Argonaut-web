@@ -1,5 +1,6 @@
 import { FACTIONS } from './constants.js';
-import { arcSplit, createGame, createShip, distance, getShip, inRadioContact, isActive, nebulaHides, sensorRange, systemUnits } from './state.js';
+import { arcSplit, createGame, createShip, distance, getShip, inRadioContact, isActive, maintainedTowPair, nebulaHides, sensorRange, systemUnits } from './state.js';
+import { reconcileMaintainedTow } from './maintained-tow.js';
 import { createRng } from './rng.js';
 import { allocateBattleId, emitBattleRecord, enableBattleRecords, snapshotShip, withBattleRecords } from './battle-records.js';
 
@@ -82,9 +83,10 @@ const fact = (game, kind, target, payload = {}) => {
 
 /** Confirmed displacement is captured at the action seam, before journal truncation. */
 export const recordOperationAssist = (before, after, actorId, action) => {
-  if (!isOperation(after) || action.type !== 'tractor' || action.targetId !== after.operation.targetId) return after;
-  const first = getShip(before, action.targetId);
-  const last = getShip(after, action.targetId);
+  const targetId = action.type === 'move' ? maintainedTowPair(before)?.target.id : action.type === 'tractor' ? action.targetId : null;
+  if (!isOperation(after) || targetId !== after.operation.targetId) return after;
+  const first = getShip(before, targetId);
+  const last = getShip(after, targetId);
   if (!first || !last || distance(first, last) <= 0 || first.faction !== FED) return after;
   const assists = { ...after.operation.assists, [actorId]: (after.operation.assists[actorId] ?? 0) + distance(first, last) };
   return { ...after, operation: { ...after.operation, assists, phase: after.operation.primary === 'pending' ? 'recovery' : after.operation.phase } };
@@ -156,7 +158,7 @@ export const operationOutcome = (game) => {
 
 export const resolveOperationBoundary = (game) => {
   if (!isOperation(game) || game.operation.result || game.operation.lastBoundary >= game.turn) return game;
-  let next = { ...game, operation: { ...game.operation, elapsed: game.operation.elapsed + 1, lastBoundary: game.turn } };
+  let next = reconcileMaintainedTow({ ...game, operation: { ...game.operation, elapsed: game.operation.elapsed + 1, lastBoundary: game.turn } });
   const op = next.operation;
   const { ready: eligible } = operationExtraction(next);
   // Leave the deployment area freely. Automatic extraction arms after the first
@@ -172,6 +174,7 @@ export const resolveOperationBoundary = (game) => {
     }
   }
   const target = getShip(next, op.targetId);
+  next = reconcileMaintainedTow(next);
   if (next.operation.primary === 'pending' && (!target || !isActive(target) || target.faction !== FED)) {
     next = { ...next, operation: { ...next.operation, primary: 'lost', phase: 'withdrawal' } };
     next = fact(next, 'rescue-lost', target);

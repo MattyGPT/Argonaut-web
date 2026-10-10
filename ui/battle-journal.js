@@ -5,7 +5,7 @@ export const JOURNAL_COMMAND_LIMIT = 12;
 const VERSION = 1;
 const groups = ['your-ship', 'battle-developments', 'fleet-traffic'];
 const operationCritical = new Set(['hull-extracted', 'rescue-completed', 'rescue-lost', 'rescue-expired', 'operation-resolved', 'operation-notice']);
-const critical = new Set(['destruction', 'surrender', 'capture', 'vacancy', 'command-loss', 'command-transfer', 'battle-outcome', 'relay-change', 'encounter-arrival', ...operationCritical]);
+const critical = new Set(['destruction', 'surrender', 'capture', 'vacancy', 'command-loss', 'command-transfer', 'battle-outcome', 'relay-change', 'encounter-arrival', 'maintained-tow-ended', 'maintained-tow-blocked', ...operationCritical]);
 const number = (value) => Number.isFinite(value) ? value : undefined;
 const text = (value) => typeof value === 'string' ? value.slice(0, 400) : undefined;
 const pick = (value, keys) => Object.fromEntries(keys.flatMap((key) => {
@@ -263,6 +263,10 @@ export const formatJournalEvent = (event) => {
     case 'vacancy': return `${target} left vacant${suffix}.`;
     case 'capture': return `${actor} captured ${target}${event.toFaction ? ` for ${event.toFaction}` : ''}${suffix}.`;
     case 'command-transfer': return `Command transferred from ${actor} to ${target}${suffix}.`;
+    case 'maintained-tow-started': return `${actor} established a maintained tow on ${target}. Move normally to carry both ships.`;
+    case 'maintained-tow-move': return `${actor} towed ${target}${event.destination ? ` to ${event.destination.x}, ${event.destination.y}` : ''}.`;
+    case 'maintained-tow-ended':
+    case 'maintained-tow-blocked': return event.cause ?? 'Maintained tow interrupted.';
     case 'hull-extracted': return `${target} extracted from the operation — evacuated through the beacon and removed from the map.`;
     case 'rescue-completed': return `${target} recovered. Bring the remaining fleet home.`;
     case 'rescue-lost': return 'Sentinel is lost. Withdraw the surviving fleet.';
@@ -300,6 +304,8 @@ export const journalView = (journal) => {
       const resolution = card.events.findLast((event) => event.kind === 'action-resolution');
       if (resolution) summary = `${action.actor?.name ?? 'Your ship'}: ${label(action.command)} ${label(resolution.result)}${confirmedText(resolution) || requestText(action.request)}${deltaText(resolution.delta)}.`;
     }
+    const towing = card.events.find((event) => ['maintained-tow-started', 'maintained-tow-move', 'maintained-tow-ended', 'maintained-tow-blocked'].includes(event.kind));
+    if (towing && action) summary = formatJournalEvent(towing);
     // Read only confirmed, event-time terminal facts. Damage, low shields and
     // today's live hull state are never evidence that this command defeated it.
     const outcomes = new Map();

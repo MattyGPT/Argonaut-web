@@ -1,0 +1,46 @@
+# Maintained towing implementation and playtest plan
+
+Date: 2026-10-10. Scope: [shared Reimagined specification](../specs/2026-10-10-maintained-towing.md). Classic remains unchanged.
+
+## Delivery order
+
+1. **Shared physical connection — implemented.** Add explicit connection/release commands, one saved pair, formation validation, engine/tractor speed limit, ownership and break rules. Retain ordinary tactical pulls. Refuse off-map and visible-obstacle movement without spending an action or RNG.
+2. **Turn-based movement and operation delivery — implemented.** Translate both hulls through ordinary movement, apply collision and terrain outcomes to both, suppress independent passenger maneuvers, count actual rescue assistance, preserve tug/extraction safeguards, and release after passenger evacuation.
+3. **Ordinary real-time integration — implemented.** Carry the passenger through the movement integrator, share course arrival, apply existing collision rules, charge connection/release cooldowns, explain stopped courses, and preserve deterministic mid-course reload. Ordinary distress passengers remain recoverable while attached; release renews their distress window for docking.
+4. **Controls and journal — implemented.** Friendly ship menu entry, console status/release, reduced movement ring, both-destination previews, refusal messages and durable typed journal facts. Clarify maintained connection versus the old directed pull in the prototype briefing and guide.
+5. **Regression and browser verification — implemented; human acceptance pending.** See evidence below. Commit this as one bounded feature before any larger navigation or AI-order changes.
+6. **Human playtest and tuning — next.** Run the journeys below, record observations, and adjust speed/cost/feedback only with evidence. Keep current mission geometry, weapon ranges and AI budgets fixed during the first comparison.
+7. **Delegated rescue — gated.** After the manual journeys are understandable and worthwhile, implement R6 Rescue/Recover-prize order phases using the same physical primitive. An AI tug needs explicit per-actor ownership and saved order phases; do not bypass the current one-command-pair limit by forging descriptors.
+
+## Verification evidence
+
+- `npm test`: 866 tests pass, including 19 dedicated maintained-tow cases and a console/menu rendering regression. Coverage includes ordinary multi-move attachment/release, invalid targets and navigation, power limits, command transfer/capture/destruction/disruption, hidden-contact non-disclosure, normal asteroid exposure, real-time obstruction/cooldown/reload, ordinary distress deadline and dockyard handoff, journal restoration, and Classic rejection. `node scripts/check-guide-content.mjs` passes with 33 command types.
+- All six authored operation seeds complete a deterministic maintained-tow rescue using one connection, normal moves, save/reload en route and normal computer turns. Sentinel recovers; all four original friendly hulls return by elapsed stardate 16. This does not establish a universal win or an accepted difficulty level.
+- Browser verification used a separate local origin and disposable fixture saves. Actual ordinary controls passed friendly ship selection, connection, both-destination preview, movement, reload and release. Prototype controls passed Sentinel selection, distinct maintained/single-pull actions and movement. The 390×844 movement dialog fit without horizontal overflow (365-pixel content and client widths). The user's main localhost save was not a test fixture.
+- Ordinary baseline comparison uses `node docs/superpowers/experiments/2026-10-06-ordinary-parity.mjs . <output.json>`: 250 Classic, 250 precision Classic, 250 Reimagined and 250 real-time wars. Compare full-state/RNG digests, not just winners; these automated pilots do not use the new maintained command. The baseline therefore protects unchanged gameplay paths, not the balance of new towing strategies.
+- The final 1,000-war output matches the preserved baseline: SHA-256 `05a5501ffd3f2b52d15a2a4cf4d3e8879ebb2e6d4b92d76e8c33a145c0d32ffd`.
+
+## Human journeys, in order
+
+| Journey | Checkpoint | Record |
+| --- | --- | --- |
+| Rescue-1, maintained connection | Approach Sentinel, connect once, maneuver to extraction, bring tug home | Pull repetitions avoided, collisions, rescue/return times, misunderstood coordinates |
+| Rescue-1, previous single-pull method | Same setup and power, old directed pull | Compare effort, danger and meaningful decisions; do not declare the faster route automatically better |
+| A second rescue variation | Change approach and try optional prize/escort choices | Whether moving with the passenger frees attention for combat and tradeoffs |
+| Ordinary turn-based distress | Reach stranded friendly, connect, route to Xanadu, release | Transit length, deadline feedback, passenger engine repair after release |
+| Ordinary real-time | Connect, plot a course, redirect, release; reload mid-course | Formation continuity, cooldown clarity, moving-contact risk and block recovery |
+| Deliberate interruption | Remove tractor power; damage engines; transfer command | Correct notice, no orphan lock, no unexpected abandoned course or free movement |
+
+Record seed, mode, power, hull/crew damage, approach, action count, first hostile contact, losses, extraction/repair boundary, blocked attempts and the player's explanation of what happened. Treat assisted or fixture-based runs separately from unassisted play.
+
+## Acceptance and follow-up gates
+
+- [x] Physical mechanic works in prototype and ordinary Reimagined; Classic paths remain isolated.
+- [x] Tests cover both timing models and actual six-seed operation completion.
+- [ ] Matt can connect and finish a rescue without repeatedly issuing tow commands or mistaking a pull for a connection.
+- [ ] Dockyard release and the difference between tug arrival and passenger delivery are understood without coaching.
+- [ ] Ordinary turn-based and real-time towing are useful and readable under combat pressure.
+- [ ] Accept or retune speed/action cost from the above observations.
+- [ ] Only then extend autonomous rescue orders, terrain presentation and campaign consequence work under the existing operations delivery gates.
+
+This delivery does not close R4 human acceptance, R6 delegation, R7 real-time operations, M3 production terrain art, or M4 campaign rescue rewards. Shared real-time towing is a prerequisite primitive for R7, not completion of the operation lifecycle.
