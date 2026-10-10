@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { applyPlayerAction } from '../game/actions.js';
 import { createOperationGame } from '../game/operations.js';
 import { getShip } from '../game/state.js';
-import { isRescueTowTarget, rescueTowPreview } from '../ui/tow-preview.js';
+import { isRescueTowTarget, maintainedMovePreview, rescueTowPreview } from '../ui/tow-preview.js';
 
 const fresh = () => {
   const game = createOperationGame();
@@ -59,4 +59,16 @@ test('rescue control applies only to the active allied objective in the turn-bas
     { ...game, ships: game.ships.map((ship) => ship.id === 'op-sentinel' ? { ...ship, faction: 'Axis' } : ship) },
   ]) assert.equal(isRescueTowTarget(changed, 'op-sentinel'), false);
   assert.equal(isRescueTowTarget(game, 'op-guard'), false);
+});
+
+test('maintained movement predicts linked evacuation even when the passenger trails outside the ring', () => {
+  let game = fresh();
+  game = { ...game, ships: game.ships.map((ship) => ship.id === game.playerShipId ? { ...ship, x: 58, y: 160 }
+    : ship.id === 'op-sentinel' ? { ...ship, x: 85, y: 160 } : ship) };
+  game = applyPlayerAction(game, { type: 'tow-start', targetId: 'op-sentinel' }).game;
+  game = { ...game, operation: { ...game.operation, elapsed: 17 } };
+  const before = JSON.stringify(game);
+  assert.match(maintainedMovePreview(game, -8, 0), /Sentinel → 77, 160.*Both ships will evacuate together.*late rescue/);
+  assert.doesNotMatch(maintainedMovePreview(game, 0, 0), /will evacuate/);
+  assert.equal(JSON.stringify(game), before);
 });

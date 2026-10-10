@@ -50,7 +50,7 @@ test('maintained towing renders actionable status for ordinary wars and operatio
     const console = read('#console').innerHTML;
     assert.match(console, /Towing.*Release tow/s);
     assert.match(console, /Speed 15 units\/stardate/);
-    assert.match(console, original.operation ? /passenger inside the extraction ring/ : /Release for dockyard repairs/);
+    assert.match(console, original.operation ? /either ship to evacuate together/ : /Release for dockyard repairs/);
     assert.match(console, /Release tow first/);
   }
 });

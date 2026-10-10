@@ -48,7 +48,7 @@ export const maintainedTowMove = (game, dx, dy, { course = false } = {}) => {
 export const endMaintainedTow = (game, message) => {
   if (!game.reimagined || !game.maintainedTow) return game;
   const link = game.maintainedTow;
-  const tug = getShip(game, link.tugId);
+  const tug = getShip(game, link.tugId) ?? game.operation?.extracted?.find((ship) => ship.id === link.tugId);
   const { maintainedTow, ...rest } = game;
   const next = { ...rest, towNotice: message, ships: game.ships.map((ship) => ship.id === link.targetId && ship.tractorBy === link.tugId
     ? { ...ship, tractorBy: null, tow: null, dest: null,
@@ -61,7 +61,9 @@ export const reconcileMaintainedTow = (game) => {
   if (!game.reimagined || !game.maintainedTow || maintainedTowPair(game)) return game;
   const link = game.maintainedTow, tug = getShip(game, link.tugId), target = getShip(game, link.targetId);
   const delivered = game.operation?.extracted?.some((ship) => ship.id === link.targetId);
-  const reason = delivered ? 'Maintained tow complete: the passenger has evacuated.'
+  const tugEvacuated = game.operation?.extracted?.find((ship) => ship.id === link.tugId);
+  const reason = delivered ? tugEvacuated ? 'Maintained tow complete: both ships evacuated together.' : 'Maintained tow complete: the passenger has evacuated.'
+    : tugEvacuated ? `Maintained tow released: ${tugEvacuated.name} evacuated through the beacon.`
     : !isActive(tug) || !isActive(target) ? 'Maintained tow ended: a linked ship is no longer active.'
       : tug.id !== game.playerShipId ? 'Maintained tow released after command transfer.'
         : tug.faction !== target.faction ? 'Maintained tow ended: a linked ship changed allegiance.'

@@ -25,7 +25,8 @@ export const rescueTowPreview = (game, targetId, destination, knownShips) => {
   if (asteroid) lines.push('The landing is inside an asteroid field and risks rock damage.');
   if (afterRange > RANGES.tractor) lines.push(`After this pull the range will be ${afterRange.toFixed(1)}; reposition within ${RANGES.tractor} before pulling again.`);
   else lines.push(`Range after the pull: ${afterRange.toFixed(1)} / ${RANGES.tractor}.`);
-  if (game.operation.primary === 'expired') lines.push('The rescue deadline has passed; towing cannot restore mission success.');
+  if (game.operation.elapsed >= game.operation.deadline && game.operation.primary === 'pending') lines.push(`Late rescue remains possible through elapsed ${game.operation.withdrawalDeadline}.`);
+  if (game.operation.primary === 'expired') lines.push('The final rescue deadline has passed.');
   return { position, text: lines.join(' '), collision: collisions.length > 0 };
 };
 
@@ -34,5 +35,8 @@ export const maintainedMovePreview = (game, dx, dy) => {
   if (!plan) return '';
   if (!plan.tugEnd) return plan.error;
   const point = (p) => `${Number(p.x.toFixed(1))}, ${Number(p.y.toFixed(1))}`;
-  return `${plan.tug.name} → ${point(plan.tugEnd)}; ${plan.target.name} → ${point(plan.targetEnd)}. ${plan.error || `Tow speed ${Number(plan.speed.toFixed(1))} units/stardate.`}${plan.rocks ? ' Asteroid exposure at arrival.' : ''}`;
+  const op = game.operation;
+  const evacuating = op && !plan.error && [plan.tugEnd, plan.targetEnd].some((ship) => distance(ship, op.exit) <= op.exit.radius);
+  const evacuation = evacuating ? ` Both ships will evacuate together after combat if the tow remains intact.${plan.target.id === op.targetId && op.primary === 'pending' && op.elapsed + 1 > op.deadline ? ' This is a late rescue.' : ''}` : '';
+  return `${plan.tug.name} → ${point(plan.tugEnd)}; ${plan.target.name} → ${point(plan.targetEnd)}. ${plan.error || `Tow speed ${Number(plan.speed.toFixed(1))} units/stardate.`}${plan.rocks ? ' Asteroid exposure at arrival.' : ''}${evacuation}`;
 };

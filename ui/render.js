@@ -475,7 +475,7 @@ const shipMenu = (game, actor, ship) => {
       ? ['An unarmed neutral merchant — it will run from warships, and a transporter party can seize it whole.']
       : []),
     ...(ship.encounter?.type === 'distress' && isActive(ship) && systemUnits(ship, 'engines') === 0
-      ? [game.operation ? 'Broadcasting distress: engines gone — tow Sentinel to the extraction beacon at 38, 160 before elapsed stardate 16.' : 'Broadcasting distress: engines gone — tow it home to Xanadu and the dockyard will return it to the fight.']
+      ? [game.operation ? 'Broadcasting distress: engines gone — maintain tow and reach the beacon at 38, 160. Aim for elapsed 16; final evacuation is 22.' : 'Broadcasting distress: engines gone — tow it home to Xanadu and the dockyard will return it to the fight.']
       : []),
     // Directional shields (round 23): the arc breakdown and heading are readable
     // combat intel on any hull — which arc you would hit, and which way its bow
@@ -1094,7 +1094,7 @@ export const renderGame = (game, view = {}) => {
   const gridOf = (list) => `<div class="command-grid">${list.map(button).join('')}</div>`;
   const releaseReady = actionAvailability(game, { type: 'tow-release' }).available && !view.battlePaused;
   const towStatus = towPair ? `<div class="maintained-tow-status" data-console-key="tow-status"><div class="tow-status-heading"><b>Towing ${escapeJournal(towPair.target.name)}</b><button data-command="tow-release"${releaseReady ? '' : ' disabled'}>Release tow</button></div>
-    <p>Speed ${Number(movementCapacity(game, actor).toFixed(1))} units/stardate · separation ${Number(distance(towPair.tug, towPair.target).toFixed(1))}. Move normally to carry both ships. ${isOperation(game) ? 'Bring the passenger inside the extraction ring.' : 'Release for dockyard repairs.'}</p>
+    <p>Speed ${Number(movementCapacity(game, actor).toFixed(1))} units/stardate · separation ${Number(distance(towPair.tug, towPair.target).toFixed(1))}. Move normally to carry both ships. ${isOperation(game) ? 'Enter the beacon with either ship to evacuate together. Keep the tow attached.' : 'Release for dockyard repairs.'}</p>
     <p id="tow-move-preview" class="dialog-note">Hover over the map or use Engines to preview both destinations.</p>
     ${game.towNotice ? `<p>${escapeJournal(game.towNotice)}</p>` : ''}</div>`
     : game.reimagined && game.towNotice ? `<p class="maintained-tow-status" data-console-key="tow-status">${escapeJournal(game.towNotice)}</p>` : '';

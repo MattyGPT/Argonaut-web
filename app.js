@@ -28,7 +28,7 @@ import { enableBattleRecords } from './game/battle-records.js';
 import { createHelpState } from './ui/help-state.js';
 import { PRACTICE_EXERCISES, createPracticeGame, updatePractice, restartPractice, dismissPracticeHints, practiceProgress } from './game/practice.js';
 import { practicePanelMarkup, practiceChooserMarkup } from './ui/practice.js';
-import { createOperationGame, finishOperation, validOperationSave } from './game/operations.js';
+import { createOperationGame, finishOperation, upgradeOperationGame, validOperationSave } from './game/operations.js';
 import { operationPanelMarkup } from './ui/operations.js';
 import { isRescueTowTarget, maintainedMovePreview, rescueTowPreview } from './ui/tow-preview.js';
 import { ingestBattleServiceRecords } from './game/service-records.js';
@@ -48,7 +48,7 @@ try {
   const raw = localStorage.getItem(OPERATION_SAVE_KEY);
   if (raw) {
     const saved = JSON.parse(raw);
-    if (validOperationSave(saved)) operationSession = saved;
+    if (validOperationSave(saved)) operationSession = { ...saved, game: upgradeOperationGame(saved.game) };
     else operationLoadNotice = 'The rescue prototype save is incompatible. Your previous game has been loaded; start a new prototype when ready.';
   }
 } catch { operationLoadNotice = 'The rescue prototype save could not be read. Your previous game has been loaded.'; }

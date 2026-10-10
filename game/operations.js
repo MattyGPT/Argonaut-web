@@ -6,8 +6,8 @@ import { allocateBattleId, emitBattleRecord, enableBattleRecords, snapshotShip, 
 
 const FED = FACTIONS.FEDERATION;
 export const OPERATION_SEEDS = Object.freeze(Array.from({ length: 6 }, (_, i) => `rescue-${i + 1}`));
-export const RESCUE_BRIEFING = 'Recover Sentinel from beyond the belt, then withdraw through the beacon at 38, 160. The central gap is direct; the northern nebula offers a longer approach. The artillery derelict to the north is optional. Directed tractor pulls use normal hardware; reposition between pulls. A friendly tow is allowed at extraction.';
-export const RESCUE_RULES = 'Turn-based prototype. Engines travel independently of field size (Argonaut: 50 units at normal power). Rescue by elapsed stardate 16; withdraw by 22. Ships inside the 16-unit beacon ring automatically evacuate after damage at a boundary and leave the map. A ship actively towing Sentinel stays until Sentinel can extract or the rescue window closes. If the last command ship evacuates without Sentinel, the rescue fails. The beacon supplies no repairs or protection. Reinforcements arrive at elapsed 6 from 290, 160. Your other captains hold and defend until ordered; Withdraw sends them to the exit. End operation lists ships left behind.';
+export const RESCUE_BRIEFING = 'Recover Sentinel from beyond the belt, then withdraw through the beacon at 38, 160. The central gap is direct; the northern nebula offers a longer approach. The artillery derelict to the north is optional. Select Sentinel, Maintain tow, then move toward the beacon. A valid maintained pair evacuates together when either linked ship enters the ring.';
+export const RESCUE_RULES = 'Turn-based prototype. Engines travel independently of field size (Argonaut: 50 units at normal power). Aim to rescue by elapsed stardate 16; late rescue is still possible through the final evacuation at 22. Ships inside the 16-unit beacon ring automatically evacuate after damage at a boundary and leave the map. A valid maintained tow evacuates both linked ships together, even if one is outside the ring. Single pulls still require Sentinel itself inside; its tug stays until delivery or the final deadline. If the last command ship evacuates without Sentinel, the rescue fails. The beacon supplies no repairs or protection. Reinforcements arrive at elapsed 6 from 290, 160. Your other captains hold and defend until ordered; Withdraw sends them to the exit. End operation lists ships left behind.';
 export const isOperation = (game) => Boolean(game?.reimagined && game.operation?.version === 1 && game.operation.id === 'rescue-at-the-belt');
 
 export const createOperationGame = ({ seed = OPERATION_SEEDS[0], movementScale = 1, gridSize = 320, realtime = false, reimagined = true, battleId } = {}) => {
@@ -41,7 +41,7 @@ export const createOperationGame = ({ seed = OPERATION_SEEDS[0], movementScale =
     ],
     log: [RESCUE_BRIEFING, RESCUE_RULES],
     operation: {
-      version: 1, id: 'rescue-at-the-belt', revision: 1, seed, movementScale,
+      version: 1, id: 'rescue-at-the-belt', revision: 2, seed, movementScale,
       phase: 'approach', elapsed: 0, lastBoundary: 0, deadline: 16, withdrawalDeadline: 22,
       targetId: sentinel.id, prizeId: prize.id, exit: { x: 38, y: 160, radius: 16 },
       briefingPoints: [{ label: 'Distress signal', x: sentinel.x, y: sentinel.y }, { label: 'Salvage report', x: prize.x, y: prize.y }],
@@ -96,22 +96,27 @@ export const operationFieldFleet = (game) => game.ships.filter((ship) => isActiv
 
 /** Public extraction geometry, shared by the boundary and its explanation. */
 export const operationExtraction = (game) => {
-  if (!isOperation(game)) return { ready: [], heldTugs: [] };
+  if (!isOperation(game)) return { ready: [], heldTugs: [], linked: [] };
   const op = game.operation;
-  const candidates = operationFieldFleet(game).filter((ship) => distance(ship, op.exit) <= op.exit.radius
-    && (ship.id !== op.targetId || (op.primary === 'pending' && op.elapsed <= op.deadline))
+  const pair = maintainedTowPair(game);
+  const linked = pair && op.elapsed <= op.withdrawalDeadline && [pair.tug, pair.target].some((ship) => distance(ship, op.exit) <= op.exit.radius)
+    ? [pair.tug, pair.target] : [];
+  const candidates = operationFieldFleet(game).filter((ship) => (distance(ship, op.exit) <= op.exit.radius || linked.includes(ship))
+    && (ship.id !== op.targetId || (op.primary === 'pending' && op.elapsed <= op.withdrawalDeadline))
     && ship.crew > 0 && (!ship.tractorBy || getShip(game, ship.tractorBy)?.faction === FED));
   const target = getShip(game, op.targetId);
-  const stillRescuing = op.primary === 'pending' && op.elapsed <= op.deadline && isActive(target) && target.faction === FED && target.crew > 0;
+  const stillRescuing = op.primary === 'pending' && op.elapsed <= op.withdrawalDeadline && isActive(target) && target.faction === FED && target.crew > 0;
   const heldTugs = stillRescuing && !candidates.some((ship) => ship.id === target.id)
     ? candidates.filter((ship) => ship.id === target.tractorBy) : [];
-  return { ready: candidates.filter((ship) => !heldTugs.includes(ship)), heldTugs };
+  return { ready: candidates.filter((ship) => !heldTugs.includes(ship)), heldTugs, linked };
 };
 
 export const operationResultExplanation = (game) => {
   const { primary, result } = game.operation;
   if (!result) return '';
-  if (result.primary === 'success') return 'Sentinel reached the extraction ring and was recovered.';
+  if (result.primary === 'success') return result.rescueTiming === 'late'
+    ? `Sentinel was recovered late at elapsed stardate ${game.operation.rescuedAt}, before final evacuation closed at ${game.operation.withdrawalDeadline}.`
+    : 'Sentinel evacuated through the beacon and was recovered.';
   if (primary === 'lost') {
     const target = result.lost.find((ship) => ship.id === game.operation.targetId);
     if (target?.status === 'destroyed') return 'Sentinel was destroyed before extraction.';
@@ -119,7 +124,9 @@ export const operationResultExplanation = (game) => {
     if (target?.crew === 0 || target?.status === 'vacant') return 'Sentinel lost its crew before extraction.';
     return 'Sentinel was lost before extraction.';
   }
-  if (primary === 'expired') return `Sentinel did not extract by elapsed stardate ${game.operation.deadline}.`;
+  if (primary === 'expired') return game.operation.revision === 1
+    ? `Under the previous prototype rules, Sentinel missed the hard rescue deadline at ${game.operation.deadline}. Retry uses updated rules: maintained pairs evacuate together and rescue remains possible through ${game.operation.withdrawalDeadline}.`
+    : `Sentinel did not evacuate before the final deadline at elapsed stardate ${game.operation.withdrawalDeadline}.`;
   if (result.reason === 'fleet-withdrawn-or-lost') return 'No command-capable ship remained in the field to recover Sentinel. Ships listed as returned evacuated through the beacon; Sentinel was left behind.';
   if (result.reason === 'deadline') return 'The operation window closed before Sentinel was recovered.';
   return 'The operation was ended before Sentinel was recovered; ships still in the field were left behind.';
@@ -139,6 +146,7 @@ const finishOperationRules = (game, reason) => {
   const initialFleet = ['op-command', 'op-scout', 'op-escort', op.targetId];
   const lost = game.ships.filter((ship) => (ship.faction === FED && !isActive(ship)) || (initialFleet.includes(ship.id) && ship.faction !== FED)).map(snapshotShip);
   const result = { reason, primary: op.primary === 'secured' ? 'success' : 'failure', elapsed: op.elapsed,
+    rescueTiming: op.primary === 'secured' ? (op.rescuedAt > op.deadline ? 'late' : 'on-time') : null,
     returned: op.extracted.map(snapshotShip), abandoned, lost,
     prizeRecovered: op.extracted.some((ship) => ship.id === op.prizeId),
     fleetSurvived: op.extracted.some((ship) => ship.id !== op.targetId && systemUnits(ship, 'engines') > 0),
@@ -158,6 +166,7 @@ export const operationOutcome = (game) => {
 
 export const resolveOperationBoundary = (game) => {
   if (!isOperation(game) || game.operation.result || game.operation.lastBoundary >= game.turn) return game;
+  game = upgradeOperationGame(game);
   let next = reconcileMaintainedTow({ ...game, operation: { ...game.operation, elapsed: game.operation.elapsed + 1, lastBoundary: game.turn } });
   const op = next.operation;
   const { ready: eligible } = operationExtraction(next);
@@ -169,8 +178,8 @@ export const resolveOperationBoundary = (game) => {
     next = { ...next, ships: next.ships.filter((entry) => entry.id !== ship.id).map((entry) => entry.tractorBy === ship.id ? { ...entry, tractorBy: null, tow: null } : entry),
       operation: { ...next.operation, extracted: [...next.operation.extracted, saved] } };
     if (ship.id === op.targetId) {
-      next = { ...next, operation: { ...next.operation, primary: 'secured', phase: 'withdrawal' } };
-      next = fact(next, 'rescue-completed', ship, { contributors: Object.keys(op.assists).map((id) => ({ id, distance: op.assists[id] })) });
+      next = { ...next, operation: { ...next.operation, primary: 'secured', phase: 'withdrawal', rescuedAt: op.elapsed } };
+      next = fact(next, 'rescue-completed', ship, { timing: op.elapsed > op.deadline ? 'late' : 'on-time', contributors: Object.keys(op.assists).map((id) => ({ id, distance: op.assists[id] })) });
     }
   }
   const target = getShip(next, op.targetId);
@@ -179,7 +188,11 @@ export const resolveOperationBoundary = (game) => {
     next = { ...next, operation: { ...next.operation, primary: 'lost', phase: 'withdrawal' } };
     next = fact(next, 'rescue-lost', target);
   }
-  if (next.operation.primary === 'pending' && op.elapsed >= op.deadline) {
+  if (next.operation.primary === 'pending' && op.elapsed >= op.deadline && op.elapsed < op.withdrawalDeadline && !op.rescueDelayed) {
+    next = { ...next, operation: { ...next.operation, rescueDelayed: true } };
+    next = fact(next, 'rescue-delayed', target);
+  }
+  if (next.operation.primary === 'pending' && op.elapsed >= op.withdrawalDeadline) {
     next = { ...next, operation: { ...next.operation, primary: 'expired', phase: 'withdrawal' } };
     next = fact(next, 'rescue-expired', target);
   }
@@ -211,8 +224,16 @@ export const resolveOperationBoundary = (game) => {
   return next;
 };
 
+/** Upgrade unfinished prototype sessions; never rewrite a completed result. */
+export const upgradeOperationGame = (game) => {
+  if (!isOperation(game) || game.operation.revision !== 1 || game.operation.result) return game;
+  const reopen = game.operation.primary === 'expired' && game.operation.elapsed < game.operation.withdrawalDeadline;
+  return { ...game, operation: { ...game.operation, revision: 2, rulesUpdated: true,
+    ...(reopen ? { primary: 'pending', phase: 'recovery', rescueDelayed: true } : {}) } };
+};
+
 export const validOperationSave = (saved) => Boolean(saved?.version === 1 && saved.resume && isOperation(saved.game)
-  && saved.game.operation.revision === 1 && !saved.game.realtime && [0.75, 1, 1.5].includes(saved.game.operation.movementScale)
+  && [1, 2].includes(saved.game.operation.revision) && !saved.game.realtime && [0.75, 1, 1.5].includes(saved.game.operation.movementScale)
   && Array.isArray(saved.game.ships) && Array.isArray(saved.game.operation.extracted) && Array.isArray(saved.game.operation.facts)
   && saved.game.operation.contacts && saved.game.operation.assignments
   && saved.game.operation.arrivals && saved.game.battleRecordState?.battleId

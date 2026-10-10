@@ -13,7 +13,7 @@ This is a shared **Reimagined** mechanic: the turn-based rescue prototype, ordin
 1. Approach an active, crewed friendly ship, between 5 and 35 units away. Select it and choose **Maintain tow**. Connection spends one normal action and moves neither hull. A distressed ship may have no working engines; the tug needs working, powered engines and tractor hardware.
 2. Use Engines or map movement. Both hulls translate by the same displacement, preserving their initial separation and relative position. The passenger does not snap onto the tug, rotate around it, or pathfind behind it. This simple formation makes the outcome predictable when changing direction.
 3. The console names the passenger, gives tow speed and separation, and provides **Release tow**. The movement ring reflects the reduced speed. Engine-coordinate and map-hover previews name both destinations, refusals, and asteroid landing risk. The beam and held marker remain visible under the existing contact rules.
-4. Release at a friendly dockyard for passenger repairs. In the operation, bring **Sentinel itself** inside the extraction radius; entering only with the tug is insufficient. Existing extraction safeguards keep its tug present until Sentinel can evacuate while the rescue remains viable.
+4. Release at a friendly dockyard for passenger repairs. In the operation, **keep the maintained tow attached**: either linked ship entering the extraction ring evacuates both together after combat. The passenger does not need separate coordinate alignment. Single pulls still require Sentinel itself inside the ring.
 
 The old pull remains available for repositioning and hostile tactical use. Sentinel's menu labels it **Single pull toward extraction…**. The tractor keyboard shortcut still opens that directed-pull dialog for Sentinel; it does not silently change into a maintained connection. Starting a maintained tow can replace the command ship's own existing pull on that target, but cannot steal another ship's active lock.
 
@@ -39,7 +39,11 @@ Reject a commanded move if either endpoint leaves the field or either hull's str
 
 This is a course safety check, not fleet-wide pathfinding or immunity. Hidden contacts do not refuse a course or leak names/coordinates. Turn-based hidden collisions use the game's existing endpoint resolution. Real-time movement still uses its ordinary swept collision resolution. A visible obstruction appearing during a real-time course stops the pair once, retains the tow, and reports the block. Other moving hulls, enemy fire, and external tractor attacks remain dangerous. Both ships receive normal asteroid checks when their movement ends in an asteroid field.
 
-Formation can place the passenger ahead or alongside the tug. The preview therefore reports the passenger's destination explicitly. In Rescue at the Belt, aim so Sentinel reaches the beacon, then move the remaining command hull home if it has not also entered. No automatic docking, route selection, extraction outside the boundary, or safe passage is implied.
+Formation can place the passenger ahead or alongside the tug. The preview therefore reports both destinations and whether the next move brings the maintained pair home. In Rescue at the Belt, either linked hull entering the ring qualifies both for evacuation; the connection must still be valid after combat. This linked exit is an explicit beacon rule, not automatic docking, pathfinding or immunity.
+
+Prototype revision 2 makes elapsed 16 the on-time rescue target and 22 the hard final evacuation. Recovery at 17–22 succeeds with a late-recovery fact and debrief; unresolved rescue at the final boundary fails. This fixes the observed sequence where Sentinel remained alive at the beacon but became ineligible after 16 while the tug automatically departed. A connected pair is evaluated together from the post-combat state. Broken, hostile, unmanned or destroyed connections do not receive linked extraction.
+
+Unfinished revision-1 saves upgrade with a visible rules notice. An expired-but-unfinished objective before 22 becomes recoverable again; ships, RNG, historical facts and prior departures are preserved. Completed results remain unchanged and explain that retry uses the new rules. No lost or departed ship is resurrected.
 
 ## State, records and compatibility
 
@@ -52,7 +56,7 @@ Operation assistance accrues from actual passenger displacement during maintaine
 ## Playtest decisions still open
 
 - Does 15 units/stardate at normal tractor power create useful exposure without making rescues tedious on the ordinary 320-unit field?
-- Do both-destination previews teach formation movement, especially when Sentinel trails outside the beacon?
+- Do both-destination previews and linked-evacuation messages make arrival clear when Sentinel trails outside the beacon?
 - Is connection-plus-release action cost worthwhile under fire? Do players understand a stop versus a broken link?
 - Can ordinary distressed hulls reach a dockyard without excessive transit, and is the renewed distress window clear?
 - Do real-time obstructions and cooldowns remain legible while under attack?

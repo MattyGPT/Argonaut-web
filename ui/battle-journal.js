@@ -4,7 +4,7 @@ export const JOURNAL_EVENT_LIMIT = 500;
 export const JOURNAL_COMMAND_LIMIT = 12;
 const VERSION = 1;
 const groups = ['your-ship', 'battle-developments', 'fleet-traffic'];
-const operationCritical = new Set(['hull-extracted', 'rescue-completed', 'rescue-lost', 'rescue-expired', 'operation-resolved', 'operation-notice']);
+const operationCritical = new Set(['hull-extracted', 'rescue-completed', 'rescue-lost', 'rescue-delayed', 'rescue-expired', 'operation-resolved', 'operation-notice']);
 const critical = new Set(['destruction', 'surrender', 'capture', 'vacancy', 'command-loss', 'command-transfer', 'battle-outcome', 'relay-change', 'encounter-arrival', 'maintained-tow-ended', 'maintained-tow-blocked', ...operationCritical]);
 const number = (value) => Number.isFinite(value) ? value : undefined;
 const text = (value) => typeof value === 'string' ? value.slice(0, 400) : undefined;
@@ -102,6 +102,7 @@ export const projectJournalRecord = (raw, pending = null) => {
     if (own || received) event.cause = text(payload.cause);
     if (raw.kind === 'battle-outcome') event.outcome = pick(payload.outcome, ['winner', 'reason', 'type', 'kind', 'message', 'faction']);
     if (raw.kind === 'operation-notice') event.cause = text(payload.message);
+    if (raw.kind === 'rescue-completed') event.rescueTiming = text(payload.timing);
     if (raw.kind === 'operation-resolved') event.result = text(payload.result?.primary) ?? 'resolved';
   } else if (raw.kind === 'action-resolution') {
     event.command = text(payload.command);
@@ -113,6 +114,9 @@ export const projectJournalRecord = (raw, pending = null) => {
       ...(payload.after?.pendingOrder ? { pendingOrder: pick(payload.after.pendingOrder, ['type']) } : {}),
     };
   } else event.result = abbreviated ? 'reported' : outcomeKnown || own || !raw.target ? 'resolved' : 'unknown';
+  // An extracted command hull is absent from live geometry, but its own tow
+  // completion notice remains known. Do not require a current map sighting.
+  if (own && ['maintained-tow-ended', 'maintained-tow-blocked'].includes(raw.kind)) event.cause = text(payload.cause);
   // Global broadcasts authorize only the terminal fact, never related damage.
   const detailsAllowed = !abbreviated && !terminal && outcomeKnown;
   if (detailsAllowed) {
@@ -180,7 +184,7 @@ export const appendRecords = (journal, rawRecords = []) => {
 const restoreEvent = (event, battleId) => {
   if (!eventNumber(event, battleId) || !groups.includes(event.group) || !Number.isSafeInteger(event.sequence) || event.sequence < 1) return null;
   const clean = {
-    ...pick(event, ['battleId', 'eventId', 'simTime', 'observedAt', 'kind', 'group', 'own', 'actionId', 'ordnanceId', 'source', 'issuingShipId', 'detail', 'command', 'result', 'weapon', 'sequence', 'earlierDetailDiscarded', 'damage', 'shieldDamage', 'crewDamage', 'arc', 'placed', 'gained', 'cause', 'fromFaction', 'toFaction', 'distressTow']),
+    ...pick(event, ['battleId', 'eventId', 'simTime', 'observedAt', 'kind', 'group', 'own', 'actionId', 'ordnanceId', 'source', 'issuingShipId', 'detail', 'command', 'result', 'weapon', 'sequence', 'earlierDetailDiscarded', 'damage', 'shieldDamage', 'crewDamage', 'arc', 'placed', 'gained', 'cause', 'fromFaction', 'toFaction', 'distressTow', 'rescueTiming']),
     actor: identity(event.actor, true), target: identity(event.target, true),
     ...(event.group === 'fleet-traffic' && operationCritical.has(event.kind) ? { group: 'battle-developments' } : {}),
   };
@@ -268,7 +272,8 @@ export const formatJournalEvent = (event) => {
     case 'maintained-tow-ended':
     case 'maintained-tow-blocked': return event.cause ?? 'Maintained tow interrupted.';
     case 'hull-extracted': return `${target} extracted from the operation — evacuated through the beacon and removed from the map.`;
-    case 'rescue-completed': return `${target} recovered. Bring the remaining fleet home.`;
+    case 'rescue-completed': return `${target} recovered${event.rescueTiming === 'late' ? ' late, before final evacuation closed' : ''}. Bring the remaining fleet home.`;
+    case 'rescue-delayed': return 'The on-time rescue target was missed. Rescue is still possible through final evacuation at elapsed 22.';
     case 'rescue-lost': return 'Sentinel is lost. Withdraw the surviving fleet.';
     case 'rescue-expired': return 'The Sentinel rescue window has closed. Withdraw the surviving fleet.';
     case 'operation-notice': return event.cause ?? 'Operation notice received.';
