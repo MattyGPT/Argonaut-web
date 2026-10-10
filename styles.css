@@ -1354,6 +1354,9 @@ body.classic #command-log li { color: inherit; }
 #battle-journal .journal-card { border-bottom: 1px solid var(--line); font-size: .77rem; line-height: 1.45; }
 #battle-journal .journal-card > details > summary { padding: .45rem .65rem; }
 #battle-journal .journal-card .command-stamp { display: inline-block; }
+#battle-journal .journal-defeat { display: block; margin: .35rem 0; padding: .3rem .4rem; border-left: 3px solid #ffad96; background: #562c294d; color: #ffd1c2; font-weight: 700; overflow-wrap: anywhere; }
+#battle-journal .journal-defeat.friendly-loss { border-color: #ffcf70; color: #ffdf9e; background: #5c481e59; }
+body.classic #battle-journal .journal-defeat { color: inherit; border-color: currentColor; background: transparent; }
 .journal-summary { display: block; }
 #battle-journal .journal-card p { padding: .1rem .75rem .4rem; margin: 0; }
 .journal-state { display: block; color: #b8d5e7; font-size: .7rem; }
@@ -1563,6 +1566,10 @@ dialog input[type=range] {
   grid-template-columns: 1fr 1fr;
   gap: .6rem;
 }
+
+#tow-risk { display: flex; align-items: flex-start; gap: .6rem; color: #ffd1c2; }
+#tow-risk input { width: auto; flex: 0 0 auto; margin: .15rem 0 0; }
+body.classic #tow-risk { color: inherit; }
 
 .dialog-note {
   color: #93b4c8;
@@ -2365,6 +2372,8 @@ body.learning #game-root { height: auto; min-height: 38rem; }
 .operation-heading { justify-content: space-between; }
 .operation-heading h2 { margin: 0; }
 .operation-objective { font-weight: 600; }
+.operation-warning, .operation-result-reason { border-left: 3px solid #ffcf70; padding: .4rem .65rem; background: #5c481e59; }
+body.classic .operation-warning, body.classic .operation-result-reason { border-color: currentColor; background: transparent; }
 .operation-controls { margin-top: .8rem; }
 .operation-controls label { display: inline-flex; align-items: center; gap: .4rem; }
 .operation-debrief { border-top: 1px solid currentColor; margin-top: .8rem; }

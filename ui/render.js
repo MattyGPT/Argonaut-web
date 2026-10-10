@@ -37,6 +37,7 @@ import {
 } from '../game/state.js';
 
 import { commandHistoryHtml } from './command-history.js';
+import { isRescueTowTarget } from './tow-preview.js';
 import { journalView } from './battle-journal.js';
 import { updateConsole, updateScrolledContent } from './console-state.js';
 import { simTimeOf } from '../game/realtime.js';
@@ -54,7 +55,8 @@ const journalReaderIds = ['command-log', 'your-ship-effects', 'battle-developmen
 export const journalCardsHtml = (cards = [], region = 'history') => cards.map((card) => {
   const id = `${region}-${encodeURIComponent(card.id)}`;
   const automatic = card.source === 'automatic' || card.source === 'auto-conn';
-  const summary = (card.source === 'legacy' ? card.lines?.[0] : card.summary) ?? card.summary ?? '';
+  const summary = (card.source === 'legacy' ? card.lines?.[0] : card.actionSummary ?? card.summary) ?? card.summary ?? '';
+  const defeats = (card.defeats ?? []).map((outcome) => `<span class="journal-defeat${outcome.friendlyLoss ? ' friendly-loss' : ''}" data-defeat-kind="${escapeJournal(outcome.kind)}">${escapeJournal(outcome.text)}</span>`).join('');
   // Some causal summaries already carry their current state. Avoid repeating
   // that label; state still comes exclusively from the projected card contract.
   const status = card.status === 'pending' && !summary.toLowerCase().includes('awaiting impact') ? 'Launched; awaiting impact'
@@ -68,7 +70,7 @@ export const journalCardsHtml = (cards = [], region = 'history') => cards.map((c
   const identityLine = [...identities.values()].map((snapshot) => `<span>${escapeJournal(snapshot.name)} · ${factionBadgeHtml(snapshot.faction)}</span>`).join(' · ');
   const stampIdentity = [...identities.values()][0];
   return `<li id="${escapeJournal(id)}" class="journal-card" data-journal-id="${escapeJournal(card.id)}" data-journal-sequence="${card.sequence}">
-    <details><summary><span class="command-stamp">Stardate ${escapeJournal(card.source === 'legacy' ? card.simTime : Math.round((card.simTime + 1) * 10) / 10)}${automatic ? ' · Automatic conn' : card.source === 'legacy' ? ` · ${escapeJournal(card.actor?.name)} · Legacy text record` : ''}${stampIdentity ? ` · ${factionBadgeHtml(stampIdentity.faction)}` : ''}</span><span class="journal-summary">${escapeJournal(summary)}</span>${status ? `<span class="journal-state">${status}</span>` : ''}</summary>
+    <details><summary><span class="command-stamp">Stardate ${escapeJournal(card.source === 'legacy' ? card.simTime : Math.round((card.simTime + 1) * 10) / 10)}${automatic ? ' · Automatic conn' : card.source === 'legacy' ? ` · ${escapeJournal(card.actor?.name)} · Legacy text record` : ''}${stampIdentity ? ` · ${factionBadgeHtml(stampIdentity.faction)}` : ''}</span>${defeats}<span class="journal-summary">${escapeJournal(summary)}</span>${status ? `<span class="journal-state">${status}</span>` : ''}</summary>
     ${identityLine ? `<p class="journal-identities">At event time: ${identityLine}</p>` : ''}
     ${(card.lines ?? []).map((line) => `<p>${escapeJournal(line)}</p>`).join('')}
     ${card.earlierDetailDiscarded ? '<p class="journal-note">Earlier detail discarded; this is a partial record.</p>' : ''}</details></li>`;
@@ -382,6 +384,7 @@ const menuCommands = (game, actor, ship) => {
   if (game.reimagined && systemUnits(actor, 'ion') > 0) commands.splice(2, 0, ['ion', 'Fire ion']);
   if (!isDrone(ship)) commands.push(['transport', ship.status === 'vacant' ? 'Board ship' : isNeutral(ship) ? 'Seize merchant' : 'Transport crew']);
   if (game.reimagined && isActive(ship) && (ship.faction !== actor?.faction || ship.encounter?.type === 'distress')) commands.push(['tractor-direct', 'Direct tow…']);
+  if (isRescueTowTarget(game, ship.id) && isActive(ship)) return [['tractor-direct', 'Tow toward extraction…'], ...commands.filter(([type]) => !['tractor', 'tractor-direct'].includes(type))];
   return commands;
 };
 

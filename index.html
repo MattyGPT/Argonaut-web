@@ -209,9 +209,9 @@
     <dialog id="tow-dialog">
       <form method="dialog" id="tow-form">
         <h2 id="tow-title">Direct the tow</h2>
-        <p class="dialog-note">Aim the beam: pick a hull to slam the target into, or enter a destination. The tow spends your normal tractor pull — you choose the direction, not the distance.</p>
+        <p id="tow-note" class="dialog-note">Aim the beam: pick a hull to slam the target into, or enter a destination. The tow spends your normal tractor pull — you choose the direction, not the distance.</p>
         <label>
-          Ram a hull
+          <span id="tow-hull-label">Ram a hull</span>
           <select id="tow-hull">
             <option value="">— use coordinates —</option>
           </select>
@@ -226,6 +226,8 @@
             <input id="tow-y" type="number">
           </label>
         </div>
+        <p id="tow-preview" class="dialog-note" role="status" hidden></p>
+        <label id="tow-risk" hidden><input id="tow-risk-ack" type="checkbox">Proceed despite the predicted collision</label>
         <div class="dialog-actions">
           <button value="cancel" class="secondary" formnovalidate>Cancel</button>
           <button value="confirm">Tow</button>
@@ -545,6 +547,7 @@
             <p><button type="button" class="secondary tiny" data-practice-start="hold-relay">Practice holding a relay</button></p>
             <h4>Tow, board, and reinforce</h4>
             <p>Choose <b>Direct tow…</b> from an eligible enemy or friendly distress hull's menu to aim your tractor pull at coordinates or another hull. You choose direction, not extra pulling distance. It costs the normal tractor action or real-time cycle. Immovable hulls, broken tractor hardware, and range can prevent the order. A friendly distress hull can also be towed home.</p>
+            <p>In <b>Rescue at the Belt</b>, select Sentinel → <b>Tow toward extraction…</b>. The beacon coordinates are filled in and the dialog previews this pull's landing. Keep your ship alongside within tractor range and reposition between pulls. An ordinary tractor pull reels the target toward your ship and can collide with it. A predicted collision with a visible hull requires an explicit acknowledgment; the preview does not predict later enemy moves.</p>
             <p>Use <b>Transport</b> (<kbd>8</kbd>), <b>Board ship</b> on a vacant hull, or <b>Transport crew</b> on a friendly one. The transporter must work and reach the target; send a positive whole crew amount while leaving crew on your source ship. A live enemy cannot be boarded directly, except a neutral merchant that can be seized. Wrecks and drones cannot be occupied.</p>
             <p>For autonomous boarding, give a friendly hull <b>Board…</b> with a valid vacant target. It approaches and sends its own party when eligible. In Reimagined a captured prize receives a captain and Withdraw order; the fleet report and gold pip identify it. A skeleton crew weakens engines and weapons until you reinforce or dock it. If its crew is lost, the frame can become vacant and be captured again. Enemy captains also race for prizes.</p>
             <p><button type="button" class="secondary tiny" data-practice-start="tow-position">Practice towing</button> <button type="button" class="secondary tiny" data-practice-start="disable-capture">Practice taking a prize</button></p>

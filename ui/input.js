@@ -354,20 +354,47 @@ export const promptForCoordinates = (title, labels) => new Promise((resolve) => 
  * coordinate. Resolves null on any dismissal or an empty destination, so a tow is
  * never aimed somewhere by accident.
  */
-export const promptForTowDestination = (ships, victimName) => new Promise((resolve) => {
+export const promptForTowDestination = (ships, victimName, options = {}) => new Promise((resolve) => {
   const dialog = document.querySelector('#tow-dialog');
   const form = document.querySelector('#tow-form');
   const hull = document.querySelector('#tow-hull');
   const xInput = document.querySelector('#tow-x');
   const yInput = document.querySelector('#tow-y');
-  document.querySelector('#tow-title').textContent = `Direct the tow — ${victimName}`;
+  const preview = document.querySelector('#tow-preview');
+  const acknowledge = document.querySelector('#tow-risk-ack');
+  const warning = document.querySelector('#tow-risk');
+  const confirm = form.querySelector('button[value="confirm"]');
+  document.querySelector('#tow-title').textContent = options.destination ? `Tow toward extraction — ${victimName}` : `Direct the tow — ${victimName}`;
+  document.querySelector('#tow-note').textContent = options.destination
+    ? 'The extraction destination is filled in below. This command makes one directed pull, not a continuing tow. Keep your ship alongside, within tractor range, and reposition between pulls. An ordinary tractor pull aims toward your own ship and can cause a collision.'
+    : 'Aim the beam: pick a hull to slam the target into, or enter a destination. The tow spends your normal tractor pull — you choose the direction, not the distance.';
+  document.querySelector('#tow-hull-label').textContent = options.destination ? "Aim at a ship’s position (optional)" : 'Ram a hull';
   hull.innerHTML = '<option value="">— use coordinates —</option>'
     + ships.map((ship) => `<option value="${ship.id}">${ship.name} (${ship.x}, ${ship.y})</option>`).join('');
-  xInput.value = '';
-  yInput.value = '';
+  xInput.value = options.destination?.x ?? '';
+  yInput.value = options.destination?.y ?? '';
+  const destination = () => hull.value ? ships.find((ship) => ship.id === hull.value)
+    : xInput.value !== '' && yInput.value !== '' ? { x: Number(xInput.value), y: Number(yInput.value) } : null;
+  let collision = false;
+  const refresh = () => {
+    xInput.disabled = yInput.disabled = Boolean(hull.value);
+    const result = options.preview?.(destination());
+    preview.hidden = !result;
+    preview.textContent = result?.text ?? '';
+    collision = Boolean(result?.collision);
+    warning.hidden = !collision;
+    acknowledge.checked = false;
+    confirm.disabled = collision;
+  };
+  hull.onchange = refresh;
+  xInput.oninput = refresh;
+  yInput.oninput = refresh;
+  acknowledge.onchange = () => { confirm.disabled = collision && !acknowledge.checked; };
+  refresh();
 
   let resolved = false;
   form.onsubmit = (event) => {
+    if (submittedConfirm(event) && collision && !acknowledge.checked) { event.preventDefault(); return; }
     resolved = true;
     if (!submittedConfirm(event)) return resolve(null);
     if (hull.value) {

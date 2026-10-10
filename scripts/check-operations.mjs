@@ -38,8 +38,9 @@ try {
   const tow = async () => {
     await page.locator('#map .ship[data-ship-id="op-sentinel"]').click();
     await page.locator('[data-ship-command="tractor-direct"][data-ship-target="op-sentinel"]').click();
-    await page.fill('#tow-x', '38');
-    await page.fill('#tow-y', '160');
+    assert.equal(await page.inputValue('#tow-x'), '38');
+    assert.equal(await page.inputValue('#tow-y'), '160');
+    assert.match(await page.locator('#tow-preview').innerText(), /This pull moves Sentinel/);
     await page.locator('#tow-dialog button[value="confirm"]').click();
     await idle();
   };
@@ -90,6 +91,46 @@ try {
   }
   await fixture('reimagined');
   const saved = await bytes();
+  // Reproduce the reported mistake using real movement, then cancel without
+  // consuming a turn. Keyboard and ship-menu rescue entry points share guidance.
+  await page.click('#operation-start');
+  await move(45, -20);
+  await move(33, 20);
+  const beforeTow = (await snapshot()).game;
+  await page.keyboard.press('5');
+  await page.selectOption('#target-select', 'op-sentinel');
+  await page.locator('#target-form button[value="confirm"]').click();
+  assert.match(await page.locator('#tow-title').innerText(), /Tow toward extraction/);
+  assert.equal(await page.inputValue('#tow-x'), '38');
+  assert.equal(await page.locator('#tow-hull option[value="op-patrol"]').count(), 0, 'No hidden enemy coordinates in the destination picker.');
+  await page.selectOption('#tow-hull', beforeTow.playerShipId);
+  assert.match(await page.locator('#tow-preview').innerText(), /Collision warning.*Argonaut/);
+  assert.equal(await page.locator('#tow-form button[value="confirm"]').isDisabled(), true);
+  await page.check('#tow-risk-ack');
+  assert.equal(await page.locator('#tow-form button[value="confirm"]').isEnabled(), true);
+  await page.selectOption('#tow-hull', '');
+  await page.fill('#tow-x', '140');
+  await page.fill('#tow-y', '160');
+  assert.equal(await page.locator('#tow-risk-ack').isChecked(), false, 'Changing the aim requires a fresh acknowledgment.');
+  assert.equal(await page.locator('#tow-form button[value="confirm"]').isDisabled(), true);
+  if (output) await page.locator('#tow-dialog').screenshot({ path: resolve(output, 'operation-tow-warning.png') });
+  await page.locator('#tow-form button[value="cancel"]').click();
+  assert.deepEqual((await snapshot()).game, beforeTow, 'Inspecting and canceling does not advance the operation.');
+  await page.locator('#map .ship[data-ship-id="op-sentinel"]').click();
+  assert.equal(await page.locator('[data-ship-command="tractor"][data-ship-target="op-sentinel"]').count(), 0);
+  const rescueButton = page.locator('[data-ship-command="tractor-direct"][data-ship-target="op-sentinel"]');
+  assert.equal(await rescueButton.innerText(), 'Tow toward extraction…');
+  await rescueButton.click();
+  assert.equal(await page.locator('#tow-risk').isVisible(), false, 'Reopening clears the previous risky destination.');
+  assert.equal(await page.locator('#tow-form button[value="confirm"]').isEnabled(), true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.ok(await page.locator('#tow-dialog').evaluate((node) => node.scrollWidth <= node.clientWidth), 'Tow dialog fits a narrow screen.');
+  if (output) await page.screenshot({ path: resolve(output, 'operation-tow-narrow.png') });
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await page.locator('#tow-form button[value="cancel"]').click();
+  await page.click('[data-operation-action="return"]'); await confirm();
+  assert.deepEqual(await bytes(), saved);
+  results.push({ rescueTowGuidance: true, keyboardAndMenu: true, collisionAcknowledgement: true, cancelPreservesGame: true });
   await page.click('#operation-start');
   if (output) await page.screenshot({ path: resolve(output, 'operation-opening.png'), fullPage: true });
   await move(45, -20);
