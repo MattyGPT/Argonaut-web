@@ -123,6 +123,8 @@ Initially launch the prototype through an isolated session adapter that snapshot
 
 ## O8 Pacing experiments and play-test gates
 
+**October 10 evidence:** [R5 comparison and metric definitions](../reviews/2026-10-10-operation-pacing.md) cover 1,440 scripted revision-2 runs. Matt confirms the corrected rescue worked and towing felt good. Retain scale 1.0, bounds 320, current tow speed and 16/22 boundaries for the next tranche. First hostile attempts in the reference scripts occur at elapsed 2, earlier than the initial band below, without sustained combat-fleet concentration. Do not add a hidden delay to force the band. Alternate-route/prize human acceptance, aggressive assault, full knowledge ablation and a genuinely wider deployment remain untested by that matrix.
+
 Suggested bands below are hypotheses for the reference manual rescue path at nominal power, not universal promises:
 
 | Observation | Initial target |
