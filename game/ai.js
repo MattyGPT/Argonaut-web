@@ -1,11 +1,12 @@
 import { AI_PURSUIT, DRONE, ENCOUNTERS, FLEET_ORDER_TUNING, GRID_SIZE, PERSONALITIES, RANGES, REIMAGINED_SUICIDE_MIN_ENEMIES, SPREAD } from './constants.js';
 import { canLaunchDrones, flushShields, tractorLock } from './actions.js';
 import { createRng } from './rng.js';
+import { isOperation, operationVisible } from './operations.js';
 import { noteFieldDecision } from './field-diagnostics.js';
 import {
   blastRadius,
   distance,
-  engineCapacity,
+  movementCapacity,
   getShip,
   ionStormZone,
   isDrone,
@@ -93,7 +94,7 @@ const stepToward = (actor, point, stopAt, game) => {
   const dx = point.x - actor.x;
   const dy = point.y - actor.y;
   const span = Math.hypot(dx, dy);
-  const capacity = engineCapacity(actor, game?.gridSize ?? GRID_SIZE, powerEffect(game, actor, 'engines'));
+  const capacity = movementCapacity(game, actor);
   const magnitude = Math.min(capacity, Math.max(0, span - stopAt));
   if (span <= 0 || magnitude < 1) return { type: 'move', dx: 0, dy: 0 };
   return { type: 'move', dx: Math.round((dx / span) * magnitude), dy: Math.round((dy / span) * magnitude) };
@@ -124,6 +125,7 @@ const pickTarget = (game, actor) => {
 
 /** Where a withdrawing ship runs to: Xanadu if it still stands, else the fleet. */
 const withdrawTo = (game, actor) => {
+  if (isOperation(game) && actor.faction === 'Federation') return game.operation.exit;
   const xanadu = getShip(game, 'xanadu');
   // Reimagined-only generalization (round 17): a prize withdraws toward a base its
   // OWN alliance holds — only the Federation ever has one — else toward its fleet,
@@ -173,6 +175,7 @@ const orderedAction = (game, actor, order) => {
   }
 
   if (order.type === 'withdraw') {
+    if (isOperation(game)) return canNavigate(game, actor) ? stepToward(actor, game.operation.exit, 5, game) : { type: 'pass' };
     // A retreating ship still shoots back at whatever is already in range.
     const threat = nearestTo(actor, enemies);
     const parting = threat ? engage(game, actor, threat.ship, threat.range) : null;
@@ -228,7 +231,7 @@ const orderedAction = (game, actor, order) => {
 
 /** Backs away from a threat on a full engine burn; the caller clamps to the map. */
 const stepAway = (actor, threat, game) => {
-  const capacity = engineCapacity(actor, game?.gridSize ?? GRID_SIZE, powerEffect(game, actor, 'engines'));
+  const capacity = movementCapacity(game, actor);
   const span = distance(actor, threat) || 1;
   return {
     type: 'move',
@@ -442,9 +445,36 @@ const merchantAction = (game, actor) => {
   return { type: 'pass' };
 };
 
+const operationAction = (game, actor) => {
+  // Only direct sightings enter combat helpers. Radio memories can direct a
+  // search, but never give a shot at an unseen hull's updated coordinates.
+  const local = { ...game, ships: game.ships.filter((ship) => ship.faction === actor.faction || operationVisible(game, actor, ship)) };
+  const order = orderFor(game, actor.id);
+  if (order && order.type !== 'focus') {
+    const ordered = orderedAction(local, actor, order);
+    if (ordered) return ordered;
+  }
+  const target = nearestTo(actor, enemiesOf(local, actor));
+  if (target) {
+    const shot = engage(local, actor, target.ship, target.range, true);
+    if (shot) return shot;
+  }
+  // Friendly captains defend their station until given an existing fleet order.
+  if (actor.faction === 'Federation' || !canNavigate(game, actor)) return { type: 'pass' };
+  const assignment = game.operation.assignments[actor.id];
+  if (!assignment) return { type: 'pass' };
+  if (target && distance(target.ship, assignment.home) <= assignment.radius) return stepToward(actor, target.ship, 24, game);
+  const memories = Object.values(game.operation.contacts[actor.id] ?? {})
+    .filter((sight) => game.operation.elapsed - sight.seenAt <= 2 && distance(sight, assignment.home) <= assignment.radius)
+    .sort((a, b) => b.seenAt - a.seenAt || distance(actor, a) - distance(actor, b));
+  if (memories.length && distance(actor, memories[0]) > 5) return stepToward(actor, memories[0], 5, game);
+  return stepToward(actor, assignment.points[Math.floor(game.operation.elapsed / 2) % assignment.points.length], 2, game);
+};
+
 const chooseAiActionInner = (game, shipId) => {
   const actor = getShip(game, shipId);
   if (!isActive(actor)) return { type: 'pass' };
+  if (isOperation(game)) return operationAction(game, actor);
 
   // A neutral merchant answers to nobody (round 24): it flees, drifts, or jumps
   // out, and takes neither orders nor doctrine.
@@ -490,7 +520,7 @@ const chooseAiActionInner = (game, shipId) => {
     const rng = createRng(`${game.seed}:${shipId}:${game.randomStep ?? 0}`);
     const deltaX = target.ship.x - actor.x;
     const deltaY = target.ship.y - actor.y;
-    const capacity = engineCapacity(actor, game.gridSize ?? GRID_SIZE, powerEffect(game, actor, 'engines'));
+    const capacity = movementCapacity(game, actor);
     const magnitude = Math.min(capacity, Math.max(1, target.range - AI_PURSUIT.standoff) * (AI_PURSUIT.speedBase + rng.next() * AI_PURSUIT.speedJitter));
     const angle = Math.atan2(deltaY, deltaX) + (rng.next() - 0.5) * AI_PURSUIT.headingDrift;
     return {
@@ -543,7 +573,7 @@ export const avoidStackedArrival = (game, actor, dx, dy) => {
   const stacked = (point) => game.ships
     .some((other) => other.id !== actor.id && other.faction === actor.faction && isActive(other) && distance(point, other) < 1);
   if (!stacked(arrival)) return { dx, dy };
-  const capacity = engineCapacity(actor, grid, powerEffect(game, actor, 'engines'));
+  const capacity = movementCapacity(game, actor);
   for (let radius = 1; radius <= 3; radius += 1) {
     for (let angle = 0; angle < 8; angle += 1) {
       const candidate = {

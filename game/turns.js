@@ -4,6 +4,7 @@ import { chooseAiAction } from './ai.js';
 import { advanceSubtick, integrateStardate, positionsOf, simTimeOf, SUBTICK } from './realtime.js';
 import { createRng } from './rng.js';
 import { scenarioOutcome } from './scenarios.js';
+import { isOperation, observeOperationActor, operationOutcome, operationVisible, recordOperationAssist, resolveOperationBoundary } from './operations.js';
 import { withFieldAction, withFieldSweep } from './field-diagnostics.js';
 import { activeTowCause, battleActionOf, beginBattleResolution, finishBattleResolution, emitBattleRecord, recordAceCrossing, snapshotKnowledge, snapshotShip, shipConsequences, withBattleAction, withBattleCause } from './battle-records.js';
 import {
@@ -170,7 +171,7 @@ const faceThreat = (game, actor, action) => {
   let threat = action.targetId ? getShip(game, action.targetId) : null;
   if (!threat || !isActive(threat) || threat.faction === actor.faction) {
     threat = game.ships
-      .filter((other) => isActive(other) && other.faction !== actor.faction)
+      .filter((other) => isActive(other) && other.faction !== actor.faction && (!isOperation(game) || operationVisible(game, actor, other)))
       .sort((a, b) => distance(actor, a) - distance(actor, b) || a.id.localeCompare(b.id))[0] ?? null;
   }
   if (!threat || (threat.x === actor.x && threat.y === actor.y)) return actor;
@@ -179,6 +180,7 @@ const faceThreat = (game, actor, action) => {
 };
 
 const resolveAiAction = (game, shipId, plotDest = false) => {
+  game = observeOperationActor(game, shipId);
   const actor = getShip(game, shipId);
   if (!isActive(actor)) return { game, messages: [], type: 'pass', records: [] };
   const action = chooseAiAction(game, shipId);
@@ -190,6 +192,7 @@ const resolveAiAction = (game, shipId, plotDest = false) => {
     accepted: true,
   }, (prepared) => {
     let result = executeAiAction(prepared, shipId, action, plotDest);
+    result = { ...result, game: recordOperationAssist(prepared, result.game, shipId, action) };
     if (!['phasers', 'photons', 'ion', 'spread', 'self-destruct', 'tractor'].includes(result.type)) {
       result = {
         ...result,
@@ -543,6 +546,8 @@ const transferCommandIfNeededRules = (game) => {
 };
 
 export const evaluateOutcome = (game) => {
+  const operation = operationOutcome(game);
+  if (operation) return operation;
   // Every alliance afloat is at war with every other, so the war ends only when
   // the field is down to one — or none. Losing the Federation does not hand the
   // victory to whoever happens to be strongest at that instant: the surviving
@@ -948,7 +953,7 @@ const resolveAutopilotTurnRules = (game) => {
   return { game: { ...next, phase: 'computer' }, messages: log, events };
 };
 
-export const resolveComputerTurns = (initialGame, options = {}) => recordedGame(initialGame, resolveComputerTurnsRules, options);
+export const resolveComputerTurns = (initialGame, options = {}) => isOperation(initialGame) && initialGame.operation.result ? initialGame : recordedGame(initialGame, resolveComputerTurnsRules, options);
 
 const resolveComputerTurnsRules = (initialGame) => {
   let game = { ...initialGame, ships: initialGame.ships.map((ship) => ({ ...ship, systems: { ...ship.systems } })) };
@@ -977,7 +982,7 @@ const resolveComputerTurnsRules = (initialGame) => {
  * One source of truth, so the two presentations of a war can never disagree
  * about what a stardate does. `log` and `events` are the caller's accumulators.
  */
-export const resolveStardateChain = (startGame, log, events, options = {}) => recordedGame(startGame, (prepared) => resolveStardateChainRules(prepared, log, events), options);
+export const resolveStardateChain = (startGame, log, events, options = {}) => isOperation(startGame) && startGame.operation.result ? startGame : recordedGame(startGame, (prepared) => resolveStardateChainRules(prepared, log, events), options);
 
 const resolveStardateChainRules = (startGame, log, events) => {
   let game = startGame;
@@ -987,7 +992,7 @@ const resolveStardateChainRules = (startGame, log, events) => {
   // Random encounters (round 24) arrive at the stardate boundary — after the
   // actors have moved, before the dockyard and objectives read the field, so an
   // arrival never acts on the stardate it arrives.
-  const encounters = resolveEncounters(game);
+  const encounters = isOperation(game) ? { game, messages: [] } : resolveEncounters(game);
   game = encounters.game;
   log.push(...encounters.messages);
   const docked = resolveDocking(game);
@@ -1012,10 +1017,11 @@ const resolveStardateChainRules = (startGame, log, events) => {
   const relay = relayOrders(game);
   game = relay.game;
   log.push(...relay.messages);
-  const transfer = transferCommandIfNeeded(game);
+  game = resolveOperationBoundary(game);
+  const transfer = isOperation(game) ? { game, message: null } : transferCommandIfNeeded(game);
   game = transfer.game;
   if (transfer.message) log.push(transfer.message);
-  const surrender = applySurrender(game);
+  const surrender = isOperation(game) ? { game, events: [] } : applySurrender(game);
   game = surrender.game;
   events.push(...surrender.events);
   if (game.outcome) log.push(game.outcome.message);

@@ -4,7 +4,7 @@
 import { DOCKING, POWER_SINKS, RANGES, SHRAPNEL_EXTRA_RANGE, STALEMATE_ROUNDS } from './constants.js';
 import { simTimeOf } from './realtime.js';
 import {
-  blastRadius, crewCapacity, distance, dockedAt, engineCapacity, hasLaunchedDrones,
+  blastRadius, crewCapacity, distance, dockedAt, movementCapacity, hasLaunchedDrones,
   ionStormZone, isActive, isDrone, isImmovable, isNeutral, isStranded, isTractorHeld,
   powerAllocation, powerEffect, reactorOutput, sensorRange, shieldCapacity,
   systemUnits, templateSystems,
@@ -36,7 +36,7 @@ export const inspectExhaustion = (game) => {
     const damaged = damagedSystems(ship);
     const repair = base && (damaged.length || ship.shields < shieldCapacity(ship) || ship.crew < crewCapacity(ship));
     const held = isTractorHeld(game, ship);
-    const movement = live && !isImmovable(ship) && !held ? engineCapacity(ship, game.gridSize, sinks.engines) : 0;
+    const movement = live && !isImmovable(ship) && !held ? movementCapacity(game, ship) : 0;
     const tractorLockTargets = live && systemUnits(ship, 'tractor') > 0
       ? game.ships.filter((other) => other.id !== ship.id && isActive(other)
         && (other.faction !== ship.faction || other.encounter?.type === 'distress')

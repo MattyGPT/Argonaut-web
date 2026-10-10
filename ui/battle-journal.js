@@ -64,7 +64,7 @@ export const projectJournalRecord = (raw, pending = null) => {
   const targetVisible = visible(k.target);
   const targetReported = radioKnown(k.target) && radio >= 1;
   const outcomeKnown = all || received || targetVisible || targetReported;
-  const actorKnown = own || known(k.actor);
+  const actorKnown = own || known(k.actor) || (terminal && raw.kind === 'command-transfer' && raw.payload?.cause === 'operation-command');
   const targetKnown = terminal || known(k.target);
   const target = targetKnown ? identity(raw.target, targetVisible) : null;
   // Delayed causes carry the launcher's old identity/position. Current mapper
@@ -99,6 +99,8 @@ export const projectJournalRecord = (raw, pending = null) => {
   } else if (terminal) {
     event.result = text(payload.status) ?? (raw.kind === 'battle-outcome' ? 'ended' : raw.kind);
     if (raw.kind === 'battle-outcome') event.outcome = pick(payload.outcome, ['winner', 'reason', 'type', 'kind', 'message', 'faction']);
+    if (raw.kind === 'operation-notice') event.cause = text(payload.message);
+    if (raw.kind === 'operation-resolved') event.result = text(payload.result?.primary) ?? 'resolved';
   } else if (raw.kind === 'action-resolution') {
     event.command = text(payload.command);
     event.result = own || all || outcomeKnown ? text(payload.result) ?? 'resolved' : 'unknown';
@@ -258,6 +260,12 @@ export const formatJournalEvent = (event) => {
     case 'vacancy': return `${target} left vacant${suffix}.`;
     case 'capture': return `${actor} captured ${target}${event.toFaction ? ` for ${event.toFaction}` : ''}${suffix}.`;
     case 'command-transfer': return `Command transferred from ${actor} to ${target}${suffix}.`;
+    case 'hull-extracted': return `${target} extracted from the operation.`;
+    case 'rescue-completed': return `${target} recovered. Bring the remaining fleet home.`;
+    case 'rescue-lost': return 'Sentinel is lost. Withdraw the surviving fleet.';
+    case 'rescue-expired': return 'The Sentinel rescue window has closed. Withdraw the surviving fleet.';
+    case 'operation-notice': return event.cause ?? 'Operation notice received.';
+    case 'operation-resolved': return `Operation concluded: rescue ${event.result}.`;
     case 'command-loss': return `Command lost${event.target ? ` aboard ${target}` : ''}.`;
     case 'battle-outcome': return event.outcome?.message ?? `Battle ended${event.outcome?.winner ? `: ${event.outcome.winner}` : ''}${event.outcome?.reason ? ` — ${event.outcome.reason}` : ''}.`;
     default: return `${event.target?.name ?? actor}: ${label(event.kind)}${event.result === 'unknown' ? ' — outcome unknown' : ''}${deltaText(event.delta)}${suffix}.`;

@@ -12,7 +12,7 @@ import {
   describeOrder,
   distance,
   dockedAt,
-  engineCapacity,
+  movementCapacity,
   facingOf,
   getShip,
   hasArcs,
@@ -233,7 +233,7 @@ const commandList = (game, actor) => {
 const cap = (value) => value[0].toUpperCase() + value.slice(1);
 
 export const commandReadiness = (game, view = {}) => {
-  if (game.outcome) return 'War concluded.';
+  if (game.outcome) return game.operation ? 'Operation concluded.' : 'War concluded.';
   if (isSpectator(game)) return 'Observing — command unavailable.';
   if (view.battlePaused || game.phase !== 'player') return 'Resolving orders — command unavailable.';
   if (!game.realtime) return 'Ready — choose a command for this stardate.';
@@ -464,7 +464,7 @@ const shipMenu = (game, actor, ship) => {
       ? ['An unarmed neutral merchant — it will run from warships, and a transporter party can seize it whole.']
       : []),
     ...(ship.encounter?.type === 'distress' && isActive(ship) && systemUnits(ship, 'engines') === 0
-      ? ['Broadcasting distress: engines gone — tow it home to Xanadu and the dockyard will return it to the fight.']
+      ? [game.operation ? 'Broadcasting distress: engines gone — tow Sentinel to the extraction beacon at 38, 160 before elapsed stardate 16.' : 'Broadcasting distress: engines gone — tow it home to Xanadu and the dockyard will return it to the fight.']
       : []),
     // Directional shields (round 23): the arc breakdown and heading are readable
     // combat intel on any hull — which arc you would hit, and which way its bow
@@ -856,7 +856,8 @@ const renderMapLegend = (game, shipArt) => {
 };
 
 export const renderGame = (game, view = {}) => {
-  const actor = getShip(game, game.playerShipId);
+  const extracted = game.operation?.extracted.find((ship) => ship.id === game.playerShipId);
+  const actor = getShip(game, game.playerShipId) ?? (extracted ? { ...extracted, status: 'extracted' } : undefined);
   const map = document.querySelector('#map-field');
   const consoleRoot = document.querySelector('#console');
   const report = document.querySelector('#report');
@@ -872,7 +873,7 @@ export const renderGame = (game, view = {}) => {
   // it. A classic war's window is the whole field at zoom 1, which projects exactly
   // as it did before the camera existed.
   const win = cameraWindow(grid, view.camera);
-  document.querySelector('#mode-readout').textContent = game.reimagined
+  document.querySelector('#mode-readout').textContent = game.operation ? 'REIMAGINED OPERATION' : game.reimagined
     ? (scenarioFor(game).id === 'annihilation' ? 'REIMAGINED WAR' : `REIMAGINED · ${scenarioFor(game).title.toUpperCase()}`)
     : '';
   renderMapLegend(game, view.shipArt);
@@ -907,7 +908,7 @@ export const renderGame = (game, view = {}) => {
   if (actorActive) {
     if (actor.systems.phasers > 0) rings.push({ r: RANGES.phasers, kind: 'phasers', x: actor.x, y: actor.y });
     if (actor.systems.photons > 0) rings.push({ r: RANGES.photons, kind: 'photons', x: actor.x, y: actor.y });
-    const engineReach = engineCapacity(actor, grid, powerEffect(game, actor, 'engines'));
+    const engineReach = movementCapacity(game, actor);
     if (engineReach > 0) rings.push({ r: engineReach, kind: 'engines', x: actor.x, y: actor.y });
   }
   // In a Reimagined war the dockyard at Xanadu repairs anything inside its ring.
@@ -1166,7 +1167,7 @@ export const renderGame = (game, view = {}) => {
 
   if (game.outcome) {
     const section = (part) => `<h2>${part.title}</h2><ul>${part.lines.map((line) => `<li>${line}</li>`).join('')}</ul>`;
-    report.innerHTML = `<h2>War concluded</h2><ul><li>${game.outcome.message ?? game.outcome.kind.replace('-', ' ')}</li></ul>`
+    report.innerHTML = `<h2>${game.operation ? 'Operation concluded' : 'War concluded'}</h2><ul><li>${game.outcome.message ?? game.outcome.kind.replace('-', ' ')}</li></ul>`
       + section(reportFor(game, 'battle-report'))
       + section(reportFor(game, 'rollcall'))
       + `<ul><li>Begin a new war to continue.</li></ul>`;
