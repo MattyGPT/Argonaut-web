@@ -4,9 +4,9 @@ import { actionAvailability, applyPlayerAction } from '../game/actions.js';
 import { chooseAiAction } from '../game/ai.js';
 import { createGame, distance, engineCapacity, getShip, movementCapacity, powerEffect, sensorRange } from '../game/state.js';
 import { evaluateOutcome, resolveComputerTurns, resolveStardateChain } from '../game/turns.js';
-import { createOperationGame, finishOperation, observeOperationActor, OPERATION_SEEDS, operationVisible, resolveOperationBoundary, validOperationSave } from '../game/operations.js';
+import { createOperationGame, finishOperation, observeOperationActor, OPERATION_SEEDS, operationExtraction, operationResultExplanation, operationVisible, resolveOperationBoundary, validOperationSave } from '../game/operations.js';
 import { operationPanelMarkup } from '../ui/operations.js';
-import { appendRecords, createJournal, formatJournalEvent, restoreJournal } from '../ui/battle-journal.js';
+import { appendRecords, createJournal, formatJournalEvent, journalView, restoreJournal } from '../ui/battle-journal.js';
 
 const fresh = (options) => createOperationGame({ battleId: 'operation-test', ...options });
 const edit = (game, id, patch) => ({ ...game, ships: game.ships.map((ship) => ship.id === id ? { ...ship, ...patch } : ship) });
@@ -178,6 +178,59 @@ test('command transfers after extraction, extracted hulls leave the live fleet a
   assert.ok(next.operation.facts.some((entry) => entry.kind === 'command-transfer'));
 });
 
+test('a rescue tug inside the beacon stays until Sentinel can extract, including after reload', () => {
+  let game = edit(fresh(), 'op-command', { x: 38, y: 160 });
+  game = edit(game, 'op-sentinel', { x: 65, y: 160, tractorBy: 'op-command' });
+  for (const id of ['op-scout', 'op-escort']) game = edit(game, id, { x: 38, y: 165 });
+  const before = JSON.stringify(game);
+  assert.deepEqual(operationExtraction(game).heldTugs.map((ship) => ship.id), ['op-command']);
+  assert.equal(JSON.stringify(game), before);
+  assert.match(operationPanelMarkup(game), /Argonaut stays on station/);
+  const held = resolveOperationBoundary(game);
+  assert.deepEqual(held.operation.extracted.map((ship) => ship.id), ['op-scout', 'op-escort']);
+  assert.equal(held.playerShipId, 'op-command');
+  assert.equal(getShip(held, 'op-sentinel').tractorBy, 'op-command');
+  assert.equal(held.operation.result, null);
+  game = JSON.parse(JSON.stringify(held));
+  game = applyPlayerAction(game, { type: 'tractor', targetId: 'op-sentinel', towardX: 38, towardY: 160 }).game;
+  assert.equal(getShip(game, 'op-sentinel').x, 50);
+  const rescued = resolveOperationBoundary({ ...game, turn: held.turn + 1 });
+  assert.equal(rescued.operation.result.primary, 'success');
+  assert.equal(rescued.operation.result.returned.length, 4);
+});
+
+test('rescue hold ends after expiry or target loss and never shields a tug from damage', () => {
+  let game = edit(fresh(), 'op-command', { x: 38, y: 160 });
+  game = edit(game, 'op-sentinel', { x: 65, y: 160, tractorBy: 'op-command' });
+  for (const primary of ['expired', 'lost']) {
+    const leaving = resolveOperationBoundary({ ...game, operation: { ...game.operation, primary } });
+    assert.ok(leaving.operation.extracted.some((ship) => ship.id === 'op-command'));
+  }
+  for (const patch of [{ status: 'destroyed', crew: 0 }, { status: 'vacant', crew: 0 }, { faction: 'Axis' }]) {
+    const lostTarget = resolveOperationBoundary(edit(game, 'op-sentinel', patch));
+    assert.ok(lostTarget.operation.extracted.some((ship) => ship.id === 'op-command'));
+    assert.equal(lostTarget.operation.primary, 'lost');
+  }
+  const deadTug = resolveOperationBoundary(edit(game, 'op-command', { status: 'destroyed', crew: 0 }));
+  assert.ok(!deadTug.operation.extracted.some((ship) => ship.id === 'op-command'));
+  assert.equal(getShip(deadTug, 'op-command').status, 'destroyed');
+});
+
+test('early evacuation explains why surviving ships disappeared and Sentinel was abandoned', () => {
+  let game = fresh();
+  for (const id of ['op-command', 'op-scout', 'op-escort']) game = edit(game, id, { x: 38, y: 160 });
+  assert.match(operationPanelMarkup(game), /last command ship is about to evacuate without Sentinel/);
+  const ended = resolveOperationBoundary(game);
+  assert.equal(ended.operation.result.primary, 'failure');
+  assert.deepEqual(ended.operation.result.returned.map((ship) => ship.name), ['Argonaut', 'Swift', 'Bulwark']);
+  assert.deepEqual(ended.operation.result.abandoned.map((ship) => ship.name), ['Sentinel']);
+  assert.match(operationResultExplanation(ended), /No command-capable ship remained.*Sentinel was left behind/);
+  const markup = operationPanelMarkup(ended);
+  assert.match(markup, /Operation ended: Sentinel was not recovered/);
+  assert.match(markup, /Evacuated through beacon \(removed from map\): Argonaut, Swift, Bulwark/);
+  assert.doesNotMatch(markup, /Tow Sentinel into the extraction ring/);
+});
+
 test('reinforcement follows declared boundaries, and occupied entries defer without duplication', () => {
   let game = fresh();
   for (let elapsed = 1; elapsed <= 6; elapsed += 1) {
@@ -253,6 +306,11 @@ test('extraction, rescue and command transfer facts survive journal projection a
   assert.match(lines, /Sentinel extracted/);
   assert.match(lines, /Sentinel recovered/);
   assert.match(lines, /Command transferred from Argonaut to Bulwark/);
+  assert.ok(journalView(restored).battleDevelopments.some((card) => /evacuated through the beacon/.test(card.summary)));
+  assert.ok(!journalView(restored).fleetTraffic.some((card) => card.events.some((event) => event.kind === 'hull-extracted')));
+  const oldSave = JSON.parse(JSON.stringify(journal));
+  for (const event of oldSave.events) if (event.kind === 'hull-extracted' && !event.own) event.group = 'fleet-traffic';
+  assert.ok(journalView(restoreJournal(oldSave, game.battleRecordState.battleId)).battleDevelopments.some((card) => /evacuated through the beacon/.test(card.summary)), 'Old retained evacuation facts are promoted on reload.');
   let endRecords;
   finishOperation(game, 'withdrawal', { onRecords: (batch) => { endRecords = batch; } });
   assert.equal(endRecords.filter((record) => record.kind === 'operation-resolved').length, 1);

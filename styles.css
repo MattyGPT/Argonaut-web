@@ -2372,6 +2372,8 @@ body.learning #game-root { height: auto; min-height: 38rem; }
 .operation-heading { justify-content: space-between; }
 .operation-heading h2 { margin: 0; }
 .operation-objective { font-weight: 600; }
+.operation-warning, .operation-result-reason { border-left: 3px solid #ffcf70; padding: .4rem .65rem; background: #5c481e59; }
+body.classic .operation-warning, body.classic .operation-result-reason { border-color: currentColor; background: transparent; }
 .operation-controls { margin-top: .8rem; }
 .operation-controls label { display: inline-flex; align-items: center; gap: .4rem; }
 .operation-debrief { border-top: 1px solid currentColor; margin-top: .8rem; }

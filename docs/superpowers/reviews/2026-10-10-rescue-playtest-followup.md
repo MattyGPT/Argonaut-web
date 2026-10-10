@@ -49,3 +49,15 @@ No new ordinary-game paired simulation baseline is claimed: this follow-up chang
 5. Continue the planned M3 terrain/art pass after the operation's useful space and interaction needs are understood. Generated pixel art should strengthen landmarks, atmosphere and hazard readability while retaining precise overlays; it should not obscure landing points or targeting information.
 
 The operations specification and delivery plan remain the comprehensive scope. This review resolves two concrete first-playtest blockers and records the evidence still needed before expansion.
+
+## Second report: ships disappeared near the beacon
+
+Matt then reported his ships disappearing and leaving Sentinel behind, ending in mission failure. He confirmed they were near the beacon or following Withdraw orders. This is consistent with automatic extraction: eligible ships are removed from the field, and departure of the last command-capable ship ends an unfinished rescue. The exact failed session was not available in the connected browser, so this diagnosis uses the reported location and reproduced rule behavior, not a recovered save.
+
+The reproduction also exposed a concrete defect: a live rescue tug could extract while Sentinel remained just outside the ring, silently releasing its tractor link. The operation now retains that tug until Sentinel can also extract, or the objective expires/is lost. Escorts can still depart normally. This safeguard does not make the tug invulnerable, move Sentinel for free, or convert early withdrawal into success.
+
+The mission strip labels extracted ships as **Evacuated through beacon (removed from map)**, explains automatic departure, shows tug holds and pending last-ship evacuation risk, and stops issuing rescue instructions after the operation has ended. The debrief explains whether Sentinel missed the deadline, was lost, or was left without a command-capable rescuer. Extraction, rescue and operation notices now appear among battle developments.
+
+Regression fixtures reproduce the fleet leaving Sentinel behind, a tug holding while escorts depart, a legal final pull extracting both hulls, save/reload, loss/expiry releasing the hold, and no extraction for a destroyed tug. All six existing manual rescue fixtures continue to pass. Existing completed failures stay completed; retry is required to replay them.
+
+Follow-up validation: **846 tests passed**, guide content passed, and the warning/debrief/journal markup was inspected in an isolated browser fixture without touching the player's saved game. The 1,000-war ordinary-state/RNG parity run matches the October 6 baseline byte for byte: SHA-256 `05A5501FFD3F2B52D15A2A4CF4D3E8879EBB2E6D4B92D76E8C33A145C0D32FFD`.

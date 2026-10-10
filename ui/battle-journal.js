@@ -4,7 +4,8 @@ export const JOURNAL_EVENT_LIMIT = 500;
 export const JOURNAL_COMMAND_LIMIT = 12;
 const VERSION = 1;
 const groups = ['your-ship', 'battle-developments', 'fleet-traffic'];
-const critical = new Set(['destruction', 'surrender', 'capture', 'vacancy', 'command-loss', 'command-transfer', 'battle-outcome', 'relay-change', 'encounter-arrival']);
+const operationCritical = new Set(['hull-extracted', 'rescue-completed', 'rescue-lost', 'rescue-expired', 'operation-resolved', 'operation-notice']);
+const critical = new Set(['destruction', 'surrender', 'capture', 'vacancy', 'command-loss', 'command-transfer', 'battle-outcome', 'relay-change', 'encounter-arrival', ...operationCritical]);
 const number = (value) => Number.isFinite(value) ? value : undefined;
 const text = (value) => typeof value === 'string' ? value.slice(0, 400) : undefined;
 const pick = (value, keys) => Object.fromEntries(keys.flatMap((key) => {
@@ -181,6 +182,7 @@ const restoreEvent = (event, battleId) => {
   const clean = {
     ...pick(event, ['battleId', 'eventId', 'simTime', 'observedAt', 'kind', 'group', 'own', 'actionId', 'ordnanceId', 'source', 'issuingShipId', 'detail', 'command', 'result', 'weapon', 'sequence', 'earlierDetailDiscarded', 'damage', 'shieldDamage', 'crewDamage', 'arc', 'placed', 'gained', 'cause', 'fromFaction', 'toFaction', 'distressTow']),
     actor: identity(event.actor, true), target: identity(event.target, true),
+    ...(event.group === 'fleet-traffic' && operationCritical.has(event.kind) ? { group: 'battle-developments' } : {}),
   };
   if (event.request) clean.request = requestOf(event.request);
   if (event.destination) clean.destination = pick(event.destination, ['x', 'y']);
@@ -261,7 +263,7 @@ export const formatJournalEvent = (event) => {
     case 'vacancy': return `${target} left vacant${suffix}.`;
     case 'capture': return `${actor} captured ${target}${event.toFaction ? ` for ${event.toFaction}` : ''}${suffix}.`;
     case 'command-transfer': return `Command transferred from ${actor} to ${target}${suffix}.`;
-    case 'hull-extracted': return `${target} extracted from the operation.`;
+    case 'hull-extracted': return `${target} extracted from the operation — evacuated through the beacon and removed from the map.`;
     case 'rescue-completed': return `${target} recovered. Bring the remaining fleet home.`;
     case 'rescue-lost': return 'Sentinel is lost. Withdraw the surviving fleet.';
     case 'rescue-expired': return 'The Sentinel rescue window has closed. Withdraw the surviving fleet.';
