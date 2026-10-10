@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createGame, getShip } from '../game/state.js';
 import { applyPlayerAction } from '../game/actions.js';
 import { enableBattleRecords } from '../game/battle-records.js';
+import { journalCardsHtml } from '../ui/render.js';
 import { createJournal, appendRecords, restoreJournal, journalView, projectJournalRecord, formatJournalEvent, JOURNAL_EVENT_LIMIT } from '../ui/battle-journal.js';
 
 const actor = { id: 'argo', name: 'Argo', faction: 'alliance', x: 10, y: 10 };
@@ -17,6 +18,59 @@ const record = (n, kind, extra = {}) => ({
 });
 const own = (n, kind, payload, extra = {}) => record(n, kind, { payload, ...extra });
 const knowledge = (changes) => ({ ...record(1, 'action').knowledge, ...changes });
+
+test('confirmed destruction is prominent on a collapsed own command and survives existing save reload', () => {
+  const rows = [own(1, 'action', { command: 'phasers', request: { targetId: target.id } }),
+    own(2, 'weapon-resolution', { weapon: 'phasers', result: 'hit' }),
+    own(3, 'destruction', { status: 'destroyed' }, { knowledge: knowledge({ globalTerminal: true }) })];
+  const journal = appendRecords(createJournal('battle'), rows);
+  const card = journalView(restoreJournal(JSON.parse(JSON.stringify(journal)), 'battle')).recentCommands[0];
+  assert.match(card.summary, /^Orion destroyed\./);
+  assert.match(card.actionSummary, /fired phasers/);
+  assert.equal(card.defeats.length, 1);
+  const markup = journalCardsHtml([card]);
+  assert.match(markup, /data-defeat-kind="destruction">Orion destroyed\./);
+  assert.ok(markup.indexOf('Orion destroyed.') < markup.indexOf('</summary>'));
+  assert.deepEqual(journalView(appendRecords(journal, rows)).recentCommands[0].defeats, card.defeats);
+});
+
+test('damage or hidden outcomes never invent a defeat, while other terminal states stay distinct', () => {
+  for (const result of ['hit', 'miss', 'unknown']) {
+    const journal = appendRecords(createJournal('battle'), [own(1, 'action', { command: 'phasers' }), own(2, 'weapon-resolution', { weapon: 'phasers', result, consequences: { delta: { shields: -999 } } })]);
+    assert.deepEqual(journalView(journal).recentCommands[0].defeats, []);
+  }
+  for (const [kind, label] of [['surrender', 'surrendered'], ['vacancy', 'left vacant'], ['capture', 'captured']]) {
+    const journal = appendRecords(createJournal('battle'), [own(1, 'action', { command: 'phasers' }), own(2, kind, {}, { knowledge: knowledge({ globalTerminal: kind === 'surrender' }) })]);
+    const card = journalView(journal).recentCommands[0];
+    assert.match(card.summary, new RegExp(`Orion ${label}`));
+    assert.doesNotMatch(card.summary, /destroyed/);
+  }
+});
+
+test('late terminal ordnance result attaches to its original issuer after command changes', () => {
+  let journal = appendRecords(createJournal('battle'), [own(1, 'action', { command: 'photons' }), own(2, 'ordnance-launch', { weapon: 'photons' }, { ordnanceId: 'torpedo' })]);
+  const lateKnowledge = knowledge({ ownAction: false, actor: hidden, target: hidden, observer: { id: 'new-command' }, globalTerminal: true });
+  journal = appendRecords(journal, [own(3, 'destruction', { status: 'destroyed' }, { ordnanceId: 'torpedo', simTime: 10, knowledge: lateKnowledge }), own(4, 'ordnance-impact', { weapon: 'photons', result: 'hit' }, { ordnanceId: 'torpedo', simTime: 10, knowledge: { ...lateKnowledge, globalTerminal: false } })]);
+  const card = journalView(journal).recentCommands[0];
+  assert.equal(card.actor.id, 'argo');
+  assert.equal(card.defeats[0].target.name, 'Orion');
+  assert.equal(card.events.find((event) => event.kind === 'destruction').target.x, undefined);
+  assert.match(card.summary, /Orion destroyed/);
+});
+
+test('friendly losses are explicit, names are escaped, and hidden global losses do not grant own credit', () => {
+  const casualty = { ...actor, id: 'escort', name: '<b>Escort</b>' };
+  const journal = appendRecords(createJournal('battle'), [own(1, 'action', { command: 'tractor' }), own(2, 'destruction', { cause: 'tractor-collision' }, { target: casualty, knowledge: knowledge({ globalTerminal: true }) })]);
+  const card = journalView(journal).recentCommands[0];
+  assert.equal(card.defeats[0].friendlyLoss, true);
+  assert.match(card.summary, /Friendly loss:/);
+  assert.match(journalCardsHtml([card]), /&lt;b&gt;Escort&lt;\/b&gt;/);
+  assert.doesNotMatch(journalCardsHtml([card]), /<b>Escort/);
+  const distant = appendRecords(createJournal('battle'), [record(1, 'destruction', { actionId: 'enemy-shot', knowledge: knowledge({ ownAction: false, actor: hidden, target: hidden, globalTerminal: true }), payload: { cause: 'secret-weapon' } })]);
+  assert.equal(journalView(distant).recentCommands.length, 0);
+  assert.equal(journalView(distant).battleDevelopments[0].defeats.length, 1);
+  assert.ok(!JSON.stringify(distant).includes('secret-weapon'));
+});
 
 test('knowledge projection precedes storage and hidden outcomes contain no payload or target secrets', () => {
   const raw = own(1, 'weapon-resolution', { weapon: 'phasers', result: 'hit', damage: 77, consequences: { delta: { shields: -77, systems: { radio: -4 } }, before: { crew: 777 } }, secret: 'hidden' }, { knowledge: knowledge({ target: hidden }) });
@@ -228,6 +282,16 @@ test('incoming enemy action is an own-ship effect, never an issued own command',
   assert.equal(view.recentCommands.length, 0);
   assert.equal(view.yourShip.length, 1);
   assert.equal(view.yourShip[0].isOwnCommand, false);
+});
+
+test('an incoming command-ship destruction is labeled a friendly loss, not a credited defeat', () => {
+  const journal = appendRecords(createJournal('battle'), [record(1, 'destruction', {
+    actor: target, target: actor, source: 'fleet-ai', payload: { status: 'destroyed' },
+    knowledge: knowledge({ ownAction: false, globalTerminal: true, actor: visible, target: { ...visible, own: true } }),
+  })]);
+  const view = journalView(journal);
+  assert.equal(view.recentCommands.length, 0);
+  assert.match(view.yourShip[0].defeats[0].text, /^Friendly loss: Argo destroyed/);
 });
 
 test('delayed facts retain launcher attribution without restamping launch coordinates as a fresh sighting', () => {

@@ -13,7 +13,7 @@ export const operationPanelMarkup = (game) => {
     <p>Returned: ${names(op.extracted)}${recent ? ` · ${escape(recent)}` : ''}</p>
     <details><summary>Briefing and prototype rules</summary><p>${RESCUE_BRIEFING}</p><p>${RESCUE_RULES}</p>
     <p>${(op.briefingPoints ?? []).map((point) => `${escape(point.label)}: ${point.x}, ${point.y}`).join(' · ')}. Diamond labels mark initial intelligence, not live ship positions.</p>
-    <p>Select Sentinel → Direct tow, then choose coordinates 38, 160. One pull moves it up to 15 units; your ship must remain within 35 units. Move alongside between pulls. Use Fleet orders → Withdraw for your other captains.</p>
+    <p>Select Sentinel → Tow toward extraction. Coordinates 38, 160 are filled in. Check the predicted landing, then confirm one pull. Your ship must remain within 35 units; keep it alongside, around 20 units above or below Sentinel, and reposition between pulls. Pulling Sentinel toward your own ship can cause a collision. Use Fleet orders → Withdraw for your other captains.</p>
     <p>This first build tests movement, local patrols, and manual rescue. The art pass and automated rescue orders follow playtesting.</p></details>
     ${result ? `<div class="operation-debrief"><h3>${result.primary === 'success' ? 'Sentinel recovered' : 'Rescue unsuccessful'}</h3>
       <p>Returned: ${names(result.returned)}. Left behind: ${names(result.abandoned)}. Lost: ${names(result.lost)}.</p>

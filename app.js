@@ -30,6 +30,7 @@ import { PRACTICE_EXERCISES, createPracticeGame, updatePractice, restartPractice
 import { practicePanelMarkup, practiceChooserMarkup } from './ui/practice.js';
 import { createOperationGame, finishOperation, validOperationSave } from './game/operations.js';
 import { operationPanelMarkup } from './ui/operations.js';
+import { isRescueTowTarget, rescueTowPreview } from './ui/tow-preview.js';
 import { ingestBattleServiceRecords } from './game/service-records.js';
 import { createWalkthrough, advanceWalkthrough, walkthroughMarkup } from './ui/walkthrough.js';
 
@@ -925,12 +926,17 @@ const dispatch = async (action) => {
   // A directed tractor tow (Reimagined): the ship menu names the victim, this picks
   // where to haul it — a hull to slam into, or a coordinate — then fires the ordinary
   // tractor action with that destination so the rules stay in one place.
-  if (action.type === 'tractor-direct') {
+  if (action.type === 'tractor-direct' || (action.type === 'tractor' && isRescueTowTarget(game, action.targetId)
+    && action.towardX === undefined && action.towardY === undefined && !action.towardId)) {
     if (!game.reimagined || game.phase !== 'player' || game.outcome || isSpectator(game)) return;
     const victim = getShip(game, action.targetId);
     if (!victim || victim.status === 'destroyed') return;
-    const candidates = game.ships.filter((ship) => ship.status !== 'destroyed' && ship.id !== victim.id);
-    const dest = await promptForTowDestination(candidates, victim.name);
+    const candidates = game.ships.filter((ship) => ship.status !== 'destroyed' && ship.id !== victim.id && (!operationSession || targetGeometryKnown(game, ship)));
+    const rescue = isRescueTowTarget(game, victim.id);
+    const dest = await promptForTowDestination(candidates, victim.name, rescue ? {
+      destination: game.operation.exit,
+      preview: (point) => rescueTowPreview(game, victim.id, point, candidates),
+    } : {});
     if (!dest) return;
     dispatch({ type: 'tractor', targetId: action.targetId, towardX: dest.x, towardY: dest.y });
     return;

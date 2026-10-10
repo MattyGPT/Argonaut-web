@@ -72,6 +72,11 @@ Store bulky simulation evidence outside deployed assets. Full mechanical-state/R
 
 **Milestone M1.** Provide Matt a reproducible launch path, six seeds, controls and a concise description of the candidate movement rule. Start with the reference seed; do not require all variants in one sitting.
 
+**October 10 follow-up:** first user feedback identified repeated Sentinel/command-ship tractor collisions and destruction events buried in the journal. Address these control and feedback problems before interpreting that session as evidence for map-size or deadline tuning. See [the follow-up review](../reviews/2026-10-10-rescue-playtest-followup.md). M1 acceptance remains pending.
+
+- [x] Highlight confirmed ship defeats in collapsed journal command cards, including actual phaser and direct-tow kills.
+- [x] Put a directed extraction tow first in Sentinel's menu; guide keyboard tractor targeting through the same destination dialog with landing, range and collision information.
+
 - [ ] Observe an uncoached first attempt, then a replay using the other route.
 - [ ] Try rescue-first, optional-prize-first and deliberate early withdrawal. Record whether pursuing the prize forces an actual compromise.
 - [ ] Record detection, first hostile action, damage, concentration, objective progress, empty transit, collisions and extraction separately.

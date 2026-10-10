@@ -98,6 +98,7 @@ export const projectJournalRecord = (raw, pending = null) => {
     event.result = outcomeKnown && !abbreviated ? text(payload.result) ?? 'resolved' : 'unknown';
   } else if (terminal) {
     event.result = text(payload.status) ?? (raw.kind === 'battle-outcome' ? 'ended' : raw.kind);
+    if (own || received) event.cause = text(payload.cause);
     if (raw.kind === 'battle-outcome') event.outcome = pick(payload.outcome, ['winner', 'reason', 'type', 'kind', 'message', 'faction']);
     if (raw.kind === 'operation-notice') event.cause = text(payload.message);
     if (raw.kind === 'operation-resolved') event.result = text(payload.result?.primary) ?? 'resolved';
@@ -297,13 +298,32 @@ export const journalView = (journal) => {
       const resolution = card.events.findLast((event) => event.kind === 'action-resolution');
       if (resolution) summary = `${action.actor?.name ?? 'Your ship'}: ${label(action.command)} ${label(resolution.result)}${confirmedText(resolution) || requestText(action.request)}${deltaText(resolution.delta)}.`;
     }
+    // Read only confirmed, event-time terminal facts. Damage, low shields and
+    // today's live hull state are never evidence that this command defeated it.
+    const outcomes = new Map();
+    for (const event of card.events) {
+      if (!['destruction', 'surrender', 'vacancy', 'capture'].includes(event.kind) || event.result === 'unknown' || event.detail === 'abbreviated') continue;
+      const target = event.target;
+      if (!target?.name) continue;
+      const ownCause = action?.own ?? launch?.own ?? event.own;
+      const friendlyLoss = event.kind === 'destruction' && card.group === 'your-ship'
+        && (!ownCause || Boolean(target.faction && target.faction === (action?.actor ?? launch?.actor ?? event.actor)?.faction));
+      const state = { destruction: 'destroyed', surrender: 'surrendered', vacancy: 'left vacant', capture: 'captured' }[event.kind];
+      outcomes.set(`${target.id ?? target.name}:${event.kind}`, {
+        kind: event.kind, target, friendlyLoss,
+        text: `${friendlyLoss ? 'Friendly loss: ' : ''}${target.name} ${state}${event.cause === 'tractor-collision' ? ' in tow collision' : ''}.`,
+      });
+    }
+    const defeats = [...outcomes.values()];
+    const actionSummary = summary;
+    if (defeats.length) summary = `${defeats.map((outcome) => outcome.text).join(' ')} ${summary}`;
     return {
       ...card, sequence: Math.max(...card.events.map((event) => event.sequence)), simTime: action?.simTime ?? launch?.simTime ?? first.simTime,
       isOwnCommand: first.group === 'your-ship' && Boolean(action ? action.own !== false : launch?.own),
       commandSequence: action?.sequence ?? launch?.issuedSequence ?? first.sequence,
       actor: action?.actor ?? launch?.actor ?? first.actor, source: action?.source ?? launch?.source ?? first.source,
       command: action?.command ?? launch?.command, status: pending ? 'pending' : unknown ? 'unknown' : 'resolved',
-      summary, lines: card.events.filter((event) => event !== action).map((event) => `Stardate ${clock(event.simTime + 1)} · ${formatJournalEvent(event)}`),
+      summary, actionSummary, defeats, lines: card.events.filter((event) => event !== action).map((event) => `Stardate ${clock(event.simTime + 1)} · ${formatJournalEvent(event)}`),
       earlierDetailDiscarded: Boolean(first.earlierDetailDiscarded),
     };
   }).sort((a, b) => b.sequence - a.sequence);

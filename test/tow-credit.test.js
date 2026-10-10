@@ -4,7 +4,8 @@ import { createGame, getShip, isAce } from '../game/state.js';
 import { applyPlayerAction, resolveCollision } from '../game/actions.js';
 import { enableBattleRecords, stripBattleRecordMetadata, withBattleAction } from '../game/battle-records.js';
 import { resolveAutopilotTurn, stepContinuum } from '../game/turns.js';
-import { reportFor } from '../ui/render.js';
+import { journalCardsHtml, reportFor } from '../ui/render.js';
+import { appendRecords, createJournal, journalView, restoreJournal } from '../ui/battle-journal.js';
 
 const issuerId = 'fed-flagship';
 const draggedId = 'axis-flagship';
@@ -44,6 +45,15 @@ test('each enemy destroyed in a direct tow collision credits the original beam w
   assert.match(lines, /Your direct tow collision kills across command ships: 2/);
   assert.match(lines, /2 enemy hulls destroyed/);
   assert.doesNotMatch(lines, /No ship scored a kill/);
+  const journal = appendRecords(createJournal('tow-test'), result.records);
+  const restored = restoreJournal(JSON.parse(JSON.stringify(journal)), 'tow-test');
+  const card = journalView(restored).recentCommands[0];
+  assert.deepEqual(card.defeats.map((entry) => entry.target.id), victimIds);
+  assert.ok(card.defeats.every((entry) => entry.kind === 'destruction' && /tow collision/.test(entry.text)));
+  assert.match(card.summary, /destroyed in tow collision/);
+  const markup = journalCardsHtml([card], 'own');
+  assert.equal((markup.match(/data-defeat-kind="destruction"/g) ?? []).length, 2);
+  assert.ok(markup.indexOf('journal-defeat') < markup.indexOf('</summary>'), 'Both defeats appear without expanding the command.');
 });
 
 test('a hauled hull destroyed by impact also credits the beam while its crippled survivor does not', () => {
@@ -54,6 +64,7 @@ test('a hauled hull destroyed by impact also credits the beam while its crippled
   assert.equal(credits(result.game)[0].target.id, destroyed.targetId);
   const survivor = result.records.find((record) => record.kind === 'collision').payload.survivorId;
   assert.ok(!credits(result.game).some((credit) => credit.target.id === survivor));
+  assert.ok(!journalView(appendRecords(createJournal('tow-test'), result.records)).recentCommands[0].defeats.some((entry) => entry.target.id === survivor));
   assert.equal(getShip(result.game, survivor).status, 'active');
   assert.ok(result.records.some((record) => record.kind === 'damage' && record.targetId === survivor && record.actorId === issuerId));
 });
