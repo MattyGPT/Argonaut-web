@@ -56,3 +56,5 @@ The ordinary full-state/RNG comparison covers 250 Classic, 250 precision Classic
 Matt: try Bulwark → Rescue Sentinel while commanding Argonaut to protect the rescue or pursue the optional prize. Check whether phase updates explain progress, whether cancellation is understandable, and whether delegation frees attention for interesting choices. Compare Swift only after the faster journey is understood. This checkpoint remains pending despite automated/browser success.
 
 Next R6 slice: **Recover prize**, including legal crew commitment, capture identity continuity, explicit withdrawal, interruptions and simultaneous rescue/prize traffic. Then the terrain presentation pilot. Ordinary autonomous dockyard recovery, real-time operations, full pathfinding, wider authored layouts and campaign rewards remain separate gated work.
+
+**Subsequent R6 delivery:** [Recover prize](2026-10-10-recover-prize.md) now implements legal boarding, independent prize withdrawal, capture continuity and simultaneous Rescue traffic. Its tests and browser journey are recorded separately. Human M2 acceptance remains open; terrain presentation is next.

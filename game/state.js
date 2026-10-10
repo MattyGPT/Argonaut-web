@@ -1381,6 +1381,7 @@ export const describeOrder = (game, order) => {
   const name = order.targetId ? getShip(game, order.targetId)?.name ?? 'that ship' : null;
   switch (order.type) {
     case 'hold': return 'hold position';
+    case 'recover': return `recover ${name ?? 'Wayfarer'}, commit up to 10 crew, and withdraw through the extraction beacon`;
     case 'rescue': return `rescue ${name ?? 'Sentinel'} through the extraction beacon`;
     case 'withdraw': return 'withdraw toward Xanadu';
     case 'escort': return `escort ${name}`;

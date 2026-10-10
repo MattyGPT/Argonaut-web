@@ -1,6 +1,6 @@
 # Operations and consequences delivery plan
 
-Date: 2026-10-06. Updated October 10. Status: **Corrected manual rescue confirmed by Matt; R5 pacing tools and first comparison delivered; delegation next.** See the [initial delivery record](../reviews/2026-10-06-rescue-prototype.md) and [current pacing review](../reviews/2026-10-10-operation-pacing.md). Parent: [Roadmap](../specs/2026-10-06-operations-and-consequences-roadmap.md).
+Date: 2026-10-06. Updated October 10. Status: **Corrected manual rescue confirmed by Matt; R5 pacing tools plus Rescue and Recover prize delegation delivered; human M2 comparison open, terrain pilot next.** See the [initial delivery record](../reviews/2026-10-06-rescue-prototype.md) and [current pacing review](../reviews/2026-10-10-operation-pacing.md). Parent: [Roadmap](../specs/2026-10-06-operations-and-consequences-roadmap.md).
 
 ## Delivery order and dependencies
 
@@ -30,6 +30,7 @@ The first playable work is the rescue prototype. Art concepts and campaign ident
 - [x] Corrected maintained-tow rescue completed by Matt, with positive towing-pace feedback.
 - [x] R5 observation tools and first 30-seed, six-profile, eight-policy matrix; retained tuning decision and limitations.
 - [x] First R6 slice: [delegated prototype Rescue](../specs/2026-10-10-delegated-rescue.md), explicit tug ownership, progress/blocker reports, 60 scripted runs and actual browser completion after reload. Recover prize and human delegated acceptance remain open.
+- [x] Second R6 slice: [Recover prize](../specs/2026-10-10-recover-prize.md), legal boarding/crew costs, capture continuity, independent withdrawal, simultaneous rescue traffic, 60 scripted comparisons and a browser journey returning all five hulls. Human M2 acceptance remains open.
 - [ ] M1 human player observation and acceptance (R4).
 - [ ] M2 accepted operational profile and delegation.
 - [ ] M3 production art and in-game visual acceptance.
