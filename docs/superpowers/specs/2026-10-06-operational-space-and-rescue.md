@@ -96,7 +96,7 @@ Keep `primaryResult`, `optionalResults`, `fleetDisposition`, `reason` and elapse
 
 ## O6 Reliable delegation
 
-**October 10 first implementation:** [Delegated Rescue](2026-10-10-delegated-rescue.md) now implements the Rescue row below in the turn-based prototype, with explicit fleet-tug ownership, normal action budgets, radio delivery, visible phases/blockers and paired extraction. Recover prize, simultaneous autonomous recoveries and human M2 acceptance remain open. Ordinary Reimagined keeps manual maintained towing; autonomous dockyard recovery is not included.
+**October 10 first implementation:** [Delegated Rescue](2026-10-10-delegated-rescue.md) now implements the Rescue row below in the turn-based prototype, with explicit fleet-tug ownership, normal action budgets, radio delivery, visible phases/blockers and paired extraction. [Recover prize](2026-10-10-recover-prize.md) now implements boarding, independent exit routing, capture continuity and simultaneous Rescue traffic. Human M2 acceptance remains open. Ordinary Reimagined keeps manual maintained towing; autonomous dockyard recovery is not included.
 
 **October 10 manual-tow implementation:** the [maintained towing contract](2026-10-10-maintained-towing.md) now supplies a shared Reimagined physical connection for manual rescue and ordinary games. Select Sentinel → Maintain tow, then maneuver normally with both hulls. Formation is preserved and speed is limited by engines and tractors. The existing single directed pull remains available. Qualifying maintained movement adds rescue assistance; Sentinel's extraction releases the connection. This does not implement the autonomous orders below, and their later ownership model must support independent fleet actors explicitly.
 

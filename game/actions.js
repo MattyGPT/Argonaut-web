@@ -1,6 +1,6 @@
 import { isOperation, operationVisible, recordOperationAssist } from './operations.js';
 import { endMaintainedTow, establishMaintainedTow, maintainedTowMove, maintainedTowStartReason, reconcileMaintainedTow } from './maintained-tow.js';
-import { prepareRescuePower, rescueOrderReason, updateRescueReports } from './operation-orders.js';
+import { prepareRescuePower, recoverOrderReason, rescueOrderReason, updateOperationOrderReports } from './operation-orders.js';
 import {
   ACE_KILLS,
   ARC,
@@ -1611,13 +1611,13 @@ const setOrder = (game, action, actor) => {
   if (ship.faction !== actor.faction) return invalid(game, 'Only Federation ships take your orders.');
   if (!isActive(ship)) return invalid(game, `${ship.name} cannot take orders.`);
   const type = action.order?.type;
-  if (!ORDER_TYPES.includes(type) && type !== 'rescue') return invalid(game, `Unknown order: ${type}.`);
+  if (!ORDER_TYPES.includes(type) && !['rescue', 'recover'].includes(type)) return invalid(game, `Unknown order: ${type}.`);
 
   const order = { type, targetId: null };
-  if (type === 'rescue') {
-    const reason = rescueOrderReason(game, ship);
+  if (['rescue', 'recover'].includes(type)) {
+    const reason = type === 'recover' ? recoverOrderReason(game, ship) : rescueOrderReason(game, ship);
     if (reason) return invalid(game, reason);
-    order.targetId = game.operation.targetId;
+    order.targetId = type === 'recover' ? game.operation.prizeId : game.operation.targetId;
   } else if (type === 'board') {
     // The one targeted order whose subject is a derelict rather than an active
     // ship — and a Reimagined-war order only, so a classic war never
@@ -1645,12 +1645,12 @@ const setOrder = (game, action, actor) => {
 
   const label = describeOrder(game, order);
   let ordered = { ...game, orders: { ...(game.orders ?? {}), [ship.id]: order } };
-  if (isOperation(game) && (type === 'rescue' || game.orders?.[ship.id]?.type === 'rescue' || game.pendingOrders?.[ship.id]?.type === 'rescue')) {
+  if (isOperation(game) && [type, game.orders?.[ship.id]?.type, game.pendingOrders?.[ship.id]?.type].some((value) => ['rescue', 'recover'].includes(value))) {
     const pendingOrders = { ...game.pendingOrders };
     delete pendingOrders[ship.id];
     ordered = { ...ordered, pendingOrders };
   }
-  const delivered = () => isOperation(game) ? updateRescueReports(reconcileMaintainedTow(prepareRescuePower(ordered))) : ordered;
+  const delivered = () => isOperation(game) ? updateOperationOrderReports(reconcileMaintainedTow(prepareRescuePower(ordered))) : ordered;
   if (ship.id === actor.id) return result(delivered(), `${ship.name} will ${label}.`);
   if (inRadioContact(game, actor, ship)) return result(delivered(), `${ship.name} acknowledges: ${label}.`);
   return result(

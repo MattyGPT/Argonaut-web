@@ -7,7 +7,7 @@ import { scenarioOutcome } from './scenarios.js';
 import { isOperation, observeOperationActor, operationOutcome, operationVisible, recordOperationAssist, resolveOperationBoundary } from './operations.js';
 import { withFieldAction, withFieldSweep } from './field-diagnostics.js';
 import { establishMaintainedTow, maintainedTowMove, reconcileMaintainedTow } from './maintained-tow.js';
-import { prepareRescuePower, updateRescueReports } from './operation-orders.js';
+import { prepareRescuePower, recordRecoveryCapture, updateOperationOrderReports } from './operation-orders.js';
 import { activeTowCause, battleActionOf, beginBattleResolution, finishBattleResolution, emitBattleRecord, recordAceCrossing, snapshotKnowledge, snapshotShip, shipConsequences, withBattleAction, withBattleCause } from './battle-records.js';
 import {
   appendLog,
@@ -184,7 +184,7 @@ const faceThreat = (game, actor, action) => {
 };
 
 const resolveAiAction = (game, shipId, plotDest = false) => {
-  if (isOperation(game)) game = updateRescueReports(reconcileMaintainedTow(game));
+  if (isOperation(game)) game = updateOperationOrderReports(reconcileMaintainedTow(game));
   game = observeOperationActor(game, shipId);
   const actor = getShip(game, shipId);
   if (!isActive(actor)) return { game, messages: [], type: 'pass', records: [] };
@@ -487,7 +487,7 @@ const executeAiAction = (startGame, shipId, action, plotDest = false) => {
     }
     const capture = captureHull(game, actor, target, PRIZE.aiParty);
     return {
-      game: capture.game,
+      game: recordRecoveryCapture(capture.game, actor.id, target.id),
       messages: [`${actor.name} beams a prize crew across to ${target.name}.`, ...capture.messages],
       type: action.type,
     };
@@ -1056,7 +1056,7 @@ const resolveStardateChainRules = (startGame, log, events) => {
   const transfer = isOperation(game) ? { game, message: null } : transferCommandIfNeeded(game);
   game = transfer.game;
   game = reconcileMaintainedTow(game);
-  game = updateRescueReports(game);
+  game = updateOperationOrderReports(game);
   if (transfer.message) log.push(transfer.message);
   const surrender = isOperation(game) ? { game, events: [] } : applySurrender(game);
   game = surrender.game;

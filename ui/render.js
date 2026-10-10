@@ -310,6 +310,7 @@ const ORDER_BUTTONS = Object.freeze([
   ['focus', 'Focus with fleet'],
   ['hold', 'Hold position'],
   ['rescue', 'Rescue Sentinel'],
+  ['recover', 'Recover prize'],
   ['withdraw', 'Withdraw'],
   ['escort', 'Escort…'],
   ['screen', 'Screen…'],
@@ -324,6 +325,7 @@ const ORDER_BUTTONS = Object.freeze([
 
 /** The order buttons a war mode offers: `board` and `launch` are Reimagined-only. */
 const orderButtonsFor = (game, ship) => ORDER_BUTTONS.filter(([type]) => {
+  if (type === 'recover') return game.reimagined && !game.realtime && game.operation && !game.operation.result && ![game.playerShipId, game.operation.targetId, game.operation.prizeId].includes(ship.id);
   if (type === 'rescue') return game.reimagined && !game.realtime && game.operation?.primary === 'pending' && ship.id !== game.playerShipId && ship.id !== game.operation.targetId;
   if (type === 'board') return game.reimagined;
   // The bay order only appears where the rules would accept it: a Reimagined
@@ -512,7 +514,7 @@ const shipMenu = (game, actor, ship) => {
         ? 'An order is still travelling to this hull.'
         : (contact ? null : 'Out of radio contact — orders arrive one stardate late.'),
       ...(own ? ['Your own hull obeys these orders whenever the autopilot has the conn.'] : []),
-      ...(game.operation && !own && ship.id !== game.operation.targetId ? ['Rescue Sentinel uses balanced reactor power if this hull has no manual allocation; existing power settings are preserved.'] : []),
+      ...(game.operation && !own && ship.id !== game.operation.targetId ? ['Recover prize commits up to 10 crew (leaving at least one aboard), then both ships withdraw independently. Capture alone is not recovery.', 'Rescue Sentinel uses balanced reactor power if this hull has no manual allocation; existing power settings are preserved.'] : []),
     ].filter(Boolean);
     const buttons = orderButtonsFor(game, ship)
       .map(([type, label]) => `<button data-order="${type}" data-order-ship="${ship.id}"${standing?.type === type ? ' class="current"' : ''}${disabled}>${label}</button>`)
@@ -1291,19 +1293,21 @@ export const reportFor = (game, type) => {
     };
   }
   if (type === 'battle-report') {
-    const survivors = game.ships.filter((ship) => ship.status !== 'destroyed');
-    const command = getShip(game, game.playerShipId);
+    // Evacuated operation hulls remain survivors and keep their earned records.
+    const roster = [...game.ships, ...(game.reimagined ? game.operation?.extracted ?? [] : [])];
+    const survivors = roster.filter((ship) => ship.status !== 'destroyed');
+    const command = roster.find((ship) => ship.id === game.playerShipId);
     const commandCaptain = game.reimagined ? command?.captain : 'Jason';
-    const federation = game.ships.filter((ship) => ship.faction === FACTIONS.FEDERATION);
+    const federation = roster.filter((ship) => ship.faction === FACTIONS.FEDERATION);
     const losses = federation.filter((ship) => ship.status === 'destroyed').length;
     const best = (list, pick) => list.reduce((top, ship) => (!top || pick(ship) > pick(top) ? ship : top), null);
     const towCredits = game.reimagined ? game.battleRecordState?.towCollisionCredits ?? [] : [];
     const towKills = (ship) => towCredits.filter((credit) => credit.actor.id === ship.id).length;
     const creditedKills = (ship) => (ship.kills ?? 0) + towKills(ship);
-    const topGun = best(game.ships, creditedKills);
+    const topGun = best(roster, creditedKills);
     const topGunIdentity = topGun?.kills ? topGun : towCredits.find((credit) => credit.actor.id === topGun?.id)?.actor ?? topGun;
     const punished = best(survivors, (ship) => ship.shotsTaken);
-    const clumsy = best(game.ships, (ship) => ship.collisions ?? 0);
+    const clumsy = best(roster, (ship) => ship.collisions ?? 0);
     // A drone has no captain to credit (round 20): the hull form reads for it,
     // so the report never names "Captain undefined".
     const gunner = topGun && creditedKills(topGun)
@@ -1317,7 +1321,7 @@ export const reportFor = (game, type) => {
     // A dark prize still in your allegiance is not lost — it can be re-manned.
     // Absent without the ledger, so a Classic report is unchanged.
     const prizesTaken = game.prizesTaken?.[FACTIONS.FEDERATION] ?? 0;
-    const prizesHeld = game.ships.filter((ship) => ship.prize?.byFaction === FACTIONS.FEDERATION
+    const prizesHeld = roster.filter((ship) => ship.prize?.byFaction === FACTIONS.FEDERATION
       && ship.faction === FACTIONS.FEDERATION && ship.status !== 'destroyed').length;
     return {
       title: 'Battle report',

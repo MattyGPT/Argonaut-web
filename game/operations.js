@@ -235,19 +235,25 @@ const validRescueOrderState = (game) => {
   const op = game.operation;
   const ids = new Set([...game.ships, ...op.extracted].map((s) => s.id));
   const used = new Set(game.maintainedTow ? [game.maintainedTow.tugId, game.maintainedTow.targetId] : []);
-  for (const key of ['tows', 'rescueReports']) {
+  for (const key of ['tows', 'rescueReports', 'recoveryReports']) {
     const map = op[key];
     if (map === undefined) continue;
     if (!map || typeof map !== 'object' || Array.isArray(map) || Object.keys(map).length > ids.size) return false;
     for (const [id, value] of Object.entries(map)) {
-      if (!ids.has(id) || !value || value.targetId !== op.targetId) return false;
+      if (!ids.has(id) || !value || value.targetId !== (key === 'recoveryReports' ? op.prizeId : op.targetId)) return false;
       if (key === 'tows') {
         if (value.tugId !== id || id === value.targetId || used.has(id) || used.has(value.targetId)
           || !Number.isFinite(value.offsetX) || !Number.isFinite(value.offsetY)) return false;
         used.add(id); used.add(value.targetId);
-      } else if (!['approaching', 'connecting', 'hauling', 'blocked', 'awaiting-extraction', 'withdrawing', 'completed', 'failed', 'ended', 'cancelled'].includes(value.phase)
+      } else if (!['approaching', 'connecting', 'hauling', 'boarding', 'blocked', 'awaiting-extraction', 'withdrawing', 'completed', 'failed', 'ended', 'cancelled'].includes(value.phase)
         || typeof value.reason !== 'string' || value.reason.length > 400 || !Number.isInteger(value.elapsed) || value.elapsed < 0) return false;
     }
+  }
+  for (const [id, order] of [...Object.entries(game.orders ?? {}), ...Object.entries(game.pendingOrders ?? {})]) {
+    if (order.type === 'recover' && (!ids.has(id) || order.targetId !== op.prizeId
+      || order.captureTimes !== undefined && (!Number.isInteger(order.captureTimes) || order.captureTimes < 1))) return false;
+    if (order.recovery !== undefined && (id !== op.prizeId || order.type !== 'withdraw' || !order.recovery
+      || !ids.has(order.recovery.captainId) || !Number.isInteger(order.recovery.captureTimes) || order.recovery.captureTimes < 1)) return false;
   }
   return true;
 };
