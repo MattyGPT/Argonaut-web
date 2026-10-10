@@ -2,7 +2,8 @@ import { ARCS, DOCKING, FACTIONS, GRID_SIZE, POWER_SINKS, PRIZE, RANGES, REFITS,
 import { actionAvailability, canLaunchDrones, REALTIME_COOLDOWN } from '../game/actions.js';
 import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
 import { isOperation } from '../game/operations.js';
-import { cameraWindow, fieldTransform, viewportFromWorld } from './camera.js';
+import { cameraWindow, distanceScale, fieldTransform, minimapWindow, viewportFromWorld } from './camera.js';
+import { stormCore, terrainMaterial } from './terrain-art.js';
 import { drawMove } from './fx.js';
 import {
   abbreviateNarrative,
@@ -622,7 +623,9 @@ const animateMoves = (map, game, win) => {
     const previous = moveMemory.positions.get(ship.id);
     moveMemory.positions.set(ship.id, { x: ship.x, y: ship.y });
     if (!previous || (previous.x === ship.x && previous.y === ship.y)) return;
-    drawMove(map, previous, ship, win);
+    // Camera-space FX belong to the viewport, not the already transformed
+    // world layer (which would apply the projection a second time).
+    drawMove(game.reimagined ? map.parentElement ?? map : map, previous, ship, win);
     button.style.left = `${(previous.x / grid) * 100}%`;
     button.style.top = `${(previous.y / grid) * 100}%`;
     // Two frames: the old position has to be committed before the transition target.
@@ -732,7 +735,8 @@ const renderMinimap = (game, win, isVisible, view = {}) => {
     .filter(isVisible)
     .map((ship) => `<span class="mini-dot ${ship.faction}${ship.id === game.playerShipId ? ' you' : ''} ${ship.status}${ship.id === view.contextShipId ? ' selected' : ''}" data-ship-id="${ship.id}" style="--mx:${frac(ship.x)};--my:${frac(ship.y)};--mdx:${miniOffsets.get(ship.id)?.dx ?? 0}px;--mdy:${miniOffsets.get(ship.id)?.dy ?? 0}px" role="img" aria-label="${escapeJournal(ship.name)}, ${factionText(ship.faction)}, ${ship.status}${ship.id === game.playerShipId ? ', command ship' : ''}${ship.id === view.contextShipId ? ', selected' : ''}">${ship.status === 'destroyed' ? '<span class="mini-wreck" aria-hidden="true">×</span>' : factionBadgeSvg(ship.faction)}</span>`)
     .join('');
-  const viewport = `<span class="mini-view" style="--vx:${frac(win.minX)};--vy:${frac(win.minY)};--vw:${frac(win.size)}"></span>`;
+  const frame = minimapWindow(win);
+  const viewport = `<span class="mini-view" style="--vx:${frac(frame.x)};--vy:${frac(frame.y)};--vw:${frac(frame.width)};--vh:${frac(frame.height)}"></span>`;
   minimap.innerHTML = terrain + dots + viewport;
 };
 
@@ -867,7 +871,7 @@ const renderMapLegend = (game, shipArt) => {
   // Set through the element rather than into the markup so the note stays a live
   // node (and the screen-reader/legend tests read it the same way as before).
   document.querySelector('#legend-note').textContent = game.reimagined
-    ? 'click a ship for its commands · click empty space to maneuver · terrain fades beyond mapper reach'
+    ? 'click a ship for its commands · click empty space to maneuver · rock gaps inside a boundary are hazardous · hatched storm core blocks radio · terrain fades beyond mapper reach'
     : 'click a ship for its commands · click empty space to maneuver';
 };
 
@@ -888,7 +892,20 @@ export const renderGame = (game, view = {}) => {
   // A Reimagined field is wider than the screen, so the map is a camera window into
   // it. A classic war's window is the whole field at zoom 1, which projects exactly
   // as it did before the camera existed.
-  const win = cameraWindow(grid, view.camera);
+  const rect = document.querySelector('#map')?.getBoundingClientRect?.();
+  const isotropic = game.reimagined && rect?.width > 0 && rect?.height > 0;
+  const win = cameraWindow(grid, { ...view.camera, aspect: isotropic ? rect.width / rect.height : undefined });
+  const terrainToggle = document.querySelector('#terrain-toggle');
+  if (terrainToggle) terrainToggle.hidden = !game.reimagined;
+  const boundaryToggle = document.querySelector('#boundaries-toggle');
+  if (boundaryToggle) boundaryToggle.hidden = !game.reimagined;
+  const scale = document.querySelector('#distance-scale');
+  if (scale) {
+    scale.hidden = !game.reimagined;
+    const bar = distanceScale(win);
+    scale.textContent = `${bar.units} units`;
+    scale.style?.setProperty('width', `${bar.percent}%`);
+  }
   document.querySelector('#mode-readout').textContent = game.operation ? 'REIMAGINED OPERATION' : game.reimagined
     ? (scenarioFor(game).id === 'annihilation' ? 'REIMAGINED WAR' : `REIMAGINED · ${scenarioFor(game).title.toUpperCase()}`)
     : '';
@@ -946,7 +963,7 @@ export const renderGame = (game, view = {}) => {
     // is public knowledge — every alliance can see who holds the objectives.
     const holder = feature.type === 'relay' ? game.held?.[feature.id] ?? null : null;
     const title = holder ? `${label} — held by the ${holder}` : label;
-    return `<div class="terrain ${feature.type}${holder ? ` ${holder}` : ''}" style="--x:${pct(feature.x)};--y:${pct(feature.y)};--d:${pct(2 * feature.radius)}%;--o:${crisp ? 1 : TERRAIN.faintOpacity}" title="${title}" aria-hidden="true"></div>`;
+    return `<div class="terrain ${feature.type}${holder ? ` ${holder}` : ''}" style="--x:${pct(feature.x)};--y:${pct(feature.y)};--d:${pct(2 * feature.radius)}%;--o:${crisp ? 1 : TERRAIN.faintOpacity};--edge:${view.terrainBoundaries !== false ? 0.8 : 0.3}" title="${title}" aria-hidden="true">${terrainMaterial(feature, win, game.reimagined && view.terrainArt !== 'simple')}${stormCore(feature)}</div>`;
   }).join('');
 
   // Stack declutter (play-test retune 27c, widened in the readability pass):
@@ -1050,6 +1067,10 @@ export const renderGame = (game, view = {}) => {
   // Slide and scale the world layer so the camera window fills the viewport. The
   // test stub has no `style`, so guard it; the projection is identity at zoom 1.
   if (map.style) {
+    // A square base layer gives every world unit the same pixel size. Classic
+    // keeps its established rectangular percentage layer and glyph projection.
+    map.style.width = isotropic ? `${Math.min(rect.width, rect.height)}px` : '100%';
+    map.style.height = isotropic ? `${Math.min(rect.width, rect.height)}px` : '100%';
     map.style.transform = fieldTransform(win);
     // Counter-scale for hull glyphs (Matt's play-test idea, 2026-09-25): the
     // world layer scales by the zoom, so without this a ship's disc and letter

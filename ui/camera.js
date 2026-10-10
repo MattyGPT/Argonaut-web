@@ -30,18 +30,23 @@ export const maxZoomFor = (gridSize) => Math.max(MAX_ZOOM, Math.round((gridSize 
 export const COMFORT_UNITS = 90;
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
+const aspectOf = (camera) => Number.isFinite(camera?.aspect) && camera.aspect > 0 ? camera.aspect : 1;
+const spans = (grid, zoom, aspect) => ({ width: grid / zoom * Math.max(1, aspect), height: grid / zoom * Math.max(1, 1 / aspect) });
 
-/** Keeps the camera in bounds: zoom inside its range, and the view inside the field. */
+/** Keep the view inside the field, or center an axis that needs letterboxing. */
 export const clampCamera = (camera, gridSize) => {
   const grid = gridSize ?? GRID_SIZE;
   const zoom = clamp(camera?.zoom ?? 1, MIN_ZOOM, maxZoomFor(grid));
-  const half = grid / zoom / 2;
+  const aspect = aspectOf(camera);
+  const { width, height } = spans(grid, zoom, aspect);
+  const bounded = (value, span) => span >= grid ? grid / 2 : clamp(value, span / 2, grid - span / 2);
   // At zoom 1 the view is the whole field, so the center is pinned to its middle.
   return {
-    cx: clamp(camera?.cx ?? grid / 2, half, grid - half),
-    cy: clamp(camera?.cy ?? grid / 2, half, grid - half),
+    cx: bounded(camera?.cx ?? grid / 2, width),
+    cy: bounded(camera?.cy ?? grid / 2, height),
     zoom,
     follow: camera?.follow !== false,
+    ...(camera?.aspect ? { aspect } : {}),
   };
 };
 
@@ -61,27 +66,29 @@ export const cameraWindow = (gridSize, camera) => {
   const grid = gridSize ?? GRID_SIZE;
   const c = clampCamera(camera, grid);
   const size = grid / c.zoom;
-  return { minX: c.cx - size / 2, minY: c.cy - size / 2, size, zoom: c.zoom, cx: c.cx, cy: c.cy, gridSize: grid };
+  const { width, height } = spans(grid, c.zoom, aspectOf(c));
+  return { minX: c.cx - width / 2, minY: c.cy - height / 2, size, width, height, zoom: c.zoom, cx: c.cx, cy: c.cy, gridSize: grid };
 };
 
 /** World coordinate under a point given as a fraction (0–1) of the viewport. */
 export const worldFromViewport = (vx, vy, win) => ({
-  x: win.minX + vx * win.size,
-  y: win.minY + vy * win.size,
+  x: win.minX + vx * (win.width ?? win.size),
+  y: win.minY + vy * (win.height ?? win.size),
 });
 
 /** Viewport fraction (0–1) of a world coordinate; may fall outside 0–1 when off-screen. */
 export const viewportFromWorld = (wx, wy, win) => ({
-  vx: (wx - win.minX) / win.size,
-  vy: (wy - win.minY) / win.size,
+  vx: (wx - win.minX) / (win.width ?? win.size),
+  vy: (wy - win.minY) / (win.height ?? win.size),
 });
 
 /**
  * The CSS transform for the world layer (`#map-field`), whose children are laid out
  * as a percentage of the whole field. `translate` is a percentage of the layer's own
  * box, so this needs no pixel measurements: it slides the scaled field so the camera
- * window fills the viewport. With `transform-origin: 0 0`, a point at world fraction
- * f lands at viewport fraction (f - minX/grid) * zoom, which is the window projection.
+ * starts at its top-left. Reimagined uses a square base layer whose side is the
+ * smaller viewport dimension; Classic retains its original rectangular layer.
+ * With `transform-origin: 0 0`, world x lands at (x-minX)/grid * zoom * layerWidth.
  */
 export const fieldTransform = (win) => {
   const tx = -(win.minX / win.gridSize) * win.zoom * 100;
@@ -98,10 +105,11 @@ export const zoomAt = (camera, gridSize, vx, vy, factor) => {
   const win = cameraWindow(grid, camera);
   const anchor = worldFromViewport(vx, vy, win);
   const zoom = clamp((camera?.zoom ?? 1) * factor, MIN_ZOOM, maxZoomFor(grid));
-  const size = grid / zoom;
+  const { width, height } = spans(grid, zoom, aspectOf(camera));
   return clampCamera({
-    cx: anchor.x - vx * size + size / 2,
-    cy: anchor.y - vy * size + size / 2,
+    ...camera,
+    cx: anchor.x - vx * width + width / 2,
+    cy: anchor.y - vy * height + height / 2,
     zoom,
     follow: false,
   }, grid);
@@ -112,8 +120,9 @@ export const panBy = (camera, gridSize, dvx, dvy) => {
   const grid = gridSize ?? GRID_SIZE;
   const win = cameraWindow(grid, camera);
   return clampCamera({
-    cx: (camera?.cx ?? grid / 2) + dvx * win.size,
-    cy: (camera?.cy ?? grid / 2) + dvy * win.size,
+    ...camera,
+    cx: (camera?.cx ?? grid / 2) + dvx * win.width,
+    cy: (camera?.cy ?? grid / 2) + dvy * win.height,
     zoom: camera?.zoom ?? 1,
     follow: false,
   }, grid);
@@ -121,8 +130,24 @@ export const panBy = (camera, gridSize, dvx, dvy) => {
 
 /** Re-center on a world point and resume following it. */
 export const centerOn = (camera, gridSize, point) => clampCamera({
+  ...camera,
   cx: point?.x ?? (gridSize ?? GRID_SIZE) / 2,
   cy: point?.y ?? (gridSize ?? GRID_SIZE) / 2,
   zoom: camera?.zoom ?? 1,
   follow: true,
 }, gridSize ?? GRID_SIZE);
+
+/** Clamp the minimap viewport to the field, excluding overview letterboxing. */
+export const minimapWindow = (win) => {
+  const x = Math.max(0, win.minX);
+  const y = Math.max(0, win.minY);
+  return { x, y, width: Math.min(win.gridSize, win.minX + win.width) - x, height: Math.min(win.gridSize, win.minY + win.height) - y };
+};
+
+/** A readable horizontal distance bar occupying at most one fifth of the view. */
+export const distanceScale = (win) => {
+  const limit = win.width / 5;
+  const magnitude = 10 ** Math.floor(Math.log10(limit));
+  const units = [5, 2, 1].map((n) => n * magnitude).find((n) => n <= limit) ?? magnitude;
+  return { units, percent: units / win.width * 100 };
+};

@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "status": "pilot; native export and budget acceptance pending",
+  "method": "Built-in image_gen, transparent_background true, 2026-10-10",
+  "export": "Unmodified generated PNGs; source and consumed file are identical. No cropping, resampling or alpha editing.",
+  "totalBytes": 3977818,
+  "decodedRgbaBytes": 25160256,
+  "targetBytes": 2097152,
+  "targetDecodedRgbaBytes": 16777216,
+  "assets": [
+    {
+      "file": "nebula-v1.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 1555942,
+      "decodedRgbaBytes": 6290064,
+      "transparentPixels": 680366,
+      "partialAlphaPixels": 890537,
+      "footprint": "Clipped to the existing circular region diameter; transparent pixels are not safe routes",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated reusable top-down pixel-art nebula material for Argonaut Reimagined, a tactical space game. Create restrained violet and indigo filaments, mottled dark pockets and irregular wispy silhouette on a truly transparent background. Square composition, cloud fills central 85 percent with transparent margins. Readable chunky pixel clusters, intended for a 256x256 native game texture, limited dark palette navy #142137, violet #534878 and blue #415e84; no bright center. Dense enough to suggest a continuous sensor hazard, no sharply empty safe corridor. Quiet highlights subordinate to small ship sprites. No stars, ships, text, UI, frame, circle outline, black rectangle, photography or luminous bloom. Transparent alpha, no checkerboard baked into the image."
+    },
+    {
+      "file": "asteroids-v1.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 739352,
+      "decodedRgbaBytes": 6290064,
+      "transparentPixels": 1043216,
+      "partialAlphaPixels": 528193,
+      "footprint": "Clipped to the existing circular region diameter; transparent pixels are not safe routes",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated top-down pixel-art asteroid cluster for a tactical space game. Four individually readable rocky silhouettes of varied sizes forming a loose irregular cluster within a square transparent canvas, 15 percent clear margin. Chunky coherent pixel art intended for a 128x128 native texture, dark slate gray and muted brown, small restrained upper-left highlights, rough facets. Space between rocks transparent. No background, stars, dust, ships, text, UI, perimeter, glow or shadows on an opaque plane. These decorate a circular area hazard, not individual colliders. True transparent alpha."
+    },
+    {
+      "file": "ion-storm-v1.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 1489058,
+      "decodedRgbaBytes": 6290064,
+      "transparentPixels": 695445,
+      "partialAlphaPixels": 877071,
+      "footprint": "Clipped to the existing circular region diameter; transparent pixels are not safe routes",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated reusable top-down pixel-art ion-storm material for a tactical space game, intended native 256x256. Square transparent canvas, irregular amber and ochre dust silhouette with quiet dark brown pockets and sparse fine electrical veins. Denser low-contrast core, thinner outer material; keep all highlights muted and below ship brightness. Chunky visible pixel clusters, modest palette charcoal #302a25 ochre #806342 muted amber #ab864e. Transparent margin. No stars, ships, labels, text, UI, circular border, bright white center, bloom or black background. The game supplies exact core/ring outlines separately. True transparent alpha."
+    },
+    {
+      "file": "beacon-v1.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 193466,
+      "decodedRgbaBytes": 6290064,
+      "transparentPixels": 1469432,
+      "partialAlphaPixels": 102296,
+      "footprint": "64 CSS px canvas centered in the existing radius-16 extraction region; no collider",
+      "prompt": "Use case: stylized-concept. Asset type: one small top-down pixel-art navigation beacon for a tactical space game, intended native 32x32. Centered on square transparent canvas with clear margin: compact neutral steel instrument buoy, short four fins, dark center, two tiny restrained cool cyan navigation lights. Coherent upper-left lighting and crisp chunky pixels compatible with retro spaceship sprites. Functional tiny navigational object, not a spacecraft, weapon, repair station or starbase. No rings, perimeter, stars, glow cloud, labels, text or UI. True transparent alpha."
+    }
+  ]
+}

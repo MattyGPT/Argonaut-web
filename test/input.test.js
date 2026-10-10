@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { bindInput, normalizeNewGameOptions, promptForConfirmation, promptForCoordinates, promptForTarget, refreshTargetPrompt } from '../ui/input.js';
 import { createGame } from '../game/state.js';
+import { cameraWindow } from '../ui/camera.js';
 import { targetExplanation } from '../ui/render.js';
 
 // bindInput only reads `dialog[open]` and `activeElement`, so stubbing those two
@@ -245,6 +246,20 @@ test('a map click is measured from the map, not the viewport', () => {
   const dispatched = bind();
   clickMap(150, 400, { left: 100, top: 300, width: 200, height: 200 });
   assert.deepEqual(dispatched, [{ type: 'map-click', x: 25, y: 50 }]);
+});
+
+test('rectangular overview clicks share the projection and reject letterbox margins', () => {
+  openDialog = null; openMenu = null;
+  const dispatched = [];
+  bindInput({ addEventListener: (type, handler) => { if (type === 'click') clickHandler = handler; } },
+    (action) => dispatched.push(action), () => cameraWindow(320, { zoom: 1, aspect: 2 }));
+  const rect = { left: 100, top: 50, width: 800, height: 400 };
+  clickMap(100, 250, rect);
+  assert.equal(dispatched.length, 0, 'the left margin is outside the world');
+  clickMap(300, 50, rect);
+  clickMap(500, 250, rect);
+  clickMap(700, 450, rect);
+  assert.deepEqual(dispatched, [{ type: 'map-click', x: 0, y: 0 }, { type: 'map-click', x: 160, y: 160 }, { type: 'map-click', x: 320, y: 320 }]);
 });
 
 test('clicking a ship selects it without also issuing a maneuver', () => {

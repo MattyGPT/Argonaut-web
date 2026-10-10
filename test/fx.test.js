@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { playEffects, replayEffects } from '../ui/fx.js';
+import { playEffects, replayEffects, updateEffectsCamera } from '../ui/fx.js';
 
 const svgNode = (name) => {
   const attributes = new Map();
@@ -71,6 +71,27 @@ test('replayed beams retain recorded coordinates when hulls are absent and misse
     assert.equal(line.getAttribute('y2'), '24');
     assert.equal(line.getAttribute('class'), 'fx-phaser miss');
     assert.equal(map.children[0].children.length, 1, 'a miss has no impact flash');
+  } finally { Object.assign(globalThis, previous); }
+});
+
+test('rectangular historical FX and camera updates share world width and height', () => {
+  const previous = { document: globalThis.document, setTimeout: globalThis.setTimeout };
+  const timers = [];
+  const map = { children: [], querySelector() { return this.children[0]; }, appendChild(child) { this.children.push(child); } };
+  globalThis.document = { createElementNS: (_namespace, name) => ({ ...svgNode(name), getBoundingClientRect: () => ({ width: 800, height: 400 }) }) };
+  globalThis.setTimeout = (callback) => timers.push(callback);
+  try {
+    playEffects([{ kind: 'phasers', fromId: 'player', historical: true, x1: 10, y1: 20, x2: 30, y2: 40, hit: true }], map, 'player', { minX: -160, minY: 0, size: 320, width: 640, height: 320 });
+    timers.shift()();
+    const svg = map.children[0];
+    assert.equal(svg.getAttribute('viewBox'), '-160 0 640 320');
+    const marker = svg.children.find((node) => node.getAttribute('class') === 'fx-historical-position');
+    assert.equal(marker.getAttribute('rx'), marker.getAttribute('ry'));
+    const line = svg.children.find((node) => node.name === 'line');
+    assert.equal(line.getAttribute('x2'), '30');
+    assert.equal(line.getAttribute('y2'), '40');
+    updateEffectsCamera(map, { minX: 5, minY: 10, width: 160, height: 80 });
+    assert.equal(svg.getAttribute('viewBox'), '5 10 160 80');
   } finally { Object.assign(globalThis, previous); }
 });
 

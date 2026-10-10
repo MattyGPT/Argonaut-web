@@ -1,6 +1,6 @@
 # Terrain and command presentation implementation plan
 
-Date: 2026-10-06. Status: **Concept complete; production art and implementation unstarted.** Spec: [Terrain and command presentation](../specs/2026-10-06-terrain-and-command-presentation.md). Parent: [Delivery plan](2026-10-06-operations-delivery.md).
+Date: 2026-10-06. Updated October 10. Status: **A1 implemented; four-material A2/A3 pilot available; native export/budgets and human M3 acceptance open.** See the [pilot review](../reviews/2026-10-10-terrain-pilot.md) for measured results and remaining checks. Spec: [Terrain and command presentation](../specs/2026-10-06-terrain-and-command-presentation.md). Parent: [Delivery plan](2026-10-06-operations-delivery.md).
 
 ## A0 Establish repeatable visual evidence
 
@@ -8,18 +8,18 @@ Date: 2026-10-06. Status: **Concept complete; production art and implementation 
 
 - [ ] Capture fixed scenes for every terrain, overlaps, faction cues, dense combat, recovery approach and extraction. Record scene adjustments, viewport and native zoom.
 - [ ] Measure frame pacing/render work on a named reference machine/browser in a small operation and larger ordinary fight.
-- [ ] Inventory coordinate projections, hit tests, crowd offsets, rings, beam endpoints and minimap transforms before changing aspect behavior.
-- [ ] Record asset bytes and decoded memory; retain the simple terrain renderer for comparison/fallback.
+- [x] Inventory coordinate projections, hit tests, crowd offsets, rings, beam endpoints and minimap transforms before changing aspect behavior.
+- [x] Record asset bytes and decoded memory; retain the simple terrain renderer for comparison/fallback. Pilot exceeds targets; reduction remains open.
 
 ## A1 Correct projection and provide an overview
 
 This can begin with prototype geometry before finished bitmaps exist.
 
-- [ ] Add isotropic Reimagined projection with real viewport dimensions and separate visible world width/height.
-- [ ] Update camera clamping, fit-to-operation, zoom anchoring, pan, minimap, click mapping and menus together.
-- [ ] Apply the same transform to terrain, ships, rings, paths, tow lines, ordnance and replay/FX endpoints.
+- [x] Add isotropic Reimagined projection with real viewport dimensions and separate visible world width/height.
+- [x] Update camera clamping, fit-to-operation, zoom anchoring, pan, minimap, click mapping and menus together.
+- [x] Apply the same transform to terrain, ships, rings, paths, tow lines, ordnance and replay/FX endpoints.
 - [ ] Preserve usable hit areas, keyboard selection and command-ship location through resize.
-- [ ] Add Operation overview, Follow command ship and distance scale. Show overview in briefing and enter tactical view explicitly.
+- [x] Add Operation overview, Follow command ship and distance scale. Show overview in briefing and enter tactical view explicitly.
 
 **Verify:** round trips across aspect ratios, equal x/y scale, boundary clicks, zoom anchoring, beam endpoints, minimap alignment and Classic presentation/mechanical parity. Inspect the actual DOM and screenshots as well as pure projection tests.
 
@@ -28,21 +28,21 @@ This can begin with prototype geometry before finished bitmaps exist.
 **Input:** [Concept and prompts](../design-assets/2026-10-06-terrain/README.md). Use the image-generation skill and built-in tool for raster candidates.
 
 - [ ] Select native pixel scale and palette by comparing one material against ships at actual game size.
-- [ ] Generate one isolated nebula material, a small rock set, one ion material and an extraction beacon; request alpha where needed.
+- [x] Generate one isolated nebula material, a small rock set, one ion material and an extraction beacon; request alpha where needed.
 - [ ] Inspect actual dimensions, pixel grid, alpha fringes, lighting, seams, silhouettes and background contamination. Revise individually.
-- [ ] Retain prompts and source outputs. Make any export/normalization deliberate and reproducible; model output is not automatically a valid atlas.
+- [x] Retain prompts and source outputs. Pilot uses unmodified 1254-pixel PNGs; native normalization remains a separate, explicit task.
 - [ ] Put selected production files in `assets/terrain/` with dimensions, bytes, decoded size, footprint and provenance in a manifest. Keep the concept in documentation.
 
 Do not commission many variants before in-game review. Save cleaned candidates separately from source images.
 
 ## A3 Compose materials over game geometry
 
-- [ ] Add bounded materials behind ships/overlays, using presentation-only deterministic variant selection keyed by terrain ID.
-- [ ] Keep hazard queries unchanged; real gaps are gaps between regions, not transparent pixels in an image.
-- [ ] Draw authoritative core/ring and extraction boundaries, with contextual emphasis and an always-show preference.
-- [ ] Preserve terrain/ship knowledge and public relay ownership. Decorative sweeps reveal no concealed hulls.
+- [x] Add bounded materials behind ships/overlays, using presentation-only deterministic variant selection keyed by terrain ID.
+- [x] Keep hazard queries unchanged; real gaps are gaps between regions, not transparent pixels in an image.
+- [x] Draw authoritative core/ring and extraction boundaries, with mapper fade and a strong/quiet edge preference. Edges remain visible in both settings.
+- [x] Preserve terrain/ship knowledge and public relay ownership. Decorative sweeps reveal no concealed hulls.
 - [ ] Cull offscreen detail, cache composition, simplify at overview and avoid rebuilding rock elements every tick.
-- [ ] Keep accurate simple fallback for failed assets and simplified presentation.
+- [x] Keep accurate simple fallback for failed assets and simplified presentation.
 
 **Verify:** identical game/RNG state for scripted inputs with art on/off/failing; displayed/mechanical edges; density bounds; camera/playback alignment. Inspect Cabal over nebula and Bloc over storm in color and grayscale.
 

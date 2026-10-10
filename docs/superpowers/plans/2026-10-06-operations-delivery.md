@@ -1,6 +1,6 @@
 # Operations and consequences delivery plan
 
-Date: 2026-10-06. Updated October 10. Status: **Corrected manual rescue confirmed by Matt; R5 pacing tools plus Rescue and Recover prize delegation delivered; human M2 comparison open, terrain pilot next.** See the [initial delivery record](../reviews/2026-10-06-rescue-prototype.md) and [current pacing review](../reviews/2026-10-10-operation-pacing.md). Parent: [Roadmap](../specs/2026-10-06-operations-and-consequences-roadmap.md).
+Date: 2026-10-06. Updated October 10. Status: **Corrected manual rescue confirmed by Matt; Rescue and Recover prize delivered; terrain presentation pilot implemented. Human M2/M3 comparisons and native asset export remain open.** See the [initial delivery record](../reviews/2026-10-06-rescue-prototype.md), [current pacing review](../reviews/2026-10-10-operation-pacing.md) and [terrain pilot review](../reviews/2026-10-10-terrain-pilot.md). Parent: [Roadmap](../specs/2026-10-06-operations-and-consequences-roadmap.md).
 
 ## Delivery order and dependencies
 
@@ -33,7 +33,8 @@ The first playable work is the rescue prototype. Art concepts and campaign ident
 - [x] Second R6 slice: [Recover prize](../specs/2026-10-10-recover-prize.md), legal boarding/crew costs, capture continuity, independent withdrawal, simultaneous rescue traffic, 60 scripted comparisons and a browser journey returning all five hulls. Human M2 acceptance remains open.
 - [ ] M1 human player observation and acceptance (R4).
 - [ ] M2 accepted operational profile and delegation.
-- [ ] M3 production art and in-game visual acceptance.
+- [x] M3 initial terrain pilot: isotropic projection, scale, generated materials, exact boundaries, simple/failure fallback and comparison fixture.
+- [ ] M3 native production exports within budget, live-combat profiling and human in-game visual acceptance; then command/debrief and audio slices.
 - [ ] M4 campaign consequence and persistence.
 - [ ] M5 additional mission families.
 - [ ] M6 release and combined acceptance.
