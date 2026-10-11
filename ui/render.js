@@ -1,3 +1,4 @@
+import { commandPriorities, commandPrioritiesMarkup, commandOrderLines } from './command-priorities.js';
 import { compactContactIds, previousCompactContacts } from './contacts.js';
 import { ARCS, DOCKING, FACTIONS, GRID_SIZE, POWER_SINKS, PRIZE, RANGES, REFITS, STANCES, TERRAIN } from '../game/constants.js';
 import { actionAvailability, canLaunchDrones, REALTIME_COOLDOWN } from '../game/actions.js';
@@ -507,15 +508,11 @@ const shipMenu = (game, actor, ship) => {
   let orders = '';
   const canOrder = game.reimagined && game.phase === 'player' && isActive(ship) && ship.faction === actor?.faction;
   if (canOrder) {
-    const standing = orderFor(game, ship.id);
     const pending = pendingOrderFor(game, ship.id);
     const contact = own || inRadioContact(game, actor, ship);
     const orderLines = [
-      `Standing orders: ${describeOrder(game, pending ?? standing)}.`,
-      pending
-        ? 'An order is still travelling to this hull.'
-        : (contact ? null : 'Out of radio contact — orders arrive one stardate late.'),
-      ...(own ? ['Your own hull obeys these orders whenever the autopilot has the conn.'] : []),
+      ...commandOrderLines(game, ship),
+      !pending && !contact ? 'Out of radio contact — orders arrive one stardate late.' : null,
       ...(game.operation && !own && ship.id !== game.operation.targetId ? ['Recover prize commits up to 10 crew (leaving at least one aboard), then both ships withdraw independently. Capture alone is not recovery.', 'Rescue Sentinel uses balanced reactor power if this hull has no manual allocation; existing power settings are preserved.'] : []),
     ].filter(Boolean);
     const buttons = orderButtonsFor(game, ship)
@@ -526,7 +523,7 @@ const shipMenu = (game, actor, ship) => {
     const refitGrid = docked && !refitTaken
       ? `<p class="menu-sub">One refit at ${docked.name}, once per war:</p><div class="order-grid">${Object.entries(REFITS).filter(([id]) => id !== 'reactor' || game.reimagined).map(([id, refit]) => `<button data-refit="${id}" data-refit-ship="${ship.id}"${disabled}>${refit.label}</button>`).join('')}</div>`
       : '';
-    orders = `<p class="menu-sub">${orderLines.join(' ')}</p><div class="order-grid">${buttons}</div>${refitGrid}`;
+    orders = `<p class="menu-sub">${orderLines.map(escapeJournal).join(' ')}</p><div class="order-grid">${buttons}</div>${refitGrid}`;
   }
   // Combat stance (round 21, Reimagined): a free, persistent per-hull choice like
   // power and orders. Firing sharpens this hull's guns but leaves it easier to hit;
@@ -877,6 +874,11 @@ const renderMapLegend = (game, shipArt) => {
 };
 
 export const renderGame = (game, view = {}) => {
+  const priorities = document.querySelector('#command-priorities');
+  if (priorities) {
+    priorities.hidden = !game.reimagined;
+    updateConsole(priorities, commandPrioritiesMarkup(commandPriorities(game)));
+  }
   const extracted = game.operation?.extracted.find((ship) => ship.id === game.playerShipId);
   const actor = getShip(game, game.playerShipId) ?? (extracted ? { ...extracted, status: 'extracted' } : undefined);
   const map = document.querySelector('#map-field');
@@ -1319,9 +1321,9 @@ export const reportFor = (game, type) => {
       .filter((ship) => ship.faction === command?.faction && ship.status !== 'destroyed')
       .map((ship) => {
         const travelling = pendingOrderFor(game, ship.id);
-        const standing = travelling ?? orderFor(game, ship.id);
+        const standing = orderFor(game, ship.id);
         const reached = ship.id === command?.id || inRadioContact(game, command, ship);
-        const mark = travelling ? ' (order in transit)' : reached ? '' : ' (out of contact)';
+        const mark = travelling ? ` (order in transit: ${describeOrder(game, travelling)}; standing order continues until delivery)` : reached ? '' : ' (out of contact)';
         // The fleet report reads each hull's combat stance in a Reimagined war
         // (round 21), so you can see your dispositions at a glance.
         const stanceNote = game.reimagined && isActive(ship) ? `, ${stanceOf(game, ship)} stance` : '';
