@@ -58,6 +58,11 @@ const keys = Object.freeze({
 const isFocusable = (element) => Boolean(element?.matches?.('button, input, select, textarea, summary, a[href], [tabindex]'));
 
 export const bindInput = (root, dispatch, getCamera = () => ({ minX: 0, minY: 0, size: GRID_SIZE })) => {
+  root.addEventListener('change', (event) => {
+    if (event.target.id === 'contact-picker' && event.target.value) {
+      dispatch({ type: 'map-select', targetId: event.target.value, fromContactPicker: true });
+    }
+  });
   root.addEventListener('click', (event) => {
     // Refit choices live beside the order picker and carry the hull they are for.
     const refitButton = event.target.closest('[data-refit]');

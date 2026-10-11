@@ -37,6 +37,26 @@ const withPair = (game, firstId, first, secondId, second) => ({
 
 const TRAFFIC = 'Firebreather fires phasers at Bonhomme for 32 damage.';
 
+test('contact picker follows mapper knowledge, excludes wrecks, and never changes Classic markers', () => {
+  elements.clear();
+  const game = createOperationGame({ seed: 'rescue-1' });
+  const before = JSON.stringify(game);
+  elements.set('#map', { getBoundingClientRect: () => ({ width: 640, height: 400 }) });
+  renderGame(game, { shipArt: 'sprites', contactMode: 'compact' });
+  const picker = read('#contact-picker').innerHTML;
+  assert.match(picker, /Argonaut/);
+  assert.doesNotMatch(picker, /Sentinel|Wayfarer|Gatekeeper/, 'distant or concealed hulls are not exposed');
+  assert.match(read('#map-field').innerHTML, /compact-contact/);
+  const modified = { ...game, ships: game.ships.map((s) => s.name === 'Swift' ? { ...s, status: 'destroyed' } : s) };
+  renderGame(modified, { contactMode: 'compact' });
+  assert.doesNotMatch(read('#contact-picker').innerHTML, /Swift/);
+  assert.equal(JSON.stringify(game), before);
+  renderGame(createGame({ seed: 'classic-contacts' }), { contactMode: 'compact' });
+  assert.doesNotMatch(read('#map-field').innerHTML, /compact-contact|contact-glyph/);
+  assert.equal(read('#contact-controls').hidden, true);
+  elements.clear();
+});
+
 test('Reimagined move trails use the untransformed viewport with the same camera window', () => {
   elements.clear();
   const previous = { requestAnimationFrame: globalThis.requestAnimationFrame, setTimeout: globalThis.setTimeout, createElementNS: document.createElementNS };
@@ -975,14 +995,14 @@ test('the sprite seam keeps the marker layer stacked on the button', () => {
   assert.match(button, /prize-pip/, 'the prize pip still stacks on the sprite button');
 });
 
-test('a sprite wears its heading as rotation and sheds the needle; a glyph keeps the needle', () => {
+test('sprites retain a CSS-hidden needle for adaptive contacts; glyphs keep the needle', () => {
   elements.clear();
   const game = createGame({ seed: 'render-sprite-rot', reimagined: true });
   renderGame(game, { shipArt: 'sprites' });
   const field = read('#map-field').innerHTML;
   const button = field.match(/<button[^>]*data-ship-id="fed-flagship"[^>]*>[\s\S]*?<\/button>/)[0];
   assert.match(button, /--rot:-?\d+deg/, 'the sprite button carries its heading as --rot');
-  assert.ok(!/heading-glyph/.test(button), 'the hull art is the heading marker; no needle spoke');
+  assert.match(button, /heading-glyph/, 'needle retained for compact mode; full artwork hides it with CSS');
   assert.match(button, /heading \d+°/, 'the heading still reads in the title and aria-label');
   elements.clear();
   renderGame(game, { shipArt: 'letters' });

@@ -1,3 +1,4 @@
+import { paintContactDensity } from './ui/contacts.js';
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets, REALTIME_COOLDOWN } from './game/actions.js';
 import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, REALTIME, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
 import { alertLevel, appendLog, createGame, defaultLoadout, distance, facingOf, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, maintainedTowPair, nebulaHides, normalizeFleetSpec, sensorRange, systemUnits } from './game/state.js';
@@ -210,9 +211,12 @@ let shipArtPref = 'sprites';
 try { shipArtPref = localStorage.getItem(ART_KEY) || 'sprites'; } catch { /* ignore */ }
 const TERRAIN_KEY = 'argonaut-web-terrain-art';
 const BOUNDARIES_KEY = 'argonaut-web-terrain-boundaries';
+const CONTACTS_KEY = 'argonaut-web-contact-density';
+let contactMode = 'adaptive';
 let terrainArt = 'textured';
 let terrainBoundaries = true;
 try {
+  contactMode = ['adaptive', 'full', 'compact'].find((mode) => mode === localStorage.getItem(CONTACTS_KEY)) ?? 'adaptive';
   terrainArt = localStorage.getItem(TERRAIN_KEY) === 'simple' ? 'simple' : 'textured';
   terrainBoundaries = localStorage.getItem(BOUNDARIES_KEY) !== 'quiet';
 } catch { /* preferences are optional */ }
@@ -251,7 +255,7 @@ const redraw = () => {
   syncCamera();
   const progress = practiceProgress(game);
   const report = view.report ?? (operationSession ? { title: 'Rescue at the Belt', lines: ['Recover Sentinel and withdraw through 38, 160. See the operation briefing above the map.', 'The beacon is an extraction area, with no repairs or protection. Wayfarer is optional.'] } : progress ? { title: 'Practice objective', lines: [progress.objective, progress.message ?? 'Use the normal commands. Retry or return whenever you wish.'] } : null);
-  renderGame(game, { ...view, terrainArt, terrainBoundaries, report, playbackMode, playbackActive: Boolean(playbackSession) && !playbackSession.finished, playbackLocked: playbackLocked(), shipArt: document.body.classList.contains('classic') ? 'letters' : shipArtPref, precision: game?.precision ? precisionSettings : null });
+  renderGame(game, { ...view, terrainArt, terrainBoundaries, contactMode, report, playbackMode, playbackActive: Boolean(playbackSession) && !playbackSession.finished, playbackLocked: playbackLocked(), shipArt: document.body.classList.contains('classic') ? 'letters' : shipArtPref, precision: game?.precision ? precisionSettings : null });
   updateEffectsCamera(document.querySelector('#map'), currentWindow());
   if (progress && progress.status !== 'active') document.querySelectorAll('[data-command]').forEach((button) => {
     if (!['rollcall', 'statistics', 'shots', 'fullmap', 'fleet', 'replay'].includes(button.dataset.command)) button.disabled = true;
@@ -526,6 +530,7 @@ const playTrajectory = () => new Promise((resolve) => {
     // onto the same screen-space ring the boundary render uses, so a converging
     // melee reads as separate glyphs instead of one blob mid-burn.
     const offsets = fanOutOffsets(positions.map(({ id, at }) => ({ id, x: at.x, y: at.y })), markerFanOptions(document.body.classList.contains('classic') ? 'letters' : shipArtPref));
+    paintContactDensity(positions.map(({ el, id, at }) => ({ el, id, ...at })), currentWindow(), map.getBoundingClientRect(), { mode: game.reimagined ? contactMode : 'full', offsets });
     positions.forEach(({ el, id, at }) => {
       place(el, at);
       const offset = offsets.get(id);
@@ -616,6 +621,7 @@ const renderFrame = () => {
     entries.push({ el, id: ship.id, x: at.x, y: at.y });
   });
   const offsets = fanOutOffsets(entries, markerFanOptions(document.body.classList.contains('classic') ? 'letters' : shipArtPref));
+  paintContactDensity(entries, currentWindow(), map.getBoundingClientRect(), { mode: game.reimagined ? contactMode : 'full', offsets });
   for (const { el, id, x, y } of entries) {
     el.style.left = `${(x / grid) * 100}%`;
     el.style.top = `${(y / grid) * 100}%`;
@@ -633,7 +639,10 @@ const renderFrame = () => {
       const ship = getShip(game, id);
       const rot = ship ? facingOf(game, ship) : null;
       if (rot === null) el.style.removeProperty('--rot');
-      else el.style.setProperty('--rot', `${Math.round(rot)}deg`);
+      else {
+        el.style.setProperty('--rot', `${Math.round(rot)}deg`);
+        el.querySelector('.heading-glyph')?.style.setProperty('--heading', `${Math.round(rot)}deg`);
+      }
     }
   }
   paintMinimapPositions(entries, grid);
@@ -851,10 +860,13 @@ const dispatch = async (action) => {
   if (practiceSession && game.practice.status !== 'active' && !['map-select', 'menu-close', 'rollcall', 'statistics', 'shots', 'fullmap', 'fleet', 'replay'].includes(action.type)) return;
   if (action.type === 'map-select') {
     const ship = game.ships.find((entry) => entry.id === action.targetId);
-    if (!ship || ship.status === 'destroyed') return;
+    if (!ship || ship.status === 'destroyed' || (action.fromContactPicker && !targetGeometryKnown(game, ship))) return;
     // Clicking a hull opens the context menu that grows out of it; clicking the
     // same hull again puts the menu away.
-    view = { ...view, contextShipId: view.contextShipId === ship.id ? null : ship.id };
+    view = { ...view, contextShipId: !action.fromContactPicker && view.contextShipId === ship.id ? null : ship.id, contextFromPicker: Boolean(action.fromContactPicker) };
+    if (action.fromContactPicker && game.reimagined) {
+      view.camera = clampCamera({ ...view.camera, cx: ship.x, cy: ship.y, follow: false }, field());
+    }
     if (!operationSession && !practiceSession && view.contextShipId) walkthrough = advanceWalkthrough(walkthrough, { type: ship.id === game.playerShipId && walkthrough.stage === 'locate' ? 'locate' : 'inspect', shipId: ship.id, paused: view.paused }, game);
     refresh();
     return;
@@ -862,8 +874,10 @@ const dispatch = async (action) => {
 
   if (action.type === 'menu-close') {
     if (!view.contextShipId) return;
-    view = { ...view, contextShipId: null };
+    const returnToPicker = view.contextFromPicker;
+    view = { ...view, contextShipId: null, contextFromPicker: false };
     refresh();
+    if (returnToPicker) document.querySelector('#contact-picker').focus({ preventScroll: true });
     return;
   }
 
@@ -1671,6 +1685,11 @@ document.querySelector('#art-toggle').addEventListener('click', () => {
 });
 applyArt(shipArtPref);
 
+document.querySelector('#contact-mode').addEventListener('change', (event) => {
+  contactMode = event.target.value;
+  try { localStorage.setItem(CONTACTS_KEY, contactMode); } catch { /* optional */ }
+  redraw();
+});
 const applyTerrainPreferences = () => {
   const art = document.querySelector('#terrain-toggle');
   art.textContent = terrainArt === 'simple' ? 'Terrain art: off' : 'Terrain art: on';
