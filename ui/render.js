@@ -508,6 +508,7 @@ const shipMenu = (game, actor, ship) => {
   let orders = '';
   const canOrder = game.reimagined && game.phase === 'player' && isActive(ship) && ship.faction === actor?.faction;
   if (canOrder) {
+    const standing = orderFor(game, ship.id);
     const pending = pendingOrderFor(game, ship.id);
     const contact = own || inRadioContact(game, actor, ship);
     const orderLines = [
