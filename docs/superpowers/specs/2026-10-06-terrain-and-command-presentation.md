@@ -87,7 +87,7 @@ Rendering remains dependency-free at runtime. Use cached repeated images, bounde
 
 ## V8 Acceptance
 
-**October 10 pilot:** the [implementation review](../reviews/2026-10-10-terrain-pilot.md) records isotropic projection, strong/quiet boundaries, optional generated materials and measured parity/performance. Source PNGs exceed the provisional asset budgets; their use is limited to this documented pilot pending native export and human review. The acceptance contract below remains open and unchanged. A5/A6 hierarchy and audio are later slices.
+**October 10 pilot:** the [implementation review](../reviews/2026-10-10-terrain-pilot.md) records isotropic projection, strong/quiet boundaries, optional generated materials and measured parity/performance. The subsequent [native export and crowd-readability slice](../reviews/2026-10-10-terrain-readability.md) brings runtime assets below both budgets. Human material acceptance remains open. The acceptance contract below remains open and unchanged. A5/A6 hierarchy and audio are later slices.
 
 Inspect the actual game at 1366×768 and 1600×1000, a narrow layout, native 200-percent browser zoom, keyboard-only input, reduced motion, classic view, glyph/sprite ships and grayscale. Check representative maximum and minimum camera zoom, dense fights, terrain overlap, image-load failure and saved-session restoration. The concept image alone establishes none of this.
 
@@ -96,3 +96,14 @@ Players must identify the asteroid hazard edge, storm core/ring, a genuinely saf
 Measure render time and frame pacing on the same recorded machine/browser and fixed scene before/after. Initial real-time target is smooth 60 Hz presentation on the chosen desktop reference, with p95 total frame time within 16.7 ms in the small operation, or a documented reference limitation. Stress a larger ordinary fleet separately; art should not worsen its measured p95 by more than 10 percent without a consciously accepted tradeoff. Report actual values and asset memory. Neither a screenshot nor an average FPS claim proves responsiveness.
 
 Presentation toggles, image failures, camera changes, sound and replay must preserve authoritative simulation/RNG state on identical scripted inputs. Screenshot approval, human readability and mechanical parity are separate acceptance results.
+
+
+## V9 Contact density and native export contract (October 10)
+
+Use 256-pixel nebula/ion textures, a 128-pixel rock cluster and a 64-pixel beacon canvas, with original generated sources retained separately and a reproducible premultiplied-alpha area export. Manifest hashes, actual alpha/dimensions and byte totals must match files. Runtime references must not point at the large sources.
+
+Reimagined defaults to Adaptive contacts. Crowding is measured in CSS pixels after the camera and existing exact-stack offsets: switch neighboring contacts below 72 pixels, retain compact treatment until separation reaches 84 pixels. This hysteresis avoids rapid mode flicker. Cull offscreen density work with a 48-pixel margin. Full artwork disables adaptation; Compact applies it to all onscreen known hulls. Settings are local presentation preferences, never authoritative save fields.
+
+Compact contacts use a fixed 26-pixel dark-backed marker, retaining faction shape/color, name initial (D for drones), heading, command/selected borders, wreck plus, vacant/surrendered marks, orders, prize and tractor cues. Replace broad stance glow with a restrained bottom stripe and threat outline with a red corner. Selection/focus remains white and does not enlarge compact hit boxes. Exact stacked hulls retain their existing tethers; no new world-position displacement is introduced. Zoom and the named selector address residual overlaps.
+
+Visible ships must contain only current mapper-visible non-destroyed hulls, with faction and status in text. Choosing a contact opens its normal commands and centers the camera without spending a turn or setting movement. Revalidate visibility before recentering. Preserve selection by ID across redraws; Escape returns focus to the selector. Apply density to initial paint, real-time interpolation and trajectory playback with the same helper. Classic rules do not opt into this treatment.

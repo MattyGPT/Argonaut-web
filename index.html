@@ -52,6 +52,10 @@
         <div class="terrain-controls" id="terrain-controls">
           <button id="terrain-toggle" class="secondary tiny" type="button" aria-pressed="true" hidden>Terrain art: on</button>
           <button id="boundaries-toggle" class="secondary tiny" type="button" aria-pressed="true" hidden>Hazard edges: strong</button>
+          <span id="contact-controls" hidden>
+            <label>Contacts <select id="contact-mode"><option value="adaptive">Adaptive</option><option value="full">Full artwork</option><option value="compact">Compact</option></select></label>
+            <label>Visible ships <select id="contact-picker" aria-label="Select visible ship"><option value="">Select visible ship…</option></select></label>
+          </span>
         </div>
         <div id="map" role="group" aria-label="Space map">
           <div id="map-field"></div>
@@ -546,6 +550,7 @@
             <p>Moving sets your heading. Free Helm turns can change the exposed arc without spending your action. Shield focus routes regeneration, engine flushes, and docking recovery into the chosen arc first; Auto restores the weakest first. Drones have no shield arcs.</p>
             <h4>Route through terrain and hold relays</h4>
             <p>Reimagined maps use the same distance scale horizontally and vertically. Use the scale bar to judge distance, and <b>Terrain art</b> and <b>Hazard edges</b> above the map to compare materials or emphasize boundaries. Each asteroid boundary encloses one continuous hazard: gaps between painted rocks are still hazardous. An ion storm's hatched inner circle marks its radio-blocking core; the outer ring degrades radio. The extraction beacon's dashed circle is the evacuation region, not a repair station. These presentation controls never spend a turn or change terrain rules.</p>
+            <p><b>Contacts: Adaptive</b> switches crowded Reimagined ships to small tactical markers while isolated ships keep their artwork. Full artwork and Compact are available in the same control. Markers retain faction shapes, initials, heading and status; a red corner indicates a ship that can reach you, and a white outline identifies selection. Zoom in to separate contacts, or use <b>Visible ships</b> to select a named vessel and center its commands. The list includes only current mapper contacts, excludes wrecks, and never issues a movement order. Escape closes its command menu and returns focus to the selector. These preferences apply to the rescue prototype and ordinary Reimagined games; Classic keeps its existing markers.</p>
             <ul>
               <li><b>Nebula:</b> a hull inside can be hidden from outside mapper, scanner, and radio beyond short sensor reveal reach. Sharing the nebula restores sight. Terrain geography remains visible beyond mapper range.</li>
               <li><b>Asteroids:</b> fire crossing a field is less accurate. Ending movement or a tow inside can cause a shield-damaging rock strike; passing through does not trigger that arrival hazard.</li>

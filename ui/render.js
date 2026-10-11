@@ -1,3 +1,4 @@
+import { compactContactIds, previousCompactContacts } from './contacts.js';
 import { ARCS, DOCKING, FACTIONS, GRID_SIZE, POWER_SINKS, PRIZE, RANGES, REFITS, STANCES, TERRAIN } from '../game/constants.js';
 import { actionAvailability, canLaunchDrones, REALTIME_COOLDOWN } from '../game/actions.js';
 import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
@@ -871,7 +872,7 @@ const renderMapLegend = (game, shipArt) => {
   // Set through the element rather than into the markup so the note stays a live
   // node (and the screen-reader/legend tests read it the same way as before).
   document.querySelector('#legend-note').textContent = game.reimagined
-    ? 'click a ship for its commands · click empty space to maneuver · rock gaps inside a boundary are hazardous · hatched storm core blocks radio · terrain fades beyond mapper reach'
+    ? 'click a ship for its commands · click empty space to maneuver · zoom in or use Visible ships for crowded contacts · rock gaps inside a boundary are hazardous · hatched storm core blocks radio · terrain fades beyond mapper reach'
     : 'click a ship for its commands · click empty space to maneuver';
 };
 
@@ -974,7 +975,28 @@ export const renderGame = (game, view = {}) => {
   // and fans them onto a screen-space ring so each glyph is seen and clicked;
   // presentation only — positions, beams, ranges, and every rule read the true
   // coordinates. The real-time flight playback reuses it per frame.
-  const stackOffsets = fanOutOffsets(game.ships.filter(isVisible), markerFanOptions(view.shipArt));
+  const visibleContacts = game.ships.filter(isVisible);
+  const stackOffsets = fanOutOffsets(visibleContacts, markerFanOptions(view.shipArt));
+  const compact = compactContactIds(visibleContacts, win, rect, {
+    mode: game.reimagined ? view.contactMode ?? 'adaptive' : 'full',
+    offsets: stackOffsets, previous: previousCompactContacts(map),
+  });
+  const contactControls = document.querySelector('#contact-controls');
+  if (contactControls) contactControls.hidden = !game.reimagined;
+  const contactMode = document.querySelector('#contact-mode');
+  if (contactMode) contactMode.value = view.contactMode ?? 'adaptive';
+  const picker = document.querySelector('#contact-picker');
+  if (picker) {
+    const options = '<option value="">Select visible ship…</option>' + visibleContacts
+      .filter((ship) => ship.status !== 'destroyed')
+      .sort((a, b) => a.faction.localeCompare(b.faction) || a.name.localeCompare(b.name))
+      .map((ship) => `<option value="${escapeJournal(ship.id)}">${escapeJournal(ship.name)} · ${escapeJournal(factionText(ship.faction))} · ${escapeJournal(ship.status)}${ship.id === game.playerShipId ? ' · command' : ''}</option>`).join('');
+    // Do not replace an unchanged native select during live redraws.
+    if (picker.innerHTML !== options) picker.innerHTML = options;
+    picker.value = visibleContacts.some((ship) => ship.id === view.contextShipId && ship.status !== 'destroyed') ? view.contextShipId : '';
+    picker.disabled = Boolean(view.battlePaused || game.outcome || isSpectator(game));
+  }
+  const focusedShipId = document.activeElement?.matches?.('.ship[data-ship-id]') ? document.activeElement.dataset.shipId : null;
   const stackStyle = (ship) => {
     const offset = stackOffsets.get(ship.id);
     return offset ? `;--dx:${offset.dx}px;--dy:${offset.dy}px` : '';
@@ -987,7 +1009,7 @@ export const renderGame = (game, view = {}) => {
       const wreckMark = view.shipArt === 'sprites'
         ? '<img class="wreck-sprite" src="assets/sprites/neutral/wreck.png" alt="" aria-hidden="true">'
         : '+';
-      return `<span class="wreck ${ship.faction}" data-ship-id="${ship.id}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" title="${escapeJournal(ship.name)}: destroyed · ${factionText(ship.faction)}" role="img" aria-label="${escapeJournal(ship.name)}, ${factionText(ship.faction)}, destroyed wreck">${wreckMark}<span class="stack-tether" aria-hidden="true"></span>${factionBadgeHtml(ship.faction, { label: false })}</span>`;
+      return `<span class="wreck ${ship.faction}${compact.has(ship.id) ? ' compact-contact' : ''}" data-ship-id="${ship.id}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" title="${escapeJournal(ship.name)}: destroyed · ${factionText(ship.faction)}" role="img" aria-label="${escapeJournal(ship.name)}, ${factionText(ship.faction)}, destroyed wreck">${wreckMark}${game.reimagined && view.shipArt === 'sprites' ? '<span class="contact-glyph" aria-hidden="true">+</span>' : ''}<span class="stack-tether" aria-hidden="true"></span>${factionBadgeHtml(ship.faction, { label: false })}</span>`;
     }
     const threat = threats.has(ship.id) ? ' threat' : '';
     const standing = orderFor(game, ship.id) ?? pendingOrderFor(game, ship.id);
@@ -1023,10 +1045,9 @@ export const renderGame = (game, view = {}) => {
     // needle pointing where its bow faces, so which arc an exchange would strike
     // is readable off the map. Public combat intel, like the threat outline.
     const heading = game.reimagined && isActive(ship) && hasArcs(game, ship) ? Math.round(facingOf(game, ship)) : null;
-    // Round 34: a sprite IS the heading marker — the hull art rotates to face
-    // (--rot, refreshed per frame in realtime by app.js), so the needle spoke
-    // only stacks on glyph buttons, where a letter needs it to show its bow.
-    const headingHtml = heading === null || useSprite ? '' : `<span class="heading-glyph" style="--heading:${heading}deg" aria-hidden="true"></span>`;
+    // Artwork carries heading through --rot; keep a CSS-hidden needle in the
+    // same node so live density changes can reveal it without replacing focus.
+    const headingHtml = heading === null ? '' : `<span class="heading-glyph" style="--heading:${heading}deg" aria-hidden="true"></span>`;
     const rotStyle = heading === null || !useSprite ? '' : `;--rot:${heading}deg`;
     const headingNote = heading === null ? '' : ` — heading ${heading}°`;
     // A hull broadcasting distress (round 24) wears a marker: the call is public,
@@ -1042,7 +1063,7 @@ export const renderGame = (game, view = {}) => {
     const selected = ship.id === view.contextShipId;
     const command = ship.id === game.playerShipId;
     const statusMark = ['vacant', 'surrendered'].includes(ship.status) ? `<span class="ship-state" aria-hidden="true">${ship.status === 'vacant' ? 'V' : 'S'}</span>` : '';
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}${heldClass}${useSprite ? ' has-sprite' : ''}${selected ? ' selected' : ''}${command ? ' command-ship' : ''}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}${rotStyle}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status} · ${factionText(ship.faction)}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${selected ? ', selected' : ''}${command ? ', command ship' : ''}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}${useSprite ? `<img class="sprite" src="assets/sprites/${spriteFaction.toLowerCase()}/${SPRITE_SLUGS.get(ship.className)}.png" alt="" aria-hidden="true" draggable="false">` : `<span class="glyph">${glyph}</span>`}<span class="stack-tether" aria-hidden="true"></span>${factionBadgeHtml(ship.faction, { label: false })}${statusMark}${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}${held ? '<span class="tractor-pip" aria-hidden="true"></span>' : ''}</button>`;
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}${heldClass}${useSprite ? ' has-sprite' : ''}${selected ? ' selected' : ''}${command ? ' command-ship' : ''}${compact.has(ship.id) ? ' compact-contact' : ''}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}${rotStyle}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status} · ${factionText(ship.faction)}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${selected ? ', selected' : ''}${command ? ', command ship' : ''}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}${useSprite ? `<img class="sprite" src="assets/sprites/${spriteFaction.toLowerCase()}/${SPRITE_SLUGS.get(ship.className)}.png" alt="" aria-hidden="true" draggable="false">` : `<span class="glyph">${glyph}</span>`}${game.reimagined && useSprite ? `<span class="contact-glyph" aria-hidden="true">${escapeJournal(glyph)}</span>` : ''}<span class="stack-tether" aria-hidden="true"></span>${factionBadgeHtml(ship.faction, { label: false })}${statusMark}${game.reimagined && threat ? '<span class="contact-threat" aria-hidden="true"></span>' : ''}${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}${held ? '<span class="tractor-pip" aria-hidden="true"></span>' : ''}</button>`;
   }).join('');
   // Tractor lock lines (Matt's call, 2026-09-25): the beam is physical. A held
   // hull you can see draws its lock back to the source even when a nebula hides
@@ -1106,6 +1127,9 @@ export const renderGame = (game, view = {}) => {
     }
   }
 
+  if (focusedShipId && !menuShip) {
+    [...(map.querySelectorAll?.('.ship[data-ship-id]') ?? [])].find((el) => el.dataset.shipId === focusedShipId)?.focus?.({ preventScroll: true });
+  }
   const condition = alertLevel(actor);
   const towPair = maintainedTowPair(game);
   const availableCommands = commandList(game, actor);

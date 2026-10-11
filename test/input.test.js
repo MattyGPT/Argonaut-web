@@ -57,6 +57,15 @@ const bind = () => {
   return dispatched;
 };
 
+test('visible ship selector opens the named contact without issuing a maneuver', () => {
+  const handlers = {}, actions = [];
+  bindInput({ addEventListener: (type, handler) => { handlers[type] = handler; } }, (action) => actions.push(action));
+  handlers.change({ target: { id: 'contact-picker', value: 'fed-flagship' } });
+  handlers.change({ target: { id: 'contact-picker', value: '' } });
+  handlers.change({ target: { id: 'contact-mode', value: 'compact' } });
+  assert.deepEqual(actions, [{ type: 'map-select', targetId: 'fed-flagship', fromContactPicker: true }]);
+});
+
 const press = (key, options = {}) => keyHandler({ key, target: { matches: () => false }, preventDefault: () => {}, ...options });
 
 /** Fakes `event.target.closest` so one selector answers and the rest miss. */

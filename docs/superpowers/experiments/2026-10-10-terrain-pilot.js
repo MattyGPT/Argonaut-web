@@ -54,6 +54,7 @@ document.querySelector('#pilot-rescue').onclick = () => { if (!busy) loadScene('
 document.querySelector('#pilot-ordinary').onclick = () => { if (!busy) loadScene('ordinary'); };
 document.querySelector('#pilot-gray').onclick = () => document.body.classList.toggle('pilot-gray');
 document.querySelector('#pilot-failure').onclick = () => document.body.classList.toggle('pilot-failure');
+document.querySelector('#contact-mode').onchange = (event) => { view.contactMode = event.target.value; paint(); };
 document.querySelector('#terrain-toggle').onclick = () => { view.terrainArt = view.terrainArt === 'simple' ? 'textured' : 'simple'; paint(); };
 document.querySelector('#boundaries-toggle').onclick = () => { view.terrainBoundaries = !view.terrainBoundaries; paint(); };
 document.querySelector('#art-toggle').onclick = () => { view.shipArt = view.shipArt === 'sprites' ? 'letters' : 'sprites'; paint(); };
@@ -75,7 +76,7 @@ document.querySelector('#pilot-benchmark').onclick = async () => {
   try {
     // Warm cached assets explicitly; layout + paint timings exclude network.
     await Promise.all(['nebula', 'asteroids', 'ion-storm', 'beacon'].map(async (name) => {
-      const image = new Image(); image.src = `assets/terrain/${name}-v1.png`; await image.decode();
+      const image = new Image(); image.src = `assets/terrain/${name}-v2.png`; await image.decode();
     }));
     for (const mode of ['simple', 'textured']) {
       view.terrainArt = mode;
