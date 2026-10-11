@@ -37,6 +37,63 @@ const withPair = (game, firstId, first, secondId, second) => ({
 
 const TRAFFIC = 'Firebreather fires phasers at Bonhomme for 32 damage.';
 
+test('Reimagined move trails use the untransformed viewport with the same camera window', () => {
+  elements.clear();
+  const previous = { requestAnimationFrame: globalThis.requestAnimationFrame, setTimeout: globalThis.setTimeout, createElementNS: document.createElementNS };
+  const svgNode = () => ({ attributes: {}, children: [], setAttribute(key, value) { this.attributes[key] = String(value); }, appendChild(child) { this.children.push(child); } });
+  const viewport = { children: [], querySelector() { return this.children[0] ?? null; }, appendChild(child) { this.children.push(child); }, getBoundingClientRect: () => ({ width: 800, height: 400 }) };
+  const button = { dataset: { shipId: 'fed-flagship' }, style: {} };
+  const field = { parentElement: viewport, querySelectorAll: () => [button] };
+  elements.set('#map', viewport); elements.set('#map-field', field);
+  document.createElementNS = svgNode;
+  globalThis.requestAnimationFrame = () => {};
+  globalThis.setTimeout = () => {};
+  try {
+    const game = createGame({ seed: 'trail-rectangular', reimagined: true });
+    const view = { camera: { cx: 160, cy: 160, zoom: 2 } };
+    renderGame(withFlagship(game, { x: 140, y: 140 }), view);
+    renderGame(withFlagship(game, { x: 150, y: 145 }), view);
+    assert.equal(viewport.children.length, 1);
+    assert.equal(viewport.children[0].attributes.viewBox, '0 80 320 160');
+    const line = viewport.children[0].children[0];
+    assert.deepEqual([line.attributes.x1, line.attributes.y1, line.attributes.x2, line.attributes.y2], ['140', '140', '150', '145']);
+  } finally {
+    globalThis.requestAnimationFrame = previous.requestAnimationFrame;
+    globalThis.setTimeout = previous.setTimeout;
+    document.createElementNS = previous.createElementNS;
+    elements.clear();
+  }
+});
+
+test('terrain presentation toggles preserve state, region/core geometry and Classic layout', () => {
+  elements.clear();
+  const game = createOperationGame({ seed: 'rescue-1' });
+  game.terrain.push({ id: 'test-storm', type: 'ion-storm', x: 100, y: 100, radius: 20 });
+  const before = JSON.stringify(game);
+  elements.set('#map', { getBoundingClientRect: () => ({ width: 800, height: 400 }) });
+  const style = { setProperty() {} };
+  elements.set('#map-field', { style });
+  renderGame(game, { camera: { zoom: 1 }, terrainArt: 'textured' });
+  assert.equal(style.width, '400px');
+  assert.equal(style.height, '400px');
+  assert.match(read('#map-field').innerHTML, /terrain-material/);
+  assert.match(read('#map-field').innerHTML, /storm-core.*--core:60%/);
+  assert.match(read('#minimap').innerHTML, /--vw:100;--vh:100/);
+  const geometry = (html) => [...html.matchAll(/--x:[^;]+;--y:[^;]+;--d:[^;]+;--o:[^;]+/g)].map((m) => m[0]);
+  const textured = geometry(read('#map-field').innerHTML);
+  renderGame(game, { camera: { zoom: 1 }, terrainArt: 'simple', terrainBoundaries: false });
+  assert.doesNotMatch(read('#map-field').innerHTML, /terrain-material/);
+  assert.deepEqual(geometry(read('#map-field').innerHTML), textured);
+  assert.match(read('#map-field').innerHTML, /storm-core/);
+  assert.equal(JSON.stringify(game), before, 'drawing/toggling never writes game or RNG');
+  renderGame(createGame({ seed: 'classic-art-parity' }), { terrainArt: 'textured' });
+  assert.equal(style.width, '100%');
+  assert.equal(style.height, '100%');
+  assert.equal(style.transform, 'translate(0%, 0%) scale(1)');
+  assert.doesNotMatch(read('#map-field').innerHTML, /terrain-material/);
+  elements.clear();
+});
+
 test('maintained towing renders actionable status for ordinary wars and operation delivery', () => {
   for (const original of [createGame({ seed: 'tow-render', reimagined: true }), createOperationGame({ seed: 'rescue-1' })]) {
     elements.clear();
@@ -666,8 +723,8 @@ test('terrain is crisp within mapper reach and faint beyond it', () => {
   renderGame(game);
   const field = read('#map-field').innerHTML;
   // A battle cruiser's mapper reaches 60; the near nebula is inside it, the far storm is not.
-  assert.match(field, /class="terrain nebula" style="[^"]*--o:1"/, 'a mapped feature renders crisp');
-  assert.match(field, /class="terrain ion-storm" style="[^"]*--o:0\.45"/, 'an unmapped one fades to faintOpacity');
+  assert.match(field, /class="terrain nebula" style="[^"]*--o:1[;"]/, 'a mapped feature renders crisp');
+  assert.match(field, /class="terrain ion-storm" style="[^"]*--o:0\.45[;"]/, 'an unmapped one fades to faintOpacity');
 });
 
 test('a Classic war draws no terrain anywhere', () => {

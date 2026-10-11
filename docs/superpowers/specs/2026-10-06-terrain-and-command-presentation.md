@@ -87,6 +87,8 @@ Rendering remains dependency-free at runtime. Use cached repeated images, bounde
 
 ## V8 Acceptance
 
+**October 10 pilot:** the [implementation review](../reviews/2026-10-10-terrain-pilot.md) records isotropic projection, strong/quiet boundaries, optional generated materials and measured parity/performance. Source PNGs exceed the provisional asset budgets; their use is limited to this documented pilot pending native export and human review. The acceptance contract below remains open and unchanged. A5/A6 hierarchy and audio are later slices.
+
 Inspect the actual game at 1366×768 and 1600×1000, a narrow layout, native 200-percent browser zoom, keyboard-only input, reduced motion, classic view, glyph/sprite ships and grayscale. Check representative maximum and minimum camera zoom, dense fights, terrain overlap, image-load failure and saved-session restoration. The concept image alone establishes none of this.
 
 Players must identify the asteroid hazard edge, storm core/ring, a genuinely safe gap, a visible hostile, a prize and the extraction region without author explanation. Ask what is decorative and what changes gameplay. Revise artwork that suggests false cover or conceals target ownership.

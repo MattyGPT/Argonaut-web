@@ -448,6 +448,35 @@ body.classic .journal-identities { color: inherit; }
   background: radial-gradient(circle at 48% 52%, #ffb04d3d, #ff8c1a1c 70%, transparent);
 }
 
+/* Terrain pilot: materials decorate continuous regions, never their collision
+   masks. Quiet base fills and exact boundaries survive missing image requests. */
+.terrain:not(.relay) {
+  overflow: hidden;
+  border-width: max(.5px, calc(1px * var(--invzoom, 1)));
+}
+.terrain.nebula { border-color: rgb(186 170 202 / var(--edge, .3)); }
+.terrain.asteroids { border-color: rgb(170 183 187 / var(--edge, .3)); border-style: dashed; }
+.terrain.ion-storm { border-color: rgb(195 160 109 / var(--edge, .3)); border-style: dotted; }
+.terrain-material { position: absolute; inset: 0; background: center / 100% 100% no-repeat; transform: rotate(var(--rotation)); image-rendering: pixelated; opacity: .85; }
+.nebula .terrain-material { background-image: url('assets/terrain/nebula-v1.png'); }
+.asteroids .terrain-material { background-image: url('assets/terrain/asteroids-v1.png'); }
+.ion-storm .terrain-material { background-image: url('assets/terrain/ion-storm-v1.png'); }
+.storm-core {
+  position: absolute; left: 50%; top: 50%; width: var(--core); height: var(--core);
+  transform: translate(-50%, -50%); border-radius: 50%;
+  border: max(.5px, calc(1px * var(--invzoom, 1))) solid #c3a06d;
+  background: repeating-linear-gradient(135deg, transparent 0 7px, #c3a06d18 7px 8px);
+}
+.terrain-controls { display: flex; gap: .5rem; padding: .35rem .75rem; flex-wrap: wrap; }
+.terrain-controls:has(button[hidden]):not(:has(button:not([hidden]))) { display: none; }
+.distance-scale {
+  position: absolute; bottom: 14px; left: 14px; z-index: 3; pointer-events: none;
+  border: solid #c4d5df; border-width: 0 1px 2px; padding: 0 3px 3px;
+  color: #c4d5df; font-size: .65rem; text-align: center; white-space: nowrap;
+  text-shadow: 0 1px 3px #000;
+}
+.practice-zone.beacon-art { background: url('assets/terrain/beacon-v1.png') center / 64px 64px no-repeat; image-rendering: pixelated; text-shadow: 0 1px 3px #000, 0 0 4px #000; }
+
 /* The capturable relay node (round 16): a small hard-ringed marker, neutral ice-blue
    while free, glowing in the holding alliance's colors while held. Ownership is
    public knowledge — every side can see who holds the objectives. */
@@ -570,7 +599,7 @@ body.classic .journal-identities { color: inherit; }
   left: calc(var(--vx) * 1%);
   top: calc(var(--vy) * 1%);
   width: calc(var(--vw) * 1%);
-  height: calc(var(--vw) * 1%);
+  height: calc(var(--vh, var(--vw)) * 1%);
   border: 1px solid #cfe8ff;
   background: #cfe8ff14;
   transform: translate(0, 0);
@@ -1061,6 +1090,10 @@ body.classic .console-section summary { color: inherit; }
   .map-panel { display: flex; flex-direction: column; min-height: 0; }
   .map-panel > .panel-title, .map-legend { flex: 0 0 auto; }
   #map { flex: 1 1 auto; min-height: 0; aspect-ratio: auto; }
+  /* Isotropic overview must have enough vertical space to distinguish hulls;
+     on short desktops the page scrolls instead of compressing the entire field. */
+  #game-root:has(#terrain-toggle:not([hidden])) { min-height: 760px; }
+  .terrain-controls { flex: 0 0 auto; }
   #report { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 }
 

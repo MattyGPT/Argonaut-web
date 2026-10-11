@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<base href="../../../"><title>Terrain pilot comparison</title><link rel="stylesheet" href="styles.css">
+<style>
+  #pilot-tools { padding: 1rem; display: flex; flex-wrap: wrap; gap: .6rem; }
+  #pilot-output { white-space: pre-wrap; margin: 1rem; }
+  .pilot-failure .terrain-material { background-image: url('assets/terrain/intentionally-missing.png') !important; }
+  .pilot-gray #map { filter: grayscale(1); }
+</style></head><body>
+<section id="pilot-tools" aria-label="Presentation test controls">
+  <button id="pilot-rescue">Rescue scene</button><button id="pilot-ordinary">Ordinary overlap scene</button>
+  <button id="pilot-failure">Toggle failed assets</button><button id="pilot-gray">Toggle grayscale</button>
+  <button id="pilot-benchmark">Measure both views (240 frames each)</button>
+</section><pre id="pilot-output" role="status">Loading fixed scene…</pre><div id="fixture"></div>
+<script type="module" src="docs/superpowers/experiments/2026-10-10-terrain-pilot.js"></script>
+</body></html>

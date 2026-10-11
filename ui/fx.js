@@ -7,6 +7,10 @@ const TERMINAL_EFFECT_MS = 2500;
 /** The whole field, as a camera window — what a classic war always draws into. */
 const FULL_FIELD = { minX: 0, minY: 0, size: GRID_SIZE };
 
+export const updateEffectsCamera = (map, win) => {
+  map?.querySelector?.('svg.fx-layer')?.setAttribute('viewBox', `${win.minX} ${win.minY} ${win.width ?? win.size} ${win.height ?? win.size}`);
+};
+
 const layer = (map, win = FULL_FIELD) => {
   let el = map.querySelector('svg.fx-layer');
   if (!el) {
@@ -18,7 +22,7 @@ const layer = (map, win = FULL_FIELD) => {
   // FX are drawn in world units, so the layer's viewBox is the camera window: beams,
   // trails, and bursts land on their hulls whether the view shows the whole field or
   // is zoomed into one corner of a wide Reimagined war.
-  el.setAttribute('viewBox', `${win.minX} ${win.minY} ${win.size} ${win.size}`);
+  el.setAttribute('viewBox', `${win.minX} ${win.minY} ${win.width ?? win.size} ${win.height ?? win.size}`);
   return el;
 };
 
@@ -53,10 +57,10 @@ const displayedPoint = (map, svg, id, fallback) => {
 
 const drawBeam = (svg, e, map) => {
   if (e.historical) {
-    const size = Number(svg.getAttribute('viewBox')?.split(/\s+/)[2]);
+    const [, , width, height] = svg.getAttribute('viewBox').split(/\s+/).map(Number);
     const box = svg.getBoundingClientRect?.();
-    const sx = size / (box?.width || 800);
-    const sy = size / (box?.height || 800);
+    const sx = width / (box?.width || 800);
+    const sy = height / (box?.height || 800);
     for (const [x, y, name, role] of [[e.x1, e.y1, e.actorName ?? 'Shooter', 'origin'], [e.x2, e.y2, e.targetName ?? 'Target', e.hit ? 'target' : 'aim']]) {
     const marker = document.createElementNS(SVG_NS, 'ellipse');
     marker.setAttribute('class', 'fx-historical-position');

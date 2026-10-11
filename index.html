@@ -49,6 +49,10 @@
             <span id="turn-readout"></span>
           </span>
         </div>
+        <div class="terrain-controls" id="terrain-controls">
+          <button id="terrain-toggle" class="secondary tiny" type="button" aria-pressed="true" hidden>Terrain art: on</button>
+          <button id="boundaries-toggle" class="secondary tiny" type="button" aria-pressed="true" hidden>Hazard edges: strong</button>
+        </div>
         <div id="map" role="group" aria-label="Space map">
           <div id="map-field"></div>
           <div id="ship-menu" aria-label="Ship commands"></div>
@@ -58,6 +62,7 @@
             <button id="camera-center" class="secondary tiny" type="button" title="Center on command ship" aria-label="Center on command ship">&#8982;</button>
           </div>
           <div id="minimap" class="minimap" role="group" aria-label="War zone minimap" hidden></div>
+          <div id="distance-scale" class="distance-scale" aria-label="Map distance scale" hidden></div>
         </div>
         <div class="map-legend" id="map-legend">
           <span class="Federation">Federation</span>
@@ -540,6 +545,7 @@
             <p>Expand <b>Helm and shield focus</b> to turn without moving or prioritize shield recovery. Crewed ships have fore, starboard, aft, and port arcs; the bow is strongest and stern weakest. Aimed primary weapon hits burn the struck arc first, with some overflow bleeding to other arcs and the rest reaching crew and systems. Low shields on an exposed arc can admit damage despite shields elsewhere. Blasts, ion, collisions, rocks, and secondary spread splash distribute damage across arcs. Weapons can fire in every direction; heading affects protection.</p>
             <p>Moving sets your heading. Free Helm turns can change the exposed arc without spending your action. Shield focus routes regeneration, engine flushes, and docking recovery into the chosen arc first; Auto restores the weakest first. Drones have no shield arcs.</p>
             <h4>Route through terrain and hold relays</h4>
+            <p>Reimagined maps use the same distance scale horizontally and vertically. Use the scale bar to judge distance, and <b>Terrain art</b> and <b>Hazard edges</b> above the map to compare materials or emphasize boundaries. Each asteroid boundary encloses one continuous hazard: gaps between painted rocks are still hazardous. An ion storm's hatched inner circle marks its radio-blocking core; the outer ring degrades radio. The extraction beacon's dashed circle is the evacuation region, not a repair station. These presentation controls never spend a turn or change terrain rules.</p>
             <ul>
               <li><b>Nebula:</b> a hull inside can be hidden from outside mapper, scanner, and radio beyond short sensor reveal reach. Sharing the nebula restores sight. Terrain geography remains visible beyond mapper range.</li>
               <li><b>Asteroids:</b> fire crossing a field is less accurate. Ending movement or a tow inside can cause a shield-damaging rock strike; passing through does not trigger that arrival hazard.</li>

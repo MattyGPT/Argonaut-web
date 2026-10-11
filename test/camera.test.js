@@ -9,11 +9,55 @@ import {
   fieldTransform,
   makeCamera,
   maxZoomFor,
+  minimapWindow,
+  distanceScale,
   panBy,
   viewportFromWorld,
   worldFromViewport,
   zoomAt,
 } from '../ui/camera.js';
+
+test('rectangular views keep equal pixel scale, round trips and whole-field overview', () => {
+  for (const [width, height] of [[1080, 800], [420, 600], [640, 320]]) {
+    for (const zoom of [1, 2, 8]) {
+      const win = cameraWindow(320, { cx: 160, cy: 160, zoom, aspect: width / height });
+      assert.ok(Math.abs(width / win.width - height / win.height) < 1e-9);
+      for (const p of [[0, 0], [38, 160], [150, 160], [320, 320]]) {
+        const v = viewportFromWorld(...p, win);
+        const back = worldFromViewport(v.vx, v.vy, win);
+        assert.ok(Math.abs(p[0] - back.x) < 1e-9 && Math.abs(p[1] - back.y) < 1e-9);
+        // Square layer + transform and direct viewport projection must coincide.
+        const layer = Math.min(width, height);
+        assert.ok(Math.abs((p[0] - win.minX) / 320 * zoom * layer - v.vx * width) < 1e-9);
+        assert.ok(Math.abs((p[1] - win.minY) / 320 * zoom * layer - v.vy * height) < 1e-9);
+      }
+      const mini = minimapWindow(win);
+      assert.ok(mini.x >= 0 && mini.y >= 0 && mini.x + mini.width <= 320 && mini.y + mini.height <= 320);
+      if (zoom === 1) assert.deepEqual(mini, { x: 0, y: 0, width: 320, height: 320 });
+      const bar = distanceScale(win);
+      assert.ok(bar.percent > 0 && bar.percent <= 20);
+    }
+  }
+});
+
+test('rectangular zoom, pan and recenter retain aspect and cursor anchor', () => {
+  for (const aspect of [1.35, .7]) {
+    const camera = { cx: 160, cy: 160, zoom: 3, aspect };
+    const before = worldFromViewport(.35, .65, cameraWindow(320, camera));
+    const zoomed = zoomAt(camera, 320, .35, .65, 1.5);
+    const after = worldFromViewport(.35, .65, cameraWindow(320, zoomed));
+    assert.ok(Math.abs(before.x - after.x) < 1e-9 && Math.abs(before.y - after.y) < 1e-9);
+    const panned = panBy(camera, 320, .1, -.1);
+    const win = cameraWindow(320, camera);
+    assert.equal(panned.cx, 160 + .1 * win.width);
+    assert.equal(panned.cy, 160 - .1 * win.height);
+    const centered = centerOn(zoomed, 320, { x: 0, y: 320 });
+    assert.equal(centered.aspect, aspect);
+    assert.equal(centered.zoom, zoomed.zoom);
+    const edge = cameraWindow(320, centered);
+    assert.ok(Math.abs(edge.minX) < 1e-9 && Math.abs(edge.minY + edge.height - 320) < 1e-9);
+  }
+});
 
 test('a classic field opens at zoom 1 framing the whole map', () => {
   const camera = makeCamera(GRID_SIZE, { x: 30, y: 40 });

@@ -1,5 +1,6 @@
 import { GRID_SIZE, SURGICAL_DAMAGE_FACTOR, WEAPONS } from '../game/constants.js';
 import { factionText } from './faction-identity.js';
+import { worldFromViewport } from './camera.js';
 
 /** Normalize new-game choices at submission, even if hidden controls are stale. */
 export const normalizeNewGameOptions = ({ ruleset, campaign = false, realtime = false, scenario = 'annihilation', loadout = null } = {}) => {
@@ -148,10 +149,12 @@ export const bindInput = (root, dispatch, getCamera = () => ({ minX: 0, minY: 0,
     const rect = map.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
     const win = getCamera();
+    const point = worldFromViewport((event.clientX - rect.left) / rect.width, (event.clientY - rect.top) / rect.height, win);
+    // Overview letterboxing is outside the playable field, never a move target.
+    if (win.gridSize && (point.x < 0 || point.y < 0 || point.x > win.gridSize || point.y > win.gridSize)) return;
     dispatch({
       type: 'map-click',
-      x: win.minX + ((event.clientX - rect.left) / rect.width) * win.size,
-      y: win.minY + ((event.clientY - rect.top) / rect.height) * win.size,
+      ...point,
     });
   });
 

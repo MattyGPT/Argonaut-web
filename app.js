@@ -6,7 +6,8 @@ import { scenarioFor } from './game/scenarios.js';
 import { positionAt, positionsOf, simTimeOf } from './game/realtime.js';
 import { resolveAutopilotTurn, resolveComputerTurns, stepContinuum } from './game/turns.js';
 import { bindInput, normalizeNewGameOptions, promptForConfirmation, promptForCoordinates, promptForTarget, promptForTowDestination, refreshTargetPrompt } from './ui/input.js';
-import { cameraWindow, centerOn, clampCamera, fieldTransform, makeCamera, panBy, zoomAt } from './ui/camera.js';
+import { cameraWindow, centerOn, clampCamera, fieldTransform, makeCamera, minimapWindow, panBy, zoomAt } from './ui/camera.js';
+import { updateEffectsCamera } from './ui/fx.js';
 import { renderSectorScreen } from './ui/sector.js';
 import {
   ordinaryBattleEvents,
@@ -166,11 +167,14 @@ const syncCamera = () => {
   const ship = getShip(game, game.playerShipId);
   if (!view.camera) {
     const camera = makeCamera(field(), ship);
-    if (operationSession) { view = { ...view, camera: { ...camera, cx: field() / 2, cy: field() / 2, zoom: 1, follow: false } }; return; }
-    const objective = game.practice?.zone;
-    view = { ...view, camera: objective ? { ...camera, cx: (ship.x + 2 * objective.x) / 3, cy: (ship.y + 2 * objective.y) / 3, follow: false } : camera };
-    return;
+    if (operationSession) { view = { ...view, camera: { ...camera, cx: field() / 2, cy: field() / 2, zoom: 1, follow: false } }; }
+    else {
+      const objective = game.practice?.zone;
+      view = { ...view, camera: objective ? { ...camera, cx: (ship.x + 2 * objective.x) / 3, cy: (ship.y + 2 * objective.y) / 3, follow: false } : camera };
+    }
   }
+  const rect = document.querySelector('#map').getBoundingClientRect();
+  view = { ...view, camera: clampCamera({ ...view.camera, aspect: game.reimagined && rect.width && rect.height ? rect.width / rect.height : undefined }, field()) };
   if (view.camera.follow && ship) {
     view = { ...view, camera: clampCamera({ ...view.camera, cx: ship.x, cy: ship.y }, field()) };
   }
@@ -204,6 +208,14 @@ const CONFIRMATIONS = new Map([
 const ART_KEY = 'argonaut-web-ship-art';
 let shipArtPref = 'sprites';
 try { shipArtPref = localStorage.getItem(ART_KEY) || 'sprites'; } catch { /* ignore */ }
+const TERRAIN_KEY = 'argonaut-web-terrain-art';
+const BOUNDARIES_KEY = 'argonaut-web-terrain-boundaries';
+let terrainArt = 'textured';
+let terrainBoundaries = true;
+try {
+  terrainArt = localStorage.getItem(TERRAIN_KEY) === 'simple' ? 'simple' : 'textured';
+  terrainBoundaries = localStorage.getItem(BOUNDARIES_KEY) !== 'quiet';
+} catch { /* preferences are optional */ }
 
 const drawPracticeZone = () => {
   const map = document.querySelector('#map');
@@ -218,7 +230,8 @@ const drawPracticeZone = () => {
     map.appendChild(marker);
   }
   const win = currentWindow();
-  marker.style.cssText = `left:${100 * (zone.x - zone.radius - win.minX) / win.size}%;top:${100 * (zone.y - zone.radius - win.minY) / win.size}%;width:${200 * zone.radius / win.size}%;height:${200 * zone.radius / win.size}%`;
+  marker.classList.toggle('beacon-art', Boolean(operationSession) && terrainArt !== 'simple');
+  marker.style.cssText = `left:${100 * (zone.x - zone.radius - win.minX) / win.width}%;top:${100 * (zone.y - zone.radius - win.minY) / win.height}%;width:${200 * zone.radius / win.width}%;height:${200 * zone.radius / win.height}%`;
 };
 const drawOperationBriefing = () => {
   const map = document.querySelector('#map');
@@ -230,14 +243,16 @@ const drawOperationBriefing = () => {
     marker.className = 'operation-waypoint';
     marker.textContent = `◇ ${point.label}`;
     marker.title = `Initial briefing location: ${point.x}, ${point.y}. This marker does not track the ship.`;
-    marker.style.cssText = `left:${100 * (point.x - win.minX) / win.size}%;top:${100 * (point.y - win.minY) / win.size}%`;
+    marker.style.cssText = `left:${100 * (point.x - win.minX) / win.width}%;top:${100 * (point.y - win.minY) / win.height}%`;
     map.appendChild(marker);
   }
 };
 const redraw = () => {
+  syncCamera();
   const progress = practiceProgress(game);
   const report = view.report ?? (operationSession ? { title: 'Rescue at the Belt', lines: ['Recover Sentinel and withdraw through 38, 160. See the operation briefing above the map.', 'The beacon is an extraction area, with no repairs or protection. Wayfarer is optional.'] } : progress ? { title: 'Practice objective', lines: [progress.objective, progress.message ?? 'Use the normal commands. Retry or return whenever you wish.'] } : null);
-  renderGame(game, { ...view, report, playbackMode, playbackActive: Boolean(playbackSession) && !playbackSession.finished, playbackLocked: playbackLocked(), shipArt: document.body.classList.contains('classic') ? 'letters' : shipArtPref, precision: game?.precision ? precisionSettings : null });
+  renderGame(game, { ...view, terrainArt, terrainBoundaries, report, playbackMode, playbackActive: Boolean(playbackSession) && !playbackSession.finished, playbackLocked: playbackLocked(), shipArt: document.body.classList.contains('classic') ? 'letters' : shipArtPref, precision: game?.precision ? precisionSettings : null });
+  updateEffectsCamera(document.querySelector('#map'), currentWindow());
   if (progress && progress.status !== 'active') document.querySelectorAll('[data-command]').forEach((button) => {
     if (!['rollcall', 'statistics', 'shots', 'fullmap', 'fleet', 'replay'].includes(button.dataset.command)) button.disabled = true;
   });
@@ -645,12 +660,15 @@ const renderFrame = () => {
     const win = currentWindow();
     const mapField = document.querySelector('#map-field');
     if (mapField) mapField.style.transform = fieldTransform(win);
+    updateEffectsCamera(document.querySelector('#map'), win);
     const viewport = document.querySelector('#minimap .mini-view');
     if (viewport) {
       const frac2 = (value) => (value / grid) * 100;
-      viewport.style.setProperty('--vx', frac2(win.minX));
-      viewport.style.setProperty('--vy', frac2(win.minY));
-      viewport.style.setProperty('--vw', frac2(win.size));
+      const frame = minimapWindow(win);
+      viewport.style.setProperty('--vx', frac2(frame.x));
+      viewport.style.setProperty('--vy', frac2(frame.y));
+      viewport.style.setProperty('--vw', frac2(frame.width));
+      viewport.style.setProperty('--vh', frac2(frame.height));
     }
   }
   // Cooldown-gate the command buttons per frame, so a cycling gun reads as a
@@ -1092,8 +1110,8 @@ mapEl.addEventListener('pointermove', (event) => {
   const preview = document.querySelector('#tow-move-preview');
   const rect = mapEl.getBoundingClientRect(), win = currentWindow();
   if (!preview || !rect.width || !rect.height) return;
-  const move = maneuverTo(game, win.minX + ((event.clientX - rect.left) / rect.width) * win.size,
-    win.minY + ((event.clientY - rect.top) / rect.height) * win.size);
+  const move = maneuverTo(game, win.minX + ((event.clientX - rect.left) / rect.width) * win.width,
+    win.minY + ((event.clientY - rect.top) / rect.height) * win.height);
   if (move) preview.textContent = maintainedMovePreview(game, move.dx, move.dy);
 });
 mapEl.addEventListener('wheel', (event) => {
@@ -1371,10 +1389,11 @@ document.querySelector('#operation-panel').addEventListener('click', async (even
   const action = button.dataset.operationAction;
   const seed = document.querySelector('#operation-seed').value;
   if (action === 'overview') {
-    view = { ...view, camera: { ...view.camera, cx: field() / 2, cy: field() / 2, zoom: 1, follow: false } };
+    view = { ...view, tacticalZoom: view.camera.zoom > 1 ? view.camera.zoom : view.tacticalZoom, camera: { ...view.camera, cx: field() / 2, cy: field() / 2, zoom: 1, follow: false } };
     refresh();
   } else if (action === 'follow') {
-    view = { ...view, camera: makeCamera(field(), getShip(game, game.playerShipId)) };
+    const camera = makeCamera(field(), getShip(game, game.playerShipId));
+    view = { ...view, camera: { ...camera, zoom: view.camera.zoom > 1 ? view.camera.zoom : view.tacticalZoom ?? camera.zoom } };
     refresh();
   }
   else if (action === 'end') {
@@ -1651,6 +1670,33 @@ document.querySelector('#art-toggle').addEventListener('click', () => {
   redraw();
 });
 applyArt(shipArtPref);
+
+const applyTerrainPreferences = () => {
+  const art = document.querySelector('#terrain-toggle');
+  art.textContent = terrainArt === 'simple' ? 'Terrain art: off' : 'Terrain art: on';
+  art.setAttribute('aria-pressed', String(terrainArt !== 'simple'));
+  const edges = document.querySelector('#boundaries-toggle');
+  edges.textContent = terrainBoundaries ? 'Hazard edges: strong' : 'Hazard edges: quiet';
+  edges.setAttribute('aria-pressed', String(terrainBoundaries));
+};
+document.querySelector('#terrain-toggle').addEventListener('click', () => {
+  terrainArt = terrainArt === 'simple' ? 'textured' : 'simple';
+  try { localStorage.setItem(TERRAIN_KEY, terrainArt); } catch { /* optional */ }
+  applyTerrainPreferences(); redraw();
+});
+document.querySelector('#boundaries-toggle').addEventListener('click', () => {
+  terrainBoundaries = !terrainBoundaries;
+  try { localStorage.setItem(BOUNDARIES_KEY, terrainBoundaries ? 'strong' : 'quiet'); } catch { /* optional */ }
+  applyTerrainPreferences(); redraw();
+});
+applyTerrainPreferences();
+let mapSize = '';
+new ResizeObserver(([entry]) => {
+  const next = `${entry.contentRect.width}:${entry.contentRect.height}`;
+  if (next === mapSize) return;
+  mapSize = next;
+  if (game && !sectorMode() && entry.contentRect.width && entry.contentRect.height) redraw();
+}).observe(mapEl);
 
 refresh();
 if (game?.phase === 'computer') { runComputer(); refresh(); }
