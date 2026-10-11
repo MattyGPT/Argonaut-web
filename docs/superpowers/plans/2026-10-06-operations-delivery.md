@@ -1,6 +1,6 @@
 # Operations and consequences delivery plan
 
-Date: 2026-10-06. Updated October 10. Status: **Corrected manual rescue confirmed by Matt; Rescue and Recover prize delivered; terrain presentation pilot implemented. Native terrain exports and adaptive contact readability are delivered; human M2/M3 comparisons and live profiling remain open.** See the [initial delivery record](../reviews/2026-10-06-rescue-prototype.md), [current pacing review](../reviews/2026-10-10-operation-pacing.md) and [terrain pilot review](../reviews/2026-10-10-terrain-pilot.md). Parent: [Roadmap](../specs/2026-10-06-operations-and-consequences-roadmap.md).
+Date: 2026-10-06. Updated October 11. Status: **Corrected manual rescue confirmed by Matt; Rescue and Recover prize delivered; terrain presentation pilot implemented. Native terrain exports and adaptive contact readability are delivered; first command-priority/order-status slice implemented; human M2/M3 comparisons and live profiling remain open.** See the [initial delivery record](../reviews/2026-10-06-rescue-prototype.md), [current pacing review](../reviews/2026-10-10-operation-pacing.md) and [terrain pilot review](../reviews/2026-10-10-terrain-pilot.md). Parent: [Roadmap](../specs/2026-10-06-operations-and-consequences-roadmap.md).
 
 ## Delivery order and dependencies
 
@@ -35,7 +35,8 @@ The first playable work is the rescue prototype. Art concepts and campaign ident
 - [ ] M2 accepted operational profile and delegation.
 - [x] M3 initial terrain pilot: isotropic projection, scale, generated materials, exact boundaries, simple/failure fallback and comparison fixture.
 - [x] M3 native production exports within budget, adaptive contact markers and named visible-ship selection; see the [readability review](../reviews/2026-10-10-terrain-readability.md).
-- [ ] M3 live-combat profiling and human in-game visual acceptance; then command/debrief and audio slices.
+- [x] M3 first command-presentation slice: ranked objective notices, pending versus standing orders, dated rescue/prize progress and visible ordinary-order limitations; see the [verification record](../reviews/2026-10-11-command-priorities.md).
+- [ ] M3 live-combat profiling and human in-game visual acceptance; debrief hierarchy is the next bounded implementation, followed by remaining contextual overlays/acknowledgments and audio.
 - [ ] M4 campaign consequence and persistence.
 - [ ] M5 additional mission families.
 - [ ] M6 release and combined acceptance.

@@ -1,6 +1,6 @@
 # Terrain and command presentation implementation plan
 
-Date: 2026-10-06. Updated October 10. Status: **A1 implemented; A2 native exports meet budgets; adaptive contacts and visible-ship selection delivered. Human M3 acceptance and live performance acceptance remain open.** See the [pilot review](../reviews/2026-10-10-terrain-pilot.md) for measured results and remaining checks. Spec: [Terrain and command presentation](../specs/2026-10-06-terrain-and-command-presentation.md). Parent: [Delivery plan](2026-10-06-operations-delivery.md).
+Date: 2026-10-06. Updated October 11. Status: **A1 implemented; A2 native exports meet budgets; adaptive contacts and visible-ship selection delivered; first A5 priority/order-status slice implemented. Human M3 acceptance and live performance acceptance remain open.** See the [pilot review](../reviews/2026-10-10-terrain-pilot.md) for measured results and remaining checks. Spec: [Terrain and command presentation](../specs/2026-10-06-terrain-and-command-presentation.md). Parent: [Delivery plan](2026-10-06-operations-delivery.md).
 
 ## A0 Establish repeatable visual evidence
 
@@ -60,8 +60,8 @@ Liking the concept sheet does not establish readability or successful gameplay p
 
 ## A5 Improve command and debrief hierarchy
 
-- [ ] Add the compact objective/priority strip from known deadlines, observed threats/contacts and announced arrivals; rank/deduplicate it.
-- [ ] Add accessible contextual overlays and order phases/blockers while retaining primary-control reach and historical scroll position.
+- [x] Add the compact objective/priority strip from known deadlines, observed threats/contacts and announced arrivals; rank/deduplicate it.
+- [ ] Add accessible contextual overlays and order phases/blockers while retaining primary-control reach and historical scroll position. The first slice implements dated rescue/recovery phases, visible ordinary-order limitations, pending/standing distinction and keyed disclosure/focus retention; contextual overlays remain open.
 - [ ] Draw aged contacts only from observations, never from hidden live coordinates.
 - [ ] Lead debriefs with outcome, returned/abandoned/lost hulls, changed condition and consequence; collapse unchanged numbers.
 - [ ] Add concise factual captain acknowledgments for accepted, pending, blocked and completed orders.
@@ -90,5 +90,5 @@ Art-only changes preserve simulation on identical inputs. Rebaseline gameplay on
 
 1. Playtest this export/readability slice in the accepted rescue and ordinary Reimagined battles. Compare Adaptive and Full artwork; confirm identification, selection, threat/stance cues, exact hazard boundaries and extraction. Compact mode and the named selector remain available for dense stacks. Capture accept/revise per material rather than treating automated checks as human approval.
 2. Finish A4/A7 active-combat frame profiling, native 200-percent zoom, responsive and reduced-motion checks. The static fixture and live smoke check are separate evidence; neither certifies the entire release matrix.
-3. Continue A5 with a bounded objective/priority strip and order phase/blocker messages, followed by debrief hierarchy. Preserve current knowledge filtering, command availability and focus behavior.
+3. Playtest the [first A5 priority/order-status slice](../reviews/2026-10-11-command-priorities.md), then implement debrief hierarchy as the next bounded slice: outcome, returned/abandoned/lost hulls, changed condition and consequences before detailed statistics. Follow with contextual overlays and factual acknowledgments/issuer metadata; preserve knowledge filtering, command availability and focus behavior.
 4. Only then add A6 audio and perform combined release journeys. No new mission geometry or Classic rules are part of these presentation slices.
