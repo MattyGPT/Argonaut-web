@@ -1,16 +1,18 @@
-# Terrain presentation pilot
+# Terrain runtime assets
 
-Four isolated candidates generated with the built-in `image_gen` tool on 2026-10-10. See [manifest.json](manifest.json) for the complete prompts, real dimensions, byte totals, alpha counts and world footprints. These files are the unmodified source outputs, consumed directly; there is no atlas, crop, resize, recoloring or concept-sheet extraction.
+The four materials were generated with built-in `image_gen` on October 10, 2026. Original 1254 × 1254 RGBA outputs are preserved byte-for-byte under `source/`; the application references only `*-v2.png`. Complete prompts, source/export SHA-256 hashes, dimensions, alpha counts, bytes and world footprints are in [manifest.json](manifest.json).
 
-| File | Source output | Intended use |
+| Runtime file | Native grid | Source generation |
 | --- | --- | --- |
-| `nebula-v1.png` | `exec-bdbb906d-8c07-4a86-8d41-01892d6ecc59.png` | Quiet violet filaments inside the existing circular nebula |
-| `asteroids-v1.png` | `exec-10ea84b7-f042-403f-a841-ada0f562e6bc.png` | One decorative four-rock cluster per continuous hazard |
-| `ion-storm-v1.png` | `exec-b2306877-2257-4d75-b98c-b9ff97086294.png` | Amber material beneath separately drawn core/ring geometry |
-| `beacon-v1.png` | `exec-c0ce2013-07aa-47a1-8691-b94708f12992.png` | Small navigation buoy inside the existing extraction circle |
+| `nebula-v2.png` | 256 × 256 | `exec-bdbb906d-8c07-4a86-8d41-01892d6ecc59.png` |
+| `asteroids-v2.png` | 128 × 128 | `exec-10ea84b7-f042-403f-a841-ada0f562e6bc.png` |
+| `ion-storm-v2.png` | 256 × 256 | `exec-b2306877-2257-4d75-b98c-b9ff97086294.png` |
+| `beacon-v2.png` | 64 × 64 | `exec-c0ce2013-07aa-47a1-8691-b94708f12992.png` |
 
-Actual outputs are 1254 × 1254 RGBA, despite smaller intended native sizes in the prompts. All contain fully transparent and partially transparent pixels. Visual inspection found no baked checkerboard or rectangular background; dark, partially transparent edges blend into the map. These are pixel-art-style candidates, **not accepted native pixel-grid exports**. The model's requested dimensions are not their actual dimensions.
+Rebuild with `npm ci` then `node scripts/export-terrain.mjs`. The existing Jimp development dependency encodes PNGs; a deterministic area filter averages premultiplied-alpha colors before unpremultiplication. This preserves translucent edges without mixing invisible black into the cloud. No crop, recoloring, alpha threshold, new model generation or simulation dependency is involved. Runtime rendering remains dependency-free and uses pixel-preserving CSS scaling.
 
-The total is **3,977,818 bytes (3.79 MiB)** compressed and **25,160,256 bytes (24.00 MiB)** decoded RGBA if all four load, excluding GPU/browser overhead. This exceeds the provisional 2 MiB/16 MiB targets. The bounded four-image pilot retains original pixels to enable in-game material review; no additional variants should be commissioned until native export/byte reduction is resolved. This is a documented pilot tradeoff, not a relaxed release budget. See [measured review](../../docs/superpowers/reviews/2026-10-10-terrain-pilot.md).
+Production totals: **190,678 bytes (186.2 KiB)** compressed and **606,208 bytes (592 KiB)** decoded RGBA, excluding browser/GPU overhead. Compared with PR #103's unmodified inputs, these are reductions of **95.2%** and **97.6%**. Both are below the unchanged 2 MiB / 16 MiB budgets. The source originals are not loaded by the renderer or fixture benchmark. Repeated exports produce identical hashes. Tests verify source/export hashes and enforce budgets without needing Jimp installed.
 
-CSS clips materials to authoritative regions. Transparent pixels and gaps between rocks do not change collision, cover, sensors or radio. Borders and the ion core survive missing PNGs. Image URLs are browser-cached; one optional material node per on-screen non-relay feature bounds composition. No animation or simulation RNG is used. The beacon carries no repair/protection meaning.
+The smaller pixel grid is an export treatment of generated pixel-art-style materials, not a claim of hand-authored sprite art. Native in-game inspection found no rectangular background or obvious alpha halo; human accept/revise review remains open. Palette and silhouettes are inherited unchanged from the pilot: subdued violet, slate/brown, amber and cyan beacon accents.
+
+CSS clips material to authoritative circles. Rock gaps inside a region are hazardous; terrain art never changes collision, cover, sensors or radio. The core/ring and beacon geometry survive missing images. One optional material per visible feature bounds composition. See the [readability review](../../docs/superpowers/reviews/2026-10-10-terrain-readability.md).

@@ -458,9 +458,9 @@ body.classic .journal-identities { color: inherit; }
 .terrain.asteroids { border-color: rgb(170 183 187 / var(--edge, .3)); border-style: dashed; }
 .terrain.ion-storm { border-color: rgb(195 160 109 / var(--edge, .3)); border-style: dotted; }
 .terrain-material { position: absolute; inset: 0; background: center / 100% 100% no-repeat; transform: rotate(var(--rotation)); image-rendering: pixelated; opacity: .85; }
-.nebula .terrain-material { background-image: url('assets/terrain/nebula-v1.png'); }
-.asteroids .terrain-material { background-image: url('assets/terrain/asteroids-v1.png'); }
-.ion-storm .terrain-material { background-image: url('assets/terrain/ion-storm-v1.png'); }
+.nebula .terrain-material { background-image: url('assets/terrain/nebula-v2.png'); }
+.asteroids .terrain-material { background-image: url('assets/terrain/asteroids-v2.png'); }
+.ion-storm .terrain-material { background-image: url('assets/terrain/ion-storm-v2.png'); }
 .storm-core {
   position: absolute; left: 50%; top: 50%; width: var(--core); height: var(--core);
   transform: translate(-50%, -50%); border-radius: 50%;
@@ -475,7 +475,7 @@ body.classic .journal-identities { color: inherit; }
   color: #c4d5df; font-size: .65rem; text-align: center; white-space: nowrap;
   text-shadow: 0 1px 3px #000;
 }
-.practice-zone.beacon-art { background: url('assets/terrain/beacon-v1.png') center / 64px 64px no-repeat; image-rendering: pixelated; text-shadow: 0 1px 3px #000, 0 0 4px #000; }
+.practice-zone.beacon-art { background: url('assets/terrain/beacon-v2.png') center / 64px 64px no-repeat; image-rendering: pixelated; text-shadow: 0 1px 3px #000, 0 0 4px #000; }
 
 /* The capturable relay node (round 16): a small hard-ringed marker, neutral ice-blue
    while free, glowing in the holding alliance's colors while held. Ownership is
@@ -2415,3 +2415,38 @@ body.classic .operation-warning, body.classic .operation-result-reason { border-
 .operation-controls label { display: inline-flex; align-items: center; gap: .4rem; }
 .operation-debrief { border-top: 1px solid currentColor; margin-top: .8rem; }
 .operation-waypoint { position: absolute; transform: translate(-50%, 1.6rem); color: #c6deea; border-bottom: 1px dotted currentColor; font-size: 11px; white-space: nowrap; pointer-events: none; z-index: 2; }
+
+/* Compact markers retain tactical identity and quiet decorative glow. */
+#contact-controls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; min-width: 0; }
+#contact-controls[hidden] { display: none; }
+#contact-controls label { display: flex; gap: .3rem; align-items: center; min-width: 0; font-size: .75rem; }
+#contact-controls select { min-width: 0; max-width: 16rem; font: inherit; }
+.contact-glyph, .ship.has-sprite:not(.compact-contact) .heading-glyph { display: none; }
+.ship.compact-contact, .wreck.compact-contact {
+  box-sizing: border-box; width: 26px; height: 26px; padding: 0;
+  background: #0a1220; border: 2px solid currentColor; border-radius: 4px;
+  box-shadow: none; filter: none; font-size: 13px; line-height: 22px;
+}
+.ship.compact-contact .sprite, .wreck.compact-contact .wreck-sprite { display: none; }
+.compact-contact .contact-glyph { display: inline; }
+.ship.compact-contact.command-ship { border-style: double; border-width: 3px; }
+.ship.compact-contact.threat { outline: none; }
+.ship.compact-contact.stance-firing { box-shadow: inset 0 -3px #ff9d5c; }
+.ship.compact-contact.stance-evasive { box-shadow: inset 0 -3px #69e4ff; }
+.ship.compact-contact.selected { outline: 2px solid white; outline-offset: 3px; z-index: 3; }
+.ship.compact-contact:hover, .ship.compact-contact:focus-visible {
+  transform: translate(calc(-50% + var(--dx, 0px) * var(--invzoom, 1)), calc(-50% + var(--dy, 0px) * var(--invzoom, 1))) scale(var(--invzoom, 1));
+  outline: 2px solid white; outline-offset: 3px; z-index: 4;
+}
+
+.ship.compact-contact .glyph { color: inherit; }
+.ship.compact-contact.vacant { border-style: dashed; }
+.ship.compact-contact.surrendered { border-style: dotted; }
+.ship.compact-contact .heading-glyph::before { bottom: 10px; height: 7px; box-shadow: none; }
+
+.contact-threat { display: none; }
+.ship.compact-contact .contact-threat {
+  display: block; position: absolute; right: -2px; top: -2px;
+  border-top: 8px solid #ff6868; border-left: 8px solid transparent; pointer-events: none;
+}
+.ship.compact-contact.threat.selected, .ship.compact-contact.threat:focus-visible { outline: 2px solid white; }

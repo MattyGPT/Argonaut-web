@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { terrainMaterial, stormCore } from '../ui/terrain-art.js';
 
 test('materials are bounded, deterministic, culled offscreen and optional; core geometry survives', () => {
@@ -15,7 +16,7 @@ test('materials are bounded, deterministic, culled offscreen and optional; core 
   assert.match(stormCore({ type: 'ion-storm' }), /--core:60%/);
 });
 
-test('terrain manifest reports actual source dimensions, alpha-capable PNGs and byte totals', () => {
+test('terrain exports meet budgets and retain verifiable originals and prompts', () => {
   const root = new URL('../assets/terrain/', import.meta.url);
   const manifest = JSON.parse(readFileSync(new URL('manifest.json', root)));
   let bytes = 0, decoded = 0;
@@ -27,6 +28,10 @@ test('terrain manifest reports actual source dimensions, alpha-capable PNGs and 
     assert.equal(data.readUInt32BE(20), asset.height);
     assert.equal(data[25], 6, 'RGBA PNG');
     assert.equal(statSync(path).size, asset.bytes);
+    assert.equal(createHash('sha256').update(data).digest('hex'), asset.sha256);
+    const source = readFileSync(new URL(asset.source.file, root));
+    assert.equal(createHash('sha256').update(source).digest('hex'), asset.source.sha256);
+    assert.equal(source.length, asset.source.bytes);
     assert.equal(asset.width * asset.height * 4, asset.decodedRgbaBytes);
     assert.ok(asset.transparentPixels > 0 && asset.partialAlphaPixels > 0);
     assert.ok(asset.prompt.length > 100);
@@ -34,4 +39,6 @@ test('terrain manifest reports actual source dimensions, alpha-capable PNGs and 
   }
   assert.equal(bytes, manifest.totalBytes);
   assert.equal(decoded, manifest.decodedRgbaBytes);
+  assert.ok(bytes <= manifest.targetBytes);
+  assert.ok(decoded <= manifest.targetDecodedRgbaBytes);
 });
