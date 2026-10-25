@@ -308,7 +308,7 @@ Design notes for the doc:
   prototyped behind a flag early if Matt wants the feel before the rest of the
   roadmap lands.
 
-### Phase 9 — Ship sprites & the graphical modern view *(NEXT — Matt's art; session brief at `docs/superpowers/briefs/2026-09-29-phase-9-ship-sprites.md`)*
+### Phase 9 — Ship sprites & the graphical modern view *(Matt's art; session brief at `docs/superpowers/briefs/2026-09-29-phase-9-ship-sprites.md`)* — ✅ COMPLETE (33 → PR #80, 34 → PR #81, merged 2026-09-29)
 
 Matt has been generating **pixel-art ship sprites** — a top-down sheet per
 alliance, six classes each (battle cruiser, cruiser, scout, interceptor,
@@ -317,8 +317,9 @@ into real graphics. Sequenced **after Phase 8** so the sprite layer lands on a
 continuous-motion field where heading is already a first-class visual (the
 sprites rotate to face). The **classic view stays letters and phosphor** — it
 is the 1992 reading of the game, and the parity story is untouched either way.
-Gets its own design doc with its own open questions for Matt when picked up.
-Provisional chunks, to be re-cut by that doc:
+It got its own design doc
+(`docs/superpowers/specs/2026-09-29-phase-9-ship-sprites.md`); the provisional
+chunks below survived that re-cut unchanged, as rounds 33 and 34:
 
 | Round | Chunk | Builds | Tested by |
 | --- | --- | --- | --- |
