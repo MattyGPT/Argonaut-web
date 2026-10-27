@@ -2450,3 +2450,19 @@ body.classic .operation-warning, body.classic .operation-result-reason { border-
   border-top: 8px solid #ff6868; border-left: 8px solid transparent; pointer-events: none;
 }
 .ship.compact-contact.threat.selected, .ship.compact-contact.threat:focus-visible { outline: 2px solid white; }
+
+/* Mission context stays outside the tactical grid so expanded order details do
+   not squeeze the map or replace the player's open report/journal. */
+.command-priorities { padding: .65rem .85rem; }
+.priority-objective { margin: 0; line-height: 1.5; }
+.priority-objective strong { color: var(--cyan); margin-right: .5rem; }
+.priority-notices { display: flex; flex-wrap: wrap; gap: .4rem 1.5rem; padding-left: 1.1rem; margin: .45rem 0; }
+.priority-notices li { flex: 1 1 15rem; max-width: 100%; }
+.command-priorities details { margin-top: .4rem; }
+.command-priorities summary { cursor: pointer; }
+.priority-note { color: var(--muted); font-size: .8rem; }
+.priority-orders { max-height: 14rem; overflow-y: auto; padding: 0 .5rem 0 0; list-style: none; }
+.priority-orders li { padding: .6rem 0; border-top: 1px solid var(--line); }
+.priority-orders span { display: block; margin-top: .2rem; }
+.priority-pending { color: #f0d093; }
+body.classic .priority-objective strong, body.classic .priority-pending { color: inherit; }

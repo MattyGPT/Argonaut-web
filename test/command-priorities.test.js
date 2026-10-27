@@ -1,0 +1,138 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createGame, getShip } from '../game/state.js';
+import { createOperationGame } from '../game/operations.js';
+import { applyPlayerAction } from '../game/actions.js';
+import { resolveComputerTurns } from '../game/turns.js';
+import { commandPriorities, commandPrioritiesMarkup, commandOrderLines, commandOrderStatus } from '../ui/command-priorities.js';
+
+const operation = () => createOperationGame({ seed: 'rescue-1', battleId: 'priority-test' });
+const edit = (game, id, patch) => ({ ...game, ships: game.ships.map((ship) => ship.id === id ? { ...ship, ...patch } : ship) });
+test('Classic opts out, repeated Reimagined presentation leaves all state unchanged', () => {
+  assert.equal(commandPriorities(createGame({ seed: 'classic-priorities' })), null);
+  const game = operation(), before = JSON.stringify(game);
+  const once = commandPrioritiesMarkup(commandPriorities(game));
+  assert.equal(commandPrioritiesMarkup(commandPriorities(game)), once);
+  assert.equal(JSON.stringify(game), before);
+  assert.match(once, /on-time target 16/);
+  assert.match(once, /final evacuation 22/);
+  assert.doesNotMatch(once, /Gatekeeper|Lookout|Pursuer/);
+});
+test('late rescue remains available, and last departure outranks routine notices', () => {
+  let game = operation();
+  game.operation.elapsed = 19;
+  game.operation.facts = [{ kind: 'operation-notice', message: 'Announced arrival.', elapsed: 4 }];
+  game = { ...game, ships: game.ships.filter((s) => !['op-scout', 'op-escort'].includes(s.id)) };
+  game = edit(game, 'op-command', { x: 38, y: 160 });
+  const model = commandPriorities(game);
+  assert.equal(model.notices[0].id, 'last-departure');
+  assert.equal(model.notices[1].id, 'final-evacuation');
+  assert.equal(model.notices.length, 3);
+  assert.ok([...model.notices, ...model.additional].some((n) => n.id === 'arrival'));
+  assert.ok(!model.notices.some((n) => n.id === 'ready-exit'), 'last-departure warning already covers these ships');
+  assert.equal(new Set([...model.notices, ...model.additional].map((n) => n.id)).size, model.notices.length + model.additional.length);
+  game.operation.elapsed = 16;
+  assert.ok([...commandPriorities(game).notices, ...commandPriorities(game).additional].some((n) => n.id === 'late-rescue'));
+});
+test('hidden enemies and hidden targeted hulls cannot supply live priority information', () => {
+  let game = operation();
+  game.orders['op-escort'] = { type: 'intercept', targetId: 'op-guard' };
+  const before = commandPriorities(game);
+  game = edit(game, 'op-guard', { name: 'SECRET', captain: 'SECRET', x: 310, y: 310, shields: 1, systems: { phasers: 99 }, status: 'destroyed' });
+  assert.deepEqual(commandPriorities(game), before);
+  assert.doesNotMatch(commandPrioritiesMarkup(before), /Gatekeeper|SECRET/);
+});
+test('visible range threats are grouped and disappear when sensor visibility is lost', () => {
+  let game = edit(operation(), 'op-guard', { x: 80, y: 160 });
+  assert.ok(commandPriorities(game).notices.some((n) => n.id === 'visible-threats'));
+  game = { ...game, terrain: [{ id: 'cover', type: 'nebula', x: 80, y: 160, radius: 5 }] };
+  assert.ok(!commandPriorities(game).notices.some((n) => n.id === 'visible-threats'));
+});
+test('pending replacement never masquerades as standing, including after battle end', () => {
+  const game = operation();
+  game.orders['op-escort'] = { type: 'hold' };
+  game.pendingOrders['op-escort'] = { type: 'withdraw' };
+  const ship = getShip(game, 'op-escort');
+  let status = commandOrderStatus(game, ship);
+  assert.equal(status.standing, 'Hold position');
+  assert.equal(status.pending, 'Withdraw to extraction beacon');
+  assert.equal(status.phase, 'Holding');
+  assert.match(commandOrderLines(game, ship).join(' '), /standing order continues until delivery/);
+  const done = { ...game, outcome: { message: 'Ended.' } };
+  status = commandOrderStatus(done, ship);
+  assert.equal(status.phase, 'Ended');
+  assert.match(status.pendingExplanation, /Undelivered/);
+  assert.doesNotMatch(commandPrioritiesMarkup(commandPriorities(done)), /scheduled for|continues until delivery/i);
+});
+test('out-of-contact pending intent stays visible without revealing current condition', () => {
+  let game = edit(operation(), 'op-escort', { x: 300, y: 300 });
+  game.orders['op-escort'] = { type: 'hold' };
+  game.pendingOrders['op-escort'] = { type: 'withdraw' };
+  const before = commandPriorities(game);
+  assert.equal(before.orders[0].phase, 'Unconfirmed');
+  assert.ok(before.notices.some((n) => n.id === 'radio-pending'));
+  game = edit(game, 'op-escort', { x: 290, y: 290, status: 'destroyed', faction: 'Axis', systems: {}, crew: 0 });
+  assert.deepEqual(commandPriorities(game), before);
+});
+test('real radio-delayed replacement stays separate until the normal delivery seam', () => {
+  let game = operation();
+  const actor = getShip(game, game.playerShipId);
+  game = edit(game, actor.id, { systems: { ...actor.systems, radio: 0 } });
+  game.orders['op-escort'] = { type: 'hold' };
+  game = applyPlayerAction(game, { type: 'orders', shipId: 'op-escort', order: { type: 'rescue' } }).game;
+  assert.equal(commandOrderStatus(game, getShip(game, 'op-escort')).standing, 'Hold position');
+  assert.equal(commandOrderStatus(game, getShip(game, 'op-escort')).pending, 'Rescue Sentinel');
+  game = resolveComputerTurns(applyPlayerAction(game, { type: 'pass' }).game);
+  assert.equal(commandOrderStatus(game, getShip(game, 'op-escort')).standing, 'Rescue Sentinel');
+  assert.equal(commandOrderStatus(game, getShip(game, 'op-escort')).pending, null);
+});
+test('recorded rescue progress is timestamped, survives pending cancellation, and is not an AI prediction', () => {
+  let game = applyPlayerAction(operation(), { type: 'orders', shipId: 'op-escort', order: { type: 'rescue' } }).game;
+  assert.ok(game.operation.rescueReports['op-escort']);
+  const before = JSON.stringify(game);
+  const report = game.operation.rescueReports['op-escort'];
+  game.pendingOrders['op-escort'] = { type: 'hold' };
+  const status = commandOrderStatus(game, getShip(game, 'op-escort'));
+  assert.equal(status.phase, `Reported ${report.phase}`);
+  assert.match(status.reason, /Reported at elapsed 0/);
+  assert.equal(status.pending, 'Hold position');
+  const snapshot = JSON.stringify(game);
+  commandPrioritiesMarkup(commandPriorities(game));
+  assert.equal(JSON.stringify(game), snapshot);
+  assert.notEqual(before, snapshot, 'only the test added pending intent');
+  game.orders['op-escort'] = { type: 'hold' };
+  delete game.pendingOrders['op-escort'];
+  assert.equal(commandOrderStatus(game, getShip(game, 'op-escort')).phase, 'Holding', 'old rescue report cannot override a delivered replacement');
+});
+test('ordinary orders report only confirmed limitations, never guessed completion or offscreen hardware', () => {
+  let game = operation();
+  game.orders['op-escort'] = { type: 'withdraw' };
+  const ship = getShip(game, 'op-escort');
+  game = edit(game, ship.id, { systems: { ...ship.systems, engines: 0 } });
+  assert.equal(commandOrderStatus(game, getShip(game, ship.id)).phase, 'Movement limited');
+  game = edit(game, ship.id, { x: 310, y: 310 });
+  assert.equal(commandOrderStatus(game, getShip(game, ship.id)).phase, 'Unconfirmed');
+  game = edit(game, ship.id, { x: 38, y: 160, systems: ship.systems });
+  assert.notEqual(commandOrderStatus(game, getShip(game, ship.id)).phase, 'Completed');
+});
+test('visible changed allegiance requests order review without learning hidden target changes', () => {
+  let game = edit(operation(), 'op-guard', { x: 85, y: 160 });
+  game.orders['op-escort'] = { type: 'intercept', targetId: 'op-guard' };
+  game = edit(game, 'op-guard', { faction: 'Federation' });
+  assert.equal(commandOrderStatus(game, getShip(game, 'op-escort')).phase, 'Review target');
+  game = edit(game, 'op-guard', { x: 300, y: 300 });
+  assert.notEqual(commandOrderStatus(game, getShip(game, 'op-escort')).phase, 'Review target');
+});
+test('operation success keeps completed reports and stops live warnings; markup escapes messages', () => {
+  const game = operation();
+  game.operation.result = { primary: 'success' };
+  game.outcome = { message: 'Done' };
+  game.orders['op-escort'] = { type: 'rescue' };
+  game.operation.rescueReports = { 'op-escort': { phase: 'completed', reason: '<script>bad</script>', elapsed: 8 } };
+  const model = commandPriorities(game);
+  assert.match(model.objective, /Sentinel recovered/);
+  assert.equal(model.notices.length, 0);
+  assert.equal(model.orders[0].phase, 'Reported completed');
+  assert.match(commandPrioritiesMarkup(model), /&lt;script&gt;/);
+  assert.doesNotMatch(commandPrioritiesMarkup(model), /<script>/);
+});

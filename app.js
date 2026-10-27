@@ -305,6 +305,7 @@ const renderWalkthrough = () => {
 const showScreens = () => {
   const sector = sectorMode();
   document.querySelector('#game-root').hidden = sector;
+  document.querySelector('#command-priorities').hidden = sector || !game?.reimagined;
   document.querySelector('#sector-root').hidden = !sector;
   // Round 31: the stylesheet kills the stardate glide while a real-time war's
   // sim clock is the motion.

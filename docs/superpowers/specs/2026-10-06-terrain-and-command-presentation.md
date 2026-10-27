@@ -1,6 +1,6 @@
 # Terrain art and command presentation specification
 
-Date: 2026-10-06. Status: **Proposed design with one generated concept study; no renderer changes.** Parent: [Operations roadmap](2026-10-06-operations-and-consequences-roadmap.md). Execution: [Presentation plan](../plans/2026-10-06-terrain-and-command-presentation.md).
+Date: 2026-10-06. Updated October 11. Status: **Terrain pilot, native exports, adaptive contacts and the first command-priority slice implemented. Human visual acceptance and live performance acceptance remain open.** Parent: [Operations roadmap](2026-10-06-operations-and-consequences-roadmap.md). Execution: [Presentation plan](../plans/2026-10-06-terrain-and-command-presentation.md).
 
 ## V1 Visual direction
 
@@ -87,7 +87,7 @@ Rendering remains dependency-free at runtime. Use cached repeated images, bounde
 
 ## V8 Acceptance
 
-**October 10 pilot:** the [implementation review](../reviews/2026-10-10-terrain-pilot.md) records isotropic projection, strong/quiet boundaries, optional generated materials and measured parity/performance. The subsequent [native export and crowd-readability slice](../reviews/2026-10-10-terrain-readability.md) brings runtime assets below both budgets. Human material acceptance remains open. The acceptance contract below remains open and unchanged. A5/A6 hierarchy and audio are later slices.
+**October 10 pilot:** the [implementation review](../reviews/2026-10-10-terrain-pilot.md) records isotropic projection, strong/quiet boundaries, optional generated materials and measured parity/performance. The subsequent [native export and crowd-readability slice](../reviews/2026-10-10-terrain-readability.md) brings runtime assets below both budgets. Human material acceptance remains open. The acceptance contract below remains open and unchanged. The first A5 priority/order-status slice is recorded below; debrief hierarchy and A6 audio remain later slices.
 
 Inspect the actual game at 1366×768 and 1600×1000, a narrow layout, native 200-percent browser zoom, keyboard-only input, reduced motion, classic view, glyph/sprite ships and grayscale. Check representative maximum and minimum camera zoom, dense fights, terrain overlap, image-load failure and saved-session restoration. The concept image alone establishes none of this.
 
@@ -107,3 +107,20 @@ Reimagined defaults to Adaptive contacts. Crowding is measured in CSS pixels aft
 Compact contacts use a fixed 26-pixel dark-backed marker, retaining faction shape/color, name initial (D for drones), heading, command/selected borders, wreck plus, vacant/surrendered marks, orders, prize and tractor cues. Replace broad stance glow with a restrained bottom stripe and threat outline with a red corner. Selection/focus remains white and does not enlarge compact hit boxes. Exact stacked hulls retain their existing tethers; no new world-position displacement is introduced. Zoom and the named selector address residual overlaps.
 
 Visible ships must contain only current mapper-visible non-destroyed hulls, with faction and status in text. Choosing a contact opens its normal commands and centers the camera without spending a turn or setting movement. Revalidate visibility before recentering. Preserve selection by ID across redraws; Escape returns focus to the selector. Apply density to initial paint, real-time interpolation and trajectory playback with the same helper. Classic rules do not opt into this treatment.
+
+
+## V10 Objective priorities and order status (October 11)
+
+The first A5 slice adds a read-only Reimagined strip above the tactical grid. Classic rules do not display it. Keep the existing journal, primary commands and Fleet orders report reachable. The strip must not run captain decision logic, mutate reports, grant outcomes or consume simulation randomness.
+
+Show the scenario/practice objective or operation primary progress, beacon, elapsed time, on-time target and final evacuation deadline. Missing the on-time target does not imply that a late rescue is impossible. At battle end, replace the live objective with the recorded outcome and stop live warnings.
+
+Rank notices by consequence: last departure without Sentinel; final evacuation; command tractor hold; paired/held extraction; late or ready extraction; order blockers; currently visible weapon-range threats; authored arrival announcement; pending radio replacements. Group repeated ships/orders, use stable notice IDs, suppress the routine ready-to-leave notice when the last-departure warning covers it, and show at most three notices. Remaining notices stay in the native Fleet order status disclosure. Range is not an attack prediction; arrivals use authored broadcasts, never hidden live positions or intentions.
+
+Order rows separate standing intent from pending replacement. Until actual radio delivery, the old standing order remains in force. At battle end, pending orders are undelivered rather than promised for a future stardate. Operation rescue/recovery reports retain their recorded phase, reason and elapsed timestamp, and only describe the matching standing order. An old rescue report must not override a subsequently delivered Hold order. A pending replacement does not erase that report.
+
+Ordinary orders report accepted intent and observed limitations: held or unpowered movement, or a visible target whose status/allegiance changed. Outside mapper view, current execution and hardware remain unconfirmed. A known pending command can remain listed outside radio range without exposing the subject's hidden condition. Operation broadcasts and extracted-hull snapshots remain available. Never infer completion from proximity or invent a route/ETA. Default operation captains hold and defend; ordinary captains follow fleet doctrine. Manual command-ship control remains explicit.
+
+Preserve disclosure expansion, keyboard focus and historical scroll through keyed DOM reconciliation. Use text equivalents and native keyboard disclosure; this strip is not a repeating live announcement region. The current order data does not retain historical issuer/time metadata, so do not fabricate it. Issuer attribution, contextual overlays, aged-contact presentation, debrief hierarchy and audio remain subsequent work.
+
+See the [implementation and verification record](../reviews/2026-10-11-command-priorities.md). Automated visibility/radio tests and declared presentation scenes do not close the human M3 checkpoint.
