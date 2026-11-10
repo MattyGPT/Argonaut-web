@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, getShip, powerEffect } from '../game/state.js';
+import { createGame, getShip, powerEffect, spawnEncounter } from '../game/state.js';
 import { applyPlayerAction, resolveCollision, tractorLock } from '../game/actions.js';
 import { resolveComputerTurns, stepContinuum } from '../game/turns.js';
 import { createFieldDiagnostics, withFieldDiagnostics } from '../game/field-diagnostics.js';
+import { ENCOUNTERS } from '../game/constants.js';
+import { createRng } from '../game/rng.js';
 import { runWar } from '../scripts/sim-wars.mjs';
-import { diagnoseField, parseFieldArgs } from '../scripts/diagnose-field.mjs';
+import { diagnoseField, parseFieldArgs, summarizeField } from '../scripts/diagnose-field.mjs';
 
 const pairGame = () => {
   const base = createGame({ seed: 'field-pair', reimagined: true });
@@ -111,10 +113,64 @@ test('a completed directed tow does not label a later unrelated contact as a man
 });
 
 test('departed merchants explain legacy final-counter undercount without losing pair evidence', () => {
-  const report = diagnoseField({ mode: 'realtime', seed: 'sim-235' });
-  assert.equal(report.summary.exactStateAndMetricsParity, true);
-  assert.deepEqual(report.summary.finalHullCounterDiscrepancies, [{ seed: 'sim-235', observedInvolvements: 14, finalHullCounters: 13 }]);
-  assert.ok(report.wars[0].pairs.some((pair) => pair.pair.includes('enc-13-merchant')));
+  // Staged rather than seed-hunted: the conn rams a neutral merchant (one pair,
+  // both counters +1), the merchant survives it, then its visit clock ages out
+  // and it jumps out of the war at the next boundary — taking its hull counter
+  // with it. The summary must explain the undercount from the departed hull
+  // while the pair record keeps the evidence. Whole-war seeds no longer grow
+  // this shape on their own once the engagement-shape doctrines move fleets.
+  let staged = null;
+  for (let index = 1; index <= 12 && !staged; index += 1) {
+    const seed = `merchant-field-${index}`;
+    const base = createGame({ seed, reimagined: true });
+    const merchant = spawnEncounter(base, 'neutral', 100, 100, createRng(`${seed}:enc`));
+    const game = {
+      ...base,
+      terrain: [],
+      // Two enemy alliances parked in far corners keep the war 'active' after
+      // the ram destroys the conn — a one-alliance field would end the war at
+      // the boundary and the merchant would never act, let alone depart.
+      ships: [
+        ...base.ships.filter((ship) => ship.id === base.playerShipId).map((ship) => ({ ...ship, x: 104, y: 100 })),
+        ...base.ships.filter((ship) => ship.id === 'axis-cruiser-1').map((ship) => ({ ...ship, x: 300, y: 300 })),
+        ...base.ships.filter((ship) => ship.id === 'bloc-cruiser-1').map((ship) => ({ ...ship, x: 200, y: 300 })),
+        merchant,
+      ],
+    };
+    const pairs = [];
+    const collector = createFieldDiagnostics({ onCollision: (pair) => pairs.push(pair) });
+    const ram = withFieldDiagnostics(game, collector, (input) => applyPlayerAction(input, { type: 'move', dx: -4, dy: 0 }));
+    const survivor = getShip(ram.game, merchant.id);
+    if (!survivor || survivor.status !== 'active' || pairs.length !== 1) continue;
+    staged = { game: ram.game, merchant, pairs };
+  }
+  assert.ok(staged, 'a staged seed where the merchant survives the ram');
+  const aged = {
+    ...staged.game,
+    phase: 'computer',
+    ships: staged.game.ships.map((ship) => (ship.id === staged.merchant.id
+      ? { ...ship, encounter: { ...ship.encounter, turn: ship.encounter.turn - ENCOUNTERS.neutralLifetime } }
+      : ship)),
+  };
+  const departed = resolveComputerTurns(aged);
+  assert.equal(getShip(departed, staged.merchant.id), undefined, 'the merchant jumps out of the war');
+  const collisions = departed.ships.reduce((total, ship) => total + (ship.collisions ?? 0), 0);
+  assert.ok(collisions < 2, 'the departed hull took its counter with it');
+  const summary = summarizeField([{
+    seed: 'staged',
+    parity: true,
+    pairs: staged.pairs,
+    exhaustion: { classification: null, tail: [] },
+    arrivalHolds: { ticks: 0, episodes: 0, maxConsecutiveTicks: 0 },
+    normal: {
+      outcome: 'timeout', turns: departed.turn, winner: '-', collisions,
+      destroyed: 0, surrendered: 0, vacantAtEnd: 0, shots: 0, kills: 0,
+      selfDestructs: 0, prizesTaken: 0, prizesHeldAtEnd: 0,
+    },
+  }], 'reimagined');
+  assert.equal(summary.exactStateAndMetricsParity, true);
+  assert.deepEqual(summary.finalHullCounterDiscrepancies, [{ seed: 'staged', observedInvolvements: 2, finalHullCounters: collisions }]);
+  assert.ok(staged.pairs.some((pair) => pair.pair.includes(staged.merchant.id)), 'the pair evidence survives the departure');
 });
 
 test('doctrine tow-ram classification comes from the deliberate AI branch', () => {
