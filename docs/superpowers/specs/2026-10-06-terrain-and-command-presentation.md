@@ -1,6 +1,6 @@
 # Terrain art and command presentation specification
 
-Date: 2026-10-06. Updated October 11. Status: **Terrain pilot, native exports, adaptive contacts and the first command-priority slice implemented. Human visual acceptance and live performance acceptance remain open.** Parent: [Operations roadmap](2026-10-06-operations-and-consequences-roadmap.md). Execution: [Presentation plan](../plans/2026-10-06-terrain-and-command-presentation.md).
+Date: 2026-10-06. Updated November 10. Status: **Terrain pilot, native exports, adaptive contacts, the first command-priority slice and the operation debrief hierarchy implemented. Human visual acceptance and live performance acceptance remain open.** Parent: [Operations roadmap](2026-10-06-operations-and-consequences-roadmap.md). Execution: [Presentation plan](../plans/2026-10-06-terrain-and-command-presentation.md).
 
 ## V1 Visual direction
 
@@ -121,6 +121,22 @@ Order rows separate standing intent from pending replacement. Until actual radio
 
 Ordinary orders report accepted intent and observed limitations: held or unpowered movement, or a visible target whose status/allegiance changed. Outside mapper view, current execution and hardware remain unconfirmed. A known pending command can remain listed outside radio range without exposing the subject's hidden condition. Operation broadcasts and extracted-hull snapshots remain available. Never infer completion from proximity or invent a route/ETA. Default operation captains hold and defend; ordinary captains follow fleet doctrine. Manual command-ship control remains explicit.
 
-Preserve disclosure expansion, keyboard focus and historical scroll through keyed DOM reconciliation. Use text equivalents and native keyboard disclosure; this strip is not a repeating live announcement region. The current order data does not retain historical issuer/time metadata, so do not fabricate it. Issuer attribution, contextual overlays, aged-contact presentation, debrief hierarchy and audio remain subsequent work.
+Preserve disclosure expansion, keyboard focus and historical scroll through keyed DOM reconciliation. Use text equivalents and native keyboard disclosure; this strip is not a repeating live announcement region. The current order data does not retain historical issuer/time metadata, so do not fabricate it. Issuer attribution, contextual overlays, aged-contact presentation and audio remain subsequent work; the debrief hierarchy is specified in V11.
 
 See the [implementation and verification record](../reviews/2026-10-11-command-priorities.md). Automated visibility/radio tests and declared presentation scenes do not close the human M3 checkpoint.
+
+## V11 Operation debrief hierarchy (November 10)
+
+The second A5 slice reorders the operation debrief so the consequence of the mission reads before the arithmetic that describes it. It is read-only presentation: no captain decision, and no simulation, operation report, save or RNG write. Classic and ordinary Reimagined battles have no operation debrief and are unchanged.
+
+Order is fixed: mission outcome, then the recorded actual consequence, then returned/left-behind/lost hulls, then optional recovery and fleet survival, then damage needing attention, then one collapsed disclosure holding confirmed towing and the condition of hulls that need no decision. A hull needing attention is never inside the disclosure.
+
+Damage needing attention is derived from actual current state, naming the disabled systems and lost shield power of each returned hull with its real shields and crew. `finishOperation` freezes identity only, so the debrief joins those snapshots back to the hulls still held in `operation.extracted` or left in the field. A hull that cannot be found reports no condition; a number is never reconstructed to fill the gap.
+
+The operation records no entering fleet state, so the debrief reports **final condition and never a change**. Computing a delta would require inventing a baseline; before/after condition belongs to the campaign engagement debrief, which does carry `beforeFleet` and `afterFleet`.
+
+No repair is offered, because none exists here: the beacon supplies no repairs and the operation fields no dockyard. The debrief says so plainly rather than presenting an affordance that cannot act. A later mission family with a real repair facility must replace that sentence with the actual available offers, as the campaign debrief already does with `dockyardOffers`.
+
+Disclosure expansion survives a re-render. The panel restores the briefing disclosure positionally and the debrief disclosure by id, so the two never swap state.
+
+See the [implementation and verification record](../reviews/2026-11-10-debrief-hierarchy.md). Automated hierarchy and immutability tests do not close the human M3 checkpoint.
