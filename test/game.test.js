@@ -959,6 +959,9 @@ test('resigning twice does not hand the successor over as well', () => {
 // Fleet-command fixtures place Xanadu explicitly and isolate terrain from the rule under test.
 const fleetWar = (seed, update) => withShips({
   ...createGame({ seed, reimagined: true, loadout: defaultLoadout() }), terrain: [],
+  // Doctrine fixtures isolate the doctrine itself: the per-war strategy draw is
+  // exercised by test/strategy-doctrine.test.js, not by weapon-choice fixtures.
+  strategies: null,
 }, (ship) => update(ship.id === 'xanadu' ? { ...ship, x: 50, y: 50 } : ship));
 
 test('a Reimagined war starts with the flag set and no orders issued', () => {
@@ -2927,10 +2930,14 @@ const relayGame = (seed = 'relay') => {
   const base = createGame({ seed, reimagined: true, loadout: defaultLoadout() });
   return {
     ...base,
-    terrain: [{ id: 'relay-1', type: 'relay', x: 160, y: 160, radius: TERRAIN.relayRadius }],
+    // The node sits in a far corner and the park in the opposite one: since the
+    // relay-contest doctrine sends captains at enemy occupants, a staged hold
+    // must sit beyond one full interceptor burn (224) plus the node radius, or
+    // the computer phase turns a resolution fixture into a node battle.
+    terrain: [{ id: 'relay-1', type: 'relay', x: 40, y: 40, radius: TERRAIN.relayRadius }],
     ships: base.ships.map((ship) => {
-      if (ship.id === 'fed-cruiser-1') return { ...ship, x: 160, y: 160 };
-      return { ...ship, x: 230, y: 20 };
+      if (ship.id === 'fed-cruiser-1') return { ...ship, x: 40, y: 40 };
+      return { ...ship, x: 320, y: 320 };
     }),
   };
 };
@@ -2951,7 +2958,7 @@ test('contesting darkens the node and driving the holder off frees it', () => {
   // An Axis hull arrives while Bonhomme still sits there: contested, nobody holds.
   const contested = {
     ...fedHeld,
-    ships: fedHeld.ships.map((ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, x: 162, y: 160 } : ship)),
+    ships: fedHeld.ships.map((ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, x: 42, y: 40 } : ship)),
   };
   const dark = resolveObjectives(contested);
   assert.equal(dark.game.held['relay-1'], undefined, 'a contested node goes dark');
@@ -2959,14 +2966,14 @@ test('contesting darkens the node and driving the holder off frees it', () => {
   // The Federation hull leaves and the Axis one stays: the node flips.
   const flipped = resolveObjectives({
     ...dark.game,
-    ships: dark.game.ships.map((ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 40, y: 200 } : ship)),
+    ships: dark.game.ships.map((ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, x: 200, y: 200 } : ship)),
   });
   assert.equal(flipped.game.held['relay-1'], 'Axis');
   assert.match(flipped.messages.join(' '), /The Axis has wrested the relay node .* from the Federation|The Axis holds the relay node/);
   // And driving the holder off frees it again.
   const freed = resolveObjectives({
     ...flipped.game,
-    ships: flipped.game.ships.map((ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, x: 40, y: 200 } : ship)),
+    ships: flipped.game.ships.map((ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, x: 200, y: 200 } : ship)),
   });
   assert.equal(freed.game.held['relay-1'], undefined);
   assert.match(freed.messages.join(' '), /The Axis has lost the relay node/);
@@ -4577,7 +4584,7 @@ test('an AI captain looses spread only into a clean, clustered splash', () => {
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 112, y: 100 };
     if (ship.id === 'fed-cruiser-2') return { ...ship, x: 116, y: 100 };
     return parked(ship);
-  }), terrain: [] };
+  }), terrain: [], strategies: null };
   assert.deepEqual(chooseAiAction(clustered, 'axis-flagship'), { type: 'spread', targetId: 'fed-cruiser-1' },
     'a clean cluster of two draws the salvo');
   // A friendly inside the splash: never (it falls back to the phasers).

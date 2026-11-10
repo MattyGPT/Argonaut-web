@@ -1017,6 +1017,40 @@ export const PERSONALITIES = Object.freeze({
 });
 
 /**
+ * War strategies (engagement-shape slice 1, 2026-11-10). A Reimagined alliance
+ * draws one strategy per war on its own `${seed}:strategy` stream, independently
+ * of the other alliances, so a seed replays the same war and no other stream
+ * shifts. **battle** is the original concentration on the enemy fleet;
+ * **relays** posts a deterministic garrison inside each relay node — holding one
+ * already pays `TERRAIN.relayPowerBonus` reactor budget, so the nodes become
+ * places fleets fight *for* rather than geography nobody reads — and fights
+ * with the remainder as a reserve; **raid** anchors the alliance's concentration
+ * on the enemy's immovable base (Xanadu while it stands), producing siege-shaped
+ * wars at a named place. A classic war never draws one and reads `battle`
+ * everywhere, and old saves tolerate the field's absence the same way. Every
+ * figure is a balance dial for the Reimagined simulation harness.
+ */
+export const STRATEGY = Object.freeze({
+  /** Relative draw weights per alliance, independent per alliance. */
+  weights: Object.freeze({ battle: 5, relays: 4, raid: 3 }),
+  /** Line hulls one relay node's garrison may claim. */
+  maxGarrison: 3,
+  /**
+   * Line hulls an alliance commits to contesting one node it does not hold.
+   * Capped on purpose: measuring an uncapped redirect of the whole main body
+   * at the occupants turned every node into a king-of-the-hill meatgrinder
+   * (Bloc 58.8% of wars, median 39 stardates, collisions 4.86/war) without
+   * splitting the field — a node battle needs a committed fraction fighting
+   * there while the rest of the wing keeps the fleet's concentration.
+   */
+  contestPer: 2,
+  /** Garrison posts sit this fraction of the node radius off its center. */
+  postFraction: 0.5,
+  /** A garrison hull inside this distance of its post holds station. */
+  postTolerance: 2,
+});
+
+/**
  * Captains are this remake's own invention: the manual names every ship but only
  * one person, Captain Jason. They are drawn from a separate seeded stream, so ship
  * positions and the vendetta pick keep exactly the sequence they have always had.

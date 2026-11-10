@@ -30,6 +30,7 @@ import {
   STANCES,
   STARBASE_BLAST_RADIUS,
   STARTING_FORMATIONS,
+  STRATEGY,
   SYSTEM_RANGE_PER_UNIT,
   TERRAIN,
   TRACTOR_PULL_PER_UNIT,
@@ -467,6 +468,35 @@ const assignCaptains = (seed, count) => {
 };
 
 /**
+ * War strategies (engagement-shape slice 1): each alliance in the war draws
+ * battle / relays / raid on its own seeded stream, independently per alliance,
+ * so the same seed replays the same strategic picture and no other stream
+ * shifts. Only the factions actually fighting draw — a two-alliance war never
+ * reads the absent ones' strategies.
+ */
+const drawStrategies = (seed, factions) => {
+  const rng = createRng(`${seed}:strategy`);
+  const entries = Object.entries(STRATEGY.weights);
+  const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
+  return Object.fromEntries(factions.map((faction) => {
+    let roll = rng.integer(1, total);
+    for (const [id, weight] of entries) {
+      roll -= weight;
+      if (roll <= 0) return [faction, id];
+    }
+    return [faction, entries[0][0]];
+  }));
+};
+
+/**
+ * The strategy an alliance drew this war (engagement-shape slice 1). A classic
+ * war, an old save without the field, and an alliance absent from the draw all
+ * read `battle` — the original concentration behavior — so every reader of the
+ * doctrine stays total.
+ */
+export const strategyFor = (game, faction) => (game?.reimagined ? (game.strategies?.[faction] ?? 'battle') : 'battle');
+
+/**
  * Terrain placement (Argonaut Reimagined, Phase 2). Features are drawn on their own
  * seeded stream — `${seed}:terrain`, the same pattern as captains — so ship positions
  * and the vendetta pick stay byte-identical. Centers sit inside `edgeMargin` of the
@@ -688,6 +718,11 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, s
     // Resolved in the computer phase like the dockyard; empty until someone ends a
     // stardate on a node, and absent in old saves, so every reader defaults to {}.
     held: {},
+    // Per-alliance war strategy (engagement-shape slice 1): battle / relays /
+    // raid drawn on `${seed}:strategy`, Reimagined only — null in a classic war
+    // and absent in old saves, so `strategyFor` defaults every reader to
+    // 'battle' and the doctrine stays byte-identical there.
+    strategies: isReimagined ? drawStrategies(normalizedSeed, factions) : null,
     // How many prize captains have been dealt (round 17), advancing the
     // `${seed}:prizes` sub-stream. Never incremented outside a Reimagined war, and
     // absent in old saves, so every reader defaults to 0.

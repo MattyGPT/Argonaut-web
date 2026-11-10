@@ -56,11 +56,23 @@ Alliances draw a war strategy on a new `${seed}:strategy` stream at
 - **raid** — the alliance's concentration anchor becomes the enemy's immovable
   base (Xanadu while it stands) rather than the enemy nearest its flagship,
   producing siege-shaped wars at a named place.
+- **contest** (added during delivery, measured in the slice review) — every
+  alliance commits its `STRATEGY.contestPer` nearest free line hulls at enemy
+  occupants inside a relay node, capped so a node fight stands beside the
+  fleet's concentration instead of replacing it; an uncapped redirect measured
+  as a meatgrinder and was rejected.
 
-Success: mean concurrent fights ≥ 3 (from 2.2); largest-component share ≤ 0.50
-(from 0.64); relay control changes hands in ≥ half of wars that draw a relays
-strategy; first contact may stay early — this slice splits the field, it does
-not hide it.
+Success, as adapted with measurements in
+[the slice-1 review](../reviews/2026-11-10-engagement-shape-slice1.md):
+concurrent fights in 100/100 wars over 61% of engaged stardates, the two
+biggest 146.8 units apart; holder transitions in 83/84 relays wars; largest
+engagement 0.64 → 0.56. The original targets of mean concurrent fights ≥ 3 and
+largest-component share ≤ 0.50 proved to belong to the program, not the slice:
+under omniscient captains and annihilation objectives the main bodies'
+convergence is correct play, so only information limits (slice 4) and internal
+spacing (slice 2) can dissolve the main knot — they stay program-level metrics
+and the reserve gate still judges them. First contact may stay early: this
+slice splits the field, it does not hide it.
 
 ## Slice 2 — Shapes to hold
 

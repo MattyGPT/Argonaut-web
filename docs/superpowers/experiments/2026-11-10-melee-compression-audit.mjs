@@ -66,6 +66,9 @@ const sample = (game) => {
   const groups = components(hulls).filter((group) => group.length > 1);
   const fights = groups.filter((group) => new Set(group.map((ship) => ship.faction)).size > 1);
   const largest = groups.sort((a, b) => b.length - a.length)[0] ?? [];
+  const bySize = fights
+    .map((group) => ({ size: group.length, center: centroid(group) }))
+    .sort((a, b) => b.size - a.size);
   return {
     turn: game.turn,
     hulls: hulls.length,
@@ -76,6 +79,11 @@ const sample = (game) => {
     fieldRadius: Number(spread(hulls).toFixed(1)),
     packing: packing(hulls),
     center: centroid(hulls),
+    // Slice-1 shape metrics: whether more than one fight runs at once, and how
+    // far apart the two biggest simultaneous fights stand — battles at named,
+    // separate places rather than one knot.
+    fights2: fights.length >= 2,
+    fightSpread: bySize.length >= 2 ? Number(distance(bySize[0].center, bySize[1].center).toFixed(1)) : null,
   };
 };
 
@@ -85,9 +93,25 @@ const quantile = (values, q) => [...values].sort((a, b) => a - b)[Math.min(value
 const wars = [];
 for (let index = 0; index < seeds; index += 1) {
   const frames = [];
+  let heldPrev = null;
+  let transitions = 0;
+  let flips = 0;
+  let strats = null;
   runWar(index, {
     mode: 'reimagined',
     onState: (game) => {
+      const held = game.held ?? {};
+      if (heldPrev) {
+        for (const [id, faction] of Object.entries(held)) {
+          if (heldPrev[id] !== faction) {
+            transitions += 1;
+            if (heldPrev[id] && heldPrev[id] !== faction) flips += 1;
+          }
+        }
+        for (const id of Object.keys(heldPrev)) if (!(id in held)) transitions += 1;
+      }
+      heldPrev = held;
+      strats = strats ?? game.strategies;
       if (frames.length && frames[frames.length - 1].turn === game.turn) return;
       const frame = sample(game);
       if (frame) frames.push(frame);
@@ -110,6 +134,11 @@ for (let index = 0; index < seeds; index += 1) {
     openingRadius: frames[0].fieldRadius,
     contactRadius: mean(engaged.map((frame) => frame.fieldRadius)),
     meleeDriftPerStardate: mean(drift),
+    concurrentFightShare: mean(engaged.map((frame) => (frame.fights2 ? 1 : 0))),
+    meanFightSpread: mean(engaged.map((frame) => frame.fightSpread).filter((v) => v !== null)),
+    hasRelays: Object.values(strats ?? {}).includes('relays'),
+    relayTransitions: transitions,
+    relayFlips: flips,
   });
 }
 
@@ -128,6 +157,16 @@ const report = {
     warsMostlyOneMelee: wars.filter((w) => w.meleeShareOfContact >= 0.8).length,
     meanLargestComponentShare: Number(mean(wars.map((w) => w.meanLargestShare)).toFixed(2)),
     meanConcurrentFights: Number(mean(wars.map((w) => w.meanFights)).toFixed(1)),
+  },
+  separateFights: {
+    warsWithConcurrentFights: wars.filter((w) => w.concurrentFightShare > 0).length,
+    meanShareOfEngagedStardates: Number(mean(wars.map((w) => w.concurrentFightShare)).toFixed(2)),
+    meanSpreadBetweenTwoBiggest: Number(mean(wars.filter((w) => w.concurrentFightShare > 0).map((w) => w.meanFightSpread)).toFixed(1)),
+  },
+  relayContest: {
+    relaysWars: wars.filter((w) => w.hasRelays).length,
+    warsWithHolderFlip: wars.filter((w) => w.hasRelays && w.relayFlips > 0).length,
+    warsWithTwoPlusTransitions: wars.filter((w) => w.hasRelays && w.relayTransitions >= 2).length,
   },
   geometry: {
     openingFieldRadius: Number(mean(wars.map((w) => w.openingRadius)).toFixed(1)),

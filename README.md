@@ -218,7 +218,9 @@ mirrored off Xanadu as capturable objectives: end a stardate inside one — not
 tractor-held — and your alliance holds it, every hull gaining +5 reactor budget
 while it is held, enough to overcharge a sink without starving another.
 Contesting darkens the node and driving the holder off frees it, and a held node
-wears its alliance's ring on the map and minimap.
+wears its alliance's ring on the map and minimap. Enemy alliances want them too:
+garrisons post inside the rings under their war strategies and committed
+contesters come at whoever camps a node, so expect fights at the nodes.
 
 ### Prizes and drones
 
@@ -441,6 +443,13 @@ commands and calibrated behavior.
   fights with its fleet but spends a tractor beam whenever it can smash you into
   another enemy; **Federation** keeps the original's concentration and adds the
   damage discipline the enemy captains never had.
+- **Each alliance also draws a war strategy.** Seeded per war: concentrate on
+  the opposing fleet as usual, garrison the relay nodes (posted hulls hold the
+  rings and fight whatever enters their guns while the rest of the wing stays
+  a reserve), or raid a starbase — the whole concentration besieges Xanadu
+  while it stands. Any alliance commits its nearest free hulls to contest a
+  node enemy hulls sit inside, so relay nodes are named battles, not empty
+  geography. Your orders still outrank all of it.
 - **Enemy captains look after themselves now.** They flush engines into shields
   and withdraw when mauled, so a fleet you have hurt can slip away instead of
   fighting to the last point of shield. The vendetta ship is exempt: it still

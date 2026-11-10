@@ -1,4 +1,4 @@
-import { AI_PURSUIT, DRONE, ENCOUNTERS, FLEET_ORDER_TUNING, GRID_SIZE, PERSONALITIES, RANGES, REIMAGINED_SUICIDE_MIN_ENEMIES, SPREAD } from './constants.js';
+import { AI_PURSUIT, DRONE, ENCOUNTERS, FLEET_ORDER_TUNING, GRID_SIZE, PERSONALITIES, RANGES, REIMAGINED_SUICIDE_MIN_ENEMIES, SPREAD, STRATEGY } from './constants.js';
 import { canLaunchDrones, flushShields, tractorLock } from './actions.js';
 import { createRng } from './rng.js';
 import { isOperation, operationVisible } from './operations.js';
@@ -18,6 +18,7 @@ import {
   powerEffect,
   sensorRange,
   shieldCapacity,
+  strategyFor,
   systemUnits,
 } from './state.js';
 
@@ -272,12 +273,99 @@ const suicideRun = (game, actor, doctrine, enemies) => {
   return { type: 'self-destruct' };
 };
 
+/** Relay nodes on the field, in a stable order (engagement-shape slice 1). */
+const relaysOf = (game) => (game.terrain ?? [])
+  .filter((feature) => feature.type === 'relay')
+  .sort((a, b) => a.id.localeCompare(b.id));
+
+/**
+ * Where a hull stations when its alliance drew `relays` (engagement-shape
+ * slice 1): the wing — the alliance's active ships of the line in id order —
+ * is dealt round-robin into garrisons of at most `STRATEGY.maxGarrison` per
+ * node, and everyone else stays a reserve for the fleet's concentration. A
+ * garrison hull's post is its own bearing around the node center at
+ * `postFraction` of the node radius, so a garrison spreads across the ring
+ * instead of stacking on the relay. Deterministic — id order and slot
+ * counts, no RNG draw — and it re-deals as the wing takes losses, so a
+ * garrison thins rather than leaving a node unwatched. Null when the alliance
+ * drew another strategy, the field carries no relay, or the hull is reserve.
+ */
+const strategyStation = (game, actor) => {
+  if (strategyFor(game, actor.faction) !== 'relays') return null;
+  const relays = relaysOf(game);
+  if (relays.length === 0) return null;
+  const wing = game.ships
+    .filter((ship) => isActive(ship) && ship.faction === actor.faction && !isDrone(ship) && !isImmovable(ship))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const per = Math.min(STRATEGY.maxGarrison, Math.max(1, Math.floor(wing.length / (relays.length + 1))));
+  const counts = relays.map(() => 0);
+  for (const [index, ship] of wing.entries()) {
+    const slot = index % (relays.length + 1);
+    if (slot === 0) continue;
+    const relayIndex = slot - 1;
+    if (counts[relayIndex] >= per) continue;
+    if (ship.id !== actor.id) {
+      counts[relayIndex] += 1;
+      continue;
+    }
+    const relay = relays[relayIndex];
+    const angle = (counts[relayIndex] * 2 * Math.PI) / per;
+    return {
+      x: relay.x + Math.cos(angle) * relay.radius * STRATEGY.postFraction,
+      y: relay.y + Math.sin(angle) * relay.radius * STRATEGY.postFraction,
+    };
+  }
+  return null;
+};
+
+/**
+ * The occupant this hull is committed to contesting (engagement-shape slice
+ * 1): for each node with enemy hulls inside, the alliance commits its
+ * `STRATEGY.contestPer` nearest line hulls that hold no garrison post — a
+ * capped fraction, so the node fight stands beside the fleet's concentration
+ * instead of replacing it. Deterministic: distance to the node, ties by id.
+ * Null when no node has enemies inside, or the hull is not among the
+ * committed for any of them.
+ */
+const contestCommitment = (game, actor, enemies) => {
+  const nodes = relaysOf(game);
+  if (nodes.length === 0) return null;
+  for (const node of nodes) {
+    const occupants = enemies
+      .filter((ship) => distance(ship, node) <= node.radius)
+      .sort((a, b) => distance(actor, a) - distance(actor, b) || a.id.localeCompare(b.id));
+    if (occupants.length === 0) continue;
+    const pool = game.ships
+      .filter((ship) => isActive(ship) && ship.faction === actor.faction && !isDrone(ship) && !isImmovable(ship) && !strategyStation(game, ship))
+      .sort((a, b) => distance(a, node) - distance(b, node) || a.id.localeCompare(b.id));
+    if (pool.slice(0, STRATEGY.contestPer).some((ship) => ship.id === actor.id)) return occupants[0];
+  }
+  return null;
+};
+
 /** Which hull an alliance's captains go for once the player has not ordered them. */
 const doctrineTarget = (game, actor, doctrine, enemies) => {
   if (isVendetta(game, actor)) {
     const player = getShip(game, game.playerShipId);
     if (player && isActive(player) && player.faction !== actor.faction && player.id !== actor.id) return player;
   }
+  // Engagement-shape slice 1: a raiding alliance besieges the enemy's immovable
+  // base instead of chasing whatever stands nearest the flagship — a war with a
+  // named place in it. Without a base to raid (the enemy fielded none, or it has
+  // fallen) the raid falls through to the ordinary concentration.
+  if (strategyFor(game, actor.faction) === 'raid') {
+    const base = enemies.filter((ship) => isImmovable(ship))
+      .sort((a, b) => distance(actor, a) - distance(actor, b) || a.id.localeCompare(b.id))[0];
+    if (base) return base;
+  }
+  // Engagement-shape slice 1: the relay nodes are worth fighting for, but a
+  // node battle needs a committed fraction rather than a redirected main
+  // body — measuring an uncapped redirect made every node a king-of-the-hill
+  // meatgrinder without splitting the field. An alliance with enemy hulls
+  // inside a node commits its `contestPer` nearest free line hulls at the
+  // occupants while the rest of the wing keeps the fleet's concentration.
+  const contest = contestCommitment(game, actor, enemies);
+  if (contest) return contest;
   // By the book: the original's concentration on the enemy nearest the flagship.
   if (doctrine.fleetFocus) return pickTarget(game, actor)?.ship ?? null;
   if (doctrine.focusWeakest) {
@@ -312,6 +400,20 @@ const doctrineAction = (game, actor) => {
   const capacity = shieldCapacity(actor);
   const ratio = capacity ? actor.shields / capacity : 1;
   if (!hunting && ratio <= doctrine.flushBelow && flushShields(actor)) return { type: 'shields' };
+
+  // Engagement-shape slice 1: an alliance that drew `relays` posts its dealt
+  // garrisons inside the nodes before the concentration claims the rest of the
+  // wing. A hull on its post fights whatever enters its guns and otherwise
+  // holds station; a hurt garrison hull still falls back like any other.
+  const station = strategyStation(game, actor);
+  if (station) {
+    const menace = nearestTo(actor, enemies);
+    if (!hunting && doctrine.retreatBelow > 0 && ratio <= doctrine.retreatBelow) return fallBack(game, actor, menace.ship);
+    const shot = engage(game, actor, menace.ship, menace.range, doctrine.noTractor);
+    if (shot) return shot;
+    if (!canNavigate(game, actor) || distance(actor, station) <= STRATEGY.postTolerance) return { type: 'pass' };
+    return stepToward(actor, station, 0, game);
+  }
 
   const target = doctrineTarget(game, actor, doctrine, enemies);
   if (!target) return { type: 'pass' };
