@@ -2,6 +2,49 @@ import { OPERATION_SEEDS, RESCUE_BRIEFING, RESCUE_RULES, operationExtraction, op
 
 const escape = (value) => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 const names = (ships) => ships.length ? ships.map((ship) => escape(ship.name)).join(', ') : 'None';
+const liveHull = (game, id) => [...game.ships, ...game.operation.extracted].find((ship) => ship.id === id);
+
+/**
+ * Actual final condition of the returned hulls. `finishOperation` froze identity
+ * only — `snapshotShip` keeps no shields, crew or systems — so the debrief joins
+ * those snapshots back to the hulls still held in `operation.extracted` or left
+ * in the field. A hull that is gone reports no condition rather than a
+ * reconstructed one: the operation records no entering state, so nothing here
+ * can claim a change it did not observe.
+ */
+const debriefHulls = (game, result) => result.returned.map((snapshot) => {
+  const ship = liveHull(game, snapshot.id);
+  const disabled = ship ? Object.entries(ship.systems ?? {}).filter(([, units]) => units === 0).map(([system]) => system) : [];
+  const attention = [
+    disabled.length ? `disabled ${disabled.join(', ')}` : null,
+    ship && ship.shields === 0 ? 'no shield power' : null,
+  ].filter(Boolean);
+  return { name: snapshot.name, attention, condition: ship ? `shields ${ship.shields}, crew ${ship.crew}` : null };
+});
+
+/**
+ * Outcome first, then hulls, then the damage that needs a decision, with the
+ * flat statistics collapsed. Read-only presentation: no captain decision, no
+ * simulation, report, save or RNG write.
+ */
+const debriefMarkup = (game, op, result) => {
+  const hulls = debriefHulls(game, result);
+  const needing = hulls.filter((hull) => hull.attention.length);
+  const settled = hulls.filter((hull) => !hull.attention.length);
+  const condition = (hull) => `${escape(hull.name)}${hull.condition ? ` (${escape(hull.condition)})` : ''}`;
+  return `<div class="operation-debrief"><h3>${result.primary === 'success' ? 'Sentinel recovered' : 'Rescue unsuccessful'}</h3>
+      <p class="operation-result-reason">${escape(operationResultExplanation(game))}</p>
+      <p>Returned: ${names(result.returned)}. Left behind: ${names(result.abandoned)}. Lost: ${names(result.lost)}.</p>
+      <p>Optional prize: ${result.prizeRecovered ? 'recovered' : 'not recovered'}. Fleet survival: ${result.fleetSurvived ? 'mobile hull returned' : 'no mobile hull returned'}.</p>
+      ${needing.length ? `<div class="operation-debrief-attention"><h4>Damage needing attention</h4>
+      <ul>${needing.map((hull) => `<li><strong>${escape(hull.name)}</strong> — ${escape(hull.attention.join('; '))}${hull.condition ? ` (${escape(hull.condition)})` : ''}</li>`).join('')}</ul>
+      <p>No repair is available in the field: the beacon supplies none, and this operation fields no dockyard.</p></div>`
+    : hulls.length ? `<p class="operation-debrief-clear">No returned hull has a disabled system or lost shield power.</p>` : ''}
+      <details class="operation-debrief-detail" id="operation-debrief-detail"><summary>Condition and towing detail</summary>
+      <p>Confirmed towing: ${Object.entries(op.assists).map(([id, amount]) => `${escape(liveHull(game, id)?.name ?? id)} ${amount.toFixed(1)} units`).join(', ') || 'None'}.</p>
+      ${settled.length ? `<p>Returned needing no attention: ${settled.map(condition).join(', ')}.</p>` : ''}
+      </details></div>`;
+};
 
 export const operationPanelMarkup = (game) => {
   const op = game.operation;
@@ -39,11 +82,7 @@ export const operationPanelMarkup = (game) => {
     <p>${(op.briefingPoints ?? []).map((point) => `${escape(point.label)}: ${point.x}, ${point.y}`).join(' · ')}. Diamond labels mark initial intelligence, not live ship positions.</p>
     <p>Select Sentinel → Maintain tow once, then use Engines or map movement toward the beacon. Tow speed is limited by engines and tractor power; the console and Engines preview show both destinations. Either linked ship entering the ring brings both home. Keep the tow attached for evacuation. Single pull toward extraction remains available for precise repositioning after releasing the maintained tow. Use Fleet orders → Withdraw for your other captains.</p>
     <p>To delegate: select another friendly captain (for example Bulwark) → Rescue Sentinel. The captain approaches, connects once, and hauls both ships through extraction using normal turns. An unconfigured tug switches to balanced reactor power on delivery; your manual allocations are preserved. Keep commanding your own ship and advance turns normally. Progress and blockers appear above. Replace the tug’s order with Hold or Withdraw to cancel; a radio-delayed replacement takes effect on delivery. Select another captain → Recover prize to investigate Wayfarer, board with up to 10 crew (leaving at least one aboard), and send both ships independently to the beacon. Capture is not recovery: Wayfarer must actually extract. The prize crew slows its engines normally. Cancelling the captain does not undo a crew transfer or cancel the prize’s own Withdraw order; select Wayfarer to change that order. Damaged engines require repair or a manual tow.</p></details>
-    ${result ? `<div class="operation-debrief"><h3>${result.primary === 'success' ? 'Sentinel recovered' : 'Rescue unsuccessful'}</h3>
-      <p class="operation-result-reason">${escape(operationResultExplanation(game))}</p>
-      <p>Returned: ${names(result.returned)}. Left behind: ${names(result.abandoned)}. Lost: ${names(result.lost)}.</p>
-      <p>Optional prize: ${result.prizeRecovered ? 'recovered' : 'not recovered'}. Fleet survival: ${result.fleetSurvived ? 'mobile hull returned' : 'no mobile hull returned'}.</p>
-      <p>Confirmed towing: ${Object.entries(op.assists).map(([id, amount]) => `${escape([...game.ships, ...op.extracted].find((ship) => ship.id === id)?.name ?? id)} ${amount.toFixed(1)} units`).join(', ') || 'None'}.</p></div>` : ''}
+    ${result ? debriefMarkup(game, op, result) : ''}
     <div class="operation-controls"><button class="secondary tiny" data-operation-action="overview">Overview</button>
     <button class="secondary tiny" data-operation-action="follow">Follow command</button>
     ${!result ? '<button class="secondary tiny" data-operation-action="end">End operation…</button>' : ''}

@@ -321,10 +321,14 @@ const showScreens = () => {
     if (markup !== operationMarkup) {
       const focused = operationPanel.contains(document.activeElement) ? document.activeElement.dataset.operationAction : null;
       const expanded = operationPanel.querySelector('details')?.open;
+      // The debrief is a second <details>, so the positional restore above cannot
+      // carry it; keep it open by id.
+      const debriefExpanded = operationPanel.querySelector('#operation-debrief-detail')?.open;
       const seed = operationPanel.querySelector('#operation-seed')?.value;
       operationPanel.innerHTML = markup;
       operationMarkup = markup;
       if (expanded) operationPanel.querySelector('details').open = true;
+      if (debriefExpanded) operationPanel.querySelector('#operation-debrief-detail').open = true;
       if (seed) operationPanel.querySelector('#operation-seed').value = seed;
       if (focused) operationPanel.querySelector(`[data-operation-action="${focused}"]`)?.focus({ preventScroll: true });
     }

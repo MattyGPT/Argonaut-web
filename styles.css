@@ -2414,6 +2414,15 @@ body.classic .operation-warning, body.classic .operation-result-reason { border-
 .operation-controls { margin-top: .8rem; }
 .operation-controls label { display: inline-flex; align-items: center; gap: .4rem; }
 .operation-debrief { border-top: 1px solid currentColor; margin-top: .8rem; }
+/* Debrief hierarchy: outcome and hulls read first, damage needing a decision is
+   accented, and the flat statistics stay collapsed behind native disclosure. */
+.operation-debrief-attention { border-left: 3px solid #ff6868; padding: .4rem .65rem; background: #5c202040; }
+.operation-debrief-attention h4 { margin: 0 0 .35rem; font-size: .85rem; }
+.operation-debrief-attention ul { margin: .35rem 0; padding-left: 1.2rem; }
+.operation-debrief-clear { color: #a8c6d8; }
+.operation-debrief-detail { margin-top: .6rem; }
+.operation-debrief-detail summary { cursor: pointer; color: var(--cyan); }
+.operation-debrief-detail summary:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 .operation-waypoint { position: absolute; transform: translate(-50%, 1.6rem); color: #c6deea; border-bottom: 1px dotted currentColor; font-size: 11px; white-space: nowrap; pointer-events: none; z-index: 2; }
 
 /* Compact markers retain tactical identity and quiet decorative glow. */
