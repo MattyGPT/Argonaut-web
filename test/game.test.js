@@ -1782,7 +1782,7 @@ test('hold Xanadu reports its progress against the target stardate', () => {
   assert.ok(lines.includes(`Hold until stardate ${SCENARIOS['defend-xanadu'].stardates}.  Now stardate 7.`), lines);
 });
 
-// --- Backlog: click to move, sensor honesty, command transfer, log growth -------
+// --- Round 11: click to move, sensor honesty, command transfer, log growth ------
 
 const atOrigin = (seed, x = 10, y = 10) => withShips(createGame({ seed }), (ship) => (ship.id === 'fed-flagship' ? { ...ship, x, y } : ship));
 

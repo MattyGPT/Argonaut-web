@@ -1,5 +1,29 @@
 # Terminal Battle Events Implementation Plan
 
+Implementation status: **Complete — shipped in PR #13** (`145039a`). All four
+tasks landed as the commits this plan names, in order: `22be656` (emit ship
+destruction events), `ec62d7a` (carry terminal events through turns),
+`045fbfd` (render terminal battle events), `87faf0a` (pace battle around
+terminal events).
+
+The checkboxes below were ticked on 2026-10-23 during a documentation
+reconciliation, a month after merge. Each was verified against the tree rather
+than assumed: `terminalEvent` in `game/actions.js`, the `surrenderWinner` /
+`markFactionSurrendered` helpers and the `{ game, events }` shape of
+`applySurrender` in `game/turns.js`, `isTerminalEvent` / `playTerminalEvents` in
+`ui/battle-events.js`, `terminalNarrative` in `ui/render.js`, `drawTerminal` and
+both `fx-terminal-*` classes in `ui/fx.js`, the `presentTerminalEvents` wiring in
+`app.js`, and the `test/battle-events.test.js` / `test/fx.test.js` suites. The
+four Final-verification boxes record what was run at merge time; `npm test` was
+re-run on 2026-10-23 (924 passing).
+
+Two surfaces have since evolved past this plan, so read it as a historical
+record rather than a description of the current build. The queue now also
+carries milestone events and honours a Compact/Full playback preference, and
+Task 4 Step 5's README bullet was added in `87faf0a` then folded into the
+"Replay the round" bullet by PR #93 (`7146f75`) — the feature is still
+documented, under different wording.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make every destroyed or surrendered ship a clear, automatically paced tactical-map and narrative event.
@@ -47,7 +71,7 @@
 - Produces: event objects shaped as `{ kind: 'destruction', shipId, shipName, faction, x, y, cause, attackerId?, attackerName?, attackerFaction? }`.
 - Consumes: the existing action `events` array returned by `applyPlayerAction`, `resolveCollision`, and `detonate`.
 
-- [ ] **Step 1: Write failing game-rule tests for destruction attribution**
+- [x] **Step 1: Write failing game-rule tests for destruction attribution**
 
   Add these tests after the existing FX-event test. Use `phaser-hit-2`, which is already known to produce a hit, and remove all of the target's shields, crew, and system units so that that hit must destroy it.
 
@@ -69,13 +93,13 @@
 
   Add analogous assertions to the existing collision, self-destruct, and seeded hyperspace-burn tests: collision has `cause: 'collision'` and identifies its surviving collider; a self-destruct includes both the detonator and every active ship inside blast radius with `cause: 'self-destruct'`; the burn event has `cause: 'hyperspace'` and no `attackerId` property.
 
-- [ ] **Step 2: Run the focused tests and verify they fail**
+- [x] **Step 2: Run the focused tests and verify they fail**
 
   Run: `node --test test/game.test.js`
 
   Expected: FAIL because no event with `kind === 'destruction'` exists for one or more tested transitions.
 
-- [ ] **Step 3: Implement the shared event factory and wire every destruction path**
+- [x] **Step 3: Implement the shared event factory and wire every destruction path**
 
   Add the factory immediately after `fireEvent`:
 
@@ -99,13 +123,13 @@
 
   Keep the existing `phasers`/`photons` and `explosion` records. Append `terminalEvent('destruction', type, victim, { attacker: actor })` only when the resulting victim status is exactly `destroyed`. In `oneCollision`, append a `destruction` record with `cause: 'collision'` and `attacker: survivor`. Make `detonate` collect events while mapping victims, including the actor, and return `{ game, messages, events }`; pass those events from both player self-destruct and AI self-destruct callers. Append a cause-only destruction record on the hyperspace-burn branch. Do not create a terminal record for a ship that becomes `vacant`.
 
-- [ ] **Step 4: Run the focused tests and verify they pass**
+- [x] **Step 4: Run the focused tests and verify they pass**
 
   Run: `node --test test/game.test.js`
 
   Expected: PASS, including existing collision, self-destruct, and hyperspace behavior.
 
-- [ ] **Step 5: Commit the rules-event slice**
+- [x] **Step 5: Commit the rules-event slice**
 
   ```bash
   git add game/actions.js test/game.test.js
@@ -123,7 +147,7 @@
 - Changes: `applySurrender(game)` to return `{ game, events }`, where `events` is an array of `surrender` records.
 - Produces: `resolveComputerTurns(...).events` and `.lastRound.events` containing destruction and surrender records.
 
-- [ ] **Step 1: Write failing propagation and surrender tests**
+- [x] **Step 1: Write failing propagation and surrender tests**
 
   Replace the direct `applySurrender` assertion with a destructured result, then assert one event per surrendered ship:
 
@@ -137,13 +161,13 @@
 
   Add a computer-turn test that starts from the same collapsing Bloc setup with `phase: 'computer'`, calls `resolveComputerTurns`, and asserts that its `events` and `lastRound.events` each include the surrender record. Add an AI self-destruct setup and assert the `events` returned by `resolveComputerTurns` include its `destruction` records.
 
-- [ ] **Step 2: Run the focused tests and verify they fail**
+- [x] **Step 2: Run the focused tests and verify they fail**
 
   Run: `node --test test/game.test.js`
 
   Expected: FAIL because `applySurrender` returns a game object rather than `{ game, events }`, and computer events omit surrender data.
 
-- [ ] **Step 3: Return and aggregate surrender events without altering combat determinism**
+- [x] **Step 3: Return and aggregate surrender events without altering combat determinism**
 
   Refactor `applySurrender` so every return has the same shape. Keep the existing eligibility calculations and faction ordering, but replace the status-update branch with this event-producing form:
 
@@ -198,13 +222,13 @@
 
   When a resigned Federation capitulates, emit one surrender record for each active Federation hull and mark those hulls `surrendered` before setting the existing alliance-win outcome. In `resolveComputerTurns`, replace `game = applySurrender(game)` with a destructured result, assign `game = surrender.game`, and append `surrender.events` to the existing `events` array before constructing `lastRound`. In `resolveAiAction`, return `events: blast.events` for self-destruct actions.
 
-- [ ] **Step 4: Run game tests and the complete suite**
+- [x] **Step 4: Run game tests and the complete suite**
 
   Run: `node --test test/game.test.js && npm test`
 
   Expected: PASS. Existing outcome, command-transfer, and replay tests remain deterministic.
 
-- [ ] **Step 5: Commit the turn-propagation slice**
+- [x] **Step 5: Commit the turn-propagation slice**
 
   ```bash
   git add game/turns.js test/game.test.js
@@ -228,7 +252,7 @@
 - Consumes: `view.terminalEvent` and `view.battlePaused` in `renderGame`.
 - Consumes: terminal event `kind`, coordinates, and faction in `playEffects` and `replayEffects`.
 
-- [ ] **Step 1: Write failing pure-queue, render, and SVG tests**
+- [x] **Step 1: Write failing pure-queue, render, and SVG tests**
 
   In `test/battle-events.test.js`, use an immediate injected delay to verify automatic ordering:
 
@@ -250,13 +274,13 @@
 
   In `test/fx.test.js`, provide a minimal SVG/document stub, replace `globalThis.setTimeout` with a recorder that does not invoke callbacks, call `playEffects` with a destruction and a surrender event unrelated to the player, and assert it creates `fx-terminal-destruction` and `fx-terminal-surrender` nodes.
 
-- [ ] **Step 2: Run the UI-focused tests and verify they fail**
+- [x] **Step 2: Run the UI-focused tests and verify they fail**
 
   Run: `node --test test/battle-events.test.js test/render.test.js test/fx.test.js`
 
   Expected: FAIL because the queue module, terminal card, and terminal SVG classes do not yet exist.
 
-- [ ] **Step 3: Implement the pure queue, card, and map effect**
+- [x] **Step 3: Implement the pure queue, card, and map effect**
 
   Create `ui/battle-events.js` with no DOM dependency:
 
@@ -276,13 +300,13 @@
 
   In `ui/fx.js`, add `drawTerminal(svg, event)`, using `event.x` and `event.y`, with class `fx-terminal-destruction` for a large explosion and `fx-terminal-surrender` for a dashed flag/halo. Extend `draw` for both kinds and make `playEffects` retain all terminal events even when neither `fromId` nor `toId` matches `playerId`. Let the effect live for the queue interval. Add matching CSS, including a `@media (prefers-reduced-motion: reduce)` block that removes animation while leaving the marker and card visible.
 
-- [ ] **Step 4: Run UI tests and the complete suite**
+- [x] **Step 4: Run UI tests and the complete suite**
 
   Run: `node --test test/battle-events.test.js test/render.test.js test/fx.test.js && npm test`
 
   Expected: PASS. The new tests demonstrate the queue order, unabridged card, disabled controls, and both terminal visual classes.
 
-- [ ] **Step 5: Commit the terminal presentation primitives**
+- [x] **Step 5: Commit the terminal presentation primitives**
 
   ```bash
   git add ui/battle-events.js ui/render.js ui/fx.js styles.css test/battle-events.test.js test/fx.test.js test/render.test.js
@@ -301,17 +325,17 @@
 - Consumes: `view.terminalEvent` and `view.battlePaused` from Task 3.
 - Produces: a single `presentTerminalEvents(events)` app helper that resolves after all terminal events have been shown for 2500 ms each.
 
-- [ ] **Step 1: Extend tests for replay-aware terminal visibility**
+- [x] **Step 1: Extend tests for replay-aware terminal visibility**
 
   Update the existing replay render fixture so `lastRound.events` includes a terminal destruction record and render it with `view.terminalEvent` set to that record. Assert the replay button remains visible and the log contains the terminal card. Add a second assertion that the card is absent when `terminalEvent` is null, so it cannot become stale after playback clears.
 
-- [ ] **Step 2: Run the render test and verify the new assertion fails**
+- [x] **Step 2: Run the render test and verify the new assertion fails**
 
   Run: `node --test test/render.test.js`
 
   Expected: FAIL until the Task 3 rendering contract is wired through app-facing replay state.
 
-- [ ] **Step 3: Serialize presentation in app control flow**
+- [x] **Step 3: Serialize presentation in app control flow**
 
   Import `playTerminalEvents` and define the app-local timing and presenter:
 
@@ -331,7 +355,7 @@
 
   At the top of `dispatch`, return when either `spectating` or `presentingTerminalEvents` is true. Make `runComputer` async: resolve the round, call ordinary `showEvents`, await `presentTerminalEvents(game.events)`, then leave the state ready for the player. In the player, autopilot, spectator, and replay paths, call `showEvents` first and await `presentTerminalEvents` before starting a following computer phase or scheduling the next spectator tick. In replay, preserve `view.entries = round.entries` while replaying terminal cards; do not mutate `lastRound` or game rules.
 
-- [ ] **Step 4: Run the complete suite and perform a browser acceptance pass**
+- [x] **Step 4: Run the complete suite and perform a browser acceptance pass**
 
   Run: `npm test`
 
@@ -346,7 +370,7 @@
   5. Replay repeats terminal effects/cards and damaged radio does not shorten the card.
   6. DevTools reduced-motion emulation removes animation but retains card/marker information.
 
-- [ ] **Step 5: Document and commit the integrated feature**
+- [x] **Step 5: Document and commit the integrated feature**
 
   Add a README note beside replay and impact juice explaining that ship losses and surrenders are automatically paced, faction-labelled terminal events with map and narrative emphasis. Then commit:
 
@@ -357,7 +381,7 @@
 
 ## Final verification
 
-- [ ] Run `git diff --check` and confirm no whitespace errors.
-- [ ] Run `npm test` and record the passing result.
-- [ ] Review `git status --short` and confirm only intentional feature changes remain.
-- [ ] Compare the implementation against `docs/superpowers/specs/2026-09-14-terminal-battle-events-design.md`: all destruction paths, all surrendered hulls, map effects, unabridged narrative cards, automatic 2500 ms pacing, replay, reduced motion, and accessibility must be covered.
+- [x] Run `git diff --check` and confirm no whitespace errors.
+- [x] Run `npm test` and record the passing result.
+- [x] Review `git status --short` and confirm only intentional feature changes remain.
+- [x] Compare the implementation against `docs/superpowers/specs/2026-09-14-terminal-battle-events-design.md`: all destruction paths, all surrendered hulls, map effects, unabridged narrative cards, automatic 2500 ms pacing, replay, reduced motion, and accessibility must be covered.
