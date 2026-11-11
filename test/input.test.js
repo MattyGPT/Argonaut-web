@@ -278,6 +278,69 @@ test('clicking a ship selects it without also issuing a maneuver', () => {
   assert.deepEqual(dispatched, [{ type: 'map-select', targetId: 'fed-flagship' }]);
 });
 
+/** A pointer/focus target standing on a hull, optionally inside a chrome region. */
+const hullTarget = (shipId, region = null) => ({
+  closest: (selector) => (selector === '[data-ship-id]'
+    ? { dataset: { shipId }, closest: (wanted) => (wanted === region ? {} : null) }
+    : null),
+});
+
+/** Binds every listener bindInput registers, not just the click one. */
+const hoverBind = () => {
+  const handlers = {};
+  const actions = [];
+  openDialog = null;
+  openMenu = null;
+  bindInput({ addEventListener: (type, handler) => { handlers[type] = handler; } }, (action) => actions.push(action));
+  return { handlers, actions };
+};
+
+test('resting the pointer on a hull asks the sensors to read it, once per change of hull', () => {
+  const { handlers, actions } = hoverBind();
+  handlers.pointerover({ target: hullTarget('axis-flagship') });
+  handlers.pointerover({ target: hullTarget('axis-flagship') });
+  handlers.pointerover({ target: { closest: () => null } });
+  handlers.pointerover({ target: { closest: () => null } });
+  handlers.pointerover({ target: hullTarget('fed-cruiser-1') });
+  handlers.pointerleave({});
+  assert.deepEqual(actions, [
+    { type: 'sensor-hover', targetId: 'axis-flagship' },
+    { type: 'sensor-hover', targetId: null },
+    { type: 'sensor-hover', targetId: 'fed-cruiser-1' },
+    { type: 'sensor-hover', targetId: null },
+  ], 'crossing the same hull, or empty field, dispatches nothing at all');
+});
+
+test('the minimap and the ship menu are chrome, not contacts, so resting on them reads nothing', () => {
+  const { handlers, actions } = hoverBind();
+  handlers.pointerover({ target: hullTarget('axis-flagship') });
+  handlers.pointerover({ target: hullTarget('axis-flagship', '#minimap') });
+  handlers.pointerover({ target: hullTarget('axis-flagship', '#ship-menu') });
+  assert.deepEqual(actions, [
+    { type: 'sensor-hover', targetId: 'axis-flagship' },
+    { type: 'sensor-hover', targetId: null },
+  ], 'a minimap dot is a camera and a menu is a command surface: the card belongs to neither');
+});
+
+test('keyboard focus reads the same card the pointer does', () => {
+  const { handlers, actions } = hoverBind();
+  handlers.focusin({ target: hullTarget('bloc-flagship') });
+  handlers.focusout({});
+  assert.deepEqual(actions, [
+    { type: 'sensor-hover', targetId: 'bloc-flagship' },
+    { type: 'sensor-hover', targetId: null },
+  ]);
+});
+
+test('a modal prompt owns the pointer and the focus, so nothing is read behind it', () => {
+  const { handlers, actions } = hoverBind();
+  openDialog = {};
+  handlers.pointerover({ target: hullTarget('axis-flagship') });
+  handlers.focusin({ target: hullTarget('axis-flagship') });
+  assert.deepEqual(actions, []);
+  openDialog = null;
+});
+
 test('a ship-menu command carries the hull it was opened for', () => {
   openDialog = null;
   const dispatched = bind();

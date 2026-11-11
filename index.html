@@ -61,6 +61,7 @@
         <div id="map" role="group" aria-label="Space map">
           <div id="map-field"></div>
           <div id="ship-menu" aria-label="Ship commands"></div>
+          <div id="sensor-card" aria-hidden="true"></div>
           <div id="camera-controls" class="camera-controls" hidden>
             <button id="zoom-in" class="secondary tiny" type="button" title="Zoom in" aria-label="Zoom in">+</button>
             <button id="zoom-out" class="secondary tiny" type="button" title="Zoom out" aria-label="Zoom out">&minus;</button>
@@ -409,6 +410,7 @@
               <li><b>Click a hull</b> to inspect its menu. Target commands depend on the target's state, working hardware, and range; Reimagined storm jamming can remove weapon choices. A displayed choice may still refuse if readiness or crew requirements fail. <kbd>Escape</kbd> closes the menu.</li>
               <li><b>Click empty space</b> to move. Turn-based clicks beyond the engine ring are clamped to current reach. Real-time clicks set a destination that may take several stardates to reach.</li>
               <li><b>Local information:</b> the tactical map uses mapper reach and visibility. <b>Scanner</b> (<kbd>6</kbd>) inspects one reachable hull; <b>Mapper</b> (<kbd>7</kbd>) lists local positions; <b>Radio</b> (<kbd>9</kbd>) reports reachable traffic. Damage and Reimagined terrain can limit these systems.</li>
+              <li><b>Sensor card:</b> rest the pointer (or keyboard focus) on a hull inside working scanner reach and a card beside it reads class, status, range, shields and arcs, crew, subsystem damage, stance, and the captain once identified. The sweep is the free scan itself: the hull is marked scanned, so names, ace stars, and your hunter's identity come from getting close enough to read. A wreck reads as a hulk and can never be scanned; a contact beyond scanner reach keeps the plain tooltip.</li>
               <li><b>War zone</b> (<kbd>Backspace</kbd>) is the original full-map report: it lists all non-destroyed hulls and their coordinates, including contacts outside your tactical mapper. It is a separate report, not a sensor upgrade.</li>
             </ul>
             <h4>Navigate the wider Reimagined field</h4>
@@ -446,7 +448,7 @@
                   <tr data-guide-command="phasers"><td>Phasers <kbd>3</kbd></td><td>Fire an energy volley at an active enemy in phaser range. Live phaser units affect damage.</td><td>Turn / Cycle</td></tr>
                   <tr data-guide-command="photons"><td>Photons <kbd>4</kbd></td><td>Fire a heavier, shorter-range torpedo. Requires live photon units and an active enemy in range.</td><td>Turn / Cycle</td></tr>
                   <tr data-guide-command="tractor tractor-direct"><td>Tractor <kbd>5</kbd></td><td>Pull a movable active enemy in tractor range. Reimagined also offers Direct tow… and towing a friendly distress hull. Tractor-held hulls cannot maneuver or dock.</td><td>Turn / Cycle</td></tr>
-                  <tr data-guide-command="scan"><td>Scanner <kbd>6</kbd></td><td>Inspect a hull within working scanner reach and visibility. Reimagined scans reveal captain details.</td><td>Free / Free</td></tr>
+                  <tr data-guide-command="scan"><td>Scanner <kbd>6</kbd></td><td>Inspect a hull within working scanner reach and visibility; resting the pointer on one reads and identifies it without the command. Reimagined scans reveal captain details.</td><td>Free / Free</td></tr>
                   <tr data-guide-command="map"><td>Mapper <kbd>7</kbd></td><td>Read exact local positions. Requires working mapper hardware.</td><td>Free / Free</td></tr>
                   <tr data-guide-command="transport"><td>Transport <kbd>8</kbd></td><td>Reinforce a friendly ship or board a vacant hull. Requires transporter reach and enough crew to leave people aboard your ship. See boarding below.</td><td>Turn / Cycle</td></tr>
                   <tr data-guide-command="radio"><td>Radio <kbd>9</kbd></td><td>Read reachable radio traffic. Requires working radio; storm cores jam it in Reimagined.</td><td>Free / Free</td></tr>
@@ -531,7 +533,7 @@
             <ul>
               <li><b>Cease hostilities — annihilation:</b> the standard surviving-alliance war.</li>
               <li><b>Hold Xanadu:</b> keep the base standing until stardate <span data-guide-constant="SCENARIOS.defend-xanadu.stardates">30</span>. Losing the base fails the objective. This choice requires Xanadu in the loadout.</li>
-              <li><b>Hunt the hunter:</b> scan the hull commanded by your named hunter before it leaves the fight, then end the vendetta by destruction, surrender, or capture. If it leaves before you identify it, the opportunity is lost.</li>
+              <li><b>Hunt the hunter:</b> scan the hull commanded by your named hunter before it leaves the fight, then end the vendetta by destruction, surrender, or capture. If it leaves before you identify it, the opportunity is lost. Resting the pointer on a hull inside scanner reach identifies it exactly as the scan command does, so the hunt is a matter of getting close enough to read.</li>
             </ul>
             <p>The mission panel shows objective progress. Standard war endings can resolve before the scenario objective, so protect the fleet as well as the objective.</p>
             <details class="guide-examples"><summary>Example: a friendly hull’s standing orders</summary>

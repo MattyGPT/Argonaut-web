@@ -1,5 +1,5 @@
 import { paintContactDensity } from './ui/contacts.js';
-import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets, REALTIME_COOLDOWN } from './game/actions.js';
+import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets, REALTIME_COOLDOWN, sensorSweep } from './game/actions.js';
 import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, REALTIME, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
 import { alertLevel, appendLog, createGame, defaultLoadout, distance, facingOf, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, maintainedTowPair, nebulaHides, normalizeFleetSpec, sensorRange, systemUnits } from './game/state.js';
 import { abandonEngagement, autoResolveNode, buyDockyard, createCampaign, nodeById, resolveNodeBattle, startNodeBattle, travelTo } from './game/campaign.js';
@@ -21,7 +21,7 @@ import {
   whenPlaybackUnlocked,
   withPlaybackLock,
 } from './ui/battle-events.js';
-import { commandReadiness, fanOutOffsets, markerFanOptions, primeMoveMemory, renderGame, reportFor, targetExplanation, targetGeometryKnown, updateTargetReadiness } from './ui/render.js';
+import { commandReadiness, fanOutOffsets, markerFanOptions, primeMoveMemory, renderGame, reportFor, targetExplanation, targetGeometryKnown, updateSensorCard, updateTargetReadiness } from './ui/render.js';
 import { playEffect, playEvent } from './ui/sound.js';
 import { playEffects, replayEffects } from './ui/fx.js';
 import { restoreCommandHistory } from './ui/command-history.js';
@@ -695,6 +695,10 @@ const renderFrame = () => {
     if (REALTIME_COOLDOWN.has(button.dataset.command)) button.disabled = baseline || cycling;
   });
   updateTargetReadiness(game, view);
+  // The card's numbers ride the sim clock too: a hull burning away from you drops
+  // out of scanner reach between renders, and the reading must say so. Placement
+  // is left alone, so the per-frame refresh never re-flows the card mid-burn.
+  updateSensorCard(game, view, { place: false });
   refreshTargetPrompt();
   // The readout rides the sim clock between boundaries, so pause and speed are
   // visible on the header without a full re-render.
@@ -857,6 +861,51 @@ const spectate = () => {
   step();
 };
 
+/**
+ * Resting the pointer on a hull: the sensor card reads it, and the free sweep
+ * identifies it. The dwell is what separates reading one contact from machine-
+ * gunning the fleet — a mouse dragged across a melee crosses a dozen hulls, and
+ * without it every crossing would repaint the card and scan whatever it passed
+ * over. Leaving a hull is immediate instead: a card that lingers behind the
+ * pointer reads as a stale reading.
+ */
+const HOVER_DWELL_MS = 150;
+let hoverDwell = null;
+
+const readHull = (shipId) => {
+  if (!game || spectating || playbackLocked() || help.active) return;
+  view = { ...view, hoverShipId: shipId };
+  const swept = sensorSweep(game, shipId);
+  if (swept !== game) {
+    // A sweep can name a captain, crown an ace, and identify the vendetta hunter,
+    // so the field is redrawn rather than patched.
+    game = swept;
+    refresh();
+    return;
+  }
+  updateSensorCard(game, view, { win: currentWindow() });
+};
+
+const restPointer = (shipId) => {
+  if (hoverDwell !== null) {
+    clearTimeout(hoverDwell);
+    hoverDwell = null;
+  }
+  if (!shipId) {
+    if (!view.hoverShipId) return;
+    view = { ...view, hoverShipId: null };
+    updateSensorCard(game, view, { win: currentWindow() });
+    return;
+  }
+  if (shipId === view.hoverShipId) return;
+  // A war that ended or restarted while the pointer was resting is not the war to read.
+  const seed = game?.seed;
+  hoverDwell = setTimeout(() => {
+    hoverDwell = null;
+    if (game?.seed === seed) readHull(shipId);
+  }, HOVER_DWELL_MS);
+};
+
 const dispatch = async (action) => {
   // Automated turns and replay mutate the current presentation asynchronously,
   // and the star chart has no war to command. A real-time spectator war takes
@@ -868,7 +917,7 @@ const dispatch = async (action) => {
     if (!ship || ship.status === 'destroyed' || (action.fromContactPicker && !targetGeometryKnown(game, ship))) return;
     // Clicking a hull opens the context menu that grows out of it; clicking the
     // same hull again puts the menu away.
-    view = { ...view, contextShipId: !action.fromContactPicker && view.contextShipId === ship.id ? null : ship.id, contextFromPicker: Boolean(action.fromContactPicker) };
+    view = { ...view, contextShipId: !action.fromContactPicker && view.contextShipId === ship.id ? null : ship.id, contextFromPicker: Boolean(action.fromContactPicker), hoverShipId: null };
     if (action.fromContactPicker && game.reimagined) {
       view.camera = clampCamera({ ...view.camera, cx: ship.x, cy: ship.y, follow: false }, field());
     }
@@ -880,9 +929,18 @@ const dispatch = async (action) => {
   if (action.type === 'menu-close') {
     if (!view.contextShipId) return;
     const returnToPicker = view.contextFromPicker;
-    view = { ...view, contextShipId: null, contextFromPicker: false };
+    view = { ...view, contextShipId: null, contextFromPicker: false, hoverShipId: null };
     refresh();
     if (returnToPicker) document.querySelector('#contact-picker').focus({ preventScroll: true });
+    return;
+  }
+
+  // Resting the pointer on a hull asks the sensors what they can resolve. The card
+  // is presentation, but the sweep it earns is real state: a hull inside working
+  // scanner reach is identified exactly as the free `6` scan would have identified
+  // it — silently, once, and only where that command would itself have landed.
+  if (action.type === 'sensor-hover') {
+    restPointer(action.targetId ?? null);
     return;
   }
 

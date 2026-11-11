@@ -406,6 +406,43 @@ export const actionAvailability = (game, action = {}, { targetKnown = true } = {
 };
 
 /**
+ * The scan a resting sensor sweep earns: resting the pointer on a hull inside
+ * working scanner reach identifies it, because the scan command was already free
+ * and the only thing it cost was the click.
+ *
+ * The gate is the Scan command's own eligibility, so the sweep can never learn
+ * something the command would have refused — no wreck (a destroyed hull is not a
+ * target), no hull behind nebula static, nothing outside scanner reach or with a
+ * dead scanner, nothing while the war is over, paused for resolution, or observed
+ * rather than commanded. It is silent by contract: no log line, no report, no
+ * journal card, no stardate spent, and the SAME game object back whenever there
+ * is nothing new to learn, so a caller in a per-frame loop can compare by identity.
+ */
+export const sensorSweep = (game, targetId) => {
+  if (!game || !targetId || game.scanned?.[targetId]) return game;
+  if (!actionAvailability(game, { type: 'scan', targetId }).available) return game;
+  return { ...game, scanned: { ...(game.scanned ?? {}), [targetId]: true } };
+};
+
+/**
+ * Whether a working scanner resolves a hull right now — the sensor card's gate,
+ * and deliberately wider than `sensorSweep`: a wreck reads on the sensors as a
+ * hulk even though it can never be scanned. Null when the sensors cannot resolve
+ * the hull at all, so a mapper-only contact keeps the plain tooltip it always had.
+ */
+export const sensorContact = (game, targetId) => {
+  const actor = getShip(game, game.playerShipId);
+  const target = getShip(game, targetId);
+  if (!actor || !target || !isActive(actor) || isSpectator(game)) return null;
+  if (systemUnits(actor, 'scanner') <= 0) return null;
+  const range = sensorRange(game, actor, 'scanner');
+  if (!(range > 0)) return null;
+  const reach = distance(actor, target);
+  if (reach > range || nebulaHides(game, actor, target)) return null;
+  return { range, distance: reach };
+};
+
+/**
  * Applies combat damage without changing its ship argument. Shields absorb damage
  * first; each exposed point then removes one crew member or one live subsystem unit,
  * weighted by CREW_DAMAGE_WEIGHT so the crew takes the bulk and the subsystems survive

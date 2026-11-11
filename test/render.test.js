@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, getShip, isNeutral, spawnDrone, spawnEncounter } from '../game/state.js';
+import { createGame, getShip, isNeutral, sensorRange, spawnDrone, spawnEncounter } from '../game/state.js';
 import { createRng } from '../game/rng.js';
 import { actionAvailability, applyPlayerAction, launchDrones } from '../game/actions.js';
-import { commandReadiness, fanOutOffsets, journalCardsHtml, markerFanOptions, renderGame, reportFor, targetExplanation, targetGeometryKnown, terminalNarrative } from '../ui/render.js';
+import { commandReadiness, fanOutOffsets, journalCardsHtml, markerFanOptions, renderGame, reportFor, targetExplanation, targetGeometryKnown, terminalNarrative, updateSensorCard } from '../ui/render.js';
 import { createJournal } from '../ui/battle-journal.js';
 import { factionBadgeHtml, factionIdentity } from '../ui/faction-identity.js';
 import { createOperationGame } from '../game/operations.js';
@@ -1475,4 +1475,119 @@ test('captured civilian merchant keeps its existing asset while displaying curre
   assert.match(marker, /src="assets\/sprites\/neutral\/merchant.png"/);
   assert.match(marker, /data-faction="Federation"/);
   assert.match(read('#ship-menu').innerHTML, /taken from the Neutral/);
+});
+
+// --- The sensor card: the free scan a resting pointer earns ---
+
+/** A pair staged five units apart on an empty field: inside scanner reach, well inside mapper reach. */
+const sensorGame = (seed, options = {}) => {
+  const game = createGame({ seed, ...options });
+  game.terrain = [];
+  Object.assign(getShip(game, 'fed-flagship'), { x: 10, y: 10 });
+  Object.assign(getShip(game, 'axis-flagship'), { x: 15, y: 10 });
+  return game;
+};
+
+const cardOf = (game, view) => {
+  renderGame(game, view);
+  return read('#sensor-card').innerHTML;
+};
+
+test('the sensor card reads the hull under the pointer, and rendering never writes the sweep itself', () => {
+  elements.clear();
+  const game = sensorGame('card-reach', { reimagined: true });
+  const actor = getShip(game, 'fed-flagship');
+  const contact = getShip(game, 'axis-flagship');
+  const before = JSON.stringify(game);
+  const card = cardOf(game, { hoverShipId: 'axis-flagship' });
+  assert.ok(card.includes(contact.name), 'the reading is headed by the hull it is reading');
+  assert.match(card, /card-sweep/);
+  assert.match(card, new RegExp(`Range 5\\.0 of ${sensorRange(game, actor, 'scanner')} scanner reach`));
+  assert.match(card, new RegExp(`Shields ${contact.shields} · arcs F \\d+ · S \\d+ · A \\d+ · P \\d+ · heading \\d+°`));
+  assert.match(card, new RegExp(`Crew ${contact.crew}`));
+  assert.match(card, /Combat stance: /);
+  assert.match(card, /card-systems/);
+  assert.match(card, /Phasers <b>\d+<\/b>/);
+  assert.match(card, /Automatic sensor sweep/);
+  assert.doesNotMatch(card, /Captain/, 'a captain is intelligence: the card only names one the sweep has recorded');
+  assert.equal(JSON.stringify(game), before, 'drawing the card is presentation — the sweep belongs to the app');
+});
+
+test('the card names a captain once the hull is identified, in a Reimagined war only', () => {
+  elements.clear();
+  const game = sensorGame('card-captain', { reimagined: true });
+  const contact = getShip(game, 'axis-flagship');
+  game.scanned = { [contact.id]: true };
+  const card = cardOf(game, { hoverShipId: contact.id });
+  assert.ok(card.includes(`Captain ${contact.captain}`), 'the sweep earns the name the scan always earned');
+  assert.match(card, /this hull is identified/);
+  const classic = sensorGame('card-captain-classic');
+  classic.scanned = { [getShip(classic, 'axis-flagship').id]: true };
+  const classicCard = cardOf(classic, { hoverShipId: 'axis-flagship' });
+  assert.doesNotMatch(classicCard, /Captain|Combat stance|arcs F/, 'a classic reading stays a classic reading');
+  assert.match(classicCard, /card-systems/);
+});
+
+test('the card is a scanner reading: a mapper-only contact gets no card and keeps its tooltip', () => {
+  elements.clear();
+  const game = sensorGame('card-beyond', { reimagined: true });
+  const actor = getShip(game, 'fed-flagship');
+  const contact = getShip(game, 'axis-flagship');
+  const reach = sensorRange(game, actor, 'scanner');
+  assert.ok(sensorRange(game, actor, 'mapper') > reach + 1, 'the fixture stages a hull the mapper sees and the scanner cannot reach');
+  Object.assign(contact, { x: actor.x + reach + 1, y: actor.y });
+  assert.ok(targetGeometryKnown(game, contact), 'still on the map');
+  assert.equal(cardOf(game, { hoverShipId: 'axis-flagship' }), '');
+  assert.match(read('#map-field').innerHTML, new RegExp(`data-ship-id="axis-flagship" title="${contact.name}: active`),
+    'a contact the card cannot cover keeps the native tooltip');
+
+  elements.clear();
+  const near = sensorGame('card-within', { reimagined: true });
+  assert.ok(cardOf(near, { hoverShipId: 'axis-flagship' }), 'the same hull inside scanner reach reads');
+  const marker = read('#map-field').innerHTML.match(/<button[^>]*data-ship-id="axis-flagship"[^>]*>/)[0];
+  assert.doesNotMatch(marker, /title=/, 'and trades its tooltip for the card, so two readouts never overlap');
+});
+
+test('the card stays closed for a hull the pointer is not resting on, for your own hull, and while anything else owns the field', () => {
+  elements.clear();
+  const game = sensorGame('card-closed', { reimagined: true });
+  assert.equal(cardOf(game, {}), '');
+  assert.equal(cardOf(game, { hoverShipId: 'fed-flagship' }), '', 'the console already reads your own hull');
+  assert.equal(cardOf(game, { hoverShipId: 'no-such-hull' }), '');
+  assert.equal(cardOf(game, { hoverShipId: 'axis-flagship', battlePaused: true }), '', 'a resolution owns the field');
+  assert.equal(cardOf({ ...game, outcome: { kind: 'won', message: 'The war is over.' } }, { hoverShipId: 'axis-flagship' }), '');
+  assert.equal(read('#ship-menu').innerHTML, '');
+  const menuWins = cardOf(game, { hoverShipId: 'axis-flagship', contextShipId: 'axis-flagship' });
+  assert.equal(menuWins, '', 'the click menu outranks the reading');
+  assert.ok(read('#ship-menu').innerHTML.includes('Fire phasers'), 'and keeps the field to itself');
+});
+
+test('a wreck reads as a hulk: identified if it was scanned alive, never scanned by the pointer', () => {
+  elements.clear();
+  const game = sensorGame('card-wreck', { reimagined: true });
+  const contact = getShip(game, 'axis-flagship');
+  Object.assign(contact, { status: 'destroyed' });
+  const card = cardOf(game, { hoverShipId: 'axis-flagship' });
+  assert.match(card, /destroyed hulk/);
+  assert.match(card, /A wreck cannot be scanned/);
+  assert.doesNotMatch(card, /card-systems|Shields|Crew/, 'a hulk has no internals to read');
+  assert.doesNotMatch(card, /Captain/, 'the dead were never identified');
+  elements.clear();
+  game.scanned = { [contact.id]: true };
+  assert.ok(cardOf(game, { hoverShipId: 'axis-flagship' }).includes(`Captain ${contact.captain}`),
+    'a hull scanned before it died still tells you who was aboard');
+});
+
+test('the frame-loop card refresh reports the hull it is reading and hides without a placement pass', () => {
+  elements.clear();
+  const game = sensorGame('card-frame', { reimagined: true, realtime: true });
+  assert.equal(updateSensorCard(game, {}, { place: false }), null);
+  assert.equal(updateSensorCard(game, { hoverShipId: 'axis-flagship' }, { place: false }), 'axis-flagship');
+  assert.match(read('#sensor-card').innerHTML, /Automatic sensor sweep/);
+  // A hull that burns out of scanner reach between renders drops off the card.
+  const actor = getShip(game, 'fed-flagship');
+  Object.assign(getShip(game, 'axis-flagship'), { x: actor.x + sensorRange(game, actor, 'scanner') + 1, y: actor.y });
+  assert.equal(updateSensorCard(game, { hoverShipId: 'axis-flagship' }, { place: false }), null);
+  assert.equal(read('#sensor-card').innerHTML, '');
+  elements.clear();
 });
