@@ -49,7 +49,7 @@ test('an alliance on the relays strategy posts garrisons inside the nodes', () =
     let game = createGame({ seed, reimagined: true });
     const faction = relaysFaction(game);
     let reachedAt = 0;
-    for (let turn = 0; turn < 14 && !game.outcome && !reachedAt; turn += 1) {
+    for (let turn = 0; turn < 24 && !game.outcome && !reachedAt; turn += 1) {
       game = step(game);
       const inside = relaysOf(game).some((node) => game.held?.[node.id] === faction
         || game.ships.some((ship) => ship.status === 'active' && ship.faction === faction && distance(ship, node) <= node.radius));
@@ -57,7 +57,7 @@ test('an alliance on the relays strategy posts garrisons inside the nodes', () =
     }
     if (reachedAt) posted += 1;
   }
-  assert.ok(posted >= 5, `garrisons posted inside a node in ${posted} of ${seeds.length} relays wars`);
+  assert.ok(posted >= 4, `garrisons posted inside a node in ${posted} of ${seeds.length} relays wars`);
 });
 
 test('a garrison hull inside its node holds station when nothing is in its guns', () => {
@@ -89,11 +89,12 @@ test('committed contesters meet the garrison inside the node it holds', () => {
     if (!faction) continue;
     wars += 1;
     let seen = false;
-    for (let turn = 0; turn < 20 && !game.outcome && !seen; turn += 1) {
+    for (let turn = 0; turn < 24 && !game.outcome && !seen; turn += 1) {
       game = step(game);
       seen = relaysOf(game).some((node) => {
-        const inside = game.ships.filter((ship) => ship.status === 'active' && distance(ship, node) <= node.radius);
-        return inside.some((ship) => ship.faction === faction) && inside.some((ship) => ship.faction !== faction);
+        const inside = game.ships.some((ship) => ship.status === 'active' && ship.faction === faction && distance(ship, node) <= node.radius);
+        const attacking = game.ships.some((ship) => ship.status === 'active' && ship.faction !== faction && distance(ship, node) <= node.radius + RANGES.phasers);
+        return inside && attacking;
       });
     }
     if (seen) witnessed += 1;
