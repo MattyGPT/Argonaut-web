@@ -33,6 +33,16 @@ test('a maneuver opens a volley window; the volley spends the stardate', () => {
   assert.match(moveAfter.messages.join(' '), /Wait for the player turn/);
 });
 
+test('a maneuver with nothing in gun reach ends the stardate as it always has', () => {
+  const far = {
+    ...stage(),
+    ships: stage().ships.map((ship) => (ship.id === 'axis-flagship' ? { ...ship, x: 250, y: 250 } : ship)),
+  };
+  const moved = applyPlayerAction(far, { type: 'move', dx: 5, dy: 0 });
+  assert.equal(moved.game.phase, 'computer', 'no volley available, no window opened');
+  assert.equal(moved.game.playerActed, undefined);
+});
+
 test('a spent maneuver slot refuses a second burn, and pass ends the window', () => {
   const moved = applyPlayerAction(stage(), { type: 'move', dx: 5, dy: 0 });
   const again = applyPlayerAction(moved.game, { type: 'move', dx: 5, dy: 0 });

@@ -37,9 +37,9 @@ test('establish once, move both hulls at tractor-limited speed, release using no
   let game = ready(started.game);
   for (let i = 0; i < 3; i++) {
     const result = applyPlayerAction(game, { type: 'move', dx: -10, dy: 0 });
-    assert.equal(result.game.phase, 'player', 'the maneuver opens the volley window');
-    assert.deepEqual(result.game.playerActed, { move: true, volley: false });
-    game = ready(result.game);
+    // The volley window opens only if a gun can reach something where the burn
+    // landed; either way the loop advances to a fresh player stardate.
+    game = ready(result.game.phase === 'computer' ? resolveComputerTurns(result.game) : result.game);
     assert.equal(getShip(game, targetId).x, getShip(game, tugId).x);
     assert.equal(getShip(game, targetId).y - getShip(game, tugId).y, 20);
     assert.ok(maintainedTowPair(game));
