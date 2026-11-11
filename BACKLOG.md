@@ -77,12 +77,29 @@ remaining closure items of the
 [player experience roadmap](docs/superpowers/specs/2026-10-03-player-experience-roadmap.md)
 belong to that plan. This file is only for work that is not a slice of either.
 
-As of the November re-check the delivery plan's own next bounded slice is
+**Opened 2026-11-11:** a second live program,
+[presence, legacy, and reach](docs/superpowers/specs/2026-11-11-presence-legacy-and-reach-program.md),
+with its own
+[delivery plan](docs/superpowers/plans/2026-11-11-presence-legacy-and-reach-delivery.md).
+It makes the depth the game already has perceptible and lasting: ship presence
+(an interior schematic, damage-reactive audio, persistent damage), an honest war
+chronicle generated from the causal records that are currently discarded at the
+resolution boundary, and replay/sharing/competition built on the already
+deterministic core. Three parked items below — Rounds 25, 28, and 29 — are
+**claimed by that program**, and each is removed from the Ideas section by the
+slice that delivers it rather than in advance. Mines stay parked.
+
+As of the November re-check the delivery plan's own next bounded slice was
 **debrief hierarchy** — lead with outcome, returned/abandoned/lost hulls, changed
 condition and actual consequence, keeping unchanged statistics behind disclosure
 — named as such in
 [the command-priorities review](docs/superpowers/reviews/2026-10-11-command-priorities.md)
-that shipped with PR #105. It is tracked there, not here.
+that shipped with PR #105. **That slice has since shipped** (2026-11-10, with
+[its own review](docs/superpowers/reviews/2026-11-10-debrief-hierarchy.md),
+`test/debrief-hierarchy.test.js`, and a ticked box in the operations delivery
+plan), so this file no longer names the operations plan's next slice; the plan
+owns its own sequence. Corrected 2026-11-11 rather than left to read as open
+work.
 
 ## Calibration
 
@@ -259,15 +276,23 @@ dropped":
   a merchant-reputation price (attacking or seizing neutrals currently costs
   nothing), Cabal predation on merchants, AI distress-rescue doctrine, a morale
   reward for answering calls, officer passives built on the captains substrate,
-  and morale bending the surrender math.
+  and morale bending the surrender math. **Claimed 2026-11-11** as slice W1 of
+  the [presence, legacy, and reach program](docs/superpowers/specs/2026-11-11-presence-legacy-and-reach-program.md);
+  it stays listed here until that slice merges and removes it.
 - **Round 28 — Seed challenges and score export** — deferred with Phase 7 (Meta
   & community) by Matt, 2026-09-25, in favour of real-time movement and sprites.
   Stands as written: a shareable seed string and a stardate score, tested by
   reproducibility and export/import. Phase 8's fixed-timestep headless sim core
   is what makes reproducible challenges cheap, so this is cheaper now than when
   it was parked — the roadmap notes 28 "arguably gets easier after 30–32".
+  **Claimed 2026-11-11** as slice S3 of the same program, now downstream of the
+  retained action log (S1) and replay (S2) that make it cheap.
 - **Round 29 — Async PvP / hotseat** — deferred with Phase 7 on the same
   decision. Two-sided play off one seed; both sides act, with a turn hand-off.
+  **Claimed 2026-11-11** as slice S5 of the same program. Note it is the one
+  claimed item that needs a genuine rules-layer change — accepting a second
+  human's commands for a second alliance — so it carries the full measurement
+  discipline rather than the presentation-only gate.
 
 ## Bugs
 
