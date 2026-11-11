@@ -83,7 +83,7 @@ export async function stageGuideScene(scene) {
         game = updatePractice(action.game);
         journal = appendRecords(journal, action.records);
         facts.commands.push(command);
-        if (game.practice.status === 'active' && game.phase === 'computer') {
+        if (game.practice.status === 'active' && (game.phase === 'computer' || game.playerActed?.move)) {
           game = updatePractice(resolveComputerTurns(game, { onRecords: (records) => { journal = appendRecords(journal, records); } }), { boundary: true });
         }
       }

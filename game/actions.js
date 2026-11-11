@@ -386,6 +386,16 @@ export const actionAvailability = (game, action = {}, { targetKnown = true } = {
     readiness: { ready: readyAt <= now, readyAt, simTime: now, remaining: Math.max(0, readyAt - now) },
   };
   let check = commandEligibility(game, action);
+  // Slice 3: the maneuver and volley slots gate availability too, so the
+  // console, the operations sim, and the execution refusal share one truth.
+  if (!check.error && game?.reimagined && !game.realtime && game.phase === 'player') {
+    const acted = game.playerActed ?? {};
+    if (COMPOSITE_MANEUVER.has(action.type) && (acted.move || acted.volley)) {
+      check = unavailable('slot-spent', 'The conn has already acted this stardate.');
+    } else if (COMPOSITE_VOLLEY.has(action.type) && acted.volley) {
+      check = unavailable('slot-spent', 'The guns have already fired this stardate.');
+    }
+  }
   if (!check.error) check = ownActionEligibility(game, action, actor);
   if (!check.error && TARGET_ACTIONS.has(action.type)) {
     check = action.targetId && !targetKnown
@@ -1196,7 +1206,8 @@ const moveAction = (game, action, actor) => {
   }
   // Round 23: the move implies the heading — a Reimagined hull ends the burn
   // facing the direction it traveled (inert elsewhere, so parity holds).
-  const movedActor = applyHeading(game, actor, x, y);
+  // Slice 3: the maneuver prices a volley fired after it (composite miss).
+  const movedActor = { ...applyHeading(game, actor, x, y), ...(game.reimagined ? { maneuvered: true } : {}) };
   const moved = emitBattleRecord(replaceShip(game, movedActor), {
     kind: 'movement', actor, target: actor, payload: { cause: 'move', consequences: shipConsequences(actor, movedActor) },
   });
@@ -1957,6 +1968,16 @@ export { REALTIME_COOLDOWN };
 const REALTIME_MANUAL_CONN = new Set(['move', 'disengage', 'phasers', 'photons', 'spread', 'ion', 'tractor', 'hyperspace']);
 
 const applyManualCommand = (game, action = {}) => {
+  // Slice 3: one maneuver slot and one volley slot per stardate in a
+  // turn-based Reimagined war, maneuver first — a spent slot is refused, not
+  // queued, and a volley always spends what is left of the stardate.
+  if (game?.reimagined && !game.realtime && game.phase === 'player') {
+    const acted = game.playerActed ?? {};
+    if (COMPOSITE_MANEUVER.has(action.type) && (acted.move || acted.volley)) {
+      return invalid(game, acted.move ? 'The conn has already maneuvered this stardate.' : 'The guns have already fired — the stardate is spent.');
+    }
+    if (COMPOSITE_VOLLEY.has(action.type) && acted.volley) return invalid(game, 'The guns have already fired this stardate.');
+  }
   const outcome = applyCommand(game, action);
   if (!game?.realtime || outcome.game === game) return outcome;
   let next = outcome.game;
@@ -2003,5 +2024,22 @@ export const applyPlayerAction = (game, action = {}) => withFieldAction(game, ga
     kind: 'command-transfer', actor: issuer, target: getShip(next, next.playerShipId),
     payload: { cause: action.type, fromId: prepared.playerShipId, toId: next.playerShipId },
   });
-  return { ...outcome, game: next };
+  return { ...outcome, game: compositeSlot(next, prepared, action) };
 }));
+
+/**
+ * Engagement-shape slice 3: the turn-based Reimagined conn may maneuver AND
+ * volley within one stardate — maneuver first, then fire from where the burn
+ * left it, paying the composite miss. The maneuver opens the volley window
+ * (the console says a volley remains, and Pass ends the stardate without
+ * one); a volley always spends what is left of the stardate, so firing first
+ * keeps the old one-command rhythm exactly. Real-time is untouched: its helm
+ * is already continuous and its volleys cycle on the boundary cooldown.
+ */
+const COMPOSITE_MANEUVER = new Set(['move', 'disengage']);
+const COMPOSITE_VOLLEY = new Set(['phasers', 'photons', 'spread', 'ion']);
+const compositeSlot = (game, prepared, action) => {
+  if (!prepared.reimagined || prepared.realtime || game.phase !== 'computer') return game;
+  if (!COMPOSITE_MANEUVER.has(action.type)) return game;
+  return { ...game, phase: 'player', playerActed: { move: true, volley: false } };
+};

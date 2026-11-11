@@ -1,4 +1,4 @@
-import { AI_PURSUIT, DRONE, ENCOUNTERS, FLEET_ORDER_TUNING, FORMATION, GRID_SIZE, PERSONALITIES, RANGES, REIMAGINED_SUICIDE_MIN_ENEMIES, SPREAD, STRATEGY } from './constants.js';
+import { AI_PURSUIT, DRONE, ENCOUNTERS, FLEET_ORDER_TUNING, FORMATION, GRID_SIZE, MANEUVER, PERSONALITIES, RANGES, REIMAGINED_SUICIDE_MIN_ENEMIES, SPREAD, STRATEGY } from './constants.js';
 import { canLaunchDrones, flushShields, tractorLock } from './actions.js';
 import { createRng } from './rng.js';
 import { isOperation, operationVisible } from './operations.js';
@@ -291,7 +291,7 @@ const relaysOf = (game) => (game.terrain ?? [])
  * garrison thins rather than leaving a node unwatched. Null when the alliance
  * drew another strategy, the field carries no relay, or the hull is reserve.
  */
-const strategyStation = (game, actor) => {
+export const strategyStation = (game, actor) => {
   if (strategyFor(game, actor.faction) !== 'relays') return null;
   const relays = relaysOf(game);
   if (relays.length === 0) return null;
@@ -477,11 +477,20 @@ const doctrineAction = (game, actor) => {
   }
 
   const shot = engage(game, actor, target, range, doctrine.noTractor);
-  if (shot) return shot;
-  if (!canNavigate(game, actor)) return { type: 'pass' };
   // Slice 2: a support hull closes only to its class stop range, holding the
   // phaser edge instead of drifting into the swarm's point-blank.
   const stop = Math.max(doctrine.standoff, edge ?? 0);
+  // Engagement-shape slice 3 measured and rejected an AI maneuver-and-volley
+  // composite in three variants (closing+orbit with a firing-stance refusal:
+  // Bloc 49.2%, collisions 3.44; symmetric orbit: Bloc 47.2%, 3.15; closing
+  // only: Bloc 44.8%, 2.68 — all against slice 2's 34.8% / 1.72, for at most
+  // +0.5 of knot drift): extra volleys during the approach accrue to the
+  // long-standoff doctrines, and orbiting churn raised collisions without
+  // moving the knot. Captains keep the shoot-XOR-move economy; the composite
+  // is the PLAYER's latitude (slice 3b), and the rate-limited facing below is
+  // what makes position matter.
+  if (shot) return shot;
+  if (!canNavigate(game, actor)) return { type: 'pass' };
   if (range > stop) return stepToward(actor, target, stop, game);
   return { type: 'pass' };
 };
@@ -790,7 +799,7 @@ export const avoidStackedArrival = (game, actor, dx, dy) => {
 
 export const chooseAiAction = (game, shipId) => {
   const action = chooseAiActionInner(game, shipId);
-  if (action?.type !== 'move') {
+  if (action?.type !== 'move' && action?.type !== 'maneuver-volley') {
     noteFieldDecision(game, shipId, action, { source: shipId === game.playerShipId ? 'auto-conn' : 'fleet-ai' });
     return action;
   }

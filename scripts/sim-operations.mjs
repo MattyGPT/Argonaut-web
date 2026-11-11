@@ -104,10 +104,10 @@ export const runOperation = ({ seed = 'rescue-1', profile = 'reference', policy 
     const changed = response.game !== before;
     const records = [...(response.records ?? [])];
     game = response.game;
-    const boundary = before.operation.elapsed + (game.phase === 'computer' ? 1 : 0);
+    const boundary = before.operation.elapsed + (game.phase === 'computer' || game.playerActed?.move ? 1 : 0);
     observer?.sample(game, boundary);
     snapshot('player');
-    if (game.phase === 'computer') game = resolveComputerTurns(game, { onRecords: (batch) => records.push(...batch) });
+    if (game.phase === 'computer' || game.playerActed?.move) game = resolveComputerTurns(game, { onRecords: (batch) => records.push(...batch) });
     observer?.consume(records, game.operation.elapsed);
     observer?.sample(game, game.operation.elapsed, true);
     observer?.command(before, game, action, records, changed);

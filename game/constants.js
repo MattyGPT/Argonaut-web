@@ -898,6 +898,31 @@ export const STANCE = Object.freeze({
   missCeil: 0.95,
 });
 
+/**
+ * Maneuver-and-volley (engagement-shape slice 3, 2026-11-10): a Reimagined hull
+ * may move and volley in one stardate — the composite burn caps at
+ * `compositeBurn` of engine capacity (the orbit step scales with range at
+ * `orbitArc`) and the volley resolves at the stardate boundary from the
+ * post-maneuver position, through the shared boundary chain, so the turn-based
+ * and real-time presentations resolve the identical volley from the identical
+ * point. Every doctrine composites symmetrically — a measured firing-stance
+ * refusal snowballed the Bloc to 49.2% — and stances price it instead: a
+ * maneuvering shooter pays `compositeMiss` and loses the firing stance's aim
+ * bonus, while an evasive hull pays no composite miss (weaving on the move is
+ * that stance's whole story). `turnRate` is the degrees of facing a hull may
+ * turn per stardate — round 23c's free bow-snap made directional shields cost
+ * nothing and pay nothing; a limited turn makes arcs, flanks, and disengages
+ * positional again. Every figure is a harness dial.
+ */
+export const MANEUVER = Object.freeze({
+  /** Composite maneuver burn as a fraction of engine capacity. */
+  compositeBurn: 0.5,
+  /** Self-miss added to a volley fired while maneuvering (evasive exempt). */
+  compositeMiss: 0.1,
+  /** Degrees of facing per stardate, in burns and in boundary turns alike. */
+  turnRate: 120,
+});
+
 /** The four shield arcs a Reimagined hull presents (round 23), clockwise from the bow. */
 export const ARCS = Object.freeze(['fore', 'starboard', 'aft', 'port']);
 

@@ -1,4 +1,4 @@
-import { DOCKING, ENCOUNTERS, FACTIONS, GRID_SIZE, POWER, PRIZE, RANGES, REALTIME, REIMAGINED_WEAPON_DAMAGE_SCALE, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
+import { DOCKING, ENCOUNTERS, FACTIONS, GRID_SIZE, MANEUVER, POWER, PRIZE, RANGES, REALTIME, REIMAGINED_WEAPON_DAMAGE_SCALE, STALEMATE_ROUNDS, SURRENDER, TERRAIN } from './constants.js';
 import { captureHull, canLaunchDrones, damageShip, detonate, fireEvent, flushShields, ionDamage, killLines, launchDrones, launchWarhead, resolveAsteroidStrike, resolveCollision, spreadSplash, spreadSplashAt, terminalEvent, tractorLock, weaponDamage } from './actions.js';
 import { chooseAiAction } from './ai.js';
 import { advanceSubtick, integrateStardate, positionsOf, simTimeOf, SUBTICK } from './realtime.js';
@@ -39,6 +39,7 @@ import {
   strongestFederation,
   systemUnits,
   templateSystems,
+  turnToward,
   vendettaGrudge,
   volleyMissChance,
 } from './state.js';
@@ -171,7 +172,7 @@ const recordedRule = (game, resolve, cause) => recordedObject(game, (prepared) =
  */
 const faceThreat = (game, actor, action) => {
   if (!game.reimagined || isDrone(actor)) return actor;
-  if (action.type === 'move' || action.type === 'hyperspace') return actor;
+  if (action.type === 'move' || action.type === 'hyperspace' || action.type === 'maneuver-volley') return actor;
   let threat = action.targetId ? getShip(game, action.targetId) : null;
   if (!threat || !isActive(threat) || threat.faction === actor.faction) {
     threat = game.ships
@@ -179,7 +180,10 @@ const faceThreat = (game, actor, action) => {
       .sort((a, b) => distance(actor, a) - distance(actor, b) || a.id.localeCompare(b.id))[0] ?? null;
   }
   if (!threat || (threat.x === actor.x && threat.y === actor.y)) return actor;
-  const facing = Math.round(bearingDeg(actor, threat));
+  // Slice 3: the bow TRACKS the threat at the turn rate instead of snapping
+  // onto it — a hull that has not moved this stardate still earns its facing,
+  // but a flank takes stardates to bring to bear.
+  const facing = turnToward(actor.facing, bearingDeg(actor, threat), MANEUVER.turnRate);
   return actor.facing === facing ? actor : { ...actor, facing };
 };
 
@@ -532,12 +536,68 @@ const executeAiAction = (startGame, shipId, action, plotDest = false) => {
     // real-time boundary plots (`plotDest`); the turn-shaped pipeline keeps
     // its round-30 teleport-and-resolve semantics.
     if (plotDest) {
-      const plotted = plotCourse(game, actor, x, y);
+      const plotted = { ...plotCourse(game, actor, x, y), maneuvered: true };
       return { game: replaceShip(game, plotted), messages: [`${actor.name} moves to ${Math.round(x)},${Math.round(y)}.`], type: action.type };
     }
-    return { game: replaceShip(game, applyHeading(game, actor, x, y)), messages: [`${actor.name} moves to ${x},${y}.`], type: action.type };
+    return { game: replaceShip(game, { ...applyHeading(game, actor, x, y), maneuvered: true }), messages: [`${actor.name} moves to ${x},${y}.`], type: action.type };
+  }
+  if (action.type === 'maneuver-volley') {
+    // Engagement-shape slice 3: the composite maneuver-and-volley. Both
+    // presentations PLOT the half-burn here (bow tracks the burn at the turn
+    // rate) and queue the volley; the shared boundary chain materializes the
+    // destination and resolves the volley from it, so the turn-based and
+    // real-time states stay identical at every boundary — the equivalence
+    // scaffold's requirement for any captain rule.
+    const grid = game.gridSize ?? GRID_SIZE;
+    const x = Math.max(0, Math.min(grid, actor.x + action.dx));
+    const y = Math.max(0, Math.min(grid, actor.y + action.dy));
+    const plotted = { ...plotCourse(game, actor, x, y), maneuvered: true };
+    const withMove = replaceShip(game, plotted);
+    return {
+      game: { ...withMove, pendingVolleys: { ...(withMove.pendingVolleys ?? {}), [shipId]: action.volley } },
+      messages: [`${actor.name} maneuvers and brings guns to bear.`],
+      type: action.type,
+    };
   }
   return { game, messages: [], type: action.type };
+};
+
+/**
+ * Engagement-shape slice 3: the boundary stage where maneuver-and-volley
+ * volleys resolve — shared VERBATIM by both presentations through
+ * `resolveStardateChain`, after every hull has moved and before encounters,
+ * dockyards, and objectives read the field. Ship-id order keeps the RNG
+ * sequence identical across modes; the maneuvered flags that priced the
+ * volleys clear here for every hull.
+ */
+const resolvePendingVolleys = (startGame) => {
+  // Composite hulls materialize at their plotted destination first, in both
+  // presentations: the turn-based war teleports here what the continuum would
+  // have flown, so the volley — and every chain stage after it — reads the
+  // same position in either mode.
+  let game = {
+    ...startGame,
+    ships: startGame.ships.map((ship) => (ship.dest && startGame.pendingVolleys?.[ship.id]
+      ? { ...ship, x: ship.dest.x, y: ship.dest.y, dest: null }
+      : ship)),
+  };
+  const log = [];
+  const events = [];
+  const queued = Object.entries(game.pendingVolleys ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  for (const [shipId, volley] of queued) {
+    if (!isActive(getShip(game, shipId))) continue;
+    const result = executeAiAction(game, shipId, volley);
+    game = result.game;
+    log.push(...result.messages);
+    events.push(...(result.events ?? []));
+  }
+  game = {
+    ...game,
+    pendingVolleys: {},
+    playerActed: { move: false, volley: false },
+    ships: game.ships.map((ship) => (ship.maneuvered ? { ...ship, maneuvered: false } : ship)),
+  };
+  return { game, messages: log, events };
 };
 
 const victoryMessage = (kind, faction) => {
@@ -1020,7 +1080,13 @@ const resolveComputerTurnsRules = (initialGame) => {
 export const resolveStardateChain = (startGame, log, events, options = {}) => isOperation(startGame) && startGame.operation.result ? startGame : recordedGame(startGame, (prepared) => resolveStardateChainRules(prepared, log, events), options);
 
 const resolveStardateChainRules = (startGame, log, events) => {
-  let game = reconcileMaintainedTow(startGame);
+  // Slice 3: maneuver-and-volley volleys resolve first, at the boundary, from
+  // the post-maneuver point — before tows reconcile and encounters, dockyards,
+  // and objectives read the field.
+  const volleys = resolvePendingVolleys(startGame);
+  log.push(...volleys.messages);
+  events.push(...(volleys.events ?? []));
+  let game = reconcileMaintainedTow(volleys.game);
   const darkened = darkenOrphanDrones(game);
   game = darkened.game;
   log.push(...darkened.messages);
@@ -1084,6 +1150,7 @@ const resolveStardateChainRules = (startGame, log, events) => {
     ...game,
     turn: game.turn + 1,
     phase: outcome.kind === 'active' ? 'player' : 'ended',
+    playerActed: { move: false, volley: false },
     outcome: outcome.kind === 'active' ? null : outcome,
     log: appendLog(game.log, log),
     events,

@@ -106,22 +106,31 @@ knot's stillness (drift 2.1) is untouched by design: that is slice 3's target.
 
 ## Slice 3 — Combat that moves
 
-- **Maneuver-and-volley**: a Reimagined hull may move and volley in one
-  stardate at a price — the composite maneuver caps at half burn and the
-  volley takes a `STANCE.maneuverMiss` self-miss term (a new dial on the ONE
-  shared roll) unless the hull holds `evasive`, whose weave is exactly this.
-  A `firing`-stance hull refuses the composite: it stands still and aims.
-  The player's turn-based console gains the same latitude (fire, then maneuver,
-  or maneuver, then fire, within one stardate); real-time already moves
-  continuously and volleys per boundary, so the presentations converge.
-- **Rate-limited facing**: round 23c's free bow-snap becomes a turn rate
-  (degrees per stardate, an engines-scaled dial) in the shared rules layer, so
-  arcs, flanking, and disengage finally cost something and pay something. The
-  real-time sweep integrates the same rate per sub-tick.
+- **Maneuver-and-volley, as delivered**: the *player's* turn-based conn may
+  maneuver and then volley in one stardate — the burn opens a volley window,
+  the volley fires from where the burn left it and spends the stardate, priced
+  by `MANEUVER.compositeMiss` on the one shared roll (evasive exempt, firing
+  loses its aim bonus on the move). Firing first keeps the old one-command
+  rhythm exactly. The **AI composite measured as a rejection** in three
+  variants (Bloc 44.8–49.2%, collisions 2.68–3.44, drift +0.5 at best — see
+  the slice-3 review); captains keep shoot-XOR-move. The `maneuver-volley`
+  action and the `pendingVolleys` boundary stage ship as the shared machinery
+  the player path uses, identical in both presentations.
+- **Rate-limited facing**: round 23c's free bow-snap became `MANEUVER.turnRate`
+  (120°/stardate) in the shared rules layer — burns, plots, and the
+  non-movers' threat-tracking all turn at the rate, so arcs, flanking, and
+  disengage finally cost something and pay something. The real-time sweep is
+  untouched: facing updates at boundaries in both modes, which is what keeps
+  the scaffold green.
 
-Success: knot centroid drift ≥ 15 units/stardate (from 2.1); war length stays
-in the 45–70 median band; volleys per kill stays in the 14–20 band; the
-boundary-equivalence scaffold stays green.
+Success, as adapted in [the slice-3 review](../reviews/2026-11-10-engagement-shape-slice3.md):
+the drift target (≥15) is retired with measurements — tactical maneuver cannot
+move a knot whose reason to sit is omniscient convergence; drift measured 3.3
+with the knot breathing at 31 units wide and formations 32 apart. War length
+median 56 (band 45–70 ✓), volleys per kill 17.2 (band 14–20 ✓), scaffold
+green ✓, and the tightest winner pack of the program (Bloc 32.4 / Axis 27.2 /
+Federation 19.2 / Cabal 11.2). Hopeless draws 8% (from 4%) is the slice's
+watch item.
 
 ## Slice 4 — Sensor-honest captains
 

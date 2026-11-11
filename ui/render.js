@@ -234,6 +234,11 @@ const commandList = (game, actor) => {
     if ((actor?.systems?.ion ?? 0) > 0) list = [...list, ['ion', 'Ion', 'I']];
     list = [...list, ['disengage', 'Disengage', 'X']];
   }
+  // Slice 3: one maneuver slot and one volley slot per stardate — a spent
+  // slot loses its buttons until the boundary resets them.
+  const acted = game.playerActed ?? {};
+  if (acted.move) list = list.filter(([type]) => !['move', 'disengage'].includes(type));
+  if (acted.volley) list = list.filter(([type]) => !['phasers', 'photons', 'spread', 'ion'].includes(type));
   return list;
 };
 
@@ -243,7 +248,11 @@ export const commandReadiness = (game, view = {}) => {
   if (game.outcome) return game.operation ? 'Operation concluded.' : 'War concluded.';
   if (isSpectator(game)) return 'Observing — command unavailable.';
   if (view.battlePaused || game.phase !== 'player') return 'Resolving orders — command unavailable.';
-  if (!game.realtime) return 'Ready — choose a command for this stardate.';
+  if (!game.realtime) {
+    const acted = game.playerActed ?? {};
+    if (acted.move && !acted.volley) return 'Maneuver spent — a volley remains this stardate, or pass to end it.';
+    return 'Ready — choose a command for this stardate.';
+  }
   const remaining = Math.max(0, (game.readyAt?.[game.playerShipId] ?? 0) - simTimeOf(game));
   return `${remaining > 0 ? `Command cycle: ${remaining.toFixed(1)} stardates remaining.` : 'Command cycle ready.'} Automatic conn: ${game.autoConn ? 'on' : 'off'}.`;
 };

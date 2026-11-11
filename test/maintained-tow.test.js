@@ -25,7 +25,7 @@ const attach = (game = fixture()) => {
   assert.ok(maintainedTowPair(result.game));
   return result;
 };
-const ready = (game) => ({ ...game, phase: 'player', readyAt: {} });
+const ready = (game) => ({ ...game, phase: 'player', readyAt: {}, playerActed: { move: false, volley: false } });
 
 test('establish once, move both hulls at tractor-limited speed, release using normal action budgets', () => {
   const original = fixture();
@@ -37,7 +37,8 @@ test('establish once, move both hulls at tractor-limited speed, release using no
   let game = ready(started.game);
   for (let i = 0; i < 3; i++) {
     const result = applyPlayerAction(game, { type: 'move', dx: -10, dy: 0 });
-    assert.equal(result.game.phase, 'computer');
+    assert.equal(result.game.phase, 'player', 'the maneuver opens the volley window');
+    assert.deepEqual(result.game.playerActed, { move: true, volley: false });
     game = ready(result.game);
     assert.equal(getShip(game, targetId).x, getShip(game, tugId).x);
     assert.equal(getShip(game, targetId).y - getShip(game, tugId).y, 20);
@@ -175,7 +176,7 @@ for (const seed of OPERATION_SEEDS) test(`${seed}: one maintained connection com
   const issue = (action) => {
     const result = applyPlayerAction(game, action);
     assert.notStrictEqual(result.game, game, result.messages.join(' '));
-    game = result.game.phase === 'computer' ? resolveComputerTurns(result.game) : result.game;
+    game = result.game.phase === 'computer' || result.game.playerActed?.move ? resolveComputerTurns(result.game) : result.game;
   };
   issue({ type: 'move', dx: 45, dy: -20 });
   const target = getShip(game, 'op-sentinel'), tug = getShip(game, game.playerShipId);

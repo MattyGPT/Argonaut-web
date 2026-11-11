@@ -175,10 +175,15 @@ test('AI tractor locks expose the same actual target haul facts as manual tracto
   for (const options of [{}, { realtime: true }]) {
     let game = staged('tractor-records', options);
     // A two-hull field: the paired assignment then deals the only enemy to the
-    // conn, matching what this record-parity test isolates.
-    game = { ...game, ships: game.ships.filter((ship) => [game.playerShipId, 'axis-flagship'].includes(ship.id)) };
+    // conn, matching what this record-parity test isolates. Dead engines keep
+    // the automated lock a plain tractor action, hauling from the same range
+    // the manual order does.
+    game = {
+      ...game,
+      ships: game.ships.filter((ship) => [game.playerShipId, 'axis-flagship'].includes(ship.id)),
+    };
     const actor = getShip(game, game.playerShipId);
-    game = enabled(replace(replace(game, 'axis-flagship', { x: 42, y: 10 }), actor.id, { systems: { ...actor.systems, phasers: 0, photons: 0, ion: 0, spread: 0, tractor: 1 } }));
+    game = enabled(replace(replace(game, 'axis-flagship', { x: 42, y: 10 }), actor.id, { systems: { ...actor.systems, phasers: 0, photons: 0, ion: 0, spread: 0, tractor: 1, engines: 0 } }));
     const manual = applyPlayerAction(game, { type: 'tractor', targetId: 'axis-flagship' });
     const automated = options.realtime
       ? withBattleRecords({ ...game, autoConn: true }, (prepared) => resolveRealtimeBoundary(prepared))

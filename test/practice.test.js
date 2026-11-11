@@ -22,7 +22,7 @@ const command = (game, action) => {
   const result = applyPlayerAction(game, action);
   assert.notEqual(result.game, game, result.messages.join(' '));
   game = updatePractice(result.game);
-  return game.realtime || game.phase === 'computer' ? advance(game) : game;
+  return game.realtime || game.phase === 'computer' || game.playerActed?.move ? advance(game) : game;
 };
 
 const tow = (x, y) => ({ type: 'tractor', targetId: 'practice-distress', towardX: x, towardY: y });

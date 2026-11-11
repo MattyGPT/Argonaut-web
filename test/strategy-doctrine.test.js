@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chooseAiAction } from '../game/ai.js';
+import { chooseAiAction, strategyStation } from '../game/ai.js';
 import { RANGES, STRATEGY } from '../game/constants.js';
 import { createGame, distance, strategyFor } from '../game/state.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from '../game/turns.js';
@@ -68,12 +68,16 @@ test('a garrison hull inside its node holds station when nothing is in its guns'
     let posted = null;
     for (let turn = 0; turn < 14 && !game.outcome && !posted; turn += 1) {
       game = step(game);
-      posted = game.ships.find((ship) => ship.status === 'active' && ship.faction === faction
-        && relaysOf(game).some((node) => distance(ship, node) <= node.radius * STRATEGY.postFraction + 2)) ?? null;
+      // At its dealt post (not merely inside some ring on the way elsewhere),
+      // and quiet: no enemy hull within tractor reach of the post.
+      posted = game.ships.find((ship) => {
+        if (ship.status !== 'active' || ship.faction !== faction) return false;
+        const station = strategyStation(game, ship);
+        if (!station || distance(ship, station) > STRATEGY.postTolerance) return false;
+        return !game.ships.some((other) => other.status === 'active' && other.faction !== faction && distance(ship, other) <= RANGES.tractor);
+      }) ?? null;
     }
     if (!posted) continue;
-    const contested = game.ships.some((ship) => ship.status === 'active' && ship.faction !== faction && distance(ship, posted) <= RANGES.tractor);
-    if (contested) continue;
     assert.equal(chooseAiAction(game, posted.id).type, 'pass', `${posted.id} holds its quiet post`);
     return;
   }

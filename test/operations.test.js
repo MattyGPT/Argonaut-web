@@ -13,7 +13,7 @@ const edit = (game, id, patch) => ({ ...game, ships: game.ships.map((ship) => sh
 const command = (game, action) => {
   const result = applyPlayerAction(game, action);
   assert.notEqual(result.game, game, result.messages?.join(' '));
-  return result.game.phase === 'computer' ? resolveComputerTurns(result.game) : result.game;
+  return result.game.phase === 'computer' || result.game.playerActed?.move ? resolveComputerTurns(result.game) : result.game;
 };
 const moveTo = (game, x, y) => {
   const ship = getShip(game, game.playerShipId);

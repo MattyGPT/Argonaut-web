@@ -14,8 +14,11 @@ const weakened = (ship) => ({ ...ship, shields: 0, arcs: { fore: 0, aft: 0, port
   systems: Object.fromEntries(Object.keys(ship.systems).map((key) => [key, 0])) });
 const fixture = (options = {}) => {
   const game = createGame({ seed: 'phaser-hit-2', reimagined: true, ...options });
+  // Dead engines: this fixture isolates the ace-record mechanics, and a hull
+  // that cannot maneuver fires a plain volley (no slice-3 composite miss on
+  // the seeded hit roll).
   return { ...game, terrain: [], ships: game.ships.map((ship, index) => ship.id === actorId
-    ? { ...ship, x: 10, y: 10, kills: ACE_KILLS - 1, systems: { ...ship.systems, photons: 0 } }
+    ? { ...ship, x: 10, y: 10, kills: ACE_KILLS - 1, systems: { ...ship.systems, photons: 0, engines: 0 } }
     : ship.id === targetId ? { ...weakened(ship), x: 16, y: 10 }
       : { ...ship, x: 120 + index * 3, y: 200, dest: null }) };
 };
