@@ -32,11 +32,21 @@ Two gaps remain, and they are the ones that decide whether the game reads as
 **Presence — the game is mechanically deep and emotionally flat.** Nothing about
 a stardate under fire feels like a warship. `ui/sound.js` is 58 lines of
 oscillator beeps with no relationship to the simulation state that already
-exists. `ui/render.js` rebuilds `map.innerHTML` from strings every frame. Damage
+exists. Damage
 is arithmetic: a hull that has taken forty volleys looks identical to one that
 has taken none, and the subsystem units, shield arcs, and crew counts that
 drive every decision the player makes are never shown as anything but numbers in
 a console. The player cannot see their own ship.
+
+*(This diagnosis originally also claimed the renderer rebuilds `map.innerHTML`
+"every frame". It does not — `renderGame` runs per stardate boundary, event,
+command, camera change and resize, while the animation-frame path is
+`renderFrame()`, which mutates styles on existing nodes. See the correction
+record in
+[the research digest](../reviews/2026-11-11-program-research-findings.md). The
+emotional-flatness finding stands and does not depend on that error; the
+renderer-cost premise behind Track P4 does not, and P4 has been re-scoped
+accordingly.)*
 
 **Legacy and reach — nothing survives the war.** A 56-stardate campaign ends and
 there is no story to tell, no score to share, and no one to race. Meanwhile the
@@ -224,14 +234,64 @@ Measured on the current DOM renderer first, with a before/after frame-pacing
 number on the reference scene from the V8 contract. If the measurement says DOM
 cannot carry it, that number becomes P4's justification.
 
+**Two things research established that must be settled before this slice starts.**
+
+First, **the guardrails contradict the slice.** They call decal placement
+"presentation randomness" while this slice demands damage that persists until the
+dockyard removes it — and presentation cannot be durable. There is no damage
+history on ship state today: a hull carries only `shotsTaken` and `collisions`
+(`game/state.js:227-228`), with no `scorch`, `wear` or repair log. So P3 must
+choose explicitly between a *derived* presentation quantity (cheap, no state or
+save change, no RNG — but it snaps back when shields regenerate, so it is wear
+that follows condition rather than history) and a *new authoritative field*
+(durable and honest, but it touches serialization, save/resume, campaign
+carry-over and the service-record field list, and must be proven inert for
+classic parity). The cheaper option is likely the right one for a first slice,
+with the wording changed from "only the dockyard removes" to match what it
+actually does.
+
+Second, the decals themselves are the easy half regardless of that choice:
+sprites already carry `filter: drop-shadow(...)` and `transform: rotate(...)`,
+and `.prize-pip`/`.distress-pip`/`.tractor-pip` are exact precedent for one more
+sibling span. Arc-impact FX is renderer-independent — `struckArc` resolves the
+arc and `svg.fx-layer` is a `#map` sibling — and wreck debris already persists.
+
 ### P4 — Canvas renderer decision
 
-A decision, not a commitment. Made from P3's measurements plus the render
-architecture report, and recorded as a dated review with an accept/revise/narrow/
-stop outcome. If accepted, the migration is its own program with its own slices,
-carrying a parallel accessible layer so keyboard selection, focus, and the status
-region survive, and keeping the simplified/fallback presentation path the
-terrain spec already requires.
+A decision, not a commitment, and **the default expectation is now *narrow*, not
+*migrate*.** The premise this slice was written on — that the renderer rebuilds
+the map every frame — is false (see the correction record in
+[the research digest](../reviews/2026-11-11-program-research-findings.md)).
+Canvas's headline advantage does not apply, because the animation-frame path
+already mutates styles on existing nodes. The measured pain is the zoom/pan path,
+where each wheel or arrow event triggers a full `renderGame` teardown; that has
+two candidate fixes far cheaper than a migration — a transform-only camera update
+through the existing CSS transform, and extending the keyed reconciler that
+already serves the console to `#map-field`.
+
+**The number this decision needs does not exist yet.** The one dense-fleet frame
+measurement on record (33.4 ms p95) comes from a harness that *forces* a full
+redraw per frame, which both of its reviews disclaim as not the production
+cadence. The V8 contract's required measurement — production cadence, small
+operation plus a larger ordinary fleet — has never been taken. Instrumenting the
+existing harness to exercise `renderFrame` and the zoom/pan path precedes any
+accept/revise/narrow/stop outcome.
+
+If a migration is ever justified it must be **partial**: terrain and rings to
+canvas, ships stay DOM. Ships are what carry the hit-testing (there is no
+geometric pick — hulls are hit by *being* elements), the per-hull `aria-label`
+and button semantics, the `focusin` path that earns the automatic sensor sweep,
+and 40 of the at-risk string assertions; terrain and rings carry none of those.
+`ui/fx.js` anchors every beam by measuring marker rects each animation frame and
+is production code that would need rewriting, not just re-testing.
+
+One finding raises the stakes independent of the decision: **the per-hull
+accessibility surface is essentially untested by `npm test`** — `role="img"` is
+asserted zero times, the composed per-ship `aria-label` is never pinned, and the
+one test that looks like it covers the label passes on `title=` alone. A canvas
+map could remove all of it and report 991 green. Pinned per-node semantics should
+be added *before* any migration is considered, following the campaign star
+chart's example in `test/sector-ui.test.js:207-208`.
 
 ## Track L — Legacy
 
@@ -246,22 +306,75 @@ Prose generated at war's end, and at campaign engagement end, from the causal
 records `game/battle-records.js` already emits. Exportable as markdown and plain
 text, and printable in the browser. Every sentence traces to a record; anything
 not `globalTerminal` is filtered through the observing command ship's knowledge.
-The memorial continues to retain lost hulls without assuming their captains
-died.
+The memorial continues to retain lost hulls without assuming their captains died.
 
-The register is the existing battle journal's, not new voice: terse, factual,
-past tense. Where radio damage already shortens the journal, the chronicle says
-what was actually known rather than reconstructing what was not.
+**It cannot be built on the battle journal, and it cannot be built on
+`game.log`.** Measurement over 25 seeded wars found the journal retains only
+**22.8% of `destruction` records** despite that kind being 100% broadcast,
+because `JOURNAL_EVENT_LIMIT` is 500 against per-war totals of 2,796–6,863 and
+eviction drops whole causal groups; one 73-stardate war's surviving journal
+contained **zero** destructions. A chronicle sourced from it would publish a long
+war in which nobody died. `game.log` is worse: it is the *omniscient* engine log,
+radio-truncated, bounded to 400 entries, and already leaks relay captures that no
+knowledge check filtered.
+
+The substrate is the raw record batch at **`app.js:147-158 collectRecords`**,
+which receives complete, frozen, knowledge-stamped records *before* truncation —
+the same seam `ingestBattleServiceRecords` uses. A pure `game/chronicle.js`
+accumulator fed there, bounded the way `SERVICE_RETENTION` bounds service records,
+needs **zero rules-layer change**. `campaign.js:437-443 resolveCampaignRound`
+already accepts an `onRecords` hook that `app.js` never passes, so auto-resolved
+and offscreen-garrison engagements are covered by wiring it rather than by new
+machinery. An engagement chronicle must be generated *before*
+`resolveNodeBattle`, which returns `battle: null` and drops the journal.
+
+The register is the project's existing one, not new voice: terse, factual, past
+tense — the terminal playback overlay is the only surface that already pairs
+victim, attacker and weapon; `serviceMilestoneText` is the best existing
+chronicle voice including its honesty guards; and the war-end battle report
+should serve as the statistical coda verbatim. **The honest register is narrower
+than this spec's illustrative sentence.** For a typical loss the broadcast facts
+are the victim's identity and the weapon; the killer's identity, the cause and
+any crew count are all separately gated. Where the gates close the chronicle says
+so in the existing vocabulary — `"outcome unknown"`, `"— radio report
+abbreviated"`, `"Captain's fate unknown."` — plus one new line accounting for the
+gated remainder. Note three traps that would otherwise produce fabrication:
+colors-strikes are recorded as `surrender` with `cause:'disabled'` and never as
+`vacancy`; `command-loss` is never an emitted kind; and **`kind:'rescue'` is never
+emitted anywhere**, so no chronicle may claim a rescue today.
+
+**One decision belongs to Matt before L1 lands.** The project already runs a
+two-tier honesty model: tactical narrative is command-ship-filtered, while
+campaign service history never reads `event.knowledge` and will name the killer
+of a lost veteran the flagship never saw. Both are defensible. The chronicle must
+pick a tier per surface and state it, or it reads as a leak in one direction and
+a fabrication in the other.
 
 ### L2 — Memorable moments
 
-Detection over the same records: last-stand self-destructs, tow-ram collisions
-(`creditTowCollision` already attributes these), aces crossing the threshold
-(`recordAceCrossing` already emits it), a hull striking its colors under ion, a
-prize changing hands and being retaken, relay nodes transitioning, and the
-terminal events machinery that already exists in `ui/battle-events.js`. Surfaces
-in the chronicle and in the debrief as a short highlighted section — never as a
-medal that implies a mechanical bonus, which the existing spec forbids.
+Detection over the same records, surfacing in the chronicle and the debrief as a
+short highlighted section — never as a medal that implies a mechanical bonus,
+which the existing spec forbids.
+
+Research separates what is shippable now from what is not. **Ship L2 on three
+categories**, all rare, fully attributed, and needing no new instrumentation:
+**tow-ram kills** (~1 per 3 wars; `creditTowCollision` already attributes them
+and `battleRecordState.towCollisionCredits` is saved and already read by the
+battle report), **player self-destructs** (never fired by AI, so always `own` and
+therefore always fully sayable including crew), and **prize recaptures**
+(`ship.prize.times` already counts hands changed).
+
+Two categories that look obvious are **too common to be memorable** at current
+tuning and need a separate non-mechanical threshold that grants nothing: aces
+fire ~10× per war at `ACE_KILLS = 2` with only 38% observer-allowed, and
+colors-strikes fire 412 times in 40 wars. **Relay-node transitions are
+structurally invisible** — the record is emitted with `actor: null, target: null`,
+so the knowledge filter drops it for every non-spectator (6 of 187 allowed, 3
+retained) despite the kind being whitelisted as critical. Fixing that means
+either an explicit knowledge override or adding the kind to `globalTerminal`, and
+**either changes what every player is told, so it is a measured rules-adjacent
+decision, not an L2 detail.** Damage-over-time and terrain-positioned prose
+("rammed her into the belt") are likewise not recorded today.
 
 ### L3 — Service records as consequence
 
@@ -277,32 +390,51 @@ morale belongs to Track W and is measured there, not smuggled in here.
 Make the war shareable and competitive. Everything in this track hangs off one
 primitive.
 
-### S0 — Authoritative determinism (added 2026-11-11)
+### S0 — Replay prerequisites (re-scoped 2026-11-11 after verification)
 
-The spec anticipated this slice as a contingency: *"If exact replay is not
-achievable without rules-layer changes, Track S is re-scoped before S1 is
-written, not after."* The contingency occurred. The replay-determinism research
-found `Math.random()` inside the authoritative path — `game/realtime.js:129`
-(hyperspace arrival), `game/realtime.js:182` (drone intercept),
-`game/turns.js:335` (vendetta hunt target), and roughly eight further sites in
-`game/`. Those rolls are not seeded, so two runs of the same seed and the same
-actions can diverge.
+This slice was originally written as a rules-layer determinism re-baseline, on
+the strength of a research summary claiming `Math.random()` inside the
+authoritative path at `game/realtime.js:129`, `:182` and `game/turns.js:335`.
+**That claim was checked directly against the source and is false:**
+`grep -rn 'Math\.random' game/` returns nothing, and those three lines are
+unrelated code. All gameplay randomness is one seeded counter (`game.randomStep`
+→ `createRng`), and `game/rng.js` is a pure PRNG with no clock and no
+`Math.random`. Exact replay from `(seed, options, actions[])` was demonstrated
+working on both timing models with zero refusals. See the correction record in
+[the research digest](../reviews/2026-11-11-program-research-findings.md).
 
-This also means the README's claim that *"Matching seeds, options, and orders at
-the same simulation times reproduce a real-time run"* does not hold universally
-today. It holds for the paths the harness exercises; it is not a property of the
-whole rules layer.
+The slice survives, much smaller, because three genuine gaps remain:
 
-S0 replaces each authoritative `Math.random()` with a draw from a seeded
-sub-stream, so a war becomes genuinely a pure function of `(seed, options,
-actions)`. This is a rules-layer change and carries the full measurement
-discipline — classic parity digit-for-digit, both turn-based modes and real time
-simulated, and a CALIBRATION row — not the presentation-only gate. `ui/sound.js`'s
-`Math.random()` noise buffer is presentation-only and correctly stays as it is.
+1. **`crypto.randomUUID()` for battle IDs** (`game/battle-records.js:22`) is the
+   one authoritative nondeterminism. No rule branches on the value, so gameplay
+   is unaffected — but it propagates into every `actionId`/`eventId` and into
+   `game.ordnance[].causal`, which blocks *byte-exact* state comparison and
+   therefore blocks a trustworthy divergence detector. `enableBattleRecords`
+   already accepts `{battleId}`, so the fix is to derive it from the seed. Side
+   benefit: `crypto.randomUUID` is only defined in a secure context and
+   `server.js` serves plain HTTP, so playing from another device on the LAN
+   currently throws.
+2. **The hover sensor sweep bypasses the action seam** (`app.js:942` →
+   `sensorSweep` → `game = swept` at `app.js:882`) and writes authoritative
+   `game.scanned`, which the hunt-the-vendetta objective reads
+   (`game/scenarios.js:42,85`). A replay from actions alone will not reproduce it
+   and can reach a different objective outcome. It must be logged as a distinct
+   entry kind — visibly not an action, so the log cannot lie about what the
+   player ordered.
+3. **No rules-revision stamp**, so a shared replay URL opened after any balance
+   deploy silently produces a different war. A hand-bumped `RULES_REVISION` with
+   a non-fatal mismatch warning; a hard refusal would make every old link dead on
+   the next deploy.
 
-**S0 is a hard predecessor of every other slice in this track.** Recording
-actions before the sim is reproducible would produce replays that do not replay,
-and no test could tell the difference.
+Items 1 and 3 touch no rule outcomes, so this is **not** the re-baselining slice
+it was first written as: classic parity still applies, but no CALIBRATION row is
+expected to move. **Cross-engine exactness is explicitly out of scope** —
+`Math.hypot`/`atan2` are implementation-approximated and `localeCompare` is an
+ICU-dependent tie-breaker at 21 sites in `game/`, so a replay shared to a
+different browser may diverge. The artifact records the engine and degrades
+gracefully rather than chasing bit-exact libm.
+
+S0 remains a predecessor of S1, but a small one.
 
 ### S1 — Retained authoritative action log
 
