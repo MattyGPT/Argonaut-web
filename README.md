@@ -176,10 +176,13 @@ and **Xanadu is optional**: without the starbase there is no dockyard, no
 radio relay, and withdraw runs to the fleet. Prizes are won, not budgeted:
 what you take exceeds your starting fleet by design.
 
-The **New game** panel exposes the replay seed, the regional fleet setup, the
-optional tactical sound, precision fire, and the **Classic / Reimagined**
-ruleset choice. Reimagined also exposes **Real-time movement**, **Sector
-campaign**, the scenario, and the **fleet loadout**.
+The **New game** panel exposes the replay seed, the regional fleet setup —
+opt-in corner sectors that also rotate per seed, so a regional opening differs
+in axis and terrain every war; unticked, the alliances scatter, which is the
+opening every balance row is measured on — the optional tactical sound,
+precision fire, and the **Classic / Reimagined** ruleset choice. Reimagined
+also exposes **Real-time movement**, **Sector campaign**, the scenario, and
+the **fleet loadout**.
 Use the same seed and options to reproduce the opening state.
 
 ### Battlefield and power

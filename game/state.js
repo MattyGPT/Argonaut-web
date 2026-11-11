@@ -15,6 +15,7 @@ import {
   LOG_LIMIT,
   MANEUVER,
   MISS_CHANCE,
+  MOVE,
   NEUTRAL_FACTION,
   PERSONALITIES,
   POWER,
@@ -366,15 +367,23 @@ export const spawnEncounter = (game, type, x, y, rng) => {
   };
 };
 
-const randomPosition = (rng, faction, regional, occupied, gridSize) => {
+const randomPosition = (rng, faction, regional, occupied, gridSize, deployment = 0) => {
   // Regional formations are pinned in 100-unit space; scale them onto the actual
   // field so a Reimagined war spreads them across the wider map. At gridSize 100
   // the scale is 1, so a classic war places every hull exactly as before.
+  // Reserve slice: a Reimagined war rotates the four corner sectors on its own
+  // `${seed}:deployment` stream, so the convergence axis and the terrain each
+  // wing spawns into vary per seed — the same war story never opens on the same
+  // diagonal twice. Classic keeps deployment 0 and the original corners.
   const scale = gridSize / GRID_SIZE;
+  const order = Object.values(FACTIONS);
+  const regionFaction = regional && deployment > 0
+    ? order[(order.indexOf(faction) + deployment) % order.length]
+    : faction;
   const bounds = regional
     ? {
-      x: STARTING_FORMATIONS[faction].x.map((value) => Math.round(value * scale)),
-      y: STARTING_FORMATIONS[faction].y.map((value) => Math.round(value * scale)),
+      x: STARTING_FORMATIONS[regionFaction].x.map((value) => Math.round(value * scale)),
+      y: STARTING_FORMATIONS[regionFaction].y.map((value) => Math.round(value * scale)),
     }
     : { x: [1, gridSize - 1], y: [1, gridSize - 1] };
 
@@ -390,8 +399,8 @@ const randomPosition = (rng, faction, regional, occupied, gridSize) => {
   return position;
 };
 
-const createFleet = (faction, rng, regional, occupied, gridSize, reimagined, spec) => (reimagined && spec ? rosterFromSpec(spec) : SHIP_ROSTER).map(([suffix, kind], index) => {
-  const position = randomPosition(rng, faction, regional, occupied, gridSize);
+const createFleet = (faction, rng, regional, occupied, gridSize, reimagined, spec, deployment = 0) => (reimagined && spec ? rosterFromSpec(spec) : SHIP_ROSTER).map(([suffix, kind], index) => {
+  const position = randomPosition(rng, faction, regional, occupied, gridSize, deployment);
   const factionId = FACTION_IDS[faction];
   return createShip({
     id: `${factionId}-${suffix}`,
@@ -423,8 +432,8 @@ const specFromRecords = (records) => records.reduce((spec, record) => ({ ...spec
  * sum to the carried shields or they are re-split (the round-23 invariant).
  * Absent records, no war reads any of this — see `createGame`'s veterans path.
  */
-const createVeteranFleet = (records, rng, regional, occupied, gridSize) => records.map((record) => {
-  const position = randomPosition(rng, FACTIONS.FEDERATION, regional, occupied, gridSize);
+const createVeteranFleet = (records, rng, regional, occupied, gridSize, deployment = 0) => records.map((record) => {
+  const position = randomPosition(rng, FACTIONS.FEDERATION, regional, occupied, gridSize, deployment);
   const hull = createShip({
     id: record.id,
     name: record.name,
@@ -574,6 +583,14 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, s
   // Real-time movement uses the same ruleset and implies Reimagined.
   const isRealtime = Boolean(realtime);
   const isReimagined = Boolean(reimagined) || isRealtime;
+  // Reserve slice measured and rejected a regional default (four variants:
+  // corner boxes converge as one mass per alliance — largest engagement 0.59-
+  // 0.60, concurrent fights 1.8-1.9, nearest-ally gap 20-21, Bloc 40-50% —
+  // against the scattered default's 0.52 / 2.9 / 32 / 32.4%: the interleaved
+  // opening is what seeds the multi-front mid-war). Scatter stays the default
+  // and every calibration row keeps its basis; regional remains the player's
+  // opt-in, and there its sectors rotate per seed.
+  const regionalOn = Boolean(regional);
   const gridSize = isReimagined ? REIMAGINED_GRID_SIZE : GRID_SIZE;
   const rng = createRng(normalizedSeed);
   const xanaduPosition = {
@@ -614,9 +631,13 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, s
       xanadu: spawnXanadu,
     }
     : null;
+  // Reserve slice: the deployment rotation — which corner sector each alliance
+  // opens in — on its own seeded stream, Reimagined only, so a seed replays the
+  // same opening and no other stream shifts.
+  const deployment = isReimagined ? createRng(`${normalizedSeed}:deployment`).integer(0, Object.values(FACTIONS).length - 1) : 0;
   const fleets = factions.flatMap((faction) => (veterans && faction === FACTIONS.FEDERATION
-    ? createVeteranFleet(veterans, rng, regional, occupied, gridSize)
-    : createFleet(faction, rng, regional, occupied, gridSize, isReimagined, resolvedLoadout?.fleets?.[faction] ?? null)));
+    ? createVeteranFleet(veterans, rng, regionalOn, occupied, gridSize, deployment)
+    : createFleet(faction, rng, regionalOn, occupied, gridSize, isReimagined, resolvedLoadout?.fleets?.[faction] ?? null, deployment)));
   // Xanadu is optional in a Reimagined war (round 19b): without it there is no
   // dockyard, no radio relay, and withdraw runs to the fleet centroid. The center
   // point stays reserved for placement, and the relay nodes still mirror through
@@ -658,7 +679,7 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, s
   // seeded factory. Reconstructing a fixture here must remain deterministic.
   return {
     seed: normalizedSeed,
-    regional: Boolean(regional),
+    regional: regionalOn,
     sound: Boolean(sound),
     // Reimagined owns expansion systems and the wider tactical field.
     reimagined: isReimagined,
@@ -730,6 +751,9 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, s
     // and absent in old saves, so `strategyFor` defaults every reader to
     // 'battle' and the doctrine stays byte-identical there.
     strategies: isReimagined ? drawStrategies(normalizedSeed, factions) : null,
+    // Reserve slice: the corner-sector rotation this war deployed under (0 in
+    // classic and old saves, which read the original corners).
+    deployment,
     // How many prize captains have been dealt (round 17), advancing the
     // `${seed}:prizes` sub-stream. Never incremented outside a Reimagined war, and
     // absent in old saves, so every reader defaults to 0.
@@ -831,14 +855,15 @@ export const systemRange = (ship, system) => systemUnits(ship, system) * (SYSTEM
  * and the figure is exactly the calibrated one. `enginesEff` is the power-management
  * multiplier for the engines sink (1 outside a Reimagined war, so parity holds).
  */
-export const engineCapacity = (ship, gridSize = GRID_SIZE, enginesEff = 1) => systemUnits(ship, 'engines') * ENGINE_MOVE_PER_UNIT * (gridSize / GRID_SIZE) * enginesEff;
+export const engineCapacity = (ship, gridSize = GRID_SIZE, enginesEff = 1, scaleCap = null) => systemUnits(ship, 'engines') * ENGINE_MOVE_PER_UNIT
+  * (scaleCap ? Math.min(gridSize / GRID_SIZE, scaleCap) : gridSize / GRID_SIZE) * enginesEff;
 
 /** Operations decouple engine travel from world bounds; ordinary rules stay exact. */
 export const movementCapacity = (game, ship) => {
   const effectiveness = powerEffect(game, ship, 'engines');
   const capacity = game.reimagined && game.operation?.version === 1
     ? systemUnits(ship, 'engines') * ENGINE_MOVE_PER_UNIT * game.operation.movementScale * effectiveness
-    : engineCapacity(ship, game.gridSize ?? GRID_SIZE, effectiveness);
+    : engineCapacity(ship, game.gridSize ?? GRID_SIZE, effectiveness, game.reimagined ? MOVE.scaleCap : null);
   const pair = maintainedTowPair(game, ship.id);
   return pair?.tug.id === ship.id
     ? Math.min(capacity, systemUnits(ship, 'tractor') * TRACTOR_PULL_PER_UNIT * powerEffect(game, ship, 'tractor')) : capacity;

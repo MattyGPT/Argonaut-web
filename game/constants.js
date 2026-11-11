@@ -899,13 +899,29 @@ export const STANCE = Object.freeze({
 });
 
 /**
+ * Reserve slice (engagement-shape program, 2026-11-10): the movement levers
+ * the slice-4 retirement named as the precondition for any future fog.
+ * `scaleCap` bounds the engine's field-scaling factor in Reimagined wars — at
+ * 3.2 the burn (128-224 units/stardate) is 4-7x weapon range, so no doctrine
+ * can enforce a preferred range; capped, transit takes stardates and standoff
+ * becomes enforceable. Measured uncapped once the regional opening default
+ * and the deployment rotation landed: the opening, not the burn rate, was the
+ * melee's engine, so the cap ships null and the dial stays for the future.
+ * Classic and extended keep the factor of 1 either way. Every figure is a
+ * harness dial.
+ */
+export const MOVE = Object.freeze({
+  /** Cap on the engine field-scaling factor, Reimagined wars only; null = uncapped. */
+  scaleCap: null,
+});
+
+/**
  * Maneuver-and-volley (engagement-shape slice 3, 2026-11-10): a Reimagined hull
  * may move and volley in one stardate — the composite burn caps at
- * `compositeBurn` of engine capacity (the orbit step scales with range at
- * `orbitArc`) and the volley resolves at the stardate boundary from the
- * post-maneuver position, through the shared boundary chain, so the turn-based
- * and real-time presentations resolve the identical volley from the identical
- * point. Every doctrine composites symmetrically — a measured firing-stance
+ * `compositeBurn` of engine capacity and the volley resolves at the stardate
+ * boundary from the post-maneuver position, through the shared boundary chain,
+ * so the turn-based and real-time presentations resolve the identical volley
+ * from the identical point. Every doctrine composites symmetrically — a measured firing-stance
  * refusal snowballed the Bloc to 49.2% — and stances price it instead: a
  * maneuvering shooter pays `compositeMiss` and loses the firing stance's aim
  * bonus, while an evasive hull pays no composite miss (weaving on the move is

@@ -2419,10 +2419,10 @@ test('terrain placement is deterministic on its own seeded stream', () => {
   }
   // The terrain stream is separate from the war's RNG: an option that changes how
   // many draws the fleets consume leaves the charted battlefield untouched.
-  const plain = createGame({ seed: 'terrain-stream', reimagined: true });
   const regional = createGame({ seed: 'terrain-stream', reimagined: true, regional: true });
-  assert.deepEqual(plain.terrain, regional.terrain, 'terrain never reads the war stream');
-  assert.notDeepEqual(plain.ships, regional.ships, 'while fleet placement does');
+  const scattered = createGame({ seed: 'terrain-stream', reimagined: true, regional: false });
+  assert.deepEqual(regional.terrain, scattered.terrain, 'terrain never reads the war stream');
+  assert.notDeepEqual(regional.ships, scattered.ships, 'while fleet placement does');
 });
 
 test('every feature is in bounds, sized in its range, and clear of Xanadu', () => {
@@ -4497,7 +4497,7 @@ test('ion never touches a classic war, and old saves tolerate its absence', () =
  * carrier) mid-field with an Axis cluster to shoot into, everyone else parked in
  * the corners. Terrain cleared so the accuracy roll isolates cleanly.
  */
-const spreadWar = (seed) => withShips(createGame({ seed, reimagined: true, loadout: defaultLoadout() }), (ship) => {
+const spreadWar = (seed) => withShips(createGame({ seed, reimagined: true, regional: false, loadout: defaultLoadout() }), (ship) => {
   if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
   if (ship.id === 'axis-cruiser-1') return { ...ship, x: 112, y: 100 };
   if (ship.id === 'axis-cruiser-2') return { ...ship, x: 118, y: 100 };
