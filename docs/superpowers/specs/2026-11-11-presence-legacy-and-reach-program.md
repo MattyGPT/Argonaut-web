@@ -154,6 +154,23 @@ reintroduced a third mode in the DOM would pass CI green." Everything in this
 track changes the DOM. Fixing this after the fact means the presentation work
 shipped unguarded.
 
+**Delivered 2026-11-11**, with a consequence the slice did not anticipate: the
+first ever full run of the suite found **5 of 17 checks red**. Each had been
+hand-run-only since it was written. All five fail identically on the system
+Chromium 155 and the pinned playwright Chromium 158, so none is a browser-version
+artifact. They are quarantined — visibly, printed on every run, with per-check
+failure text — and the 12 green checks are enforced in CI. Evidence and triage in
+[the browser-check CI review](../reviews/2026-11-11-browser-check-ci.md).
+
+### P0b — Repair the quarantined checks
+
+Whether each of the five is a *stale assertion* about behavior that intentionally
+changed or a *real regression* in the app is not yet determined, and that
+determination is this slice. It must precede P3: two of the five
+(`check-combat-feedback`, `check-faction-identity`) assert exactly the
+beam-endpoint and tether geometry that persistent damage and impact FX will
+touch, so P3 needs them green as a baseline to regress against.
+
 ### P1 — Ship interior schematic
 
 A hull view that shows what the numbers already mean: the four directional
@@ -259,6 +276,33 @@ morale belongs to Track W and is measured there, not smuggled in here.
 
 Make the war shareable and competitive. Everything in this track hangs off one
 primitive.
+
+### S0 — Authoritative determinism (added 2026-11-11)
+
+The spec anticipated this slice as a contingency: *"If exact replay is not
+achievable without rules-layer changes, Track S is re-scoped before S1 is
+written, not after."* The contingency occurred. The replay-determinism research
+found `Math.random()` inside the authoritative path — `game/realtime.js:129`
+(hyperspace arrival), `game/realtime.js:182` (drone intercept),
+`game/turns.js:335` (vendetta hunt target), and roughly eight further sites in
+`game/`. Those rolls are not seeded, so two runs of the same seed and the same
+actions can diverge.
+
+This also means the README's claim that *"Matching seeds, options, and orders at
+the same simulation times reproduce a real-time run"* does not hold universally
+today. It holds for the paths the harness exercises; it is not a property of the
+whole rules layer.
+
+S0 replaces each authoritative `Math.random()` with a draw from a seeded
+sub-stream, so a war becomes genuinely a pure function of `(seed, options,
+actions)`. This is a rules-layer change and carries the full measurement
+discipline — classic parity digit-for-digit, both turn-based modes and real time
+simulated, and a CALIBRATION row — not the presentation-only gate. `ui/sound.js`'s
+`Math.random()` noise buffer is presentation-only and correctly stays as it is.
+
+**S0 is a hard predecessor of every other slice in this track.** Recording
+actions before the sim is reproducible would produce replays that do not replay,
+and no test could tell the difference.
 
 ### S1 — Retained authoritative action log
 

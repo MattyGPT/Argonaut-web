@@ -2,15 +2,13 @@
  * PLAYWRIGHT_MODULE installation if playwright-core is not locally available.
  * GAME_URL and TOW_OUTPUT override the localhost URL and evidence directory.
  */
-import { createRequire } from 'node:module';
+import { launchBrowser } from './lib/browser.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
-const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core');
 const output = process.env.TOW_OUTPUT || join(process.env.TEMP || process.env.TMPDIR || '/tmp', 'argonaut-practice-service', 'tow');
 await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const { browser } = await launchBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
   const errors = [];

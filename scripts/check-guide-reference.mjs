@@ -2,17 +2,15 @@
  * npm start; PLAYWRIGHT_MODULE points to an existing playwright-core install.
  * Installed Edge only; no downloads. GAME_URL defaults to localhost:8080.
  * GUIDE_REFERENCE_OUTPUT may override the TEMP evidence directory. */
-import { createRequire } from 'node:module';
+import { launchBrowser } from './lib/browser.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import assert from 'node:assert/strict';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core');
 const output = process.env.GUIDE_REFERENCE_OUTPUT || resolve(tmpdir(), 'argonaut-guide-reference');
 await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const { browser } = await launchBrowser();
 const layouts = [
   { label: 'modern-desktop', width: 1366, height: 768, classic: false, deviceScaleFactor: 1, reduced: false },
   { label: 'modern-large', width: 1600, height: 1000, classic: false, deviceScaleFactor: 1, reduced: false },

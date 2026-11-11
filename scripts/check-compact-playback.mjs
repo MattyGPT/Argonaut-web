@@ -2,15 +2,13 @@
  * Start npm start; PLAYWRIGHT_MODULE selects an existing installation.
  * PLAYBACK_OUTPUT optionally saves screenshots and JSON outside the repository.
  */
-import { createRequire } from 'node:module';
+import { launchBrowser } from './lib/browser.mjs';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
-const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core');
 const output = process.env.PLAYBACK_OUTPUT;
 if (output) await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const { browser } = await launchBrowser();
 const results = [];
 const url = process.env.GAME_URL || 'http://localhost:8080';
 const saveKey = 'argonaut-web-save-v1';

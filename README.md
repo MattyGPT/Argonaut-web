@@ -57,10 +57,25 @@ static server (`server.js`), so the only prerequisite is a Node runtime on
 ```sh
 npm test
 node scripts/check-guide-content.mjs
+npm run check:browser
 ```
 
 The tests use Node's built-in test runner; CI runs on Node 24 and checks
 guide links, illustrations, command coverage, and documented rule values.
+`npm run check:browser` runs the browser regression checks, which assert on the
+actual DOM — the renderer, the console, the ship menu, the guide — that
+`npm test` cannot reach. It boots `server.js` itself on a free port, so nothing
+else needs to be running. Add `-- --list` to see the suite, `-- --only
+check-mode-selection` to run one check, `-- --jobs 4` to parallelize, and
+`-- --include-quarantined` to also run the checks that are red for a known
+reason. CI runs the suite against the pinned browser that
+`npx playwright install chromium` provides (`BROWSER_MANAGED=1`), because these
+checks assert geometry and `:focus-visible` behavior, which vary by browser
+version; locally the launcher falls back to an installed Edge, Chrome or
+Chromium. Five checks are currently quarantined — listed with their failures in
+`scripts/lib/browser-suite.mjs` and triaged in the
+[browser-check CI review](docs/superpowers/reviews/2026-11-11-browser-check-ci.md).
+
 To reproduce
 the deterministic whole-war balance checks:
 
@@ -74,13 +89,15 @@ See [CALIBRATION.md](CALIBRATION.md) for measured baselines and the
 for planned polish. Design drafts describe future work, not shipped features.
 
 To refresh the illustrated guide, run `npm start`, then
-`node scripts/capture-guide-shots.mjs`. This optional developer tool uses
-an installed Edge browser and `playwright-core`; set `PLAYWRIGHT_MODULE`
-to an existing module installation. It never installs packages or uses your
-live browser profile. `GAME_URL` selects another running server. Scene
-definitions and the capture manifest record each staged example. Inspect the
-new images, then run `node scripts/check-guide-content.mjs` and
-`node scripts/check-guide-reference.mjs` with the same browser setup.
+`node scripts/capture-guide-shots.mjs`. `playwright` is a declared
+devDependency, so `npm ci` provides it; the launcher resolves a browser in a
+documented order, and `BROWSER_EXECUTABLE`, `BROWSER_CHANNEL` or
+`BROWSER_MANAGED` override that. It never uses your live browser profile.
+`GAME_URL` selects another running server. Scene definitions and the capture
+manifest record each staged example, including the browser that actually
+produced it. Inspect the new images, then run
+`node scripts/check-guide-content.mjs` and
+`node scripts/check-guide-reference.mjs`.
 
 ## First orders
 

@@ -1,16 +1,14 @@
 /** Browser regression with real capture/loss actions and application finalization.
  * npm start; PLAYWRIGHT_MODULE points to an existing playwright-core install.
  * Staged tactical terminal states avoid depending on combat AI timing. */
-import { createRequire } from 'node:module';
+import { launchBrowser } from './lib/browser.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import assert from 'node:assert/strict';
-const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core');
 const output = process.env.CAMPAIGN_OUTPUT || resolve(tmpdir(), 'argonaut-practice-service', 'campaign');
 await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const { browser } = await launchBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
   const errors = [];

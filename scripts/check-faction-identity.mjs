@@ -1,15 +1,13 @@
 /** Optional browser regression: npm start, then set PLAYWRIGHT_MODULE to an
  * existing playwright-core install. No downloads. Evidence defaults to TEMP. */
-import { createRequire } from 'node:module';
+import { launchBrowser } from './lib/browser.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import assert from 'node:assert/strict';
-const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core');
 const output = process.env.FACTION_OUTPUT || resolve(tmpdir(), 'argonaut-faction-navigation');
 await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const { browser } = await launchBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
   const errors = [];
