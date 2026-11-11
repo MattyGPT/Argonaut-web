@@ -218,9 +218,12 @@ const convergingWar = (axisChanges = {}) => {
   const game = createGame({ seed: 'rt-collide', realtime: true });
   return {
     ...game,
+    // Slice 3 keeps the pair outside phaser reach: this fixture isolates
+    // collision avoidance, and a composite maneuver-and-volley would put the
+    // axis captain on a different burn than the dodge under test.
     ships: game.ships.map((ship, index) => {
-      if (ship.id === 'fed-flagship') return { ...ship, x: 150, y: 150, dest: { x: 160, y: 160 } };
-      if (ship.id === 'axis-flagship') return { ...ship, x: 170, y: 170, dest: { x: 160, y: 160 }, ...axisChanges };
+      if (ship.id === 'fed-flagship') return { ...ship, x: 140, y: 140, dest: { x: 160, y: 160 } };
+      if (ship.id === 'axis-flagship') return { ...ship, x: 180, y: 180, dest: { x: 160, y: 160 }, ...axisChanges };
       return { ...ship, x: 4 + ((index * 37) % 312), y: 300, dest: null };
     }),
   };
@@ -242,8 +245,8 @@ test("captains avoid collisions as they pilot: the same convergence is dodged, n
   const axis = game.ships.find((ship) => ship.id === 'axis-flagship');
   // The threatened arrival held short of the occupied point instead of snapping
   // onto it, plot still standing — loitering, not ramming the anchorage.
-  assert.equal(axis.x, 170);
-  assert.equal(axis.y, 170);
+  assert.equal(axis.x, 180);
+  assert.equal(axis.y, 180);
   assert.deepEqual(axis.dest, { x: 160, y: 160 });
   // Determinism: the dodge replays identically.
   const twin = drive(convergingWar(), TICKS);

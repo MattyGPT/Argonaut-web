@@ -16,7 +16,8 @@ const command = (game, action, records = []) => {
   const out = applyPlayerAction(game, action);
   assert.notEqual(out.game, game, out.messages?.join(' '));
   records.push(...out.records);
-  return out.game.phase === 'computer' ? resolveComputerTurns(out.game, { onRecords: (batch) => records.push(...batch) }) : out.game;
+  return out.game.phase === 'computer' || out.game.playerActed?.move
+    ? resolveComputerTurns(out.game, { onRecords: (batch) => records.push(...batch) }) : out.game;
 };
 const assign = (game, shipId = 'op-escort') => command(game, { type: 'orders', shipId, order: { type: 'rescue' } });
 const play = (seed, shipId, reload = false) => {

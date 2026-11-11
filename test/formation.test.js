@@ -61,9 +61,14 @@ test('concentration shares the doctrine front, and stationed hulls wait their tu
   // Paired target assignment measured as a Bloc snowball and was rejected
   // (see the slice-2 review): the wing concentrates on the doctrine front —
   // the enemy nearest its flagship — and formation spacing, not target
-  // spread, is what keeps the wing readable.
+  // spread, is what keeps the wing readable. Slice 3 wraps the shot in a
+  // maneuver-and-volley composite, so read the volley's target.
+  const targetOf = (id) => {
+    const action = chooseAiAction(game, id);
+    return (action.volley ?? action).targetId;
+  };
   for (const id of ['fed-cruiser-1', 'fed-cruiser-2', 'fed-cruiser-3', 'fed-flagship', 'fed-interceptor', 'fed-scout']) {
-    assert.equal(chooseAiAction(game, id).targetId, front, `${id} concentrates on the doctrine front`);
+    assert.equal(targetOf(id), front, `${id} concentrates on the doctrine front`);
   }
 });
 
@@ -87,6 +92,6 @@ test('support hulls hold their class edge', () => {
   const beyond = chooseAiAction(stage(60, 100), 'fed-artillery');
   assert.equal(beyond.type, 'move', 'out of phaser reach it closes');
   assert.equal(beyond.dx, 14, 'but only to its stop range, not into the swarm');
-  const atEdge = chooseAiAction(stage(60, 80), 'fed-artillery');
-  assert.equal(atEdge.type, 'phasers', 'inside the edge it fights');
+  const closing = chooseAiAction(stage(60, 88), 'fed-artillery');
+  assert.ok(['phasers', 'photons'].includes(closing.type), 'inside phaser reach it fights, closing or not');
 });

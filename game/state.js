@@ -13,6 +13,7 @@ import {
   ION,
   LOADOUT,
   LOG_LIMIT,
+  MANEUVER,
   MISS_CHANCE,
   NEUTRAL_FACTION,
   PERSONALITIES,
@@ -695,6 +696,12 @@ export const createGame = ({ seed = 'xanadu', regional = false, sound = false, s
     // not reach the ship that received them. Both are empty in a classic war.
     orders: {},
     pendingOrders: {},
+    // Maneuver-and-volley volleys queued at the stardate boundary (slice 3):
+    // shipId -> the volley action a composite maneuver carries. Resolved in
+    // the shared boundary chain so both presentations fire the identical
+    // volley from the identical post-maneuver point; empty otherwise and
+    // absent in old saves, so every reader defaults to {}.
+    pendingVolleys: {},
     // Hulls the player has scanned, which is what reveals who captains them.
     scanned: {},
     // The one-time dockyard refit each hull has taken, if any.
@@ -1193,10 +1200,18 @@ export const stanceOf = (game, ship) => {
  * `[STANCE.missFloor, STANCE.missCeil]` so no pairing is a certain hit or miss.
  */
 export const volleyMissChance = (game, shooter, target) => {
+  const stance = stanceOf(game, shooter);
+  // Slice 3: a maneuvering shooter pays the composite term unless it holds
+  // evasive (weaving is that stance's story), and loses the firing stance's
+  // aim bonus — aiming on the move is hard.
+  const maneuvering = Boolean(shooter.maneuvered);
+  const selfMiss = maneuvering && stance === 'firing' ? 0 : (STANCE.selfMiss[stance] ?? 0);
+  const composite = maneuvering && stance !== 'evasive' ? MANEUVER.compositeMiss : 0;
   const total = MISS_CHANCE
     + (segmentCrossesFeature(game, shooter, target, 'asteroids') ? TERRAIN.asteroidCoverMiss : 0)
     + (ionStormZone(game, shooter) === 'ring' ? TERRAIN.ionStormRingMiss : 0)
-    + (STANCE.selfMiss[stanceOf(game, shooter)] ?? 0)
+    + selfMiss
+    + composite
     + (STANCE.incomingMiss[stanceOf(game, target)] ?? 0);
   return Math.max(STANCE.missFloor, Math.min(STANCE.missCeil, total));
 };
@@ -1365,18 +1380,31 @@ export const struckArc = (game, shooter, target) => {
 export const applyHeading = (game, ship, x, y) => {
   const moved = { ...ship, x, y };
   if (!hasArcs(game, ship) || (ship.x === x && ship.y === y)) return moved;
-  return { ...moved, facing: Math.round(bearingDeg(ship, moved)) };
+  return { ...moved, facing: turnToward(ship.facing, bearingDeg(ship, moved), MANEUVER.turnRate) };
 };
 
 /**
  * Round 32: point the bow at a coordinate WITHOUT moving — the heading-only
  * half of `applyHeading`, for the continuous-time paths (tows, plots) where
  * repositioning belongs to the integrator alone. Drones have no facing; a
- * zero-displacement turn keeps the last heading.
+ * zero-displacement turn keeps the last heading. Slice 3: the turn is rate
+ * limited like every other facing change.
  */
 export const facePoint = (game, ship, x, y) => {
   if (!hasArcs(game, ship) || (ship.x === x && ship.y === y)) return ship;
-  return { ...ship, facing: Math.round(bearingDeg(ship, { x, y })) };
+  return { ...ship, facing: turnToward(ship.facing, bearingDeg(ship, { x, y }), MANEUVER.turnRate) };
+};
+
+/**
+ * Rotate a facing toward a bearing by at most `degrees`, the short way around
+ * (engagement-shape slice 3). Round 23c's free bow-snap made directional
+ * shields cost nothing and pay nothing; a limited turn is what makes arcs,
+ * flanks, and disengages positional again. Pure integer degrees, no RNG.
+ */
+export const turnToward = (facing, bearing, degrees) => {
+  let delta = normalizeDegrees(bearing - facing);
+  if (delta > 180) delta -= 360;
+  return Math.round(normalizeDegrees(facing + Math.max(-degrees, Math.min(degrees, delta))));
 };
 
 /**

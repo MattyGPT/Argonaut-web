@@ -1090,8 +1090,12 @@ test('an intercept order engages the named ship over a nearer enemy', () => {
     return { ...ship, x: 90, y: 90 };
   });
   assert.equal(chooseAiAction(setup(false), 'fed-cruiser-1').targetId, 'axis-flagship', 'a classic autopilot shoots the near target');
-  assert.ok(['axis-flagship', 'cabal-flagship'].includes(chooseAiAction(setup(true), 'fed-cruiser-1').targetId),
-    'fleet doctrine pairs onto an in-range enemy, front first');
+  const doctrinePick = () => {
+    const action = chooseAiAction(setup(true), 'fed-cruiser-1');
+    return (action.volley ?? action).targetId;
+  };
+  assert.ok(['axis-flagship', 'cabal-flagship'].includes(doctrinePick()),
+    'fleet doctrine concentrates on an in-range enemy, front first');
 
   const ordered = { ...setup(true), orders: { 'fed-cruiser-1': { type: 'intercept', targetId: 'cabal-flagship' } } };
   const action = chooseAiAction(ordered, 'fed-cruiser-1');
@@ -1531,8 +1535,9 @@ test('a Bloc gunner executes the wounded it can hit, not one across the map', ()
     return { ...ship, x: 95, y: 5 };
   });
   const action = chooseAiAction(game, 'bloc-cruiser-1');
-  assert.equal(action.type, 'phasers');
-  assert.equal(action.targetId, 'fed-flagship', 'the crippled scout 113 units away is not worth the trip');
+  const shot = action.volley ?? action;
+  assert.equal(shot.type, 'phasers');
+  assert.equal(shot.targetId, 'fed-flagship', 'the crippled scout 113 units away is not worth the trip');
 });
 
 test('a Cabal trickster tows a target into another enemy rather than shooting it', () => {
@@ -1565,7 +1570,7 @@ test('a Cabal trickster will not tow a target onto its own hull', () => {
   });
   const action = chooseAiAction(game, 'cabal-cruiser-1');
   assert.notEqual(action.type, 'tractor', 'that tow would land the Argo on the Cabal hull itself');
-  assert.equal(action.type, 'photons');
+  assert.equal((action.volley ?? action).type, 'photons');
 });
 
 test('a Cabal trickster shoots when a tow would hit nothing', () => {
@@ -1576,7 +1581,8 @@ test('a Cabal trickster shoots when a tow would hit nothing', () => {
     if (ship.faction === 'Cabal') return ship;
     return { ...ship, x: 95, y: 95 };
   });
-  assert.equal(chooseAiAction(game, 'cabal-cruiser-1').type, 'phasers',
+  const cabalShot = chooseAiAction(game, 'cabal-cruiser-1');
+  assert.equal((cabalShot.volley ?? cabalShot).type, 'phasers',
     'a tow from 20 units lands in empty space, so the volley is not wasted on it');
 });
 
@@ -1593,8 +1599,8 @@ test('a Federation captain concentrates with the fleet and refits when hurt', ()
 
   const healthy = withShips(game, (ship) => (ship.id === 'fed-cruiser-1' ? { ...ship, shields: 60 } : ship));
   const action = chooseAiAction(healthy, 'fed-cruiser-1');
-  assert.equal(action.type, 'phasers');
-  assert.equal(action.targetId, 'axis-scout', 'the fleet concentrates on the enemy nearest the flagship');
+  assert.equal((action.volley ?? action).type, 'phasers');
+  assert.equal((action.volley ?? action).targetId, 'axis-scout', 'the fleet concentrates on the enemy nearest the flagship');
 });
 
 test('the vendetta ship neither refits nor runs', () => {
@@ -2797,9 +2803,9 @@ test('a jammed autopilot never picks a volley, though the same captain shoots in
   // Both flagships inside the core, 10 apart: photon range for the Axis guns.
   const game = { ...base, ships: base.ships.map((ship) => (ship.id === 'fed-flagship' ? { ...ship, x: 110, y: 120 } : ship)) };
   const jammed = chooseAiAction(game, 'axis-flagship');
-  assert.ok(!['phasers', 'photons'].includes(jammed.type), 'the core takes the guns offline');
+  assert.ok(!['phasers', 'photons'].includes((jammed.volley ?? jammed).type), 'the core takes the guns offline');
   const clear = chooseAiAction({ ...game, terrain: [] }, 'axis-flagship');
-  assert.ok(['phasers', 'photons'].includes(clear.type), 'in open space the same captain opens fire');
+  assert.ok(['phasers', 'photons'].includes((clear.volley ?? clear).type), 'in open space the same captain opens fire');
 });
 
 test('shots fired from the storm ring miss more often', () => {
@@ -4250,11 +4256,12 @@ test('AI captains fight in their doctrine stance, and shooting a weaving hull mi
     'the same shot misses a weaving Cabal hull more than a by-the-book Federation one');
 });
 
-test('disengage burns away from the nearest threat and spends the stardate', () => {
+test('disengage burns away from the nearest threat and opens the volley window', () => {
   const game = stancePair('stance-disengage');
   const actor = getShip(game, 'fed-flagship');
   const out = applyPlayerAction(game, { type: 'disengage' });
-  assert.equal(out.game.phase, 'computer', 'disengage is the maneuver for the turn');
+  assert.equal(out.game.phase, 'player', 'disengage takes the maneuver slot and leaves the volley window');
+  assert.deepEqual(out.game.playerActed, { move: true, volley: false });
   const fed = getShip(out.game, 'fed-flagship');
   const capacity = engineCapacity(actor, game.gridSize, powerEffect(game, actor, 'engines'));
   assert.ok(fed.x < 100, 'it runs directly away from the threat to the east');
@@ -4428,7 +4435,8 @@ test('an AI ion hull suppresses over the standoff its phasers cannot reach', () 
     if (ship.id === 'fed-scout') return { ...ship, x: 73, y: 40 };
     return ship;
   }), terrain: [] };
-  assert.deepEqual(chooseAiAction(game, 'axis-artillery'), { type: 'ion', targetId: 'fed-scout' },
+  const suppression = chooseAiAction(game, 'axis-artillery');
+  assert.deepEqual(suppression.volley ?? suppression, { type: 'ion', targetId: 'fed-scout' },
     'at 33 out the phasers cannot reach but the ion emitter can');
   const close = withShips(game, (ship) => (ship.id === 'fed-scout' ? { ...ship, x: 65, y: 40 } : ship));
   assert.equal(chooseAiAction(close, 'axis-artillery').type, 'phasers', 'inside 30 the lethal gun outranks ion');
@@ -4593,14 +4601,18 @@ test('an AI captain looses spread only into a clean, clustered splash', () => {
     if (ship.id === 'fed-cruiser-2') return { ...ship, x: 116, y: 100 };
     return parked(ship);
   }), terrain: [], strategies: null };
-  assert.deepEqual(chooseAiAction(clustered, 'axis-flagship'), { type: 'spread', targetId: 'fed-cruiser-1' },
+  const salvo = (game) => {
+    const action = chooseAiAction(game, 'axis-flagship');
+    return action.volley ?? action;
+  };
+  assert.deepEqual(salvo(clustered), { type: 'spread', targetId: 'fed-cruiser-1' },
     'a clean cluster of two draws the salvo');
   // A friendly inside the splash: never (it falls back to the phasers).
   const friendlyInTheWay = withShips(clustered, (ship) => (ship.id === 'axis-cruiser-1' ? { ...ship, x: 114, y: 100 } : ship));
-  assert.notEqual(chooseAiAction(friendlyInTheWay, 'axis-flagship').type, 'spread', 'the AI never splashes its own wing');
+  assert.notEqual(salvo(friendlyInTheWay).type, 'spread', 'the AI never splashes its own wing');
   // A lone target: not worth the area salvo.
   const lone = withShips(clustered, (ship) => (ship.id === 'fed-cruiser-2' ? { ...ship, x: 200, y: 200 } : ship));
-  assert.notEqual(chooseAiAction(lone, 'axis-flagship').type, 'spread', 'a single hull gets a gun, not a salvo');
+  assert.notEqual(salvo(lone).type, 'spread', 'a single hull gets a gun, not a salvo');
 });
 
 test('the computer phase resolves an AI spread salvo', () => {
@@ -4733,9 +4745,11 @@ test('disengage sets the escape heading — the runner shows its weak aft to the
   const game = arcWar('arc-disengage');
   const out = applyPlayerAction(game, { type: 'disengage' });
   const runner = getShip(out.game, 'fed-flagship');
-  assert.equal(runner.facing, 180, 'the burn away from the east-pointing threat heads west');
-  assert.equal(struckArc(out.game, getShip(out.game, 'axis-flagship'), runner), 'aft',
-    'a pursuer shooting down the escape vector strikes the weak aft arc');
+  // Slice 3 rate-limits the turn: one stardate of a 180° about-face is 120°,
+  // leaving the pursuer on the port quarter until the turn completes.
+  assert.equal(runner.facing, 120, 'the burn away from the east-pointing threat turns at the rate limit');
+  assert.equal(struckArc(out.game, getShip(out.game, 'axis-flagship'), runner), 'port',
+    'mid-turn, a pursuer down the escape vector meets the port quarter');
 });
 
 test('a tractor tow heads the victim along the tow; a hyperspace jump keeps the prior facing', () => {
@@ -4747,7 +4761,7 @@ test('a tractor tow heads the victim along the tow; a hyperspace jump keeps the 
   const towed = applyPlayerAction(staged, { type: 'tractor', targetId: 'axis-cruiser-1' });
   const victim = getShip(towed.game, 'axis-cruiser-1');
   assert.ok(victim.x < 80, 'the beam hauled the victim west');
-  assert.equal(victim.facing, 180, 'the towed hull heads the way it was dragged');
+  assert.equal(victim.facing, 120, 'the towed hull turns toward the drag at the rate limit');
   // A jump has no meaningful heading: find a seed whose 10% burn-up roll spares the
   // ship, then assert the facing survived the relocation untouched.
   for (let i = 0; i < 30; i += 1) {
@@ -5149,17 +5163,18 @@ const facingWar = (seed, stage) => {
 
 test('an AI captain turns its reinforced bow onto the threat it engages', () => {
   // The Axis flagship starts facing east; the only enemy sits due west, inside
-  // phaser range — it snaps about and fires bow-on.
+  // phaser range — it turns about at the rate limit and fires. Dead engines
+  // keep the volley plain (no slice-3 composite), so the bow tracks the target.
   const game = facingWar('ai-facing-bow', (ship) => {
-    if (ship.id === 'axis-flagship') return { ...ship, x: 100, y: 100, facing: 0 };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 100, y: 100, facing: 0, systems: { ...ship.systems, engines: 0 } };
     if (ship.id === 'fed-cruiser-1') return { ...ship, x: 90, y: 100 };
     return parked(ship);
   });
   const out = resolveComputerTurns({ ...game, phase: 'computer' });
   const axis = getShip(out, 'axis-flagship');
-  assert.equal(axis.facing, 180, 'the bow snaps onto the engaged target');
-  assert.equal(struckArc(out, getShip(out, 'fed-cruiser-1'), axis), 'fore',
-    'the enemy now shoots at the reinforced fore arc');
+  assert.equal(axis.facing, 120, 'the bow turns onto the engaged target at the rate limit');
+  assert.equal(struckArc(out, getShip(out, 'fed-cruiser-1'), axis), 'starboard',
+    'one stardate into the turn, the enemy shoots at the starboard quarter');
   // Deterministic: the same staged state resolves identically.
   assert.deepEqual(resolveComputerTurns({ ...game, phase: 'computer' }).ships, out.ships);
 });
@@ -5200,8 +5215,9 @@ test('an AI burn keeps the escape heading — a runner shows its weak aft', () =
   });
   const runner = getShip(fleeing, 'axis-flagship');
   const headed = applyHeading(fleeing, runner, runner.x - 20, runner.y);
-  assert.equal(struckArc(fleeing, getShip(fleeing, 'fed-cruiser-1'), { ...headed, x: 80 }), 'aft',
-    'whatever the escape burn is, the pursuer meets the aft arc');
+  assert.equal(headed.facing, 120, 'the escape turn is rate-limited like every other');
+  assert.equal(struckArc(fleeing, getShip(fleeing, 'fed-cruiser-1'), { ...headed, x: 80 }), 'port',
+    'mid-turn the pursuer meets a quarter arc; the weak aft arrives with the completed turn');
 });
 
 test('AI facing never touches drones, and never fires outside a Reimagined war', () => {
@@ -5227,15 +5243,16 @@ test('AI facing never touches drones, and never fires outside a Reimagined war',
 
 test('the autopilot conn faces the threat too', () => {
   // resolveAutopilotTurn runs the player's hull through the same decision path: a
-  // resigned Federation captain holds the gun line bow-on.
+  // resigned Federation captain holds the gun line bow-on. Dead engines keep the
+  // volley plain (no slice-3 composite), so the bow tracks the target.
   const game = facingWar('ai-facing-autopilot', (ship) => {
-    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 100, y: 100, facing: 90 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 100, y: 100, facing: 90, systems: { ...ship.systems, engines: 0 } };
     if (ship.id === 'axis-flagship') return { ...ship, x: 110, y: 100 };
     return parked(ship);
   });
   const out = resolveAutopilotTurn({ ...game, playerShipId: 'fed-cruiser-1' });
   const cruiser = getShip(out.game, 'fed-cruiser-1');
-  assert.equal(cruiser.facing, 0, 'the autopilot snaps the bow onto the target it engages');
+  assert.equal(cruiser.facing, 0, 'the autopilot tracks the bow onto the target it engages');
 });
 
 // --- Argonaut Reimagined, round 23d: directional shields in the reports ---
