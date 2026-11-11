@@ -450,6 +450,12 @@ commands and calibrated behavior.
   while it stands. Any alliance commits its nearest free hulls to contest a
   node enemy hulls sit inside, so relay nodes are named battles, not empty
   geography. Your orders still outrank all of it.
+- **Wings arrive as formations, not piles.** Autopilot arrivals keep formation
+  spacing between allied ships of the line, steer around a hostile endpoint
+  when a clean landing exists inside the burn, and leave deliberate rams —
+  your manual conn, Cabal tow-rams, the sit-and-ram hold, a melee with no
+  clean point — alone. Artillery and carriers close only to their class stop
+  range, holding the phaser edge instead of drifting into point-blank.
 - **Enemy captains look after themselves now.** They flush engines into shields
   and withdraw when mauled, so a fleet you have hurt can slip away instead of
   fighting to the last point of shield. The vendetta ship is exempt: it still
