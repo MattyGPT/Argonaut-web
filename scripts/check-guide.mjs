@@ -5,17 +5,15 @@
  * an existing installation). GAME_URL defaults to http://localhost:8080.
  * No packages are installed. The context is isolated from the player's saves.
  */
-import { createRequire } from 'node:module';
+import { launchBrowser } from './lib/browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { REALTIME } from '../game/constants.js';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core');
 const output = process.env.GUIDE_OUTPUT;
 if (output) await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const { browser } = await launchBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
   const errors = [];

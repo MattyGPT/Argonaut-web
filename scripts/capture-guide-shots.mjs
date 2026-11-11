@@ -1,20 +1,17 @@
-/** npm start; PLAYWRIGHT_MODULE may point to an existing playwright-core installation. */
-import { createRequire } from 'node:module';
+/** npm start, then node scripts/capture-guide-shots.mjs. Browser resolution: scripts/lib/browser.mjs. */
+import { launchBrowser } from './lib/browser.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { GUIDE_SCENES, stageGuideScene } from './guide-scenes.mjs';
-const require = createRequire(import.meta.url);
-let chromium;
-try { ({ chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core')); }
-catch { throw new Error('Use an installed playwright-core package via PLAYWRIGHT_MODULE; no browser dependency is installed by this script.'); }
+
 const output = resolve(process.env.GUIDE_OUTPUT || 'assets/guide');
 const selected = process.env.GUIDE_SCENES?.split(',');
 const scenes = GUIDE_SCENES.filter((scene) => !selected || selected.includes(scene.file));
 assert.ok(scenes.length, 'No guide scenes selected');
 await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const { browser, via } = await launchBrowser();
 const assets = [];
 async function ready(page) {
   await page.waitForFunction(() => typeof window.__guideCaptureSnapshot === 'function' && !window.__guideCaptureSnapshot().playback);
@@ -88,5 +85,7 @@ try {
   }
   let previous = [];
   if (selected) try { previous = JSON.parse(await readFile(resolve(output, 'manifest.json'), 'utf8')).assets.filter((asset) => !assets.some((current) => current.file === asset.file)); } catch {}
-  await writeFile(resolve(output, 'manifest.json'), JSON.stringify({ version: 1, sceneVersion: 2, browser: 'Microsoft Edge via optional Playwright', url: process.env.GAME_URL || 'http://localhost:8080', scale: 1, reducedMotion: 'reduce', assets: [...previous, ...assets] }, null, 2) + '\n');
+  // Provenance, not configuration: this records which browser actually produced
+  // the committed images, so it is resolved at capture time rather than asserted.
+  await writeFile(resolve(output, 'manifest.json'), JSON.stringify({ version: 1, sceneVersion: 2, browser: `${via} ${await browser.version()}`, url: process.env.GAME_URL || 'http://localhost:8080', scale: 1, reducedMotion: 'reduce', assets: [...previous, ...assets] }, null, 2) + '\n');
 } finally { await browser.close(); }

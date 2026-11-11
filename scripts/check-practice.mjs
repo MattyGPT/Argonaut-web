@@ -4,16 +4,14 @@
  * localhost:8080. PRACTICE_OUTPUT optionally writes screenshots/evidence.
  * No packages are installed and the player's browser profile is never used.
  */
-import { createRequire } from 'node:module';
+import { launchBrowser } from './lib/browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core');
 const output = process.env.PRACTICE_OUTPUT;
 if (output) await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const { browser } = await launchBrowser();
 const keys = ['argonaut-web-save-v1', 'argonaut-web-save-campaign-v1', 'argonaut-web-first-orders'];
 const practiceKey = 'argonaut-web-save-practice-v1';
 const results = [];

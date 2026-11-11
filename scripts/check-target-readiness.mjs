@@ -2,15 +2,13 @@
  * to an existing playwright-core installation, and run this file. No downloads.
  * TARGET_OUTPUT saves screenshots of desktop, narrow and enlarged layouts.
  */
-import { createRequire } from 'node:module';
+import { launchBrowser } from './lib/browser.mjs';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
-const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core');
 const output = process.env.TARGET_OUTPUT;
 if (output) await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const { browser } = await launchBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
   const errors = [];

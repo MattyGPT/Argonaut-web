@@ -1,15 +1,13 @@
 /** Optional actual-app first-order checks. Start npm start; uses installed Edge.
  * PLAYWRIGHT_MODULE selects playwright-core; WALKTHROUGH_OUTPUT keeps evidence outside the repo.
  */
-import { createRequire } from 'node:module';
+import { launchBrowser } from './lib/browser.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
-const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core');
 const output = process.env.WALKTHROUGH_OUTPUT;
 if (output) await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const { browser } = await launchBrowser();
 const results = [];
 const key = 'argonaut-web-save-v1';
 const hintKey = 'argonaut-web-first-orders';

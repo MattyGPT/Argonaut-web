@@ -17,3 +17,24 @@ jobs:
           node-version: 24
       - run: npm test
       - run: node scripts/check-guide-content.mjs
+
+  # The browser checks assert on the actual DOM, which is where the renderer,
+  # the console and the guide live, so a green `npm test` alone has never
+  # covered them. BROWSER_MANAGED pins the playwright browser revision rather
+  # than using whatever Chromium the runner image happens to ship: these checks
+  # assert geometry and :focus-visible behavior, both of which vary by browser
+  # version. Deploy is deliberately not gated on this job — see the
+  # 2026-11-11 browser-check-ci review for that decision.
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run check:browser -- --jobs 4
+        env:
+          BROWSER_MANAGED: 1

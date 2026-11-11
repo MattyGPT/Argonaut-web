@@ -6,9 +6,12 @@
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
     "start": "node server.js",
-    "sim": "node scripts/sim-wars.mjs"
+    "sim": "node scripts/sim-wars.mjs",
+    "check:browser": "node scripts/run-browser-checks.mjs"
   },
   "devDependencies": {
-    "jimp": "^1.6.1"
+    "jimp": "^1.6.1",
+    "playwright": "^1.65.0",
+    "playwright-core": "^1.65.0"
   }
 }

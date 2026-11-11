@@ -2,12 +2,10 @@
  * Start npm start; set PLAYWRIGHT_MODULE to an existing playwright-core install.
  * All fixtures and test-only app instrumentation use an isolated browser context.
  */
-import { createRequire } from 'node:module';
+import { launchBrowser } from './lib/browser.mjs';
 import assert from 'node:assert/strict';
 import { REALTIME } from '../game/constants.js';
-const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core');
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const { browser } = await launchBrowser();
 try {
   const page = await browser.newPage();
   const errors = [];

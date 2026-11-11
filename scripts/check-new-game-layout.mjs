@@ -1,13 +1,11 @@
 /** Optional Edge geometry/interaction check. Uses an isolated browser context.
  * NEW_GAME_OUTPUT saves screenshots; PLAYWRIGHT_MODULE selects playwright-core.
  */
-import { createRequire } from 'node:module';
+import { launchBrowser } from './lib/browser.mjs';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
-const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core');
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const { browser } = await launchBrowser();
 const output = process.env.NEW_GAME_OUTPUT;
 if (output) await mkdir(output, { recursive: true });
 try {

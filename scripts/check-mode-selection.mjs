@@ -5,12 +5,10 @@
  * existing installation; no dependencies are downloaded. GAME_URL overrides
  * http://localhost:8080. Uses an isolated browser context and its own saves.
  */
-import { createRequire } from 'node:module';
+import { launchBrowser } from './lib/browser.mjs';
 import assert from 'node:assert/strict';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core');
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const { browser } = await launchBrowser();
 const SAVE = 'argonaut-web-save-v1';
 const CAMPAIGN_SAVE = 'argonaut-web-save-campaign-v1';
 try {

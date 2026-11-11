@@ -3,13 +3,12 @@
  * GAME_URL defaults to localhost:8080. OPERATION_OUTPUT optionally saves screenshots.
  * Uses an isolated browser profile and read-only app instrumentation.
  */
-import { createRequire } from 'node:module';
+import { launchBrowser } from './lib/browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright-core');
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const { browser } = await launchBrowser();
 const keys = ['argonaut-web-save-v1', 'argonaut-web-save-campaign-v1', 'argonaut-web-first-orders'];
 const operationKey = 'argonaut-web-save-operation-v1';
 const results = [];

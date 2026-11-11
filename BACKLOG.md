@@ -232,7 +232,9 @@ survives:
   "all three modes" — neither of which had been true since PR #87 on 2026-10-03.
   Its still-valid items were accurate; its framing was not.
 
-One item from that pass remains open, and it is the consequential one:
+One item from that pass was the consequential one. **It is fixed as of
+2026-11-11**, and fixing it immediately surfaced a worse problem than the one
+described:
 
 - **18 verification scripts cannot run from a clean checkout.** Every
   `scripts/check-*.mjs` browser check plus `capture-guide-shots.mjs` requires
@@ -249,6 +251,33 @@ One item from that pass remains open, and it is the consequential one:
   the cheap state/DOM assertions into `npm test`, or record explicitly in each
   plan which guards are manual. Re-confirmed 2026-11-10: `node_modules` is
   absent and importing `playwright-core` fails with `ERR_MODULE_NOT_FOUND`.
+
+  **Fixed 2026-11-11** by slice P0 of the
+  [presence, legacy, and reach program](docs/superpowers/specs/2026-11-11-presence-legacy-and-reach-program.md).
+  `playwright` and `playwright-core` are declared devDependencies and locked;
+  all 18 scripts now launch through one shared resolver
+  (`scripts/lib/browser.mjs`) instead of 18 copies of
+  `chromium.launch({ channel: 'msedge' })`; `npm run check:browser`
+  (`scripts/run-browser-checks.mjs`) boots `server.js` itself and runs the suite;
+  and `test.yml` has a `browser` job that installs a pinned Chromium and runs it.
+  A test asserts the hardcoded channel cannot come back.
+
+- **Five of the seventeen browser checks are red, and nobody knew.** This is the
+  new finding, and it is the reason the item above mattered. Running the suite
+  for the first time on 2026-11-11 gave **12/17 pass**. The five failures are
+  `check-battle-journal`, `check-combat-console`, `check-combat-feedback`,
+  `check-faction-identity` and `check-target-readiness`; each fails identically
+  against both the system Chromium 155 and the pinned playwright Chromium 158,
+  so none is a browser-version artifact. Whether each is a stale assertion about
+  behavior that intentionally changed, or a **real regression that shipped
+  green**, is not yet determined — that is the next slice (P0b), and its per-check
+  triage is in
+  [the browser-check CI review](docs/superpowers/reviews/2026-11-11-browser-check-ci.md).
+  They are quarantined in `scripts/lib/browser-suite.mjs`, printed on every run,
+  and a test fails if a quarantine entry stops naming a real check. The lesson
+  generalizes past these five: PR #117's commit message records a *manual*
+  browser pass, which reads like coverage and is not. Manual evidence quoted
+  into a review doc has a shelf life nobody was tracking.
 
 ## Ideas
 

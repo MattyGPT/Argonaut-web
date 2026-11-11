@@ -2,11 +2,9 @@
  * Uses an isolated context and test-only dispatch exposure; no production hooks.
  * npm start; PLAYWRIGHT_MODULE=<existing playwright-core> node this-file.mjs
  */
-import { createRequire } from 'node:module';
+import { launchBrowser } from './lib/browser.mjs';
 import assert from 'node:assert/strict';
-const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core');
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const { browser } = await launchBrowser();
 try {
   const page = await browser.newPage();
   const errors = [];
