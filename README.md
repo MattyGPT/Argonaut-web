@@ -125,7 +125,9 @@ offered. A real-time target may move before confirmation, and the shared
 command cycle still applies. In Reimagined a Federation hull's
 menu also carries its standing orders and its one dockyard refit. `Escape` or a
 click elsewhere on the map puts the menu away, and clicking the same hull again
-toggles it. Time-consuming commands spend a stardate in turn-based play;
+toggles it. Time-consuming commands spend a stardate in turn-based play — except
+a Reimagined maneuver, which opens a volley window instead: fire from where the
+burn left it (at the composite miss penalty) or Pass to end the stardate;
 real-time combat commands use their simulation-time cycle. Scanning and
 other information commands are free. Plotting a real-time course or holding
 position is also free; movement takes simulation time.
@@ -339,11 +341,14 @@ rebuilds, and new commissions within the fleet budget. Prizes remain outside
 that starting-hull budget.
 
 Enemy alliances make strategic moves between engagements and can raid your
-systems. Losing Xanadu or the whole carried fleet ends the campaign;
-taking the enemy home system wins it. A draw or abandoned engagement can
-cede the system without ending the entire campaign. Inspect the campaign
-report for battle results, holdings, credits, prizes, and surviving aces.
-Campaign progress autosaves separately from the ordinary-war slot.
+systems. Inside engagements the same aims appear: an alliance that drew the
+raid strategy besieges a starbase, and a relays alliance garrisons and contests
+the relay nodes while its reserve fights the fleet. Losing Xanadu or the whole
+carried fleet ends the campaign; taking the enemy home system wins it. A draw
+or abandoned engagement can cede the system without ending the entire
+campaign. Inspect the campaign report for battle results, holdings, credits,
+prizes, and surviving aces. Campaign progress autosaves separately from the
+ordinary-war slot.
 
 Each engagement now has a reopenable debrief: survivors, losses, prizes,
 new damage, system disposition, and actual credit changes. Expand a hull's

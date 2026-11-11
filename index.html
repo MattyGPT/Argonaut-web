@@ -358,7 +358,7 @@
               <li>Find your command ship on the map and check its name, shields, crew, and status in the console.</li>
               <li>Click a clear point inside the cyan engine ring, away from other hulls, to move. Or choose <b>Engines</b> (<kbd>2</kbd>) and enter a small ΔX / ΔY displacement. Working engines and freedom from a tractor lock are required.</li>
               <li>After an accepted maneuver, other captains act and the stardate advances. Read <b>Your ship</b> in the battle journal for your result, then <b>Battle developments</b> for milestones.</li>
-              <li>Use <b>Pass turn</b> (<kbd>P</kbd>) when you want to hold position and let the next stardate resolve. If an enemy is in range, click its hull and choose <b>Fire phasers</b> instead of moving.</li>
+              <li>Use <b>Pass turn</b> (<kbd>P</kbd>) when you want to hold position and let the next stardate resolve. If an enemy is in range, click its hull and choose <b>Fire phasers</b> — and in Reimagined you may maneuver first and still fire from where the burn left it, in the same stardate, at the composite miss penalty.</li>
             </ol>
             <p>A target is not guaranteed to be in weapon range at the opening. Movement is enough for your first order. A rejected command explains its refusal; canceling a prompt or issuing an invalid order does not spend a turn.</p>
             <h4>Start a real-time battle — Reimagined</h4>
@@ -434,7 +434,7 @@
             <h3>Commands and time</h3>
             <p>The console keeps movement, primary weapons, passing or holding, and autopilot close at hand. Expand <b>Systems and commands</b> for the complete command set. Keyboard shortcuts work during play; dialogs own the keyboard. Menu commands can preselect the hull you clicked.</p>
             <p>Target menus and weapon prompts show known distance, weapon reach, and an explanation when an action is unavailable. In real time, a spent shared command cycle is separate from a target being out of range. The selected hull is checked again on confirmation; if it moves out of reach or disappears, choose another target explicitly.</p>
-            <p><b>Turn-based cost:</b> an accepted action marked “Turn” completes your turn, then other captains act. “Free” reports and configuration keep the current stardate. <b>Real-time cost:</b> “Cycle” commands share a readiness timer measured in simulation time; course changes, reports, and configuration do not spend that timer. A paused clock cannot recharge it.</p>
+            <p><b>Turn-based cost:</b> an accepted action marked “Turn” completes your turn, then other captains act. “Free” reports and configuration keep the current stardate. In Reimagined a maneuver is the one exception that opens a window instead of closing the stardate: a volley may still follow from where the burn left it (at the composite miss penalty), and Pass ends the stardate without one. <b>Real-time cost:</b> “Cycle” commands share a readiness timer measured in simulation time; course changes, reports, and configuration do not spend that timer. A paused clock cannot recharge it.</p>
             <div class="guide-table-wrap">
               <table class="guide-keys" data-guide-scope="classic reimagined">
                 <caption>Commands in both rulesets; the real-time column applies only to Reimagined real-time battles.</caption>
@@ -490,7 +490,7 @@
           </section>
           <section id="guide-combat" tabindex="-1">
             <h3>Understanding combat</h3>
-            <p>A valid shot can miss. Damage varies with the weapon, surviving units, and ruleset; Reimagined power, stance, terrain, and crew condition also matter. Read the result for hit or miss and damage rather than treating range or readiness as a hit prediction.</p>
+            <p>A valid shot can miss. Damage varies with the weapon, surviving units, and ruleset; Reimagined power, stance, terrain, crew condition, and whether the shooter maneuvered this stardate (the composite term) also matter. Read the result for hit or miss and damage rather than treating range or readiness as a hit prediction.</p>
             <ul>
               <li><b>Shields and systems:</b> damage past shields can kill crew and disable hardware. Fewer live units reduce the affected system's performance. Zero crew can leave a vacant frame; destruction leaves an unboardable wreck.</li>
               <li><b>Command loss:</b> losing your command ship transfers command to a surviving Federation hull where possible. With no Federation command left, you watch other alliances finish. Resigning hands play to autopilot.</li>
@@ -619,7 +619,7 @@
             <p>At Xanadu or another Federation-held system, expand <b>Dockyard offers</b> between engagements. Each lists its credit cost: shield repair, crew replenishment, system overhaul, refits, spent drone-bay rebuilds, and new commissions. Select an affordable eligible offer and check the changed credit balance and hull condition. Refits can be purchased again within hardware limits; commissions are limited by the purchase point budget, while prizes do not spend it. Paid services do not consume a battle stardate.</p>
             <h4>Draws, abandonment, and raids</h4>
             <p>A draw or retreat at an enemy system leaves that system in enemy hands and carries out surviving hulls in their end condition. <b>Abandon engagement</b> confirms leaving the battle; abandoning a defense cedes the friendly node to its attacker. A drawn or stalled defense holds the friendly node if the fleet survives; losing or abandoning Xanadu's defense ends the campaign.</p>
-            <p>Enemy alliances also contest systems, occupy empty ones, and raid yours as campaign turns advance. A raid at your fleet's system becomes a defensive engagement; a strike on Xanadu recalls the fleet home. Resolve that defense before traveling. Garrisons resolve raids elsewhere. The <b>campaign report</b> tracks outcomes, holdings, credits, prizes, and aces.</p>
+            <p>Enemy alliances also contest systems, occupy empty ones, and raid yours as campaign turns advance. A raid at your fleet's system becomes a defensive engagement; a strike on Xanadu recalls the fleet home. Resolve that defense before traveling. Garrisons resolve raids elsewhere. The same aims appear inside a battle: an alliance that drew the raid strategy besieges a starbase during the engagement, and a relays alliance garrisons and contests the relay nodes. The <b>campaign report</b> tracks outcomes, holdings, credits, prizes, and aces.</p>
             <figure class="guide-figure">
               <img src="assets/guide/campaign-route.png" width="776" height="527" alt="The sector chart places the fleet at Xanadu and shows linked routes through friendly, unclaimed, and hostile systems." loading="lazy">
               <figcaption>Select a connected system to inspect it before travel. Engagements and defensive raids can block the next move. <a href="assets/guide/campaign-route.png" target="_blank" rel="noopener">Full-size image (new tab)</a></figcaption>
