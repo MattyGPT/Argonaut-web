@@ -2038,8 +2038,25 @@ export const applyPlayerAction = (game, action = {}) => withFieldAction(game, ga
  */
 const COMPOSITE_MANEUVER = new Set(['move', 'disengage']);
 const COMPOSITE_VOLLEY = new Set(['phasers', 'photons', 'spread', 'ion']);
+/**
+ * Whether the conn could volley right now with any carried gun (slice 3). The
+ * maneuver window opens only when the answer is yes at the burn's landing —
+ * otherwise the maneuver ends the stardate exactly as it always has. Play-test
+ * 2026-11-11: an empty window on stardate 1 read as a dead game, because every
+ * habitual click after the burn was a silent refusal and the only way out was
+ * a Pass button against a decade of one-command rhythm.
+ */
+const volleyInRange = (game) => {
+  const actor = getShip(game, game.playerShipId);
+  if (!actor || !isActive(actor)) return false;
+  const reach = Math.max(0, ...[['phasers', RANGES.phasers], ['photons', RANGES.photons], ['spread', RANGES.spread], ['ion', RANGES.ion]]
+    .filter(([system]) => systemUnits(actor, system) > 0)
+    .map(([, range]) => range));
+  return reach > 0 && game.ships.some((ship) => isActive(ship) && !isNeutral(ship) && ship.faction !== actor.faction && distance(actor, ship) <= reach);
+};
 const compositeSlot = (game, prepared, action) => {
   if (!prepared.reimagined || prepared.realtime || game.phase !== 'computer') return game;
   if (!COMPOSITE_MANEUVER.has(action.type)) return game;
+  if (!volleyInRange(game)) return game;
   return { ...game, phase: 'player', playerActed: { move: true, volley: false } };
 };

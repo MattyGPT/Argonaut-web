@@ -4256,12 +4256,13 @@ test('AI captains fight in their doctrine stance, and shooting a weaving hull mi
     'the same shot misses a weaving Cabal hull more than a by-the-book Federation one');
 });
 
-test('disengage burns away from the nearest threat and opens the volley window', () => {
+test('disengage burns away from the nearest threat and ends the stardate', () => {
   const game = stancePair('stance-disengage');
   const actor = getShip(game, 'fed-flagship');
   const out = applyPlayerAction(game, { type: 'disengage' });
-  assert.equal(out.game.phase, 'player', 'disengage takes the maneuver slot and leaves the volley window');
-  assert.deepEqual(out.game.playerActed, { move: true, volley: false });
+  // The burn leaves the pursuer far outside gun reach, so no volley window
+  // opens: disengage spends the stardate like any other maneuver.
+  assert.equal(out.game.phase, 'computer');
   const fed = getShip(out.game, 'fed-flagship');
   const capacity = engineCapacity(actor, game.gridSize, powerEffect(game, actor, 'engines'));
   assert.ok(fed.x < 100, 'it runs directly away from the threat to the east');

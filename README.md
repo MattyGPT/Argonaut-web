@@ -125,9 +125,10 @@ offered. A real-time target may move before confirmation, and the shared
 command cycle still applies. In Reimagined a Federation hull's
 menu also carries its standing orders and its one dockyard refit. `Escape` or a
 click elsewhere on the map puts the menu away, and clicking the same hull again
-toggles it. Time-consuming commands spend a stardate in turn-based play — except
-a Reimagined maneuver, which opens a volley window instead: fire from where the
-burn left it (at the composite miss penalty) or Pass to end the stardate;
+toggles it. Time-consuming commands spend a stardate in turn-based play — in
+Reimagined, a maneuver that leaves an enemy in gun reach opens a volley window
+instead (fire from where the burn left it, at the composite miss penalty, or
+Pass); any other maneuver ends the stardate as usual;
 real-time combat commands use their simulation-time cycle. Scanning and
 other information commands are free. Plotting a real-time course or holding
 position is also free; movement takes simulation time.
@@ -267,10 +268,11 @@ beaten near destruction weaves as it breaks off; the stance shows as a colored
 halo on the map and in the fleet report. And **Disengage** (`X`) is the pilot's
 escape lever — a full engine burn straight away from the nearest threat, as the
 turn's maneuver, pairing with evasive to break off under fire. In turn-based
-Reimagined the conn may **maneuver and then volley in one stardate**: the burn
-opens a volley window, the volley fires from where the burn left it at a
-composite miss penalty (evasive excepted; a firing hull loses its aim bonus on
-the move), and firing first ends the stardate exactly as before. Heading turns
+Reimagined a maneuver that leaves an enemy in gun reach opens a **volley
+window**: fire from where the burn left it at a composite miss penalty
+(evasive excepted; a firing hull loses its aim bonus on the move), or Pass to
+hold your fire. Any other maneuver — and any volley — ends the stardate
+exactly as before. Heading turns
 at a limited rate per stardate — the bow no longer snaps onto a target — so
 flanks, disengages, and orbits are positional: mid-turn you show a quarter
 arc, and the weak aft arrives only with the completed about-face. Some hulls —
