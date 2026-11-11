@@ -1,4 +1,4 @@
-import { AI_PURSUIT, DRONE, ENCOUNTERS, FLEET_ORDER_TUNING, GRID_SIZE, PERSONALITIES, RANGES, REIMAGINED_SUICIDE_MIN_ENEMIES, SPREAD, STRATEGY } from './constants.js';
+import { AI_PURSUIT, DRONE, ENCOUNTERS, FLEET_ORDER_TUNING, FORMATION, GRID_SIZE, PERSONALITIES, RANGES, REIMAGINED_SUICIDE_MIN_ENEMIES, SPREAD, STRATEGY } from './constants.js';
 import { canLaunchDrones, flushShields, tractorLock } from './actions.js';
 import { createRng } from './rng.js';
 import { isOperation, operationVisible } from './operations.js';
@@ -14,6 +14,7 @@ import {
   isImmovable,
   isNeutral,
   isTractorHeld,
+  maintainedTowPair,
   orderFor,
   powerEffect,
   sensorRange,
@@ -366,17 +367,51 @@ const doctrineTarget = (game, actor, doctrine, enemies) => {
   // occupants while the rest of the wing keeps the fleet's concentration.
   const contest = contestCommitment(game, actor, enemies);
   if (contest) return contest;
-  // By the book: the original's concentration on the enemy nearest the flagship.
-  if (doctrine.fleetFocus) return pickTarget(game, actor)?.ship ?? null;
+  // Engagement-shape slice 2 measured and rejected paired target assignment
+  // (pairCap 2 and 3, and pairing limited to the concentration doctrines):
+  // every variant snowballed the Bloc (43-48% winners against 39.2% without)
+  // because a stacking execution doctrine locally out-numbers paired
+  // opponents, and the shape audit gained nothing spacing does not already
+  // deliver (largest engagement 0.51 paired vs 0.52 unpaired). Concentration
+  // therefore keeps one focus target — the doctrine front — and the wing's
+  // shape comes from formation spacing and the support-class edge instead.
+  const priority = concentrationPriority(game, actor, doctrine, enemies);
+  if (priority.length === 0) return null;
+  // The execution doctrine finishes the dying — but only among hulls this
+  // gunner can actually hit, or a battery spends the war chasing one crippled
+  // scout across the map.
   if (doctrine.focusWeakest) {
-    // Execute the wounded — but only among hulls this gunner can actually hit, or a
-    // battery spends the war chasing one crippled scout across the map.
     const within = enemies.filter((ship) => distance(actor, ship) <= RANGES.phasers);
     const pool = within.length > 0 ? within : enemies;
     return [...pool].sort((a, b) => (a.shields + a.crew) - (b.shields + b.crew)
       || distance(actor, a) - distance(actor, b) || a.id.localeCompare(b.id))[0];
   }
-  return nearestTo(actor, enemies)?.ship ?? null;
+  // Fight what you can hit from the priority list; close on the front when
+  // nothing is in reach. Measured: always closing on the front re-converged
+  // the wing (nearest-ally gap 23.9, largest engagement 0.62) against fighting
+  // the in-range priority enemy (33.5 / 0.52) — the in-range pool is what lets
+  // a formation stand and fight where it stands.
+  return priority.find((ship) => distance(actor, ship) <= RANGES.phasers) ?? priority[0];
+};
+
+/**
+ * The doctrine's target priority for the wing's concentration (slice 2): the
+ * by-the-book and swarm doctrines order enemies by distance to the flagship —
+ * the fleet front — while stationed hulls (garrisons on their posts) sit at
+ * the end of the list: node holders are the contest commitment's job, and
+ * dealing concentration onto them measured as garrisons dying in transit
+ * before they posted (3/6 wars instead of 6/6).
+ */
+const concentrationPriority = (game, actor, doctrine, enemies) => {
+  const rank = (ship) => (strategyStation(game, ship) ? 1 : 0);
+  if (doctrine.focusWeakest) {
+    return [...enemies].sort((a, b) => rank(a) - rank(b) || (a.shields + a.crew) - (b.shields + b.crew) || a.id.localeCompare(b.id));
+  }
+  const flagship = game.ships.find((ship) => isActive(ship) && ship.faction === actor.faction && ship.id.endsWith('-flagship')) ?? actor;
+  return enemies
+    .map((ship) => ({ ship, rank: rank(ship), focus: distance(flagship, ship) }))
+    .sort((a, b) => a.rank - b.rank || a.focus - b.focus || a.ship.id.localeCompare(b.ship.id))
+    .map((entry) => entry.ship);
 };
 
 /**
@@ -421,6 +456,11 @@ const doctrineAction = (game, actor) => {
 
   if (!hunting && doctrine.retreatBelow > 0 && ratio <= doctrine.retreatBelow) return fallBack(game, actor, target);
   if (doctrine.minRange > 0 && range < doctrine.minRange && canNavigate(game, actor)) return stepAway(actor, target, game);
+  // Engagement-shape slice 2: support hulls keep their edge — they close only
+  // to their class stop range, holding the phaser edge instead of drifting
+  // into the swarm's point-blank. (A measured danger-floor step-away made
+  // support hulls uncatchable: Bloc snowballed to 45.6% winners.)
+  const edge = FORMATION.classEdge[actor.className];
   // Cabal would rather wreck your hull on somebody else's than shoot it — but only
   // when the tow lands you on another enemy, so both hulls in that collision belong
   // to someone else. Towing you onto a Cabal ship is a coin flip it will not take.
@@ -439,7 +479,10 @@ const doctrineAction = (game, actor) => {
   const shot = engage(game, actor, target, range, doctrine.noTractor);
   if (shot) return shot;
   if (!canNavigate(game, actor)) return { type: 'pass' };
-  if (range > doctrine.standoff) return stepToward(actor, target, doctrine.standoff, game);
+  // Slice 2: a support hull closes only to its class stop range, holding the
+  // phaser edge instead of drifting into the swarm's point-blank.
+  const stop = Math.max(doctrine.standoff, edge ?? 0);
+  if (range > stop) return stepToward(actor, target, stop, game);
   return { type: 'pass' };
 };
 
@@ -679,6 +722,17 @@ export const avoidStackedArrival = (game, actor, dx, dy) => {
   // clumsy attrition that thins firing clusters; avoiding it lets clusters
   // stay dense enough for last-stand massacres (measured 19.2% 4+-hull blasts).
   if (dx === 0 && dy === 0) return { dx, dy };
+  // Engagement-shape slice 2: the deconfliction floor is formation spacing,
+  // not the collision unit — a wing arrives as a formation, not a packing
+  // ring. Drones and garrison hulls keep the round-35 one-unit floor instead:
+  // a wing escorts at DRONE.escortDistance, inside spacing, and the node ring
+  // IS a garrison's formation — spacing would shove it out of its own node.
+  // (Drones keep arrival avoidance entirely; dropping it in an early slice-2
+  // cut measured as the round-27c drone collision share returning.) Tractor-
+  // linked hulls are exempt outright: a tow is one maneuvering pair.
+  if (maintainedTowPair(game, actor.id)) return { dx, dy };
+  const tight = isDrone(actor) || Boolean(strategyStation(game, actor));
+  const floor = tight ? 1 : FORMATION.allySpacing;
   const grid = game.gridSize ?? GRID_SIZE;
   const arrival = { x: actor.x + dx, y: actor.y + dy };
   // Round 35: deconflict against ALLIES only. 27c measured and rejected full
@@ -690,22 +744,48 @@ export const avoidStackedArrival = (game, actor, dx, dy) => {
   // ramming its own wingmate on the way to a shared target — so allies
   // deconflict their arrivals, and cross-alliance rams stay in the game.
   const stacked = (point) => game.ships
-    .some((other) => other.id !== actor.id && other.faction === actor.faction && isActive(other) && distance(point, other) < 1);
-  if (!stacked(arrival)) return { dx, dy };
+    .some((other) => {
+      if (other.id === actor.id || other.faction !== actor.faction || !isActive(other)) return false;
+      // At the formation floor, drones, starbases, and towed wingmates are not
+      // formation references; at the one-unit floor every ally counts.
+      if (floor === FORMATION.allySpacing && (isDrone(other) || isImmovable(other) || isTractorHeld(game, other))) return false;
+      return distance(point, other) < floor;
+    });
+  // Slice 2 changed that calculus: paired wings interleave with the enemy, and
+  // the measured endpoint overlaps quadrupled (2.43 -> 10.8 hulls/war) back to
+  // the volume Matt called inept in round 34. The cluster-thinning valve 27c
+  // protected is gone by other means now — formations, pairs, and objectives
+  // keep clusters loose — so a mover also avoids ending a stardate on top of a
+  // hostile hull when a clean landing exists inside its burn. When the melee
+  // leaves no clean point, the overlap still stands: combat, not seamanship.
+  const onEnemy = (point) => game.ships
+    .some((other) => other.id !== actor.id && other.faction !== actor.faction && isActive(other) && distance(point, other) < 1);
+  if (!stacked(arrival) && !onEnemy(arrival)) return { dx, dy };
   const capacity = movementCapacity(game, actor);
-  for (let radius = 1; radius <= 3; radius += 1) {
-    for (let angle = 0; angle < 8; angle += 1) {
-      const candidate = {
-        x: arrival.x + Math.round(Math.cos((angle * Math.PI) / 4) * radius),
-        y: arrival.y + Math.round(Math.sin((angle * Math.PI) / 4) * radius),
-      };
-      const step = { dx: candidate.x - actor.x, dy: candidate.y - actor.y };
-      if (candidate.x < 0 || candidate.y < 0 || candidate.x > grid || candidate.y > grid) continue;
-      if (Math.hypot(step.dx, step.dy) > capacity) continue;
-      if (!stacked(candidate)) return step;
+  const touches = (point) => game.ships
+    .some((other) => other.id !== actor.id && isActive(other) && distance(point, other) < 1);
+  const scan = (allowEnemyTouch) => {
+    for (let radius = 1; radius <= Math.max(3, Math.ceil(floor)); radius += 1) {
+      for (let angle = 0; angle < 8; angle += 1) {
+        const candidate = {
+          x: arrival.x + Math.round(Math.cos((angle * Math.PI) / 4) * radius),
+          y: arrival.y + Math.round(Math.sin((angle * Math.PI) / 4) * radius),
+        };
+        const step = { dx: candidate.x - actor.x, dy: candidate.y - actor.y };
+        if (candidate.x < 0 || candidate.y < 0 || candidate.x > grid || candidate.y > grid) continue;
+        if (Math.hypot(step.dx, step.dy) > capacity) continue;
+        if (stacked(candidate)) continue;
+        if (!allowEnemyTouch && touches(candidate)) continue;
+        return step;
+      }
     }
-  }
-  return { dx, dy };
+    return null;
+  };
+  // Prefer a landing that stacks on nobody; only if the formation floor leaves
+  // no clean point does the nudge fall back to ally-free — a deliberate enemy
+  // overlap (pursuit, tow-ram, sit-and-ram) stays combat, but seamanship never
+  // causes a ram.
+  return scan(false) ?? scan(true) ?? { dx, dy };
 };
 
 export const chooseAiAction = (game, shipId) => {

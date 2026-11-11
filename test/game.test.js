@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACE_KILLS, ARC, ARCS, CAPTAIN_NAMES, CRIPPLE, DOCKING, DRONE, ENCOUNTERS, GRID_SIZE, ION, LOADOUT, LOG_LIMIT, MISS_CHANCE, NEUTRAL_FACTION, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, REIMAGINED_WEAPON_DAMAGE_SCALE, SCENARIOS, SHIP_TEMPLATES, SPREAD, STALEMATE_ROUNDS, STANCE, STANCES, TERRAIN, VENDETTA } from '../game/constants.js';
+import { ACE_KILLS, ARC, ARCS, CAPTAIN_NAMES, CRIPPLE, DOCKING, DRONE, ENCOUNTERS, FORMATION, GRID_SIZE, ION, LOADOUT, LOG_LIMIT, MISS_CHANCE, NEUTRAL_FACTION, POWER, POWER_SINKS, PRIZE, RANGES, REIMAGINED_GRID_SIZE, REIMAGINED_SELF_DESTRUCT_SCALE, REIMAGINED_WEAPON_DAMAGE_SCALE, SCENARIOS, SHIP_TEMPLATES, SPREAD, STALEMATE_ROUNDS, STANCE, STANCES, TERRAIN, VENDETTA } from '../game/constants.js';
 import { createRng } from '../game/rng.js';
 import { scenarioOutcome, scenarioProgress } from '../game/scenarios.js';
 import { abbreviateNarrative, alertLevel, appendLog, applyHeading, arcFocusOf, arcSplit, arcsOf, bearingDeg, blastRadius, clampPowerAllocation, createGame, crewCapacity, deductArcsProportionally, defaultLoadout, distance, dockedAt, engineCapacity, facingOf, fleetCost, fleetHulls, getShip, grownArcs, hasArcs, inRadioContact, insideFeature, ionStormZone, isAce, isDrone, isNeutral, nebulaHides, nebulaRevealRange, normalizeDegrees, normalizeFleetSpec, powerAllocation, powerEffect, radioIntegrity, radioStormFactor, reactorOutput, segmentCrossesFeature, sensorRange, shieldCapacity, spawnEncounter, stanceOf, struckArc, strongestFederation, systemUnits, templateSystems, terrainAt, vendettaGrudge, volleyMissChance } from '../game/state.js';
@@ -1090,7 +1090,8 @@ test('an intercept order engages the named ship over a nearer enemy', () => {
     return { ...ship, x: 90, y: 90 };
   });
   assert.equal(chooseAiAction(setup(false), 'fed-cruiser-1').targetId, 'axis-flagship', 'a classic autopilot shoots the near target');
-  assert.notEqual(chooseAiAction(setup(true), 'fed-cruiser-1').targetId, 'cabal-flagship', 'fleet doctrine would not pick that target');
+  assert.ok(['axis-flagship', 'cabal-flagship'].includes(chooseAiAction(setup(true), 'fed-cruiser-1').targetId),
+    'fleet doctrine pairs onto an in-range enemy, front first');
 
   const ordered = { ...setup(true), orders: { 'fed-cruiser-1': { type: 'intercept', targetId: 'cabal-flagship' } } };
   const action = chooseAiAction(ordered, 'fed-cruiser-1');
@@ -1448,6 +1449,7 @@ test('an Axis captain will not detonate over its own fleet', () => {
 test('an Axis captain with nothing in range closes to contact', () => {
   const game = fleetWar('axis-ram', (ship) => {
     if (ship.id === 'axis-cruiser-1') return { ...ship, x: 10, y: 10, systems: { ...ship.systems, phasers: 0, photons: 0, tractor: 0 } };
+    if (ship.id === 'axis-flagship') return { ...ship, x: 60, y: 40 };
     if (ship.faction === 'Federation') return { ...ship, x: 60, y: 10 };
     return { ...ship, x: 90, y: 90 };
   });
@@ -1534,7 +1536,7 @@ test('a Bloc gunner executes the wounded it can hit, not one across the map', ()
 });
 
 test('a Cabal trickster tows a target into another enemy rather than shooting it', () => {
-  const game = fleetWar('cabal-tow', (ship) => {
+  const full = fleetWar('cabal-tow', (ship) => {
     if (ship.id === 'cabal-cruiser-1') return { ...ship, x: 10, y: 10 };
     if (ship.id === 'cabal-flagship') return { ...ship, x: 26, y: 10 };
     if (ship.id === 'fed-flagship') return { ...ship, x: 25, y: 10 };
@@ -1542,6 +1544,12 @@ test('a Cabal trickster tows a target into another enemy rather than shooting it
     if (ship.faction === 'Cabal') return ship;
     return { ...ship, x: 95, y: 95 };
   });
+  // A two-hull wing: the trickster holds pair slot 0, so the paired target is
+  // the doctrine front — the hull its tow will wreck on the Bloc scout.
+  const game = {
+    ...full,
+    ships: full.ships.filter((ship) => ['cabal-cruiser-1', 'cabal-flagship', 'fed-flagship', 'bloc-scout', 'xanadu'].includes(ship.id)),
+  };
   const action = chooseAiAction(game, 'cabal-cruiser-1');
   assert.equal(action.type, 'tractor', 'the Cabal reactor profile overcharges the tow onto the Bloc scout');
   assert.equal(action.targetId, 'fed-flagship');
@@ -5532,28 +5540,33 @@ test('arrival avoidance nudges stacked landings to a free point, Reimagined only
   const base = createGame({ seed: 'avoid', reimagined: true });
   const game = withShips(base, (ship) => {
     if (ship.id === 'fed-flagship') return { ...ship, x: 100, y: 100 };
-    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 110, y: 100 };
+    if (ship.id === 'fed-cruiser-1') return { ...ship, x: 105, y: 100 };
     return { ...ship, x: 250, y: 250 };
   });
   const actor = getShip(game, 'fed-flagship');
   const drone = { ...actor, id: 'avoid-drone', className: 'Drone' };
   assert.deepEqual(avoidStackedArrival(game, drone, 5, 5), { dx: 5, dy: 5 }, 'a free arrival is untouched');
-  const nudged = avoidStackedArrival(game, drone, 10, 0);
-  assert.notDeepEqual(nudged, { dx: 10, dy: 0 }, 'a stacked arrival moves');
-  const arrival = { x: drone.x + nudged.dx, y: drone.y + nudged.dy };
-  assert.ok(game.ships.every((other) => distance(arrival, other) >= 1), 'the nudged landing stacks on nobody');
+  // Slice 2 exempted drones from the spacing floor: a wing escorts inside it.
+  assert.deepEqual(avoidStackedArrival(game, drone, 10, 0), { dx: 10, dy: 0 }, 'a drone wing keeps its escort geometry');
   assert.deepEqual(avoidStackedArrival(game, drone, 0, 0), { dx: 0, dy: 0 }, 'the sit-and-ram hold stays');
   // Round 35: the 250-war attribution found the mechanism is fleet seamanship
   // (57% both-movers, 21% mover-into-sitter), not drones (3%) — so line hulls
-  // deconflict their arrivals too.
+  // deconflict their arrivals too; slice 2 raised that floor to formation spacing.
   const lineHull = avoidStackedArrival(game, actor, 10, 0);
   assert.notDeepEqual(lineHull, { dx: 10, dy: 0 }, 'line hulls deconflict stacked arrivals too');
   const lineArrival = { x: actor.x + lineHull.dx, y: actor.y + lineHull.dy };
-  assert.ok(game.ships.every((other) => other.id === actor.id || distance(lineArrival, other) >= 1),
-    'the nudged line-hull landing stacks on nobody');
+  assert.ok(game.ships.every((other) => other.id === actor.id || other.faction !== actor.faction
+    || distance(lineArrival, other) >= FORMATION.allySpacing),
+  'the nudged line-hull landing keeps formation spacing from every allied line hull');
   const withEnemy = { ...game, ships: [...game.ships, { ...actor, id: 'avoid-enemy', faction: 'Axis', x: 120, y: 100 }] };
-  assert.deepEqual(avoidStackedArrival(withEnemy, actor, 20, 0), { dx: 20, dy: 0 },
-    'cross-alliance rams stay in the game — enemy overlap is combat, not ineptitude');
+  const atEnemy = avoidStackedArrival(withEnemy, actor, 20, 0);
+  const enemyArrival = { x: actor.x + atEnemy.dx, y: actor.y + atEnemy.dy };
+  assert.ok(distance(enemyArrival, getShip(withEnemy, 'avoid-enemy')) >= 1,
+    'seamanship steers around a hostile endpoint when a clean landing exists');
+  // When the melee leaves no clean point the overlap still stands (measured:
+  // collisions stay above zero), and the deliberate rams — the sit-and-ram
+  // zero move above, the player's manual conn, Cabal tow-rams — never pass
+  // through this function's nudge at all.
   const classic = createGame({ seed: 'avoid' });
   const classicDrone = { ...getShip(classic, 'fed-flagship'), className: 'Drone' };
   assert.deepEqual(avoidStackedArrival(classic, classicDrone, 10, 0), { dx: 10, dy: 0 }, 'a classic war never reads it');

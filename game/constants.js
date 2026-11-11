@@ -1017,6 +1017,32 @@ export const PERSONALITIES = Object.freeze({
 });
 
 /**
+ * Formation discipline (engagement-shape slice 2, 2026-11-10): a wing arrives
+ * as a formation, not a packing ring. `allySpacing` is the floor autopilot
+ * arrivals keep between allied ships of the line — the round-35 one-unit stack
+ * deconfliction generalized into seamanship; `pairCap` is how many
+ * concentration hulls one target draws before the next target in the
+ * doctrine's priority order gets its pair; `classEdge` gives support hulls a
+ * stop range near the phaser edge so batteries hold their distance instead of
+ * drifting into the swarm. Drones, starbases, garrison posts, and tractor-
+ * linked pairs are exempt from the formation floor: a wing escorts at
+ * `DRONE.escortDistance`, a base is a dockyard rather than a wingmate, the
+ * node ring is a garrison's formation, and a tow is one maneuvering pair.
+ * Every figure is a harness dial.
+ */
+export const FORMATION = Object.freeze({
+  /** Allied ships of the line keep at least this between arrival points. */
+  allySpacing: 8,
+  /**
+   * Support-class stop range: artillery and carriers close only to here,
+   * holding the phaser edge instead of drifting into the swarm's point-blank.
+   * A measured danger-floor step-away beyond this made support hulls
+   * uncatchable (Bloc 45.6% winners) and was cut.
+   */
+  classEdge: Object.freeze({ Artillery: 26, Carrier: 20 }),
+});
+
+/**
  * War strategies (engagement-shape slice 1, 2026-11-10). A Reimagined alliance
  * draws one strategy per war on its own `${seed}:strategy` stream, independently
  * of the other alliances, so a seed replays the same war and no other stream

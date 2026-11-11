@@ -77,19 +77,32 @@ slice splits the field, it does not hide it.
 ## Slice 2 — Shapes to hold
 
 - **Ally spacing**: generalize `avoidStackedArrival`'s allied deconfliction
-  from a 1-unit stack to an `ALLY_SPACING` floor (~12 units, a dial), so a wing
-  arrives as a formation instead of a packing ring. Cross-alliance overlap
-  stays combat; the sit-and-ram and player rams stay.
-- **Paired targets**: a concentrating group assigns targets threat-ordered, at
-  most two attackers per target until every target in the group has two, then
-  nearest — ending the thirty-hull focus on one hull.
-- **Support standoffs**: artillery and carriers hold a class standoff near the
-  phaser edge instead of the swarm's point-blank, so a formation has depth.
-  Combat classes keep their doctrine standoff; alliance identity survives.
+  from a 1-unit stack to a `FORMATION.allySpacing` floor (shipped at 8 units
+  after 12 measured as the death of spread-torpedo play), so a wing arrives as
+  a formation instead of a packing ring. Drones and garrison posts keep the
+  one-unit floor; tows are exempt. Measured alongside: a mover also avoids a
+  *hostile* endpoint when a clean landing exists inside its burn — the paired
+  wings interleave, and endpoint overlaps had quadrupled to the volume Matt
+  called inept in round 34 — with the overlap standing when no clean point
+  remains, and the sit-and-ram, player, and tow rams untouched.
+- **Paired targets — measured and rejected**: pairCap 2, pairCap 3, and
+  pairing limited to the concentration doctrines each snowballed the Bloc
+  (43–48% winners against 39.2% without), and the shape audit gained nothing
+  spacing does not already deliver (0.51 vs 0.52 largest engagement). The
+  bullet is retired; the numbers live in the slice-2 review.
+- **Support standoffs**: artillery and carriers close only to a class stop
+  range (`FORMATION.classEdge`: 26 / 20) instead of the swarm's point-blank,
+  so a formation has depth. A measured danger-floor step-away made support
+  hulls uncatchable (Bloc 45.6%) and was cut. Concentration priority also
+  ranks stationed hulls last — node holders belong to the contest commitment.
 
-Success: mean nearest-ally gap inside the largest component ≥ 10 units; knot
-radius ≥ 40; sprites readable at the default camera without the fan-out ring
-carrying the load.
+Success, as adapted in [the slice-2 review](../reviews/2026-11-10-engagement-shape-slice2.md):
+mean nearest-ally gap 32.6 (from 23.5), largest engagement 0.52 (from 0.56),
+single-melee stardates 0.11, concurrent fights in 100/100 wars 152.9 units
+apart, collisions 1.72/war turn-based and 13.48 real-time (both down), winners
+Bloc 34.8 / Axis 25.2 / Federation 20.8 / Cabal 10.4 with the real-time mode at
+Bloc 39.2 — the leader shares are the standing watch items into slice 3. The
+knot's stillness (drift 2.1) is untouched by design: that is slice 3's target.
 
 ## Slice 3 — Combat that moves
 
