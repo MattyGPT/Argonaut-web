@@ -132,30 +132,33 @@ green ✓, and the tightest winner pack of the program (Bloc 32.4 / Axis 27.2 /
 Federation 19.2 / Cabal 11.2). Hopeless draws 8% (from 4%) is the slice's
 watch item.
 
-## Slice 4 — Sensor-honest captains
+## Slice 4 — Sensor-honest captains: RETIRED with measurements
 
-Captains act on what they have seen: each hull keeps a contact memory
-(position plus `seenAt`) fed by its own scanner reach at each boundary and
-shared one radio hop per stardate through allies in radio range (Xanadu's
-radio relays as it does for orders). Doctrine targets remembered contacts and
-moves to remembered positions; a volley still requires live scanner contact
-this stardate, exactly as operations already rule; contacts age out after a
-bounded number of stardates. The vendetta captain keeps its one innate knowl-
-edge — the hull that hunts Jason — because that is the scenario's story.
+Five measured iterations (boundary contact memory; paint as max(mapper,
+carried weapon); segment-sweep sightings; ghost-disproof plus pooled alliance
+reports; detection reach ×2) all stalemate the war: medians 67–225 stardates,
+hopeless draws 23–65%, timeouts 10–39%, against slice 3's 56 / 8% / 2%. On a
+320 field with 128–224 unit burns, a 40–60 unit sensor bubble cannot hold
+contact through teleport-per-stardate movement, and thinning the fog until
+wars conclude empties it back into omniscience. The full evidence table and
+the root-cause analysis live in
+[the retirement review](../reviews/2026-11-10-engagement-shape-slice4-retired.md);
+no game code shipped. The review also records the precondition for any future
+fog: change the movement/sensor ratio first — which is exactly what the
+reserve slice does.
 
-Success: first-contact median ≥ 3 (from 1); ≥ 80% of wars show a reconnaissance
-phase (movers, no fight) of ≥ 2 stardates; knot centroid position varies
-across seeds (report its spread); hopeless draws and timeouts watched against
-their 3%/1% rows.
+## Reserve slice — gate TRIPPED, now scheduled
 
-## Reserve slice — gated, not scheduled
-
-If after slices 1–4 the audit still shows first-contact median ≤ 2 or a
-largest-component share ≥ 0.50: a Reimagined-only rebalance of the speed/range
-ratio (engine field-scaling exponent below 1, or ranges scaled with the field)
-plus seeded rotation of the spawn sectors on a `${seed}:deployment` stream so
-the convergence axis and terrain interaction vary per seed. The gate and its
-measurement decide; the reserve is not shipped on taste.
+The gate reads the slice-3 audit: first-contact median 1 (≤ 2) and
+largest-component share 0.52 (≥ 0.50), so the reserve ships on its
+measurements: a Reimagined-only rebalance of the speed/range ratio (engine
+field-scaling exponent below 1, or ranges scaled with the field) plus seeded
+rotation of the spawn sectors on a `${seed}:deployment` stream so the
+convergence axis and terrain interaction vary per seed. Success: first
+contact median ≥ 2; knot drift up from 3.3; war length inside 45–70; the
+winner pack inside the slice-3 band or a named re-baseline; draws/timeouts
+inside 8%/2%; classic digit-for-digit; the scaffold green. And it is the
+precondition any revived fog attempt must cite.
 
 ## Delivery
 
