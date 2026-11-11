@@ -57,12 +57,44 @@ const keys = Object.freeze({
 /** Whether focus currently sits on something Tab is supposed to reach. */
 const isFocusable = (element) => Boolean(element?.matches?.('button, input, select, textarea, summary, a[href], [tabindex]'));
 
+/**
+ * The hull a pointer or focus is resting on. The minimap's dots carry ship ids too,
+ * but they are a camera rather than a contact: reading one from there would draw
+ * the card beside a hull the player is not pointing at.
+ */
+const restingShipId = (target) => {
+  const node = target?.closest?.('[data-ship-id]');
+  if (!node || node.closest?.('#minimap') || node.closest?.('#ship-menu')) return null;
+  return node.dataset.shipId ?? null;
+};
+
 export const bindInput = (root, dispatch, getCamera = () => ({ minX: 0, minY: 0, size: GRID_SIZE })) => {
   root.addEventListener('change', (event) => {
     if (event.target.id === 'contact-picker' && event.target.value) {
       dispatch({ type: 'map-select', targetId: event.target.value, fromContactPicker: true });
     }
   });
+  // Resting on a hull reads it: the app answers with the sensor card and the free
+  // sweep that identifies the contact. Only a CHANGE of hull is dispatched, so
+  // crossing the console, the terrain, or empty field costs nothing at all.
+  let resting = null;
+  const restOn = (target) => {
+    const id = restingShipId(target);
+    if (id === resting) return;
+    resting = id;
+    dispatch({ type: 'sensor-hover', targetId: id });
+  };
+  root.addEventListener('pointerover', (event) => {
+    if (document.querySelector('dialog[open]')) return;
+    restOn(event.target);
+  });
+  root.addEventListener('pointerleave', () => restOn(null));
+  // Keyboard parity: tabbing onto a hull reads the same card the pointer does.
+  root.addEventListener('focusin', (event) => {
+    if (document.querySelector('dialog[open]')) return;
+    restOn(event.target);
+  });
+  root.addEventListener('focusout', () => restOn(null));
   root.addEventListener('click', (event) => {
     // Refit choices live beside the order picker and carry the hull they are for.
     const refitButton = event.target.closest('[data-refit]');

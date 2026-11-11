@@ -1,7 +1,7 @@
 import { commandPriorities, commandPrioritiesMarkup, commandOrderLines } from './command-priorities.js';
 import { compactContactIds, previousCompactContacts } from './contacts.js';
 import { ARCS, DOCKING, FACTIONS, GRID_SIZE, POWER_SINKS, PRIZE, RANGES, REFITS, STANCES, TERRAIN } from '../game/constants.js';
-import { actionAvailability, canLaunchDrones, REALTIME_COOLDOWN } from '../game/actions.js';
+import { actionAvailability, canLaunchDrones, REALTIME_COOLDOWN, sensorContact } from '../game/actions.js';
 import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
 import { isOperation } from '../game/operations.js';
 import { cameraWindow, distanceScale, fieldTransform, minimapWindow, viewportFromWorld } from './camera.js';
@@ -570,35 +570,126 @@ const shipMenu = (game, actor, ship) => {
 };
 
 /**
- * Parks the menu beside the hull it grew from, flipping to the other side near a
+ * Parks a popover beside the hull it grew from, flipping to the other side near a
  * map edge and clamping so it never leaves the map or covers its own ship. The
  * tail keeps pointing at the hull's row once the box has been clamped.
  */
-const placeShipMenu = (menu, map, ship, win) => {
+const placeBesideHull = (node, map, ship, win, width = '16rem') => {
   const rect = map?.getBoundingClientRect?.();
   if (!rect?.width || !rect?.height) return;
-  menu.style.maxHeight = `${Math.max(100, rect.height - 8)}px`;
+  node.style.maxHeight = `${Math.max(100, rect.height - 8)}px`;
   const visibleWidth = Math.min(rect.width, (globalThis.window?.innerWidth ?? rect.right) - rect.left);
   // Absolute shrink-to-fit width changes when left changes near a clipped
   // narrow map. Fix the preferred width before measuring/clamping its position.
-  menu.style.width = '16rem';
-  menu.style.maxWidth = `${Math.max(100, visibleWidth - 8)}px`;
+  node.style.width = width;
+  node.style.maxWidth = `${Math.max(100, visibleWidth - 8)}px`;
   const at = viewportFromWorld(ship.x, ship.y, win);
   const px = at.vx * rect.width;
   const py = at.vy * rect.height;
   const gap = 16;
   let side = 'right';
   let left = px + gap;
-  if (left + menu.offsetWidth > visibleWidth - 4) {
+  if (left + node.offsetWidth > visibleWidth - 4) {
     side = 'left';
-    left = px - gap - menu.offsetWidth;
+    left = px - gap - node.offsetWidth;
   }
-  left = Math.max(4, Math.min(left, visibleWidth - menu.offsetWidth - 4));
-  const top = Math.max(4, Math.min(py - menu.offsetHeight / 2, rect.height - menu.offsetHeight - 4));
-  menu.style.left = `${left}px`;
-  menu.style.top = `${top}px`;
-  menu.dataset.side = side;
-  menu.style.setProperty('--tail-y', `${Math.max(10, Math.min(py - top, menu.offsetHeight - 10))}px`);
+  left = Math.max(4, Math.min(left, visibleWidth - node.offsetWidth - 4));
+  const top = Math.max(4, Math.min(py - node.offsetHeight / 2, rect.height - node.offsetHeight - 4));
+  node.style.left = `${left}px`;
+  node.style.top = `${top}px`;
+  node.dataset.side = side;
+  node.style.setProperty('--tail-y', `${Math.max(10, Math.min(py - top, node.offsetHeight - 10))}px`);
+};
+
+/** Whether the sensor card may own the field at all: the click menu, a resolution pause, and a war you merely watch all outrank it. */
+const cardAllowed = (game, view = {}) => !game.outcome && !isSpectator(game) && !view.battlePaused && !view.contextShipId;
+
+const CARD_WIDTH = '15rem';
+
+/** The camera window the map is drawing through, recomputed for a card refresh between full renders. */
+const mapWindowOf = (game, view = {}) => {
+  const rect = document.querySelector('#map')?.getBoundingClientRect?.();
+  const grid = game.gridSize ?? GRID_SIZE;
+  const isotropic = game.reimagined && rect?.width > 0 && rect?.height > 0;
+  return cameraWindow(grid, { ...view.camera, aspect: isotropic ? rect.width / rect.height : undefined });
+};
+
+/**
+ * The sensor card: what a working scanner resolves about the hull under the
+ * pointer, with no `6` and no click. It reads as the scan report always did —
+ * internals, arcs, heading, stance, and the captain once the sweep has recorded
+ * the hull — and it exists only inside scanner reach, so a gutted scanner, a
+ * starved sensors sink, or nebula static still decide how much of the field you
+ * can read. A wreck gets the hulk reading and nothing more: it cannot be scanned.
+ */
+const sensorCardHtml = (game, actor, ship, contact) => {
+  const wreck = ship.status === 'destroyed';
+  const captain = game.reimagined && game.scanned?.[ship.id] && !isDrone(ship) ? ship.captain : null;
+  const arcs = wreck ? null : arcReadout(game, ship);
+  const heading = wreck || !game.reimagined || !isActive(ship) || !hasArcs(game, ship) || !Number.isFinite(ship.facing)
+    ? null : Math.round(facingOf(game, ship));
+  const hostile = ship.faction !== actor.faction;
+  // The map already rings a hull that can shoot you; the card says so in words.
+  const threatens = !wreck && isActive(ship) && hostile && !isNeutral(ship)
+    && ((contact.distance <= RANGES.phasers && systemUnits(ship, 'phasers') > 0)
+      || (contact.distance <= RANGES.photons && systemUnits(ship, 'photons') > 0));
+  const lines = [
+    `${factionBadgeHtml(ship.faction)} ${ship.className.toLowerCase()} · ${wreck ? 'destroyed hulk' : ship.status}`,
+    `Range ${contact.distance.toFixed(1)} of ${Number(contact.range.toFixed(1))} scanner reach`,
+    ...(wreck ? [] : [
+      `Shields ${ship.shields}${arcs ? ` · arcs ${arcs}` : ''}${heading === null ? '' : ` · heading ${heading}°`}`,
+      `Crew ${ship.crew}`,
+    ]),
+    ...(captain ? [`Captain ${escapeJournal(captain)}${isAce(ship) ? ` · an ace, ${ship.kills} kills` : ''}`] : []),
+    ...(isDrone(ship) ? [`Unmanned fighter drone of the ${escapeJournal(getShip(game, ship.droneOf)?.name ?? 'fleet')}`] : []),
+    ...(game.reimagined && !wreck && isActive(ship) && hostile && !isNeutral(ship) ? [`Combat stance: ${stanceOf(game, ship)}`] : []),
+    ...(threatens ? ['<b class="card-threat">This hull can reach you now.</b>'] : []),
+    ...(isNeutral(ship) ? ['An unarmed neutral merchant — it will run from warships.'] : []),
+    ...(ship.encounter?.type === 'distress' && isActive(ship) && systemUnits(ship, 'engines') === 0
+      ? ['Broadcasting distress — engines gone, pleading for a tow.'] : []),
+    ...(ship.prize ? [`Prize of war — taken from the ${escapeJournal(ship.prize.from)} at stardate ${ship.prize.turn}.`] : []),
+  ];
+  const systems = wreck ? '' : `<div class="card-systems">${Object.entries(ship.systems)
+    .map(([name, units]) => `<span${units > 0 ? '' : ' class="down"'}>${cap(name)} <b>${units}</b></span>`).join('')}</div>`;
+  const foot = wreck
+    ? 'A wreck cannot be scanned — the sensors read the hulk only.'
+    : `Automatic sensor sweep${game.scanned?.[ship.id] ? ' — this hull is identified.' : ' — rest the pointer to identify it.'}`;
+  return `<h3>${escapeJournal(ship.name)}<span class="card-sweep" aria-hidden="true"></span></h3>`
+    + `<ul class="card-info">${lines.map((line) => `<li>${line}</li>`).join('')}</ul>${systems}`
+    + `<p class="card-foot">${foot}</p>`;
+};
+
+const sensorCardCache = new WeakMap();
+
+/**
+ * Draws, refreshes, or hides the sensor card for the hull the pointer is resting
+ * on. Cheap enough for the real-time frame loop: the markup is cached so an
+ * unchanged reading costs one comparison, and `place:false` skips the layout
+ * reads so a per-frame refresh never re-flows the card mid-burn.
+ */
+export const updateSensorCard = (game, view = {}, { place = true, win = null } = {}) => {
+  const card = document.querySelector('#sensor-card');
+  if (!card) return null;
+  const actor = getShip(game, game.playerShipId);
+  const ship = view.hoverShipId ? getShip(game, view.hoverShipId) : null;
+  const contact = actor && ship && ship.id !== actor.id && cardAllowed(game, view) && targetGeometryKnown(game, ship)
+    ? sensorContact(game, ship.id) : null;
+  if (!contact) {
+    if (sensorCardCache.get(card)) {
+      sensorCardCache.delete(card);
+      updateConsole(card, '');
+    }
+    card.removeAttribute?.('open');
+    return null;
+  }
+  const html = sensorCardHtml(game, actor, ship, contact);
+  if (sensorCardCache.get(card) !== html) {
+    sensorCardCache.set(card, html);
+    updateConsole(card, html);
+  }
+  card.setAttribute?.('open', '');
+  if (place) placeBesideHull(card, document.querySelector('#map'), ship, win ?? mapWindowOf(game, view), CARD_WIDTH);
+  return ship.id;
 };
 
 /**
@@ -1014,6 +1105,12 @@ export const renderGame = (game, view = {}) => {
     return offset ? `;--dx:${offset.dx}px;--dy:${offset.dy}px` : '';
   };
 
+  // A hull your scanner resolves trades its native tooltip for the sensor card:
+  // the browser's own bubble lands a second later on top of a readout that says
+  // strictly more, so only contacts the card cannot cover keep their title.
+  const cardReplacesTip = (ship) => cardAllowed(game, view) && ship.id !== game.playerShipId
+    && Boolean(sensorContact(game, ship.id));
+
   const shipHtml = game.ships.filter(isVisible).map((ship) => {
     if (ship.status === 'destroyed') {
       // Round 34: under sprite art the wreck is the commissioned hulk, snapped
@@ -1021,7 +1118,7 @@ export const renderGame = (game, view = {}) => {
       const wreckMark = view.shipArt === 'sprites'
         ? '<img class="wreck-sprite" src="assets/sprites/neutral/wreck.png" alt="" aria-hidden="true">'
         : '+';
-      return `<span class="wreck ${ship.faction}${compact.has(ship.id) ? ' compact-contact' : ''}" data-ship-id="${ship.id}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}" title="${escapeJournal(ship.name)}: destroyed · ${factionText(ship.faction)}" role="img" aria-label="${escapeJournal(ship.name)}, ${factionText(ship.faction)}, destroyed wreck">${wreckMark}${game.reimagined && view.shipArt === 'sprites' ? '<span class="contact-glyph" aria-hidden="true">+</span>' : ''}<span class="stack-tether" aria-hidden="true"></span>${factionBadgeHtml(ship.faction, { label: false })}</span>`;
+      return `<span class="wreck ${ship.faction}${compact.has(ship.id) ? ' compact-contact' : ''}" data-ship-id="${ship.id}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}"${cardReplacesTip(ship) ? '' : ` title="${escapeJournal(ship.name)}: destroyed · ${factionText(ship.faction)}"`} role="img" aria-label="${escapeJournal(ship.name)}, ${factionText(ship.faction)}, destroyed wreck">${wreckMark}${game.reimagined && view.shipArt === 'sprites' ? '<span class="contact-glyph" aria-hidden="true">+</span>' : ''}<span class="stack-tether" aria-hidden="true"></span>${factionBadgeHtml(ship.faction, { label: false })}</span>`;
     }
     const threat = threats.has(ship.id) ? ' threat' : '';
     const standing = orderFor(game, ship.id) ?? pendingOrderFor(game, ship.id);
@@ -1075,7 +1172,7 @@ export const renderGame = (game, view = {}) => {
     const selected = ship.id === view.contextShipId;
     const command = ship.id === game.playerShipId;
     const statusMark = ['vacant', 'surrendered'].includes(ship.status) ? `<span class="ship-state" aria-hidden="true">${ship.status === 'vacant' ? 'V' : 'S'}</span>` : '';
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}${heldClass}${useSprite ? ' has-sprite' : ''}${selected ? ' selected' : ''}${command ? ' command-ship' : ''}${compact.has(ship.id) ? ' compact-contact' : ''}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}${rotStyle}" data-ship-id="${ship.id}" title="${ship.name}: ${ship.status} · ${factionText(ship.faction)}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}" aria-label="${ship.name}, ${ship.faction}, ${ship.status}${selected ? ', selected' : ''}${command ? ', command ship' : ''}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}${useSprite ? `<img class="sprite" src="assets/sprites/${spriteFaction.toLowerCase()}/${SPRITE_SLUGS.get(ship.className)}.png" alt="" aria-hidden="true" draggable="false">` : `<span class="glyph">${glyph}</span>`}${game.reimagined && useSprite ? `<span class="contact-glyph" aria-hidden="true">${escapeJournal(glyph)}</span>` : ''}<span class="stack-tether" aria-hidden="true"></span>${factionBadgeHtml(ship.faction, { label: false })}${statusMark}${game.reimagined && threat ? '<span class="contact-threat" aria-hidden="true"></span>' : ''}${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}${held ? '<span class="tractor-pip" aria-hidden="true"></span>' : ''}</button>`;
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}${heldClass}${useSprite ? ' has-sprite' : ''}${selected ? ' selected' : ''}${command ? ' command-ship' : ''}${compact.has(ship.id) ? ' compact-contact' : ''}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}${rotStyle}" data-ship-id="${ship.id}"${cardReplacesTip(ship) ? '' : ` title="${ship.name}: ${ship.status} · ${factionText(ship.faction)}${captain ? ` — Captain ${captain}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}"`} aria-label="${ship.name}, ${ship.faction}, ${ship.status}${selected ? ', selected' : ''}${command ? ', command ship' : ''}${captain ? `, Captain ${captain}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}${useSprite ? `<img class="sprite" src="assets/sprites/${spriteFaction.toLowerCase()}/${SPRITE_SLUGS.get(ship.className)}.png" alt="" aria-hidden="true" draggable="false">` : `<span class="glyph">${glyph}</span>`}${game.reimagined && useSprite ? `<span class="contact-glyph" aria-hidden="true">${escapeJournal(glyph)}</span>` : ''}<span class="stack-tether" aria-hidden="true"></span>${factionBadgeHtml(ship.faction, { label: false })}${statusMark}${game.reimagined && threat ? '<span class="contact-threat" aria-hidden="true"></span>' : ''}${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}${held ? '<span class="tractor-pip" aria-hidden="true"></span>' : ''}</button>`;
   }).join('');
   // Tractor lock lines (Matt's call, 2026-09-25): the beam is physical. A held
   // hull you can see draws its lock back to the source even when a nebula hides
@@ -1129,7 +1226,7 @@ export const renderGame = (game, view = {}) => {
     updateConsole(menu, menuShip ? shipMenu(game, actor, menuShip) : '');
     if (menuShip) {
       menu.setAttribute?.('open', '');
-      placeShipMenu(menu, document.querySelector('#map'), menuShip, win);
+      placeBesideHull(menu, document.querySelector('#map'), menuShip, win);
       if (!wasOpen) {
         menu.querySelector?.('button:not(:disabled)')?.focus?.({ preventScroll: true });
         menu.scrollTop = 0;
@@ -1138,6 +1235,9 @@ export const renderGame = (game, view = {}) => {
       menu.removeAttribute?.('open');
     }
   }
+
+  // The sensor card rides the same field and yields to the menu that outranks it.
+  updateSensorCard(game, view, { win });
 
   if (focusedShipId && !menuShip) {
     [...(map.querySelectorAll?.('.ship[data-ship-id]') ?? [])].find((el) => el.dataset.shipId === focusedShipId)?.focus?.({ preventScroll: true });

@@ -759,6 +759,185 @@ body.classic #ship-menu .menu-sub {
   color: #9fdf9f;
 }
 
+/* The sensor card: what a working scanner resolves about the hull the pointer is
+   resting on, so the free scan is something you read instead of something you
+   order. It is a reading and not a menu — nothing in it is clickable, so it can
+   never take the click meant for the hull or the maneuver meant for the field
+   behind it. render.js places it in pixels beside the hull, exactly like the ship
+   menu, which it yields to whenever one is open. */
+#sensor-card {
+  position: absolute;
+  /* Under the ship menu (5): the reading must never cover a command. */
+  z-index: 4;
+  min-width: 9.5rem;
+  max-width: 15rem;
+  padding: .5rem .6rem .55rem;
+  background: linear-gradient(145deg, rgba(13, 34, 52, .96), rgba(6, 14, 26, .96));
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  box-shadow: 0 10px 30px #0008;
+  pointer-events: none;
+}
+
+#sensor-card:not([open]) {
+  display: none;
+}
+
+#sensor-card::before {
+  content: "";
+  position: absolute;
+  top: calc(var(--tail-y, 1.2rem) - 5px);
+  width: 9px;
+  height: 9px;
+  background: #0d2234;
+  transform: rotate(45deg);
+}
+
+#sensor-card[data-side="right"]::before {
+  left: -5px;
+  border-left: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+#sensor-card[data-side="left"]::before {
+  right: -5px;
+  border-right: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+}
+
+#sensor-card h3 {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  margin: 0 0 .3rem;
+  color: var(--cyan);
+  font-size: .78rem;
+}
+
+/* The sweep bar is the only motion in the card: the reading itself has to sit
+   still enough to be read while a battle moves underneath it. */
+#sensor-card .card-sweep {
+  position: relative;
+  flex: 1;
+  height: 2px;
+  overflow: hidden;
+  background: #123248;
+}
+
+#sensor-card .card-sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  animation: sensor-sweep 1.9s linear infinite;
+}
+
+@keyframes sensor-sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+
+#sensor-card .card-info {
+  margin: 0 0 .4rem;
+  padding: 0;
+  list-style: none;
+  color: #b9d0df;
+  font-size: .68rem;
+  line-height: 1.5;
+}
+
+#sensor-card .card-threat {
+  color: #ff8080;
+}
+
+#sensor-card .card-systems {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: .2rem;
+  margin-bottom: .4rem;
+  color: #a1bed0;
+  font-size: .63rem;
+}
+
+#sensor-card .card-systems span {
+  display: flex;
+  justify-content: space-between;
+  gap: .35rem;
+  padding: .16rem .3rem;
+  background: #09111f;
+}
+
+#sensor-card .card-systems b {
+  color: var(--cyan);
+}
+
+/* A dead subsystem is the reason to open the card at all, so it reads hot. */
+#sensor-card .card-systems span.down {
+  color: #7b95a6;
+}
+
+#sensor-card .card-systems span.down b {
+  color: #ff8080;
+}
+
+#sensor-card .card-foot {
+  margin: 0;
+  color: #7f9fb3;
+  font-size: .62rem;
+  line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #sensor-card .card-sweep::after { animation: none; }
+}
+
+body.classic #sensor-card {
+  background: #000;
+  border-color: #145014;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+body.classic #sensor-card::before {
+  background: #000;
+  border-color: #145014;
+}
+
+body.classic #sensor-card h3 {
+  color: #38ff38;
+}
+
+body.classic #sensor-card .card-info,
+body.classic #sensor-card .card-foot {
+  color: #9fdf9f;
+}
+
+body.classic #sensor-card .card-sweep {
+  background: #0d2a0d;
+}
+
+body.classic #sensor-card .card-sweep::after {
+  background: linear-gradient(90deg, transparent, #38ff38, transparent);
+}
+
+body.classic #sensor-card .card-systems {
+  color: #9fdf9f;
+}
+
+body.classic #sensor-card .card-systems span {
+  background: #041404;
+}
+
+body.classic #sensor-card .card-systems b {
+  color: #baffba;
+}
+
+body.classic #sensor-card .card-threat,
+body.classic #sensor-card .card-systems span.down b {
+  color: #ff8d8d;
+}
+
 .map-legend {
   display: flex;
   flex-wrap: wrap;

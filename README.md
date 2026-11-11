@@ -133,6 +133,14 @@ real-time combat commands use their simulation-time cycle. Scanning and
 other information commands are free. Plotting a real-time course or holding
 position is also free; movement takes simulation time.
 
+**Resting the pointer on a hull** inside working scanner reach reads it without a
+click: a sensor card beside the hull carries its class, status, range, shields and
+arcs, crew, subsystem damage, stance, and its captain once identified. The sweep is
+the free scan itself — the hull is marked scanned — so captains' names, ace stars,
+and the vendetta hunter's identity come from getting close enough to read rather
+than from a keystroke. A wreck reads as a hulk and can never be scanned, and a
+contact beyond scanner reach keeps the plain tooltip.
+
 `-`, `=`, and `Escape` ask for confirmation first, because none of them can be
 undone. Hyperspace takes no destination: you commit to the jump and emerge
 wherever it takes you, your shields weakened on arrival. That makes it a way out
@@ -482,8 +490,9 @@ commands and calibrated behavior.
 - **Every hull has a captain, and you have to earn their names.** A new Reimagined
   war tells you that a captain — by name — has sworn to hunt you down, but not
   which ship they command. Scanning a hull reveals who captains it, so finding
-  your hunter means getting inside scanner range of the enemy fleet. That is what
-  makes the scanner worth its hardware.
+  your hunter means getting inside scanner range of the enemy fleet — and resting
+  the pointer on a hull inside that reach identifies it exactly as the scan command
+  does. That is what makes the scanner worth its hardware.
 - **Aces and a deepening vendetta.** Two weapon or self-destruct kills make a
   captain an ace, and a scanned ace wears a ★ on the map. Every third kill the vendetta captain scores
   makes its volleys against your command ship bite 25% harder, so ignoring that
@@ -505,9 +514,10 @@ commands and calibrated behavior.
     the war is lost, whatever else survives. Use standing orders to screen
     the base and bring damaged ships back for dockyard repairs.
   - *Hunt the hunter* — the captain hunting you is named at the outset; their hull
-    is not. Scan the enemy fleet to identify them, then end them. If the war kills
-    your hunter before you have identified them, you lose: you never learned who
-    was coming for you. It is a race, and the scanner is the whole game.
+    is not. Scan the enemy fleet to identify them — or rest the pointer on a hull
+    inside scanner reach, which identifies it the same way — then end them. If the
+    war kills your hunter before you have identified them, you lose: you never
+    learned who was coming for you. It is a race, and the scanner is the whole game.
 
   The standard last-alliance-standing outcome takes precedence over a scenario
   objective; eliminating just one of several enemies does not win the war.
