@@ -2380,15 +2380,18 @@ body.classic .guide-body b {
 
 @media (max-width: 1100px), (max-height: 619px) { #terminal-members-list { max-height: none; overflow: visible; } }
 
-/* Optional teaching panels stay in normal flow and never cover the controls. */
-.learning-panel { margin: .65rem 1.4rem; padding: .7rem 1rem; border: 1px solid var(--line); border-radius: .45rem; background: var(--panel); font-size: .85rem; }
+/* Optional teaching panels stay in normal flow and never cover the controls.
+   They share #game-root's horizontal geometry — a centered 1680px box with
+   1.4rem side padding — so their edges line up with the journal and console
+   columns instead of running to the window edge. */
+.learning-panel { width: min(100% - 2.8rem, 1680px - 2.8rem); margin: .65rem auto; padding: .7rem 1rem; border: 1px solid var(--line); border-radius: .45rem; background: var(--panel); font-size: .85rem; }
 .learning-panel h2, .learning-panel h3 { margin: 0 0 .35rem; font-size: 1rem; color: var(--cyan); }
 .learning-panel p { margin: .3rem 0; }
 .learning-panel button, .practice-entry button, #guide-practice-chooser button { margin: .25rem .5rem .25rem 0; }
 .practice-entry summary { cursor: pointer; color: var(--cyan); }
 .practice-zone { position: absolute; border: 2px dashed var(--cyan); border-radius: 50%; color: var(--cyan); display: grid; place-items: center; font-size: .7rem; pointer-events: none; }
 body.practicing #game-root { height: auto; min-height: 38rem; }
-@media (max-width: 700px) { .learning-panel { margin: .5rem; } }
+@media (max-width: 700px) { .learning-panel { width: calc(100% - 1rem); margin: .5rem auto; } }
 .practice-entry button, #guide-practice-chooser button { display: block; width: 100%; text-align: left; }
 .practice-entry button span, #guide-practice-chooser button span { display: block; font-weight: normal; font-size: .8rem; margin-top: .3rem; }
 .practice-zone { z-index: 2; font-size: 12px; text-shadow: 0 1px 3px #000; }
