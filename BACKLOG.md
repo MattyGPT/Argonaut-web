@@ -15,6 +15,21 @@ November re-check corrected one shifted line citation and found that two
 in `CALIBRATION.md` at all; both are fixed below and the correction is recorded
 rather than silently made.
 
+**Reconciled again 2026-11-10 at the close of the engagement-shape program
+(PRs #108–#113, 963 tests passing).** Matt's play-test complaint — every
+Reimagined war compressing into one melee by stardate 2 — was measured, rooted,
+and worked slice by slice: the mid-war knot by shipped doctrine changes
+(strategies and contested objectives, formation spacing and support edges,
+rate-limited facing and the player's maneuver-and-volley window), and the
+opening by discovery (the scattered placement default interleaves the
+alliances at spawn; regional stays the opt-in, now with seeded sector
+rotation). Sensor-honest captains and a regional default were both built,
+measured, and retired with their numbers. The program's spec, five reviews,
+and six CALIBRATION rows carry the evidence; nothing below claimed the melee
+as an open item, so no backlog entry changes hands — but the real-time
+Bloc/Cabal winner shares, the 8% hopeless-draw row, and stardate-1 first
+contact remain open by name in `CALIBRATION.md` with their measured levers.
+
 ## The two supported rulesets
 
 New games offer **Classic** and **Reimagined**. Extended was retired on

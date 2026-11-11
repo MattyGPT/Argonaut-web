@@ -147,18 +147,41 @@ no game code shipped. The review also records the precondition for any future
 fog: change the movement/sensor ratio first — which is exactly what the
 reserve slice does.
 
-## Reserve slice — gate TRIPPED, now scheduled
+## Reserve slice — executed; the regional default and the cap retired
 
-The gate reads the slice-3 audit: first-contact median 1 (≤ 2) and
-largest-component share 0.52 (≥ 0.50), so the reserve ships on its
-measurements: a Reimagined-only rebalance of the speed/range ratio (engine
-field-scaling exponent below 1, or ranges scaled with the field) plus seeded
-rotation of the spawn sectors on a `${seed}:deployment` stream so the
-convergence axis and terrain interaction vary per seed. Success: first
-contact median ≥ 2; knot drift up from 3.3; war length inside 45–70; the
-winner pack inside the slice-3 band or a named re-baseline; draws/timeouts
-inside 8%/2%; classic digit-for-digit; the scaffold green. And it is the
-precondition any revived fog attempt must cite.
+The gate tripped on the slice-3 audit (first contact 1, largest engagement
+0.52) and the reserve ran its measurements, recorded in
+[the reserve review](../reviews/2026-11-10-engagement-shape-reserve.md). The
+audit of the first variant found the program's last root cause: the scattered
+placement default interleaves the alliances at spawn — the opening itself was
+the melee Matt watched. Four regional-default variants (uncapped and caps
+2.0 / 1.6 / 1.2, plus widened boxes) all converged as one mass per alliance
+(fights 1.8–1.9, ally gap 20–21) and fed the Bloc (40–50% winners); scatter's
+interleaved opening is what seeds the multi-front mid-war, so the default
+stays scatter and every calibration row keeps its basis. What ships: the
+`${seed}:deployment` sector rotation for regional (opt-in) wars, the
+`MOVE.scaleCap` dial at null with its measured caps recorded, and the
+placement default documented as the calibrated opening in code, README, and
+guide. The gate closes with its question answered: first contact lives in the
+spawn mix, and any future attempt on it must change the spawn or the
+information structure — the latter behind the movement rebalance the slice-4
+review names.
+
+## Program close
+
+Five PRs (#108 baseline and spec, #109 slice 1, #110 slice 2, #111 slice 3,
+#112 slice 4 retirement) plus the reserve PR carry the program. Final state
+against the baseline: largest engagement 0.64 → **0.52**; single-melee
+stardates 0.32 → **0.10**; concurrent fights in **100/100** wars over **65%**
+of engaged stardates, the two biggest **~150 units** apart; nearest-ally gap
+23.5 → **32.4**; collisions 1.33 → **1.49** turn-based and 18.41 → **13.5**
+real-time; winners Federation 44.8 → **Bloc 32.4 / Axis 27.2 / Federation
+19.2 / Cabal 11.2**, the tightest pack since round 24; war median 50 → 56
+inside the band; facing rate-limited so arcs are positional; the player's conn
+maneuvers and volleys in one stardate; classic digit-for-digit and the
+boundary-equivalence scaffold green at every step. What remains open is named
+in the CALIBRATION rows: the real-time Bloc/Cabal shares, the 8% hopeless-draw
+row, and first contact at stardate 1 — each with its measured lever list.
 
 ## Delivery
 

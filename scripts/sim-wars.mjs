@@ -26,7 +26,7 @@ import { REALTIME } from '../game/constants.js';
 import { enableBattleRecords } from '../game/battle-records.js';
 import { withFieldDiagnostics } from '../game/field-diagnostics.js';
 
-export const DEFAULTS = Object.freeze({ mode: 'all', seeds: 250, precision: false, regional: false, maxStardates: 600 });
+export const DEFAULTS = Object.freeze({ mode: 'all', seeds: 250, precision: false, regional: null, maxStardates: 600 });
 
 /**
  * Plays one war to its outcome (or the stardate cap) and returns its metrics.
@@ -44,7 +44,7 @@ export const DEFAULTS = Object.freeze({ mode: 'all', seeds: 250, precision: fals
  * avoidance happen mid-tick. It is a SEPARATE baseline — 'all' stays the
  * two turn-based modes so cross-commit comparisons keep their meaning.
  */
-export const runWar = (index, { mode = 'classic', precision = false, regional = false, maxStardates = DEFAULTS.maxStardates, recordBattles = false, onRecords, fieldDiagnostics, onState, seed } = {}) => {
+export const runWar = (index, { mode = 'classic', precision = false, regional = null, maxStardates = DEFAULTS.maxStardates, recordBattles = false, onRecords, fieldDiagnostics, onState, seed } = {}) => {
   if (!['classic', 'reimagined', 'realtime'].includes(mode)) throw new Error(`Unsupported mode: ${mode}. Choose classic, reimagined, or realtime.`);
   const realtime = mode === 'realtime';
   const reimagined = mode === 'reimagined' || realtime;
