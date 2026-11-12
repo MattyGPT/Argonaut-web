@@ -1,7 +1,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, getShip, ionStormZone, powerEffect, radioIntegrity, systemUnits } from '../game/state.js';
+import { createGame, crewCapacity, getShip, ionStormZone, powerEffect, radioIntegrity, systemUnits } from '../game/state.js';
 import { enableBattleRecords } from '../game/battle-records.js';
 import { resolveComputerTurns } from '../game/turns.js';
 import {
@@ -156,7 +156,29 @@ test('the engine hum pitch follows the engine allocation, and a classic hull sta
   const classicHum = engineHumModel(classic, own(classic));
   assert.equal(classicHum.effect, 1, 'powerEffect is 1 outside a Reimagined war');
   assert.equal(classicHum.frequency, nominal.frequency, 'a classic hull hums at the nominal pitch');
+  assert.equal(classicHum.state, 'nominal', 'and is never called starved: there is no dial in a classic war');
   assert.equal(classicHum.share, null, 'a classic hull has no reactor key, so no share is claimed');
+});
+
+test('a skeleton-crewed prize is named for its crew, not blamed on the power dial', () => {
+  const game = reimagined('audio-hum-manning');
+  const ship = own(game);
+  const complement = crewCapacity(ship);
+  // `manningEffect` halves engines and weapons for a prize below PRIZE.manningFloor
+  // of its complement. `powerEffect` folds that in, so reading the folded number
+  // alone would report a crew shortage as a starved allocation.
+  const prize = { ...ship, prize: true, crew: Math.max(1, Math.floor(complement * 0.1)) };
+  const hum = engineHumModel(game, prize);
+  assert.equal(hum.manning, 0.5, 'the fixture really is skeleton-crewed');
+  assert.equal(hum.state, 'skeleton-crewed', 'not "starved" — the dial is not the problem');
+  assert.equal(hum.dialled, 1, 'the allocation itself is untouched');
+  assert.ok(hum.frequency < engineHumModel(game, ship).frequency,
+    'and the hum still drops, because the engines really do deliver less');
+
+  const line = audioStateText({ engine: hum }).join(' ');
+  assert.match(line, /skeleton-crewed/, 'the prose uses the rules\' own word');
+  assert.match(line, /transporter transfer or the dockyard/, 'and names the remedy the rules actually offer');
+  assert.doesNotMatch(line, /starved/, 'it does not send the player to the power dial');
 });
 
 test('impact voices separate an arc that held, an arc already gutted, and damage that reached inside', () => {

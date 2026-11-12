@@ -27,7 +27,7 @@
  */
 import { POWER } from '../game/constants.js';
 import {
-  distance, ionStormZone, isActive, powerAllocation, powerEffect,
+  distance, ionStormZone, isActive, manningEffect, powerAllocation, powerEffect,
   radioIntegrity, radioStormFactor, reactorOutput, systemUnits,
 } from '../game/state.js';
 
@@ -123,14 +123,30 @@ export const engineHumModel = (game, ship) => {
   const effect = clamp(powerEffect(game, ship, 'engines'), 0, POWER.overcharge);
   const budget = reactorOutput(ship, game);
   const allocated = powerAllocation(game, ship).engines ?? 0;
+  // Separate what the player dialled from what the crew can actually deliver.
+  // `powerEffect` folds both together, and `manningEffect` halves the engines of a
+  // skeleton-crewed prize — calling that "starved" would send the player to the
+  // power dial when the rules' own remedy is a transporter transfer or the
+  // dockyard. Outside a Reimagined war both factors are 1, so a classic hull is
+  // always nominal and classic presentation is unchanged.
+  const need = POWER.need?.engines ?? 0;
+  const dialled = game?.reimagined && need > 0 ? allocated / need : 1;
+  const manning = manningEffect(game, ship, 'engines');
   return {
     audible: running,
+    // Pitch still tracks the folded effect, so a skeleton crew hums slower too —
+    // that is a real reduction in what the engines deliver, not a misattribution.
     frequency: ENGINE_FLOOR_HZ + ENGINE_SPAN_HZ * effect,
     effect,
+    dialled,
+    manning,
     share: budget > 0 ? allocated / budget : null,
     budget,
     allocated,
-    state: !running ? 'silent' : effect > 1 ? 'overcharged' : effect < 1 ? 'starved' : 'nominal',
+    state: !running ? 'silent'
+      : manning < 1 ? 'skeleton-crewed'
+        : dialled > 1 ? 'overcharged'
+          : dialled < 1 ? 'starved' : 'nominal',
   };
 };
 
@@ -261,7 +277,11 @@ export const audioStateText = ({ comms, engine, storm, settings } = {}) => {
   }
   if (engine) {
     if (!engine.audible) lines.push('Engine hum: silent — no working engine units.');
-    else if (engine.share === null) lines.push(`Engine hum: ${engine.frequency.toFixed(0)} Hz, nominal allocation.`);
+    else if (engine.state === 'skeleton-crewed') {
+      // Named the way the rules name it, with the remedy the rules actually offer:
+      // this is a crew shortage, not a power-dial problem.
+      lines.push(`Engine hum: ${engine.frequency.toFixed(0)} Hz — engines at ${Math.round(engine.manning * 100)}% effect, this prize is skeleton-crewed; a transporter transfer or the dockyard brings it up.`);
+    } else if (engine.share === null) lines.push(`Engine hum: ${engine.frequency.toFixed(0)} Hz, nominal allocation.`);
     else lines.push(`Engine hum: ${engine.frequency.toFixed(0)} Hz — engines ${engine.state}, ${Math.round(engine.share * 100)}% of the reactor budget.`);
   }
   if (storm) {

@@ -26,7 +26,7 @@ verified against the source and recorded in the digest's correction record. Spec
 Baseline: `main` at `f1050ce` (PR #117), clean, **983 tests passing**.
 After slice 1: **991 tests passing**, 12/12 enforced browser checks green.
 After P1 (#125): **1004 tests passing**, 15 enforced checks green.
-After P2 (this slice): **1015 tests passing**, 16 enforced checks green of 19
+After P2 (this slice): **1016 tests passing**, 16 enforced checks green of 19
 discovered, guide contract at 29 local links / 20 illustrated references / 33
 command types, and `git diff game/` empty for both P1 and P2 — neither moved the
 rules layer, so no CALIBRATION row was touched.
@@ -189,9 +189,9 @@ None of them changed a file.
       ambience, effects and alerts volumes with an effective mute, stored as a
       device preference in localStorage and never in a save, defaulting to unity
       so the existing soundtrack is unchanged. `git diff game/` is **empty**.
-      11 Node tests plus a new `check-audio` browser check that reads real
+      12 Node tests plus a new `check-audio` browser check that reads real
       `BiquadFilterNode` cutoffs back off the nodes, so the enforced suite is
-      **16 of 19**; `npm test` 1015/1015. Not done: no guide screenshot (hash-verified
+      **16 of 19**; `npm test` 1016/1016. Not done: no guide screenshot (hash-verified
       manifest, same follow-up as P1), traffic chirps rate-limited rather than
       per-message, and no per-hull spatialisation beyond the storm.
 - [ ] Slice 8 — P3 persistent damage and impact FX.

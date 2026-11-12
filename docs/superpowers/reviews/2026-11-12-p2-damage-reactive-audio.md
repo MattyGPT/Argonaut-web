@@ -98,6 +98,19 @@ state, never a save field"). `sound` itself stays on `game`, so the per-war
 "Tactical sound" tick remains the master enable and the save envelopes are
 untouched — the browser check asserts the volumes never appear in a save.
 
+**A skeleton-crewed prize is not reported as "starved".** `powerEffect` folds two
+unrelated things together: the allocation the player dialled, and `manningEffect`,
+which halves the engines and weapons of a prize below `PRIZE.manningFloor` of its
+complement. Reading only the folded number would have labelled a crew shortage as
+a starved allocation and sent the player to the power dial, when the rules' own
+remedy is a transporter transfer or the dockyard. The model now keeps `dialled`
+and `manning` separate and names the state `skeleton-crewed`, using the project's
+existing vocabulary and stating the remedy the rules actually offer. Pitch still
+tracks the folded `effect`, so the hum genuinely drops — that part is not a
+misattribution, the engines really do deliver less. Outside a Reimagined war both
+factors are 1, so a Classic hull is always nominal and is never called starved by
+a dial that does not exist there.
+
 **Defaults leave the existing soundtrack alone.** Effects and alerts default to
 gain 1.0, and a `GainNode` at unity is transparent, so a player who ticks Tactical
 sound and never opens the panel hears the volleys, hits and klaxon exactly as
@@ -132,10 +145,10 @@ round replay and terminal presentation voice nothing — the same as before.
 
 | Check | Result |
 | --- | --- |
-| `npm test` | **1015 pass, 0 fail** (11 new in `test/audio-model.test.js`, up from 1004) |
+| `npm test` | **1016 pass, 0 fail** (12 new in `test/audio-model.test.js`, up from 1004) |
 | `node scripts/check-guide-content.mjs` | passes; **29** local links (was 28 — the new guide cross-reference), 20 illustrated references, 33 command types |
-| Enforced browser suite | **16/16 pass**, 196.9 s cumulative — `check-audio` was picked up automatically by suite discovery, so the enforced suite grows from 15 to 16 of 19 |
-| `check-audio` stability | **9/9 consecutive runs green** (6 before the final edit, 3 after) |
+| Enforced browser suite | **16/16 pass**, 199.9 s cumulative — `check-audio` was picked up automatically by suite discovery, so the enforced suite grows from 15 to 16 of 19 |
+| `check-audio` stability | **no flake across 14 runs** during development, including four full-suite passes |
 | `git diff game/` | **empty** — no rules-layer change |
 
 No `npm run sim` was run. The guardrail ties the sim and a CALIBRATION row to
