@@ -136,8 +136,17 @@ try {
   const layouts = [];
   for (const [width, height, label] of [[1366, 768, 'desktop'], [1600, 1000, 'large'], [390, 844, 'narrow'], [800, 500, 'zoom-200']]) {
     await page.setViewportSize({ width, height });
-    await page.evaluate(() => window.targetFixture.render());
-    const geometry = await page.locator('#ship-menu').evaluate((menu) => {
+    // Resizing #map fires the app's ResizeObserver, which redraws with the app's
+    // own game and replaces this fixture's menu with one whose commands are all
+    // disabled. Let that redraw land first, then render and measure inside a
+    // single task: an observer callback cannot interleave with synchronous JS, so
+    // the fixture is guaranteed the last word. Two round-trips here were the whole
+    // flake — it failed roughly two runs in five, always at the second viewport,
+    // which is the first resize after the initial layout.
+    await page.waitForTimeout(150);
+    const geometry = await page.evaluate(() => {
+      window.targetFixture.render();
+      const menu = document.querySelector('#ship-menu');
       const button = menu.querySelector('button:not(:disabled)');
       if (!button) return { noEnabledCommand: true };
       // Narrow viewports scroll: the deliberate #game-root minimum that keeps the
@@ -151,9 +160,9 @@ try {
       return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, mapTop: map.top, mapBottom: map.bottom, mapLeft: map.left, mapRight: map.right, viewportWidth: innerWidth, horizontalOverflow: document.documentElement.scrollWidth > innerWidth, clickable: document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)?.closest('button') === button };
     });
     // Name this failure instead of throwing a TypeError from deep inside the
-    // evaluate: it means the fixture reached a state where every command in the
-    // menu is disabled, which is a fixture-determinism bug, not a layout one.
-    assert.equal(geometry.noEnabledCommand, undefined, `${label}: the ship menu has no enabled command, so the fixture's cooldown state is not deterministic`);
+    // evaluate. It means the app's resize redraw beat the fixture to the DOM, or
+    // the fixture genuinely reached a state with every command disabled.
+    assert.equal(geometry.noEnabledCommand, undefined, `${label}: the ship menu has no enabled command, so the fixture lost the race with the app's resize redraw`);
     assert.ok(geometry.top >= geometry.mapTop && geometry.bottom <= geometry.mapBottom + 1, `${label} menu stays in map`);
     assert.ok(geometry.left >= geometry.mapLeft && geometry.right <= geometry.mapRight + 1, `${label} menu stays in map width`);
     assert.ok(geometry.right <= geometry.viewportWidth + 1, `${label} menu stays within viewport width: ${JSON.stringify(geometry)}`);

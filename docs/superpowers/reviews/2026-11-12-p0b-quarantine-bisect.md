@@ -77,7 +77,7 @@ quarantined. It is user-visible: at 1600×1000 the page scrolls when it should
 not. It needs its own investigation, and it should not be closed by loosening
 the assertion further.
 
-### 2. `check-target-readiness` — flaky, two independent modes
+### 2. `check-target-readiness` — flaky, two independent modes. **RESOLVED 2026-11-12**
 
 - **(a) Below the fold at 390×844.** Measured: the menu occupies y 678–970 and
   the map y 674–974, in a viewport 844px tall. The first enabled command button
@@ -88,12 +88,34 @@ the assertion further.
   is the same deliberate `min-height` as above. **Fixed** by scrolling the
   control into view before hit-testing, which is what a reader does.
 - **(b) No enabled command at all.** Intermittently,
-  `menu.querySelector('button:not(:disabled)')` returns `null`, i.e. the fixture
-  reaches a state where every command in the menu is disabled. The fixture sets
-  `game.simTime = 1.45` and relies on cooldown expiry, so its setup is **not
-  deterministic**. This is a fixture bug, and until it is fixed the check cannot
-  be enforced in CI — a flaky check is worse than an absent one. Now surfaced as
-  a named assertion instead of a `TypeError` from inside an `evaluate`.
+  `menu.querySelector('button:not(:disabled)')` returned `null`.
+
+  **The first diagnosis of (b) was wrong, and is corrected here.** It was
+  recorded as "the fixture's cooldown setup is not deterministic", reasoning from
+  the fixture setting `game.simTime = 1.45` and relying on cooldown expiry.
+  Measurement contradicts that: over five runs the check failed twice, and both
+  times at `large` — the *second* entry in the viewport loop, i.e. the first
+  resize after the initial layout. A cooldown bug would not care which viewport
+  it was on.
+
+  The actual cause is the same race as `check-battle-journal`. `setViewportSize`
+  resizes `#map`, the `ResizeObserver` at `app.js:1776` calls `redraw()`, and the
+  app re-renders `#ship-menu` from its **own** game — in which no target is
+  selected, so every command is disabled. The check rendered the fixture and
+  measured it in **two separate round-trips**, and the observer's redraw landed in
+  the gap between them.
+
+  **Fixed** by rendering and measuring inside a *single* `page.evaluate`, after a
+  short settle wait so the app's redraw lands first. An observer callback cannot
+  interleave with synchronous JS, so the fixture is guaranteed the last word.
+  **8/8 runs green afterwards, against 3/5 before.** Un-quarantined.
+
+The general rule matters more than the individual fix: **a browser check that
+renders a private fixture and then asserts in a later round-trip is racing the
+app's own redraw, and will flake on any viewport change.** Render and measure in
+one task, or drive the app's real state. Items 3 and 5 below share this cause;
+for `check-battle-journal` the single-task fix is necessary but not sufficient,
+because that check also clicks and scrolls between renders.
 
 ### 3. `check-battle-journal` — structural race with the app's render loop
 
@@ -182,14 +204,25 @@ a single quarantined browser script.
 
 ## Recommended order for the remainder
 
-1. **Investigate the 1600×1000 overflow.** It is the only finding here that is a
-   probable user-visible defect rather than a stale test. Highest value.
-2. **`check-target-readiness` fixture determinism** — smallest remaining fix, and
-   it un-quarantines a check.
+1. ~~**Investigate the 1600×1000 overflow.**~~ **Closed 2026-11-12 (PR #122).**
+   It was a real layout regression, not a stale test: the desktop grid sized
+   itself from the viewport with `height: calc(100dvh - 6.2rem)`, which assumed
+   the topbar was the only in-flow block above it, while the Objective strip
+   (`#command-priorities`, PR #105) is a second one — so the whole console sat
+   119px below the fold. Fixed in the stylesheet with a flex column, guarded by a
+   new Node-level assertion in `test/layout-alignment.test.js` so it cannot
+   regress without a browser, and `check-combat-console` was un-quarantined.
+   See `2026-11-12-combat-console-overflow.md`.
+2. ~~**`check-target-readiness` fixture determinism**~~ **Closed 2026-11-12.**
+   Not a cooldown bug as first recorded — the same ResizeObserver race as item 3,
+   fixed by rendering and measuring in one task. 8/8 green, un-quarantined. See
+   §2 above, which carries the correction.
 3. **`check-faction-identity`**, together with pinned per-hull a11y assertions in
    `npm test`, so the accessibility surface has coverage that does not depend on
-   a browser script.
-4. **`check-combat-feedback`** — find the second stale geometry assumption.
+   a browser script. ← **next**
+4. **`check-combat-feedback`** — find the second stale geometry assumption. Check
+   whether it also races the resize redraw before assuming it is purely a
+   projection-math problem.
 5. **`check-battle-journal`** — rewrite onto the app's own seams. Largest.
 
 ## Lesson

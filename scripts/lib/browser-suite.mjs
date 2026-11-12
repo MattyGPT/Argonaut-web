@@ -39,14 +39,20 @@ const LAUNCHER_IMPORT = "from './lib/browser.mjs'";
  * whole console below the fold — fixed in the stylesheet, not in the assertion.
  * See docs/superpowers/reviews/2026-11-12-combat-console-overflow.md.
  *
+ * `check-target-readiness` left the same day. It was not a layout bug but a race:
+ * resizing the viewport fires the app's ResizeObserver, whose redraw replaced the
+ * fixture's menu with the app's own all-disabled one between two round-trips.
+ * Rendering and measuring now happen inside a single task, where an observer
+ * callback cannot interleave. 8/8 runs green afterwards, against 3/5 before.
+ * See docs/superpowers/reviews/2026-11-12-p0b-quarantine-bisect.md.
+ *
  * Remove an entry when its check passes. Do not add one without a dated review
  * recording the failure and the reason it is not being fixed now.
  */
 export const QUARANTINE = Object.freeze({
-  'check-battle-journal': 'Structural race with the app render loop: the fixture calls renderGame with a private game, which unhides #terrain-toggle, which resizes #map, which fires the ResizeObserver at app.js:1776 and re-renders the app\'s own game over it. Confirmed — the fixture yields 12 #command-log entries, then 0 within 100ms. Needs re-architecting to drive the app\'s own journal the way check-journal-lifecycle does',
+  'check-battle-journal': 'Structural race with the app render loop: the fixture calls renderGame with a private game, which unhides #terrain-toggle, which resizes #map, which fires the ResizeObserver at app.js:1776 and re-renders the app\'s own game over it. Confirmed — the fixture yields 12 #command-log entries, then 0 within 100ms. Needs re-architecting to drive the app\'s own journal the way check-journal-lifecycle does. The single-task render-and-measure fix that un-quarantined check-target-readiness is necessary here but not sufficient, because this check also clicks and scrolls between renders',
   'check-combat-feedback': 'Hardcodes a square camera window ({minX, minY, size}) that predates the isotropic projection, so the beam is compared against the wrong geometry. Deriving it through cameraWindow(..., aspect) as renderGame does is necessary but NOT sufficient — it still fails, so a second stale geometry assumption remains to be found',
   'check-faction-identity': 'Assumes a fanned-out stack tether points at the centre of #map. #103 made #map-field a square base layer whose side is the smaller viewport dimension, so the layer centre and the map centre no longer coincide on a non-square viewport. Also the only coverage the per-hull aria-label/role surface has anywhere',
-  'check-target-readiness': 'Flaky, with two distinct modes. (a) At 390x844 the deliberate #game-root minimum puts the menu below the fold, so elementFromPoint returns null for a point outside the viewport — now fixed by scrolling the control into view first. (b) Intermittently menu.querySelector("button:not(:disabled)") is null, i.e. the fixture reaches a state with no enabled command, so its cooldown setup is not deterministic. Now reported as a named assertion instead of a TypeError; (b) still needs fixing before this can be enforced',
 });
 
 /**
