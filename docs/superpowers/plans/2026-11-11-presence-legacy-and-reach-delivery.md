@@ -121,7 +121,16 @@ None of them changed a file.
 - [x] Slice 1 — P0 browser checks in CI. 12/17 enforced and green against the
       pinned browser; 5 quarantined with per-check triage; 8 new Node tests;
       `npm test` 991/991.
-- [ ] Slice 2 — P0b repair the five quarantined checks.
+- [ ] Slice 2 — P0b repair the five quarantined checks. **Partially delivered
+      2026-11-12**: all five bisected to a single commit — `d613faa` (PR #103,
+      2026-10-10, isotropic map projection) — with root causes established by
+      measurement in
+      [the bisect review](../reviews/2026-11-12-p0b-quarantine-bisect.md).
+      `check-combat-console` and `check-target-readiness` were improved but
+      neither is green yet, so nothing left the quarantine and no assertion was
+      weakened to make one pass. One **probable real regression** surfaced:
+      1114px of page content at 1600×1000 that the deliberate `min-height: 760px`
+      does not explain.
 - [ ] Slice 3 — S0 replay prerequisites.
 - [ ] Slice 4 — S1 retained action log.
 - [ ] Slice 5 — L1 war chronicle.
@@ -150,13 +159,23 @@ None of them changed a file.
 
 ## Current next sequence
 
-1. **Slice 2 (P0b) — repair the five quarantined checks.** Two of them
-   (`check-combat-feedback`, `check-faction-identity`) assert exactly the
-   beam-endpoint and tether geometry that P3 will touch, so P3 needs them green
-   first as a baseline. Each may also be a real regression rather than a stale
-   assertion; that determination is the point of the slice, and it has not been
-   made yet. `check-faction-identity` is also the only coverage the per-hull
-   accessibility surface has, which raises its priority further.
+1. **Slice 2 (P0b) — finish repairing the five quarantined checks.** The bisect
+   is done and the causes are known; what remains is ordered by value in
+   [the bisect review](../reviews/2026-11-12-p0b-quarantine-bisect.md):
+   1. the **1600×1000 content overflow** — the only finding that is a probable
+      user-visible defect rather than a stale test, so it comes first and must
+      not be closed by loosening the assertion;
+   2. `check-target-readiness` **fixture determinism** — the smallest remaining
+      fix, and it un-quarantines a check;
+   3. `check-faction-identity`, paired with **pinned per-hull `aria-label`/`role`
+      assertions in `npm test`** so the accessibility surface stops depending on
+      a single browser script;
+   4. `check-combat-feedback` — find the second stale geometry assumption;
+   5. `check-battle-journal` — rewrite onto the app's own seams. Largest.
+
+   Two of these (`check-combat-feedback`, `check-faction-identity`) assert the
+   beam-endpoint and tether geometry that P3 will touch, so P3 still needs them
+   green first as a baseline.
 2. **Slices 3–4 (S0, S1) — replay prerequisites and the action log.** S0 is now
    three small items rather than a re-baseline, and exact replay was demonstrated
    working, so the Reach track is the cheapest large capability left in the

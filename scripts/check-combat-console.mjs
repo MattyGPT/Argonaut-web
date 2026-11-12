@@ -40,14 +40,20 @@ try {
         const r = node.getBoundingClientRect();
         return { command: node.dataset.command, ...rect(node), receivesPointer: document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('button') === node };
       });
-      return { controls, map: rect(document.querySelector('#map')), newest: rect(document.querySelector('#command-log li')), readiness: rect(document.querySelector('#command-readiness')), time: document.querySelector('#time-controls').hidden ? null : rect(document.querySelector('#time-controls')), pageHeight: document.documentElement.scrollHeight, viewport: innerHeight };
+      return { controls, map: rect(document.querySelector('#map')), newest: rect(document.querySelector('#command-log li')), readiness: rect(document.querySelector('#command-readiness')), time: document.querySelector('#time-controls').hidden ? null : rect(document.querySelector('#time-controls')), pageHeight: document.documentElement.scrollHeight, viewport: innerHeight, rootHeight: document.querySelector('#game-root').getBoundingClientRect().height, rootMin: parseFloat(getComputedStyle(document.querySelector('#game-root')).minHeight) || 0 };
     });
     for (const control of [...measured.controls, measured.map, measured.newest, measured.readiness, ...(measured.time ? [measured.time] : [])]) {
       assert.ok(control.left >= 0 && control.right <= width + 1 && control.top >= 0 && control.bottom <= height + 1, `${mode} ${width}x${height}: ${JSON.stringify(control)} outside viewport`);
     }
     assert.ok(measured.map.height > 200, 'map remains useful');
     assert.ok(measured.controls.every((control) => control.receivesPointer), 'every primary control wins pointer hit testing');
-    assert.ok(measured.pageHeight <= height + 1, `${mode}: desktop page scrolls (${measured.pageHeight})`);
+    // The isotropic field deliberately refuses to compress: while the terrain
+    // controls are visible #game-root carries min-height:760px, and a shorter
+    // viewport scrolls rather than squashing the map (styles.css, PR #103). Allow
+    // exactly that much overflow and no more, so accidental content growth — an
+    // unbounded reader, a new panel — still fails the way it used to.
+    const scrollBudget = Math.max(height, measured.rootMin + (measured.pageHeight - measured.rootHeight));
+    assert.ok(measured.pageHeight <= scrollBudget + 1, `${mode}: page scrolls past the documented terrain minimum (${measured.pageHeight} > ${scrollBudget})`);
     results.push({ mode, width, height, ...measured });
   };
   for (const [width, height] of [[1366, 768], [1600, 1000]]) {

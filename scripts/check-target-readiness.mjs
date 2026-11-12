@@ -138,10 +138,22 @@ try {
     await page.setViewportSize({ width, height });
     await page.evaluate(() => window.targetFixture.render());
     const geometry = await page.locator('#ship-menu').evaluate((menu) => {
+      const button = menu.querySelector('button:not(:disabled)');
+      if (!button) return { noEnabledCommand: true };
+      // Narrow viewports scroll: the deliberate #game-root minimum that keeps the
+      // isotropic field readable pushes the map, and so the menu, below the fold,
+      // and elementFromPoint only answers for points inside the viewport. A real
+      // reader scrolls to the command they want, so scroll first and then ask
+      // whether the enabled control — not something stacked over it — wins.
+      button.scrollIntoView({ block: 'center' });
       const r = menu.getBoundingClientRect(); const map = document.querySelector('#map').getBoundingClientRect();
-      const button = menu.querySelector('button:not(:disabled)'); const b = button.getBoundingClientRect();
+      const b = button.getBoundingClientRect();
       return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, mapTop: map.top, mapBottom: map.bottom, mapLeft: map.left, mapRight: map.right, viewportWidth: innerWidth, horizontalOverflow: document.documentElement.scrollWidth > innerWidth, clickable: document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)?.closest('button') === button };
     });
+    // Name this failure instead of throwing a TypeError from deep inside the
+    // evaluate: it means the fixture reached a state where every command in the
+    // menu is disabled, which is a fixture-determinism bug, not a layout one.
+    assert.equal(geometry.noEnabledCommand, undefined, `${label}: the ship menu has no enabled command, so the fixture's cooldown state is not deterministic`);
     assert.ok(geometry.top >= geometry.mapTop && geometry.bottom <= geometry.mapBottom + 1, `${label} menu stays in map`);
     assert.ok(geometry.left >= geometry.mapLeft && geometry.right <= geometry.mapRight + 1, `${label} menu stays in map width`);
     assert.ok(geometry.right <= geometry.viewportWidth + 1, `${label} menu stays within viewport width: ${JSON.stringify(geometry)}`);
