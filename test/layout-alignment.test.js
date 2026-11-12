@@ -33,3 +33,34 @@ test('the narrow-screen override keeps the panels centered', () => {
   assert.ok(narrow, 'the 700px override for .learning-panel must exist');
   assert.match(narrow, /margin:[^;]*auto/);
 });
+
+// The desktop console used to size itself from the viewport alone —
+// `height: calc(100dvh - 6.2rem)` — which silently assumed the topbar is 6.2rem
+// tall and is the only block above the grid. The Objective strip every
+// Reimagined war shows (#command-priorities, unhidden by renderGame) is a second
+// in-flow block, and it pushed the whole console 119px below the fold: 1114px of
+// page at 1600x1000 while the check's scroll budget allowed 1000. The layout now
+// takes the space left above it instead; this locks that coupling so restyling
+// either rule fails here rather than in a screenshot.
+test('the desktop console fills the space left above it, not a hardcoded topbar height', () => {
+  const desktop = css.match(/@media \(min-width: 1101px\) and \(min-height: 620px\) \{([\s\S]*?)\n\}/)?.[1];
+  assert.ok(desktop, 'the desktop layout media query must exist');
+  assert.doesNotMatch(desktop, /#game-root \{[^}]*height:\s*calc\(/,
+    '#game-root must not derive its height from the viewport; it must take the space left above it');
+  assert.match(desktop, /body \{[^}]*display: flex;[^}]*flex-direction: column/,
+    'the page must stack its blocks in a column so the grid can take the remainder');
+  assert.match(desktop, /#game-root \{[^}]*flex:\s*1 1 0/,
+    '#game-root must grow into the space the topbar and any panel above it leave');
+  assert.match(desktop, /\.topbar, \.campaign-bar, #game-root, #sector-root \{ width: 100%; \}/,
+    'a flex item with an auto cross-axis margin is not stretched, so the centered blocks keep their width explicitly');
+  assert.match(desktop, /#game-root:has\(#terrain-toggle:not\(\[hidden\]\)\) \{ min-height: 760px; \}/,
+    'the deliberate isotropic minimum must still beat the fill on short desktops');
+});
+
+test('the teaching modes keep the grid content-sized instead of filling the viewport', () => {
+  for (const mode of ['practicing', 'learning']) {
+    const body = css.match(new RegExp(`body\\.${mode} #game-root \\{([^}]*)\\}`))?.[1];
+    assert.ok(body, `body.${mode} #game-root must exist`);
+    assert.match(body, /flex:\s*0 0 auto/, `body.${mode} #game-root must opt out of filling the viewport`);
+  }
+});
