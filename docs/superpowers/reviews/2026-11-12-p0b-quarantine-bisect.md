@@ -165,26 +165,72 @@ by assigning `target.style.left = '58%'` directly, now that #103 made
 (so a percentage of the layer is no longer a percentage of the map). That
 reverted rather than ship a partial fix that does not make the check pass.
 
-### 5. `check-faction-identity` — stale "tether points at the map centre"
+### 5. `check-faction-identity` — **a real app bug, partly fixed 2026-11-12**
 
-The check asserts a fanned-out stack tether ends at the true hull position,
-computed as the centre of `#map`:
+**The diagnosis originally recorded here was wrong, and is corrected.** It blamed
+#103's square base layer for making "the tether points at the map centre" false,
+and asserted the 1.22 hover scale was *not* the cause. Measurement says the
+opposite on both counts.
+
+The check asserts a fanned-out stack tether ends at the hull's true position:
 
 ```js
 Math.hypot(r.x + r.width / 2 + angle.a * length - (map.x + map.width / 2), ...)
 ```
 
-and derives `length` from `parseFloat(css.width) * shipScale * mapFieldScale`.
-#103's `fieldTransform` documents the change: *"Reimagined uses a square base
-layer whose side is the smaller viewport dimension; Classic retains its original
-rectangular layer."* On a non-square viewport the layer centre and the `#map`
-centre no longer coincide, so the expected endpoint is wrong. The 1.22
-hover/focus scale the assertion name mentions is **not** the cause — that rule
-dates from `9961edd` (2026-10-05), and the check passed for five days afterwards.
+Measured at zoom 8 on a crowded stack:
+
+| Quantity | Value |
+| --- | --- |
+| `--dx` (fan offset) | `101px` |
+| tether computed width | `82.78px` = 101 / 1.22 |
+| ship computed transform | `matrix(0.125, 0, 0, 0.125, -0.375, -13)` — scale **0.125**, i.e. `--invzoom` only |
+| `ship.matches(':focus-visible')` | **true** (and the same node, and `document.activeElement`) |
+| resulting error | **18.16px** = 101 × (1 − 1/1.22) |
+
+So the tether *was* shortened by the `/1.22` compensation, while the ship *was
+not* enlarged by 1.22. The map-centre assumption was fine — the y component came
+out exact.
+
+**Cause.** `.ship:focus-visible` scales by `invzoom × 1.22` (`styles.css:188`) and
+`.ship:focus-visible .stack-tether` divides the tether width by 1.22 to match
+(`:273`). But `.ship.compact-contact:hover, .ship.compact-contact:focus-visible`
+(`:2645`, added by #104) deliberately **drops the 1.22** — sensible, since
+enlarging one marker in a crowded stack would only cover its neighbours — at
+specificity (0,3,0), beating the generic (0,2,0). Nothing restored the tether
+width for that case, so **every hovered or keyboard-focused hull in a dense stack
+drew its leader line 18% short of the hull it points to.** That is a genuine
+visual defect, not a stale assertion, and the check was right to fail.
+
+**Fixed** by adding the missing counterpart so the compensation matches the scale
+actually applied, and pinned by `test/stack-tether-scale.test.js`, which parses
+`styles.css` and fails if any tether-shortening rule applies to a selector that
+is not enlarged. Verified the guard bites: removing the CSS fix fails 1 of its 3
+tests; restoring it passes 3/3. The tether assertion now passes.
+
+**Still open, and deliberately not "fixed".** With the tether corrected the check
+fails later, on:
+
+```js
+for (const check of selectionChecks) { …; assert.equal(check.outline, 'rgb(255, 93, 93)'); … }
+```
+
+`selectionChecks` loops `['modern', 'classic']` and asserts the **classic-only**
+selected-threat outline for both. `rgb(255, 93, 93)` is `#ff5d5d`, which comes
+from `body.classic .ship.selected.threat` (`styles.css:277`); the modern rule
+`.ship.selected { outline: 2px solid #fff }` (`:275`) gives white, which is what
+is measured. Those four selection rules (`:275`, `:276`, `:277`, `:287`) are
+**byte-identical between `9961edd` and today**, and the check passed at `9961edd`
+— which does not add up. Either the modern threat cue regressed somewhere the
+stylesheet does not show, or that bisect row is not trustworthy for this check.
+Until it is settled, the assertion stays as written: changing it to expect white
+in modern would be exactly the "weaken the check until it passes" move this slice
+is supposed to avoid, and if the modern threat cue really did regress, that edit
+would bury a user-visible loss of a targeting affordance.
 
 This one carries extra weight: per the
 [research digest](2026-11-11-program-research-findings.md), `role="img"` is
-asserted **zero times** in 991 Node tests and the composed per-ship `aria-label`
+asserted **zero times** in the Node suite and the composed per-ship `aria-label`
 is never pinned, so `check-faction-identity` is the *only* coverage the per-hull
 accessibility surface has. Repairing it should be paired with adding pinned
 `aria-label`/`role` assertions to `npm test`, so that surface stops depending on

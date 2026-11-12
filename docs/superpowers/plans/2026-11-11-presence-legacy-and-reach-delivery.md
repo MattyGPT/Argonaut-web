@@ -189,9 +189,19 @@ None of them changed a file.
       measuring inside a single task, where an observer callback cannot
       interleave. 8/8 runs green against 3/5 before; un-quarantined, so the
       enforced suite is now **14 of 17**;
-   3. `check-faction-identity`, paired with **pinned per-hull `aria-label`/`role`
-      assertions in `npm test`** so the accessibility surface stops depending on
-      a single browser script — **now next**;
+   3. `check-faction-identity` — **partly closed 2026-11-12, and it was a real
+      app bug rather than a stale test**: the stack tether drew 18% short of the
+      hull it points at whenever a crowded hull was hovered or keyboard-focused,
+      because `.ship.compact-contact:hover/:focus-visible` drops the 1.22×
+      enlargement while the generic tether rule still divided its width by 1.22.
+      Fixed in `styles.css`, pinned by `test/stack-tether-scale.test.js`
+      (verified to fail without the fix). **Still open:** the check also asserts
+      the classic-only selected-threat outline for *both* themes, while modern
+      has used a white outline since `9961edd` — which does not square with the
+      check passing at `9961edd`, so it is not yet known whether that assertion
+      was ever right or the modern threat cue regressed. Left as written rather
+      than weakened. The paired **pinned per-hull `aria-label`/`role` assertions
+      in `npm test`** are still outstanding and remain the point of this item;
    4. `check-combat-feedback` — find the second stale geometry assumption, and
       check whether it also races the resize redraw before assuming it is purely
       projection math;

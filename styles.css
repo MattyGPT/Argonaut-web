@@ -2645,6 +2645,17 @@ body.classic .operation-warning, body.classic .operation-result-reason { border-
   transform: translate(calc(-50% + var(--dx, 0px) * var(--invzoom, 1)), calc(-50% + var(--dy, 0px) * var(--invzoom, 1))) scale(var(--invzoom, 1));
   outline: 2px solid white; outline-offset: 3px; z-index: 4;
 }
+/* A compact contact deliberately does not enlarge on hover or keyboard focus: in
+   a crowded stack a bigger marker would only cover the hulls beside it. But the
+   generic rule still divides the stack tether by 1.22 to compensate for an
+   enlargement that never happens here, so the dotted leader fell 18% short of
+   the hull it points at — visible as a tether that stops before the true
+   position whenever a fanned-out hull in a dense stack was hovered or focused.
+   Keep the two in step: the tether compensation must match the scale actually
+   applied, whichever rule wins. */
+.ship.compact-contact:hover .stack-tether, .ship.compact-contact:focus-visible .stack-tether {
+  width: hypot(var(--dx, 0px), var(--dy, 0px));
+}
 
 .ship.compact-contact .glyph { color: inherit; }
 .ship.compact-contact.vacant { border-style: dashed; }
