@@ -127,10 +127,19 @@ None of them changed a file.
       measurement in
       [the bisect review](../reviews/2026-11-12-p0b-quarantine-bisect.md).
       `check-combat-console` and `check-target-readiness` were improved but
-      neither is green yet, so nothing left the quarantine and no assertion was
+      neither was green yet, so nothing left the quarantine and no assertion was
       weakened to make one pass. One **probable real regression** surfaced:
       1114px of page content at 1600×1000 that the deliberate `min-height: 760px`
       does not explain.
+      **Item 1 of that regression closed 2026-11-12**: the overflow was the
+      Objective strip every Reimagined war shows (`#command-priorities`), a
+      second in-flow block above a grid whose desktop height was hardcoded from
+      the viewport; the stylesheet now lets the grid take the space left above
+      it, 1114px → 1000px at 1600×1000 with the deliberate minimum intact, and
+      `check-combat-console` left the quarantine — measured in
+      [the overflow review](../reviews/2026-11-12-combat-console-overflow.md),
+      guarded by two new `test/layout-alignment.test.js` tests, `npm test`
+      993/993 and 13/13 enforced browser checks. Four remain quarantined.
 - [ ] Slice 3 — S0 replay prerequisites.
 - [ ] Slice 4 — S1 retained action log.
 - [ ] Slice 5 — L1 war chronicle.
@@ -162,11 +171,13 @@ None of them changed a file.
 1. **Slice 2 (P0b) — finish repairing the five quarantined checks.** The bisect
    is done and the causes are known; what remains is ordered by value in
    [the bisect review](../reviews/2026-11-12-p0b-quarantine-bisect.md):
-   1. the **1600×1000 content overflow** — the only finding that is a probable
-      user-visible defect rather than a stale test, so it comes first and must
-      not be closed by loosening the assertion;
-   2. `check-target-readiness` **fixture determinism** — the smallest remaining
-      fix, and it un-quarantines a check;
+   1. ~~the **1600×1000 content overflow**~~ — **closed 2026-11-12**: it was a
+      real layout regression, the Objective strip above a grid whose desktop
+      height was hardcoded from the viewport; fixed in the stylesheet, not by
+      loosening the assertion, and `check-combat-console` left the quarantine —
+      [the overflow review](../reviews/2026-11-12-combat-console-overflow.md);
+   2. `check-target-readiness` **fixture determinism** — now next: the smallest
+      remaining fix, and it un-quarantines a check;
    3. `check-faction-identity`, paired with **pinned per-hull `aria-label`/`role`
       assertions in `npm test`** so the accessibility surface stops depending on
       a single browser script;

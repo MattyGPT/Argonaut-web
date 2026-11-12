@@ -1265,7 +1265,21 @@ body.classic .legend-swatch.stance-evasive { background: #40e0ff; box-shadow: no
 body.classic .console-section summary { color: inherit; }
 
 @media (min-width: 1101px) and (min-height: 620px) {
-  #game-root { height: calc(100dvh - 6.2rem); padding-bottom: 1rem; grid-template-rows: minmax(0, 1fr) minmax(6rem, .2fr); }
+  /* The console fills whatever vertical space is left below the topbar and any
+     other in-flow block above the grid: the Objective strip every Reimagined
+     war shows (#command-priorities), the campaign bar, a teaching panel. The
+     previous `height: calc(100dvh - 6.2rem)` sized #game-root from the viewport
+     alone, which silently assumed the topbar is 6.2rem tall and is the only
+     thing above it. Neither holds: the Objective strip pushed the whole console
+     119px below the fold (1114px of page at 1600x1000, 1194px at 1920x1080),
+     and a topbar that wraps to two rows overflows the same way. Flexbox states
+     the real rule — the grid takes the rest — and the documented min-height
+     below still wins on short desktops, so the field never compresses. */
+  body { display: flex; flex-direction: column; min-height: 100dvh; }
+  /* A flex item with an auto cross-axis margin is not stretched, so the
+     centered blocks keep the width they have in block flow. */
+  .topbar, .campaign-bar, #game-root, #sector-root { width: 100%; }
+  #game-root { flex: 1 1 0; min-height: 0; padding-bottom: 1rem; grid-template-rows: minmax(0, 1fr) minmax(6rem, .2fr); }
   .map-panel { display: flex; flex-direction: column; min-height: 0; }
   .map-panel > .panel-title, .map-legend { flex: 0 0 auto; }
   #map { flex: 1 1 auto; min-height: 0; aspect-ratio: auto; }
@@ -2569,7 +2583,9 @@ body.classic .guide-body b {
 .learning-panel button, .practice-entry button, #guide-practice-chooser button { margin: .25rem .5rem .25rem 0; }
 .practice-entry summary { cursor: pointer; color: var(--cyan); }
 .practice-zone { position: absolute; border: 2px dashed var(--cyan); border-radius: 50%; color: var(--cyan); display: grid; place-items: center; font-size: .7rem; pointer-events: none; }
-body.practicing #game-root { height: auto; min-height: 38rem; }
+/* The teaching modes keep the grid content-sized rather than filling the
+   viewport: the panels above it need the room, and the page scrolls naturally. */
+body.practicing #game-root { height: auto; min-height: 38rem; flex: 0 0 auto; }
 @media (max-width: 700px) { .learning-panel { width: calc(100% - 1rem); margin: .5rem auto; } }
 .practice-entry button, #guide-practice-chooser button { display: block; width: 100%; text-align: left; }
 .practice-entry button span, #guide-practice-chooser button span { display: block; font-weight: normal; font-size: .8rem; margin-top: .3rem; }
@@ -2579,7 +2595,7 @@ body.practicing #game-root { height: auto; min-height: 38rem; }
 .engagement-debrief summary:focus-visible, .service-history summary:focus-visible, .campaign-memorial summary:focus-visible, .campaign-debrief-archive summary:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 .engagement-debrief ul, .service-history ul, .campaign-memorial ul { padding-left: 1.2rem; }
 .engagement-debrief p, .service-history p { margin: .5rem 0; }
-body.learning #game-root { height: auto; min-height: 38rem; }
+body.learning #game-root { height: auto; min-height: 38rem; flex: 0 0 auto; }
 #sector-side { min-width: 0; }
 @media (min-width: 961px) { #sector-root { grid-template-columns: minmax(0, 1.6fr) minmax(0, .8fr); } }
 /* The isolated operation remains readable above either presentation theme. */
