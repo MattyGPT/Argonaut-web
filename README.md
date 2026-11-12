@@ -652,7 +652,19 @@ prior war or campaign without transferring practice hulls or credits.
   journal entries retain the allegiance known when the event occurred.
 - **Sound** — enable tactical sound in `New game` for distinct phaser, photon,
   explosion, and miss effects (WebAudio, no assets). A klaxon sounds on the
-  transition into RED alert, not continuously while you sit there.
+  transition into RED alert, not continuously while you sit there. The soundtrack
+  is also a model of your own hull rather than a set of beeps: incoming fleet
+  traffic narrows in band as your radio units are knocked out and falls silent
+  when none survive — the same rule that abbreviates the prose, so a burned-out
+  radio sounds burned out; the engine hum rises when you overcharge the engine
+  sink and drops when you starve it; ion-storm static is full and centred in the
+  jamming core and half-strength and panned toward the eye in the outer ring; and
+  a blow on your own hull sounds different depending on whether a live shield arc
+  threw it, whether it walked through an arc that was already gutted, or whether
+  it reached the internals. The top-bar **Audio** button sets separate ambience,
+  effects and alert volumes with an effective mute — stored on this device, never
+  in a save file — and states every one of those cues in words, so nothing in the
+  soundtrack is audio-only.
 - **Impact juice** — phaser hits flash where they land and the map shakes when a
   volley lands on your command ship. Both are suppressed under
   `prefers-reduced-motion`, and nothing in the rules reads them.

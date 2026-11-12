@@ -1803,6 +1803,46 @@ body.classic #tow-risk { color: inherit; }
   line-height: 1.5;
 }
 
+/* Slice P2 — the audio panel: three bus volumes, then the prose that states what
+   the sound is currently reporting, so no cue is audio-only. Colours come from
+   the theme variables, so the classic view re-skins it for free. */
+.audio-volume-row {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+}
+
+.audio-volume-row input[type=range] { flex: 1 1 auto; min-width: 0; }
+
+.audio-volume-row output {
+  flex: 0 0 3.2rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--cyan);
+}
+
+.audio-state {
+  border-top: 1px solid var(--line);
+  padding-top: .65rem;
+}
+
+.audio-state h3 {
+  margin: 0 0 .4rem;
+  color: var(--cyan);
+  font-size: .74rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+#audio-state-list {
+  margin: 0 0 .45rem;
+  padding-left: 1.05rem;
+  display: grid;
+  gap: .28rem;
+  font-size: .76rem;
+  line-height: 1.45;
+}
+
 .command-control { display: grid; align-content: start; gap: .25rem; min-width: 0; }
 .command-control > button { width: 100%; }
 .action-explanation { display: block; color: #b9d2e1; font-size: .72rem; line-height: 1.4; overflow-wrap: anywhere; }
