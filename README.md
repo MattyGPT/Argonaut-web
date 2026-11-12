@@ -72,12 +72,15 @@ reason. CI runs the suite against the pinned browser that
 `npx playwright install chromium` provides (`BROWSER_MANAGED=1`), because these
 checks assert geometry and `:focus-visible` behavior, which vary by browser
 version; locally the launcher falls back to an installed Edge, Chrome or
-Chromium. Four checks are currently quarantined — listed with their failures in
-`scripts/lib/browser-suite.mjs` and triaged in the
-[browser-check CI review](docs/superpowers/reviews/2026-11-11-browser-check-ci.md);
-a fifth, `check-combat-console`, left the list on 2026-11-12 when the layout
-regression it caught was fixed
-([review](docs/superpowers/reviews/2026-11-12-combat-console-overflow.md)).
+Chromium. Three checks are currently quarantined — listed with their established
+causes in `scripts/lib/browser-suite.mjs` and triaged in the
+[bisect review](docs/superpowers/reviews/2026-11-12-p0b-quarantine-bisect.md),
+which traces all of them to a single commit (PR #103, the isotropic map
+projection). Two have since left the list: `check-combat-console` on 2026-11-12,
+when the layout regression it caught was fixed in the stylesheet
+([review](docs/superpowers/reviews/2026-11-12-combat-console-overflow.md)), and
+`check-target-readiness` the same day, once its race with the app's resize redraw
+was closed.
 
 To reproduce
 the deterministic whole-war balance checks:

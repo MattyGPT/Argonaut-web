@@ -139,7 +139,14 @@ None of them changed a file.
       `check-combat-console` left the quarantine — measured in
       [the overflow review](../reviews/2026-11-12-combat-console-overflow.md),
       guarded by two new `test/layout-alignment.test.js` tests, `npm test`
-      993/993 and 13/13 enforced browser checks. Four remain quarantined.
+      993/993 and 13/13 enforced browser checks.
+      **Item 2 closed 2026-11-12 as well**: `check-target-readiness` was not a
+      cooldown-determinism bug as first recorded, but the same `ResizeObserver`
+      race — the viewport resize redraws the app's own all-disabled menu over the
+      fixture between two round-trips. Rendering and measuring now happen in one
+      task. 8/8 runs green against 3/5 before, so it left the quarantine too and
+      the enforced suite is **14 of 17**. Three remain: `check-battle-journal`,
+      `check-combat-feedback`, `check-faction-identity`.
 - [ ] Slice 3 — S0 replay prerequisites.
 - [ ] Slice 4 — S1 retained action log.
 - [ ] Slice 5 — L1 war chronicle.
@@ -176,12 +183,18 @@ None of them changed a file.
       height was hardcoded from the viewport; fixed in the stylesheet, not by
       loosening the assertion, and `check-combat-console` left the quarantine —
       [the overflow review](../reviews/2026-11-12-combat-console-overflow.md);
-   2. `check-target-readiness` **fixture determinism** — now next: the smallest
-      remaining fix, and it un-quarantines a check;
+   2. ~~`check-target-readiness` **fixture determinism**~~ — **closed
+      2026-11-12**: not a cooldown bug as first recorded, but the same
+      `ResizeObserver` race as `check-battle-journal`. Fixed by rendering and
+      measuring inside a single task, where an observer callback cannot
+      interleave. 8/8 runs green against 3/5 before; un-quarantined, so the
+      enforced suite is now **14 of 17**;
    3. `check-faction-identity`, paired with **pinned per-hull `aria-label`/`role`
       assertions in `npm test`** so the accessibility surface stops depending on
-      a single browser script;
-   4. `check-combat-feedback` — find the second stale geometry assumption;
+      a single browser script — **now next**;
+   4. `check-combat-feedback` — find the second stale geometry assumption, and
+      check whether it also races the resize redraw before assuming it is purely
+      projection math;
    5. `check-battle-journal` — rewrite onto the app's own seams. Largest.
 
    Two of these (`check-combat-feedback`, `check-faction-identity`) assert the
