@@ -5,6 +5,7 @@ import { actionAvailability, canLaunchDrones, REALTIME_COOLDOWN, sensorContact }
 import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
 import { isOperation } from '../game/operations.js';
 import { cameraWindow, distanceScale, fieldTransform, minimapWindow, viewportFromWorld } from './camera.js';
+import { schematicHtml } from './schematic.js';
 import { stormCore, terrainMaterial } from './terrain-art.js';
 import { drawMove } from './fx.js';
 import {
@@ -566,7 +567,9 @@ const shipMenu = (game, actor, ship) => {
   const note = commands || orders
     ? ''
     : `<p class="menu-sub">${own ? 'Your command ship — open another hull to act on it.' : 'Nothing can reach this hull.'}</p>`;
-  return `<h3>${ship.name}</h3><ul class="menu-info">${lines.map((line) => `<li>${line}</li>`).join('')}</ul>${commands ? `<div class="menu-grid">${commands}</div>` : ''}${orders}${stanceBlock}${helmBlock}${note}`;
+  // The schematic goes last: the menu's job is to let the player act, so the
+  // command grid stays above the fold and the interior readout extends below it.
+  return `<h3>${ship.name}</h3><ul class="menu-info">${lines.map((line) => `<li>${line}</li>`).join('')}</ul>${commands ? `<div class="menu-grid">${commands}</div>` : ''}${orders}${stanceBlock}${helmBlock}${schematicHtml(game, ship)}${note}`;
 };
 
 /**

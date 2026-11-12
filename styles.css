@@ -2684,3 +2684,32 @@ body.classic .operation-warning, body.classic .operation-result-reason { border-
 .priority-orders span { display: block; margin-top: .2rem; }
 .priority-pending { color: #f0d093; }
 body.classic .priority-objective strong, body.classic .priority-pending { color: inherit; }
+
+/* The hull interior schematic: a picture of the arcs, systems, complement and
+   reactor distribution the player was previously reading as bare numbers. Rows
+   are label / bar / value so nothing is graphics-only, and the panel scrolls
+   inside the menu rather than pushing the command grid off screen. */
+.schematic { margin-top: .8rem; padding-top: .6rem; border-top: 1px solid var(--line); max-height: 18rem; overflow-y: auto; }
+.schematic-title { margin: 0 0 .5rem; font-size: .95rem; letter-spacing: .04em; text-transform: uppercase; }
+.schematic-title-note { display: block; margin-top: .15rem; font-size: .78rem; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.schematic-group { margin-bottom: .7rem; }
+.schematic-legend { display: block; margin-bottom: .25rem; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.schematic-legend-note { text-transform: none; letter-spacing: 0; }
+.schematic-note { margin: .1rem 0 0; font-size: .82rem; color: var(--muted); }
+.schematic-row { display: grid; grid-template-columns: 6.5rem 1fr auto; align-items: center; gap: .45rem; padding: .12rem 0; }
+.schematic-label { font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.schematic-value { font-size: .78rem; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+.schematic-bar { position: relative; display: block; height: .5rem; border: 1px solid var(--line); background: rgba(127, 127, 127, .16); }
+.schematic-bar > i { position: absolute; inset: 0 auto 0 0; display: block; background: currentColor; }
+.schematic-row.down .schematic-value, .schematic-down-mark { color: #ff6b5d; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
+.schematic-row.starved .schematic-value { color: #f0d093; }
+.schematic-row.focused .schematic-label { font-weight: 700; }
+.schematic-focus-mark { font-size: .7rem; }
+.schematic-units { display: flex; gap: 2px; align-items: center; }
+.schematic-units > i { width: .55rem; height: .55rem; border: 1px solid var(--line); background: transparent; }
+.schematic-units > i.on { background: currentColor; border-color: currentColor; }
+body.classic .schematic-bar > i, body.classic .schematic-units > i.on { background: currentColor; }
+body.classic .schematic-row.down .schematic-value, body.classic .schematic-down-mark { color: inherit; text-decoration: line-through; }
+@media (prefers-reduced-motion: reduce) {
+  .schematic, .schematic-bar > i, .schematic-units > i { transition: none; animation: none; }
+}

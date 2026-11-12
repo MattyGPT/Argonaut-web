@@ -150,7 +150,20 @@ None of them changed a file.
 - [ ] Slice 3 — S0 replay prerequisites.
 - [ ] Slice 4 — S1 retained action log.
 - [ ] Slice 5 — L1 war chronicle.
-- [ ] Slice 6 — P1 ship interior schematic.
+- [x] Slice 6 — P1 ship interior schematic. Delivered 2026-11-12 with
+      [its own review](../reviews/2026-11-12-p1-ship-schematic.md): a pure
+      `ui/schematic.js` projection mounted in the ship menu, showing the four arcs
+      against their undamaged split, one block per installed system unit, crew
+      against complement, and the reactor budget across the five sinks.
+      `git diff game/` is **empty**, so classic parity and the sim baselines
+      cannot have moved. Nominal counts come from the game's own
+      `templateSystems`, after a test caught that reading the raw class template
+      silently omitted the real `reactor` and `spread` subsystems. Absence is
+      stated in words rather than drawn as zero for drones and Classic hulls, and
+      nothing is graphics-only. 8 Node tests plus a new `check-schematic` browser
+      check, auto-discovered, so the enforced suite is now **15 of 17**;
+      `npm test` 1004/1004. Not done: guide screenshots were not re-captured, and
+      a persistent command-ship panel remains a follow-up.
 - [ ] Slice 7 — P2 damage-reactive audio.
 - [ ] Slice 8 — P3 persistent damage and impact FX.
 - [ ] Slice 9 — S2 replay and spectator.
