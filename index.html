@@ -21,6 +21,7 @@
         <button id="user-guide" class="secondary">User guide</button>
         <button id="theme-toggle" class="secondary">Classic view</button>
         <button id="art-toggle" class="secondary">Ship art: sprites</button>
+        <button id="audio-toggle" class="secondary" aria-haspopup="dialog" title="Audio volumes, and what the sound is currently reporting">Audio</button>
         <button id="new-game" class="secondary">New game</button>
         <button id="operation-start" class="secondary" title="Launch the isolated Reimagined, turn-based rescue prototype">Rescue prototype (turn-based)</button>
       </div>
@@ -218,6 +219,45 @@
         </div>
       </form>
     </dialog>
+    <dialog id="audio-dialog" aria-labelledby="audio-title">
+      <form method="dialog" id="audio-form">
+        <h2 id="audio-title">Audio</h2>
+        <p class="dialog-note">Volumes are stored on this device and never enter a save file. Tactical sound must also be ticked on the war you are flying — these controls set how loud each part of it is.</p>
+        <label class="check">
+          <input id="audio-muted" type="checkbox">
+          Mute all audio
+        </label>
+        <label class="audio-volume">
+          Ambience — engine hum, ion storm, shield trickle
+          <span class="audio-volume-row">
+            <input id="audio-ambience" type="range" min="0" max="100" step="5" value="60">
+            <output id="audio-ambience-value" for="audio-ambience">60%</output>
+          </span>
+        </label>
+        <label class="audio-volume">
+          Effects — volleys, impacts and radio traffic
+          <span class="audio-volume-row">
+            <input id="audio-effects" type="range" min="0" max="100" step="5" value="100">
+            <output id="audio-effects-value" for="audio-effects">100%</output>
+          </span>
+        </label>
+        <label class="audio-volume">
+          Alerts — red alert klaxon
+          <span class="audio-volume-row">
+            <input id="audio-alerts" type="range" min="0" max="100" step="5" value="100">
+            <output id="audio-alerts-value" for="audio-alerts">100%</output>
+          </span>
+        </label>
+        <div id="audio-state" class="audio-state">
+          <h3>What the sound is reporting</h3>
+          <ul id="audio-state-list"></ul>
+          <p class="dialog-note">Every cue above is also stated here in words, so nothing in the soundtrack is audio-only.</p>
+        </div>
+        <div class="dialog-actions">
+          <button value="close">Close</button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="tow-dialog">
       <form method="dialog" id="tow-form">
         <h2 id="tow-title">Direct the tow</h2>
@@ -388,7 +428,7 @@
               <li><b>Classic</b> preserves the calibrated original rules and fixed fleets. With optional settings unticked, it is the original turn-based experience.</li>
               <li><b>Reimagined</b> adds composed fleets, <a href="#guide-fleet">standing orders, doctrines, captains, repairs, and scenarios</a>, plus <a href="#guide-reimagined">terrain, power, prizes, and new weapons</a>. Choose participating alliances, their budgets, your Federation loadout, and whether Xanadu is present. The Federation and at least one enemy are required; the flagship is required. Prizes won later do not consume the starting loadout budget.</li>
               <li><b>Real-time movement</b> and <b>Sector campaign</b> are Reimagined options. Choose one: current campaign engagements use turn-based battles.</li>
-              <li><b>Regional enemy formations</b> clusters each alliance into its own corner sector, and each war rotates which alliance holds which sector on the seed — so a regional opening differs per seed in axis and terrain. Unticked (the default) the alliances scatter across the field, which is the opening every balance row is measured on. <b>Tactical sound</b> enables combat sounds and the RED alert klaxon.</li>
+              <li><b>Regional enemy formations</b> clusters each alliance into its own corner sector, and each war rotates which alliance holds which sector on the seed — so a regional opening differs per seed in axis and terrain. Unticked (the default) the alliances scatter across the field, which is the opening every balance row is measured on. <b>Tactical sound</b> enables combat sounds and the RED alert klaxon; the <b>Audio</b> button in the top bar then sets the ambience, effects and alert volumes and states in words what the sound is reporting. See <a href="#guide-comfort">accessibility and appearance</a>.</li>
               <li><b>Precision fire</b> is an optional phaser setting for either ruleset. See <a href="#guide-precision">called shots and power</a>.</li>
               <li><b>Classic view</b> changes the visual theme; <b>Ship art</b> changes modern map artwork. Neither selects Classic rules. See <a href="#guide-comfort">accessibility and appearance</a>.</li>
             </ul>
@@ -661,6 +701,8 @@
             <h3>Accessibility and appearance</h3>
             <ul>
               <li><b>Classic view</b> switches to a black phosphor theme with glyphs. <b>Ship art</b> selects hull sprites in modern view. Both preferences persist; the ruleset stays selected separately in New game.</li>
+              <li><b>Audio</b> opens separate volumes for ambience, effects and alerts, plus a mute that silences all three. Volumes are stored on this device and never enter a save file. Tactical sound must also be ticked on the war you are flying. Below the sliders the panel states in words everything the soundtrack is currently reporting, so no cue is audio-only.</li>
+              <li>What the sound reports, and where the same fact is written: <b>incoming fleet traffic</b> narrows in band as your radio units are knocked out and falls silent when none survive — the console already prints the same figure as "radio at N%, traffic abbreviated", and your own ship's lines stay clear because they reach you over the intercom. The <b>engine hum</b> rises in pitch when you overcharge the engine sink and drops when you starve it, which the hull schematic shows as numbers. <b>Ion storm</b> static is full and centred in the jamming core and half-strength and panned toward the eye in the outer ring. A blow on your own hull sounds different depending on whether a live shield arc threw it, whether it walked through an arc that was already gutted, or whether it reached the internals — the journal names the arc and the damage in words.</li>
               <li>Keyboard controls are listed above. Use Tab to reach controls and links; focused buttons activate normally. Escape closes help or a menu before returning to gameplay.</li>
               <li>Motion and impact effects honor <b>prefers-reduced-motion</b>. A concise status line supports screen readers.</li>
               <li>These written procedures contain the essential instructions; images are optional examples. Use <a href="#guide-first-orders">First orders</a> as a short introduction, then follow the contents to the task you need.</li>

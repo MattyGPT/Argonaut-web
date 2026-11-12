@@ -22,7 +22,8 @@ import {
   withPlaybackLock,
 } from './ui/battle-events.js';
 import { commandReadiness, fanOutOffsets, markerFanOptions, primeMoveMemory, renderGame, reportFor, targetExplanation, targetGeometryKnown, updateSensorCard, updateTargetReadiness } from './ui/render.js';
-import { playEffect, playEvent } from './ui/sound.js';
+import { playComms, playEffect, playEvent, playImpact, playRegen, setAudioSettings, stopAmbience, updateAmbience } from './ui/sound.js';
+import { AUDIO_BUSES, audioStateText, commsModel, engineHumModel, impactVoiceModel, parseAudioSettings, regenCueModel, stormStaticModel } from './ui/audio-model.js';
 import { playEffects, replayEffects } from './ui/fx.js';
 import { restoreCommandHistory } from './ui/command-history.js';
 import { appendRecords, createJournal, restoreJournal } from './ui/battle-journal.js';
@@ -145,6 +146,10 @@ try {
 let presentationRecords = [];
 let serviceRecords = [];
 const collectRecords = (records) => {
+  // Voiced from the raw batch, before the journal gate below: a truncated or
+  // journal-less context still heard the blow, and the record is the only place
+  // that knows which arc took it.
+  voiceRecords(records);
   if (campaign?.battle && records?.length) serviceRecords.push(...records);
   if (!operationSession && !practiceSession && records?.length) walkthrough = advanceWalkthrough(walkthrough, { type: 'records', records, paused: view.paused }, game);
   if (!records?.length || !view.journal) return false;
@@ -220,6 +225,115 @@ try {
   terrainArt = localStorage.getItem(TERRAIN_KEY) === 'simple' ? 'simple' : 'textured';
   terrainBoundaries = localStorage.getItem(BOUNDARIES_KEY) !== 'quiet';
 } catch { /* preferences are optional */ }
+
+// Slice P2: audio volumes are a device preference like the theme and the ship art
+// — never game state, never a save field, and changing them consumes no gameplay
+// randomness. The per-war "Tactical sound" tick stays the master enable; these
+// only set how loud each bus is once it is on.
+const AUDIO_KEY = 'argonaut-web-audio-v1';
+let audioSettings = parseAudioSettings(null);
+try { audioSettings = parseAudioSettings(JSON.parse(localStorage.getItem(AUDIO_KEY) ?? 'null')); } catch { /* preferences are optional */ }
+setAudioSettings(audioSettings);
+
+/** Minimum gap between fleet-traffic chirps, so a busy battle is not a metronome. */
+const COMMS_GAP_MS = 900;
+let lastCommsAt = 0;
+
+const audioDialog = () => document.querySelector('#audio-dialog');
+
+/** The panel's prose: the same facts the sound is playing, in words. */
+const renderAudioPanel = () => {
+  const dialog = audioDialog();
+  if (!dialog?.open) return;
+  for (const bus of AUDIO_BUSES) {
+    const slider = document.querySelector(`#audio-${bus}`);
+    const output = document.querySelector(`#audio-${bus}-value`);
+    const percent = Math.round(audioSettings[bus] * 100);
+    if (slider && Number(slider.value) !== percent) slider.value = String(percent);
+    if (output) output.textContent = `${percent}%`;
+  }
+  const muted = document.querySelector('#audio-muted');
+  if (muted) muted.checked = audioSettings.muted;
+  const list = document.querySelector('#audio-state-list');
+  if (list) {
+    list.innerHTML = audioStateText({ ...audioModel, settings: audioSettings })
+      .map((line) => `<li>${line}</li>`)
+      .join('');
+  }
+};
+
+/** Apply volumes without writing them, so dragging a slider is heard live. */
+const applyAudioSettings = (next) => {
+  audioSettings = setAudioSettings(next);
+  renderAudioPanel();
+  if (audioModel) updateAmbience(Boolean(game?.sound), { engine: audioModel.engine, storm: audioModel.storm });
+};
+
+const persistAudioSettings = (next) => {
+  applyAudioSettings(next);
+  try { localStorage.setItem(AUDIO_KEY, JSON.stringify(audioSettings)); } catch { /* preferences are optional */ }
+};
+
+/**
+ * The command ship's audio model: the band its surviving radio hardware allows,
+ * the hum its reactor allocation implies, and the ion-storm jam the rules are
+ * already applying. Recomputed on the render cadence — per stardate, event,
+ * command and camera change — never per animation frame.
+ */
+let audioModel = null;
+const audioModelOf = () => {
+  const ship = game ? getShip(game, game.playerShipId) : null;
+  if (!game || !ship) return null;
+  return {
+    comms: commsModel(game, ship),
+    engine: engineHumModel(game, ship),
+    storm: stormStaticModel(game, ship, currentWindow()),
+    settings: audioSettings,
+  };
+};
+
+const updateShipAudio = () => {
+  audioModel = audioModelOf();
+  if (!audioModel) { stopAmbience(); return; }
+  updateAmbience(Boolean(game.sound), { engine: audioModel.engine, storm: audioModel.storm });
+  renderAudioPanel();
+};
+
+/**
+ * Give a record batch its sound, ahead of any journal truncation.
+ *
+ * Read from the records rather than the battle events because only the record
+ * carries what the hit actually did: which arc was struck, whether that arc's own
+ * pool absorbed it or was already gutted, and whether the volley reached the
+ * internals. Those are the deltas `damageShip` produced and the record layer
+ * froze, so the sound describes the blow that was recorded rather than a guess
+ * recomputed from state that has since moved on.
+ */
+const voiceRecords = (records) => {
+  if (!game?.sound || !records?.length) return;
+  const ownShipId = game.playerShipId;
+  let traffic = false;
+  for (const record of records) {
+    const impact = impactVoiceModel(record, ownShipId);
+    if (impact) { playImpact(true, impact); continue; }
+    const regen = regenCueModel(record, ownShipId);
+    if (regen) { playRegen(true, regen); continue; }
+    // Anything the player neither did nor received is fleet traffic, and arrives
+    // over a radio whose condition is the same number that shortened its prose.
+    if (record.kind === 'damage' && record.actorId !== ownShipId && record.targetId !== ownShipId) traffic = true;
+  }
+  if (!traffic) return;
+  const now = Date.now();
+  if (now - lastCommsAt < COMMS_GAP_MS) return;
+  lastCommsAt = now;
+  // Computed from the game as it stands at this seam rather than from the cached
+  // model, which is a whole refresh old. It is still the PRE-state for this batch
+  // — `collectRecords` runs before `game` is reassigned — so a radio knocked out
+  // by this very resolution is heard clearly and the next traffic is not. The
+  // journal has no such lag, because each record carries its own stamped
+  // integrity; the audio is a beat behind on exactly one transition.
+  playComms(true, commsModel(game, getShip(game, ownShipId)));
+};
 
 const drawPracticeZone = () => {
   const map = document.querySelector('#map');
@@ -382,6 +496,11 @@ const refresh = ({ persist = true } = {}) => {
     redraw();
     refreshTargetPrompt();
     warnOnRedAlert();
+    updateShipAudio();
+  } else {
+    // The sector map has no battle and no hull to hum: do not leave a bed running.
+    audioModel = null;
+    stopAmbience();
   }
   showScreens();
   if (persist) save();
@@ -413,7 +532,11 @@ const showEvents = (events) => {
   if (ordinary.some((e) => e.toId === game.playerShipId && e.hit)) shake();
   if (game.sound) {
     ordinary
-      .filter((e) => e.fromId === game.playerShipId || e.toId === game.playerShipId)
+      // A blow that landed on your own hull is voiced from its damage record
+      // instead, because only the record knows whether an arc held, was already
+      // gutted, or let the volley through to the internals — see voiceRecords.
+      // Sounding both would double every hit you take.
+      .filter((e) => e.fromId === game.playerShipId || (e.toId === game.playerShipId && !e.hit))
       .forEach((e, i) => setTimeout(() => playEvent(e.hit ? e.kind : 'miss', true), i * 160));
   }
 };
@@ -1747,6 +1870,33 @@ document.querySelector('#art-toggle').addEventListener('click', () => {
   redraw();
 });
 applyArt(shipArtPref);
+
+// Slice P2: the audio panel. The button reports only the one state that changes
+// what you hear without opening it — muted or not — rather than three numbers.
+// No aria-pressed: this opens a dialog, it does not toggle, so the state belongs
+// in the accessible name rather than in a pressed state that would imply one.
+const applyAudioToggle = () => {
+  document.querySelector('#audio-toggle').textContent = audioSettings.muted ? 'Audio: muted' : 'Audio';
+};
+document.querySelector('#audio-toggle').addEventListener('click', () => {
+  // Open first: the panel only renders while the dialog is up, so an idle war
+  // never pays for rewriting it.
+  audioDialog().showModal();
+  renderAudioPanel();
+});
+for (const bus of AUDIO_BUSES) {
+  const slider = document.querySelector(`#audio-${bus}`);
+  slider.addEventListener('input', (event) => applyAudioSettings({ [bus]: Number(event.target.value) / 100 }));
+  // Persisted on release rather than on every drag frame.
+  slider.addEventListener('change', () => {
+    try { localStorage.setItem(AUDIO_KEY, JSON.stringify(audioSettings)); } catch { /* preferences are optional */ }
+  });
+}
+document.querySelector('#audio-muted').addEventListener('change', (event) => {
+  persistAudioSettings({ muted: event.target.checked });
+  applyAudioToggle();
+});
+applyAudioToggle();
 
 document.querySelector('#contact-mode').addEventListener('change', (event) => {
   contactMode = event.target.value;
