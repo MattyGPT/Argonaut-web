@@ -110,12 +110,12 @@ prerequisites, not the re-baseline originally scoped here. The research digest
 | 9 | Replay and spectator | S2 | new `game/replay.js`, `app.js`, `ui/`, `index.html` | Exact reproduction from `(seed, options, actions[])` in both timing models, verified by full-state comparison; a separate driver, **not** bolted onto `runWar`; URL fragment round-trip; scoped to single wars |
 | 10 | Renderer cost measurement, then canvas decision | P4 | `docs/superpowers/experiments/`, review doc | Measure the production cadence (`renderFrame`) and the zoom/pan path first — the V8 number has never been taken. Then accept / revise / narrow / stop. Default expectation is **narrow**: transform-only camera update and/or the existing keyed reconciler on `#map-field`. Any migration is partial (terrain and rings to canvas, ships stay DOM) and must be preceded by pinned per-hull a11y tests |
 | 11 | Seed challenge and score export | S3 | new module, `app.js`, `index.html` | Reproducibility test; export/import round-trip; BACKLOG Round 28 removed |
-| 12 | Memorable moments | L2 | `game/chronicle.js`, `ui/battle-events.js`, `app.js` | Ships on tow-rams, player self-destructs and prize recaptures only; aces and colors-strikes need a separate non-mechanical threshold; relay transitions stay out pending a measured visibility decision; no medal implies a bonus |
+| 12 | Memorable moments | L2 | `ui/chronicle.js` (not `game/` — see the L1 review: it must import `projectJournalRecord`), `ui/battle-events.js`, `app.js` | Ships on tow-rams, player self-destructs and prize recaptures only; aces and colors-strikes need a separate non-mechanical threshold; relay transitions stay out pending a measured visibility decision; no medal implies a bonus |
 | 13 | Modular refits | W2 | `game/constants.js`, `game/campaign.js`, `game/turns.js`, `ui/` | Full sim in both turn-based modes plus real time; CALIBRATION row; classic parity |
 | 14 | Officers and morale | W1 | `game/ai.js`, `game/state.js`, `game/constants.js` | Same discipline; BACKLOG Round 25 removed; seams from Phase 5 §25 honored |
 | 15 | Service records as consequence | L3 | `game/service-records.js`, `game/campaign.js`, `ui/` | No fabricated milestone; dockyard offers trace to real state |
 | 16 | Alliance politics | W3 | `game/ai.js`, `game/state.js`, `game/turns.js` | Outcome distribution re-baselined and named; all four victory proclamations still reachable |
-| 17 | Ghost fleets | S4 | `app.js`, `ui/replay.js` | Ghost and live fleets coexist without perturbing the live sim |
+| 17 | Ghost fleets | S4 | `app.js`, `game/replay.js` (the S2a driver lives in `game/`, not `ui/`) | Ghost and live fleets coexist without perturbing the live sim |
 | 18 | Async PvP and hotseat | S5 | `app.js`, `game/actions.js`, `ui/` | Second-side commands legal; hand-off explicit; BACKLOG Round 29 removed |
 | 19 | Fleet import/export | T2 | `index.html`, `app.js`, New game panel | Round-trip preserves the points budget and the seed |
 | 20 | Data-driven mission format | T1 | `game/operations.js`, `game/scenarios.js` | Existing scenarios and operations expressible in the new format with identical behavior |
@@ -173,6 +173,20 @@ None of them changed a file.
       task. 8/8 runs green against 3/5 before, so it left the quarantine too and
       the enforced suite is **14 of 17**. Three remain: `check-battle-journal`,
       `check-combat-feedback`, `check-faction-identity`.
+      **Item 5 (`check-faction-identity`) closed 2026-11-12 in #131**, under Matt's
+      ruling to fix both causes and un-quarantine. Its outline assertion had recorded
+      a CSS **source-order accident** as a contract: the fixture renders the selected
+      threat inside a dense zoom-8 stack, so the marker carries `compact-contact`,
+      whose round-31 rules deliberately keep selection white and move the threat cue
+      to a red corner — as the V-spec requires. It is now split by contact density,
+      with the compact case pinning the red corner *alongside* the white outline so a
+      future change cannot delete the threat affordance and still pass. The
+      ResizeObserver race at its classic-rules block was fixed the same way as item 2.
+      Evidence and measurement tables:
+      [the investigation](../reviews/2026-11-12-faction-identity-outline-investigation.md).
+      **Two checks remain quarantined — `check-battle-journal` and
+      `check-combat-feedback`** — and `check-combat-feedback` still asserts
+      beam-endpoint geometry, so it is the one outstanding baseline gap for P3.
 - [x] Slice 3 — S0 replay prerequisites. Delivered 2026-11-12 with
       [its own review](../reviews/2026-11-12-s0-replay-prerequisites.md). Battle
       identity is now **derived from the engagement seed** through the engine's own
