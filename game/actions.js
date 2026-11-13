@@ -229,7 +229,9 @@ const resolvedDamage = (game, actor, before, after, cause, details = {}) => {
 };
 
 // Record only execution inputs, never menu state, DOM nodes or presentation data.
-const commandRequest = (action) => {
+// Exported so the retained action log (game/action-log.js) re-applies the exact
+// same whitelist instead of keeping a second copy of it that could drift.
+export const commandRequest = (action) => {
   const request = {};
   for (const key of ['targetId', 'shipId', 'dx', 'dy', 'x', 'y', 'towardId', 'towardX', 'towardY', 'power', 'focus', 'amount', 'transferCommand', 'kind', 'sink', 'delta', 'stance', 'degrees', 'deltaDegrees', 'arc']) {
     const value = action[key];
