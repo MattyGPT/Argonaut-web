@@ -206,3 +206,39 @@ higher-specificity block written to a *different, documented* contract silently
 retired it. The assertion's history was the only thing keeping the accident
 alive — and the history, re-run with the rev printed next to every row, is also
 what finally explained it.
+
+## Outcome (same day)
+
+Matt ruled **fix both and un-quarantine**, and recommendations 1, 2 and 4 were
+implemented; recommendation 3 was deliberately skipped.
+
+- **Recommendation 1** — the assertion is split by contact density. The compact case
+  pins the white outline *and* the red corner flag together (`display: block`,
+  `border-top-color rgb(255,104,104)`), which is the pairing that keeps a threat
+  affordance covered; the isolated case pins `rgb(255,93,93)` at a 2px offset in
+  both themes. The hysteresis problem flagged in the risk note was solved without
+  any geometry guessing by rendering the isolated scene with the app's own
+  `contactMode: 'full'`, which returns an empty compact set unconditionally
+  (`ui/contacts.js:5`) — and the check asserts `compact === false` as a precondition,
+  so it cannot silently degrade into measuring the wrong scene.
+- **Recommendation 2** — the three classic-rules assertions moved into the same
+  `page.evaluate` that renders them.
+- **Recommendation 3 (Node-level CSS pairing guard) — skipped, deliberately.** With
+  the check enforced in CI the guard would be redundant, and this review's own risk
+  note says it would ossify a presentation decision. Recording the skip so it is a
+  choice rather than an omission.
+- **Recommendation 4's prerequisite was already met** by `test/ship-a11y.test.js`
+  (PR #129), which landed the pinned per-hull accessible-name assertions earlier the
+  same day, so this check is no longer that surface's only coverage.
+
+Mutation-verified after the fix: hiding the corner flag fails
+`compact/modern: ... the corner flag is actually rendered`; recolouring
+`.ship.threat` fails `isolated/modern: ... keeps the red ring the legend teaches`;
+recolouring both compact-white rules fails `compact/modern: selection stays white`.
+One mutation was informative by *not* failing — removing `:2716` alone changes
+nothing, because `:2688` also sets white on compact selection. That is a redundancy
+in the stylesheet, not a gap in the check, and it is recorded here because it is the
+kind of thing that makes a future mutation test look broken when it is not.
+
+`styles.css` was restored byte-identical after every mutation. Enforced suite is
+**19 of 21**; the check is green on 7 runs with no flake.

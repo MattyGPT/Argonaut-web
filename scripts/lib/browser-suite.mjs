@@ -52,7 +52,16 @@ const LAUNCHER_IMPORT = "from './lib/browser.mjs'";
 export const QUARANTINE = Object.freeze({
   'check-battle-journal': 'Structural race with the app render loop: the fixture calls renderGame with a private game, which unhides #terrain-toggle, which resizes #map, which fires the ResizeObserver at app.js:1776 and re-renders the app\'s own game over it. Confirmed — the fixture yields 12 #command-log entries, then 0 within 100ms. Needs re-architecting to drive the app\'s own journal the way check-journal-lifecycle does. The single-task render-and-measure fix that un-quarantined check-target-readiness is necessary here but not sufficient, because this check also clicks and scrolls between renders',
   'check-combat-feedback': 'Hardcodes a square camera window ({minX, minY, size}) that predates the isotropic projection, so the beam is compared against the wrong geometry. Deriving it through cameraWindow(..., aspect) as renderGame does is necessary but NOT sufficient — it still fails, so a second stale geometry assumption remains to be found',
-  'check-faction-identity': 'Two separate causes; one fixed, one open. (1) FIXED and it was a real app bug, not a stale test: the stack tether fell 18% short of the hull it points at, because .ship.compact-contact:hover/:focus-visible deliberately drops the 1.22x enlargement while the generic .ship:focus-visible .stack-tether rule still divided its width by 1.22 to compensate for a scale that never happened. Measured: --dx 101px, tether width 82.78px = 101/1.22, ship transform scale 0.125 (invzoom only, no 1.22), error 18.16px. Corrected in styles.css and pinned by test/stack-tether-scale.test.js. The earlier note here blaming the square base layer was wrong. (2) OPEN: the check asserts the classic-only selected-threat outline rgb(255,93,93) for BOTH themes, but .ship.selected has been a white outline since 9961edd, so modern reports rgb(255,255,255). Those selection rules are byte-identical between 9961edd and today, which does not square with the check passing at its introducing commit — so it is not established whether the assertion was ever correct or whether the modern threat cue regressed. Do not change it until that is settled. This check is also the only coverage the per-hull aria-label/role surface has anywhere',
+  // 'check-faction-identity' left the quarantine on 2026-11-12. Both of its open
+  // causes are settled and fixed: the selected-threat outline assertion recorded a
+  // CSS source-order accident as a contract (it is now split by contact density, and
+  // the compact case pins the red corner flag alongside the white outline so the
+  // threat affordance stays covered), and the classic-rules block now renders and
+  // measures inside a single page.evaluate, which is the ResizeObserver race that
+  // first turned it red at d613faa. Full evidence and the measurement tables are in
+  // docs/superpowers/reviews/2026-11-12-faction-identity-outline-investigation.md.
+  // It is also no longer the only coverage of the per-hull accessible name — see
+  // test/ship-a11y.test.js.
 });
 
 /**

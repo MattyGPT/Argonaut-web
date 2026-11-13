@@ -9,13 +9,17 @@ Track P's presentation work is now delivered through P2: the browser-check CI (P
 **S1**: battle identity is derived rather than drawn (S0, #127), so the engine has
 no remaining authoritative nondeterminism, and every accepted player command plus
 every hover sensor sweep is retained in a replayable log (S1). The enforced browser
-suite stands at **18 of 21**, with three checks quarantined for recorded reasons and
-left there by Matt's standing decision — see
+suite stands at **19 of 21**, with two checks quarantined for recorded reasons —
+`check-faction-identity` was settled by measurement and un-quarantined on
+2026-11-12 with Matt's approval, leaving `check-battle-journal` and
+`check-combat-feedback`. See
 [the browser-check CI review](../reviews/2026-11-11-browser-check-ci.md) and
 [the bisect review](../reviews/2026-11-12-p0b-quarantine-bisect.md). **Next is S2,
-replay and spectator**, which now has both prerequisites in place. Track L's L1 is
-blocked on Matt's honesty-tier ruling, and P3 and P4 are blocked on a durability
-ruling and a frame measurement respectively.**
+replay and spectator**, which now has both prerequisites in place. **Matt ruled on
+2026-11-12** on the two blocked slices: L1 takes honesty **tier D** (per-surface
+split plus post-war declassification of terminal facts, labelled on the page) and P3
+takes the **new authoritative damage-history field** rather than derived wear. P4
+remains blocked on a production-cadence frame measurement that has never been taken.**
 
 **Corrected 2026-11-11:** the full research reports contradicted the condensed
 summaries this plan was first written from, on two load-bearing points. There is
@@ -217,7 +221,24 @@ None of them changed a file.
       adding the `export` keyword to `commandRequest` — 3 insertions, 1 deletion —
       and nothing in `game/` imports the new module, so no rule can read the log.
       Both sim modes were still diffed against a clean `origin/main` worktree.
-- [ ] Slice 5 — L1 war chronicle. **BLOCKED on Matt's honesty-tier ruling.**
+- [ ] Slice 5 — L1 war chronicle. **UNBLOCKED — Matt ruled 2026-11-12: tier D.**
+      Per-surface split (chronicle narrative filtered to what the flagship could
+      know) **plus post-war declassification of terminal facts** — a destruction's
+      killer and weapon, named at war's end from the fleet's consolidated returns,
+      which the brief measures at ~28 fully attributed sentences per ~59-sentence
+      chronicle instead of ~6.7. Two obligations come with the ruling: one added
+      clause in the program spec's *No fabricated narrative* guardrail covering
+      post-war attribution, and one line of on-page framing that says the attribution
+      comes from consolidated returns rather than from what the flagship saw. The
+      remaining seven rulings in the brief take its recommended defaults unless Matt
+      says otherwise (battle report stays verbatim and omniscient, labelled a fleet
+      return; campaign service history unchanged; relay/encounter/order-delivery stay
+      out and are named as an L2 decision; chronicle draft lives in `app.js` module
+      scope on its own localStorage key with nothing on `game` or `campaign`, which
+      makes the parity risk zero; Classic in scope but spare by design and said so in
+      the guide; operations link to the existing debrief rather than being covered).
+      Hard constraint regardless of tier: `surrender` carries **no `actor` at all**,
+      so a colors-strike can never be attributed to whoever forced it.
       Research delivered 2026-11-12:
       [L1 chronicle research and honesty-tier brief](../reviews/2026-11-12-l1-chronicle-research-and-honesty-tier-brief.md)
       carries the verified findings, the measured cost of each tier, eight rulings
@@ -272,7 +293,19 @@ None of them changed a file.
       **16 of 19**; `npm test` 1016/1016. Not done: no guide screenshot (hash-verified
       manifest, same follow-up as P1), traffic chirps rate-limited rather than
       per-message, and no per-hull spatialisation beyond the storm.
-- [ ] Slice 8 — P3 persistent damage and impact FX.
+- [ ] Slice 8 — P3 persistent damage and impact FX. **UNBLOCKED — Matt ruled
+      2026-11-12: a new authoritative damage-history field, not derived wear.**
+      That resolves the spec's guardrail contradiction in favour of durability:
+      scarring survives repair and carries across a campaign, so a veteran hull
+      really does look like one rather than snapping back as shields regenerate.
+      It is the expensive branch and the slice must budget for all of it — a new
+      field on ship state, a save-format decision, campaign carry-over, an entry in
+      `stripBattleRecordMetadata`, a four-profile parity re-run, and the full sim
+      discipline with a CALIBRATION row if anything moves. The other P3 gate is now
+      met: `check-faction-identity` was un-quarantined on 2026-11-12, so the beam
+      and tether geometry P3 touches has a green baseline. `check-combat-feedback`
+      is still red and still asserts beam-endpoint geometry, so it remains the one
+      outstanding baseline gap for this slice.
 - [ ] Slice 9 — S2 replay and spectator.
 - [ ] Slice 10 — P4 canvas renderer decision.
 - [ ] Slice 11 — S3 seed challenge and score export.
@@ -353,8 +386,26 @@ None of them changed a file.
    the red corner alongside the white outline. Note this will **not** by itself
    un-quarantine the check: with only that assertion corrected it fails again at
    lines 161–163 on the known ResizeObserver redraw race, which was in fact this
-   check's original `d613faa` failure. Matt's ruling is still needed before the
-   assertion is edited, per his §7 instruction.
+   check's original `d613faa` failure.
+
+   **Matt ruled on 2026-11-12: fix both and un-quarantine. Done.** The outline
+   assertion is now split by contact density — the isolated case pins the red ring
+   `rgb(255,93,93)` at a 2px offset in *both* themes, and the compact case pins the
+   white outline **together with** the red corner flag (`display: block`,
+   `border-top-color rgb(255,104,104)`), because asserting white alone would be the
+   "weaken until green" move that lets a future change delete the threat cue and
+   still pass. The isolated scene uses the app's own `contactMode: 'full'` setting,
+   which returns an empty compact set unconditionally, so it defeats the 72/84px
+   hysteresis deterministically instead of depending on how many pixels the camera
+   happens to give a 25-unit separation. The classic-rules block now renders and
+   measures inside a single `page.evaluate`. Mutation-verified: hiding the corner
+   flag, recolouring `.ship.threat`, and recolouring both compact-white rules each
+   turn the check red; a no-op mutation of the redundant `:2716` rule does not, which
+   is what revealed that `:2688` is the rule actually producing the white. Enforced
+   suite is now **19 of 21**; 7 green runs with no flake. The Node-level CSS pairing
+   guard the investigation suggested as item 3 was **deliberately skipped** — with
+   the check enforced in CI it would be redundant, and the investigation itself flags
+   that such a guard risks ossifying a presentation decision.
 2. ~~**Slices 3–4 (S0, S1) — replay prerequisites and the action log.**~~
    **Both delivered 2026-11-12** (#127, #128) — see the completion records above.
    Together they clear the Reach track's two prerequisites: battle identity is

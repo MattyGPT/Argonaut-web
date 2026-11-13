@@ -133,34 +133,117 @@ try {
     return { error: Math.hypot(r.x + r.width / 2 + angle.a * length - (map.x + map.width / 2), r.y + r.height / 2 + angle.b * length - (map.y + map.height / 2)), length };
   });
   assert.ok(tetherCheck.length > 10 && tetherCheck.error < 4, 'focused tether ends at the true position without hover-scale overshoot');
+  // Selection and threat cues, split by contact density. This assertion used to
+  // demand the classic red ring for BOTH themes and was treated as a contract; it
+  // was not one. At 9961edd the modern red came only from a source-order tie-break
+  // between two equal-specificity rules (.ship.selected white at styles.css:275 vs
+  // .ship.threat red at :362). The round-31 compact-contact rules (:2685, :2688,
+  // :2711) now outrank both and deliberately replace the ring with a red corner
+  // while keeping selection white — exactly what the V-spec at
+  // docs/superpowers/specs/2026-10-06-terrain-and-command-presentation.md:107
+  // requires. The fixture below renders its selected threat inside a dense zoom-8
+  // stack, so it was measuring the compact case and asserting the non-compact
+  // colour. See docs/superpowers/reviews/2026-11-12-faction-identity-outline-investigation.md.
+  //
+  // Both cases are now pinned, and the compact case asserts the red corner ALONGSIDE
+  // the white outline. Asserting white alone would be the "weaken until green" move:
+  // the corner is what keeps a threat affordance pinned, so dropping it would let a
+  // future change remove the cue entirely and still pass.
   const selectionChecks = await page.evaluate(async () => {
     const { renderGame } = await import('/ui/render.js');
     const { spawnDrone } = await import('/game/state.js');
     const source = window.factionFixture.game;
+    const measure = (node) => {
+      const css = getComputedStyle(node);
+      const corner = node.querySelector('.contact-threat');
+      const cornerCss = corner ? getComputedStyle(corner) : null;
+      return {
+        threat: node.classList.contains('threat'),
+        selected: node.classList.contains('selected'),
+        compact: node.classList.contains('compact-contact'),
+        outline: css.outlineColor,
+        outlineOffset: css.outlineOffset,
+        shadow: css.boxShadow,
+        cornerPresent: Boolean(corner),
+        cornerDisplay: cornerCss?.display ?? null,
+        cornerBorderTop: cornerCss?.borderTopColor ?? null,
+      };
+    };
     const checks = [];
+    // (a) Dense stack at zoom 8: contact density compacts the marker.
     for (const theme of ['modern', 'classic']) {
       const drone = spawnDrone(source.ships.find((ship) => ship.faction === 'Axis'), 8, 164, 160);
       const game = { ...source, ships: [...source.ships, drone] };
       document.body.classList.toggle('classic', theme === 'classic');
       renderGame(game, { shipArt: 'letters', contextShipId: drone.id, camera: { cx: 160, cy: 160, zoom: 8 } });
-      const selected = document.querySelector(`.ship[data-ship-id="${drone.id}"]`);
-      const css = getComputedStyle(selected);
-      checks.push({ theme, threat: selected.classList.contains('threat'), selected: selected.classList.contains('selected'), outline: css.outlineColor, shadow: css.boxShadow });
+      checks.push({ scene: 'compact', theme, ...measure(document.querySelector(`.ship[data-ship-id="${drone.id}"]`)) });
     }
+    // (b) One isolated threat, with contact density set to Full — the app's own
+    // setting, which returns an empty compact set unconditionally. That defeats the
+    // 72/84px hysteresis deterministically instead of depending on how many pixels
+    // the camera happens to give a 25-unit separation.
+    for (const theme of ['modern', 'classic']) {
+      const player = source.ships.find((ship) => ship.id === source.playerShipId);
+      const foe = {
+        ...source.ships.find((ship) => ship.faction === 'Axis' && ship.status === 'active' && ship.systems.phasers > 0),
+        id: 'fixture-isolated-threat', x: player.x + 25, y: player.y,
+      };
+      const game = { ...source, ships: [{ ...player }, foe] };
+      document.body.classList.toggle('classic', theme === 'classic');
+      renderGame(game, {
+        shipArt: 'letters', contactMode: 'full', contextShipId: foe.id,
+        camera: { cx: player.x + 12, cy: player.y, zoom: 2 },
+      });
+      checks.push({ scene: 'isolated', theme, ...measure(document.querySelector(`.ship[data-ship-id="${foe.id}"]`)) });
+    }
+    document.body.classList.remove('classic');
     return checks;
   });
-  for (const check of selectionChecks) { assert.ok(check.threat && check.selected); assert.equal(check.outline, 'rgb(255, 93, 93)'); assert.notEqual(check.shadow, 'none'); }
-  // Classic rules keep their phosphor/glyph treatment and omit the minimap.
+  const cue = (scene, theme) => selectionChecks.find((check) => check.scene === scene && check.theme === theme);
+  for (const check of selectionChecks) {
+    assert.ok(check.threat && check.selected, `${check.scene}/${check.theme}: the fixture really selected a threat`);
+    assert.notEqual(check.shadow, 'none', `${check.scene}/${check.theme}: the selected-threat halo is still drawn`);
+  }
+  // Isolated contact: the red ring the legend teaches, in BOTH themes.
   for (const theme of ['modern', 'classic']) {
-    await page.evaluate(async (theme) => {
+    const check = cue('isolated', theme);
+    assert.equal(check.compact, false, `isolated/${theme}: contact density really is off, so this is the non-compact contract`);
+    assert.equal(check.outline, 'rgb(255, 93, 93)', `isolated/${theme}: a selected threat keeps the red ring the legend teaches`);
+    assert.equal(check.outlineOffset, '2px', `isolated/${theme}: at the offset the legend's ring is drawn with`);
+  }
+  // Compact contact: selection stays white and the threat moves to a red corner.
+  const compactModern = cue('compact', 'modern');
+  assert.equal(compactModern.compact, true, 'compact/modern: the fixture really produced a dense contact');
+  assert.equal(compactModern.outline, 'rgb(255, 255, 255)', 'compact/modern: selection stays white, per the V-spec');
+  assert.equal(compactModern.cornerPresent, true, 'compact/modern: the threat cue moves to the corner flag rather than disappearing');
+  assert.equal(compactModern.cornerDisplay, 'block', 'compact/modern: and the corner flag is actually rendered, not display:none');
+  assert.equal(compactModern.cornerBorderTop, 'rgb(255, 104, 104)', 'compact/modern: the corner flag is red');
+  const compactClassic = cue('compact', 'classic');
+  assert.equal(compactClassic.compact, true, 'compact/classic: classic is dense too in this fixture');
+  assert.equal(compactClassic.outline, 'rgb(255, 93, 93)', 'compact/classic: classic keeps its red selection outline, which outranks the compact rule');
+  // Classic rules keep their phosphor/glyph treatment and omit the minimap.
+  // Rendered and measured inside ONE page.evaluate: across a round-trip the app's own
+  // ResizeObserver fires (renderGame unhides #terrain-toggle, which resizes #map) and
+  // redraws the app's reimagined save over this fixture, so a later assertion ends up
+  // measuring the wrong game. That race — not the outline colour — is what first
+  // turned this check red at d613faa. The screenshot afterwards is evidence only.
+  for (const theme of ['modern', 'classic']) {
+    const rules = await page.evaluate(async (theme) => {
       const { createGame } = await import('/game/state.js');
       const { renderGame } = await import('/ui/render.js');
       document.body.classList.toggle('classic', theme === 'classic');
       renderGame(createGame({ seed: 'faction-classic-rules' }), { shipArt: 'letters' });
+      const minimap = document.querySelector('#minimap');
+      return {
+        minimapHidden: minimap.hidden || getComputedStyle(minimap).display === 'none'
+          || minimap.getBoundingClientRect().height === 0,
+        glyphs: document.querySelectorAll('.ship .glyph').length,
+        neutralLegend: document.querySelectorAll('#map-legend [data-faction="Neutral"]').length,
+      };
     }, theme);
-    assert.equal(await page.locator('#minimap').isVisible(), false);
-    assert.ok(await page.locator('.ship .glyph').count());
-    assert.equal(await page.locator('#map-legend [data-faction="Neutral"]').count(), 0);
+    assert.equal(rules.minimapHidden, true, `${theme} theme: a classic-rules war omits the minimap`);
+    assert.ok(rules.glyphs > 0, `${theme} theme: hulls are drawn as letter glyphs`);
+    assert.equal(rules.neutralLegend, 0, `${theme} theme: no Neutral entry in the legend`);
     await page.screenshot({ path: resolve(output, `faction-classic-rules-${theme}.png`), fullPage: true });
   }
   // A test-only module suffix observes the real app's frame path. Paused poses
