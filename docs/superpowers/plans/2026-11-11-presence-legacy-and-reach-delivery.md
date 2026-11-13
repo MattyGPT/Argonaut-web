@@ -217,7 +217,28 @@ None of them changed a file.
       adding the `export` keyword to `commandRequest` — 3 insertions, 1 deletion —
       and nothing in `game/` imports the new module, so no rule can read the log.
       Both sim modes were still diffed against a clean `origin/main` worktree.
-- [ ] Slice 5 — L1 war chronicle.
+- [ ] Slice 5 — L1 war chronicle. **BLOCKED on Matt's honesty-tier ruling.**
+      Research delivered 2026-11-12:
+      [L1 chronicle research and honesty-tier brief](../reviews/2026-11-12-l1-chronicle-research-and-honesty-tier-brief.md)
+      carries the verified findings, the measured cost of each tier, eight rulings
+      with recommended defaults, and the reproduction method. **Read it before
+      starting the slice.** Its headline correction reshapes the decision: the
+      project runs **three** honesty tiers, not two — the war-end battle report
+      (`ui/render.js:1455-1508`) is *already* fully omniscient, reading the whole
+      roster with zero knowledge filters and naming an enemy captain as top gun, and
+      the spec nominates that report as the chronicle's coda. An all-filtered
+      chronicle would therefore print directly above an unfiltered summary of the
+      same war, so **a ruling that does not cover that surface is incomplete**.
+      Also verified: `surrender` carries **no `actor` at all** (0 of 416 sampled), so
+      no tier can attribute a colors-strike to whoever forced it — a chronicle naming
+      one would fabricate regardless of the ruling.
+      One hard requirement for the implementing slice, found while researching: since
+      P2, `collectRecords` also drives audio, and `voiceRecords` does **not** filter
+      by `battleId` (though `presentationRecords` already does, at `app.js:617`, and
+      every record carries one). Hull ids are deterministic per battle, so **the same
+      commit that wires `resolveCampaignRound`'s `onRecords` hook must add a
+      `battleId` guard to `voiceRecords`**, or an offscreen garrison battle will play
+      impact audio in the player's own bridge.
 - [x] Slice 6 — P1 ship interior schematic. Delivered 2026-11-12 with
       [its own review](../reviews/2026-11-12-p1-ship-schematic.md): a pure
       `ui/schematic.js` projection mounted in the ship menu, showing the four arcs
@@ -311,20 +332,45 @@ None of them changed a file.
    green first as a baseline. **Items 3–5 are left quarantined by Matt's standing
    decision (2026-11-12)**; they are visible on every suite run and block nothing
    except P3, so the queue below proceeds without them rather than stalling on
-   them. Item 3's open question is a genuine unknown — do not edit that assertion
-   until the `9961edd` discrepancy is settled, or a real loss of the modern
-   targeting cue could be buried.
-2. **Slices 3–4 (S0, S1) — replay prerequisites and the action log. NEXT.** S0 is
-   now three small items rather than a re-baseline, and exact replay was
-   demonstrated working, so the Reach track is the cheapest large capability left
-   in the program. S1 records at the single `applyPlayerAction` seam, reusing the
-   existing `commandRequest` whitelist.
+   them.
+
+   **Item 3's open question is now SETTLED by measurement** — see
+   [the investigation](../reviews/2026-11-12-faction-identity-outline-investigation.md).
+   The `9961edd` discrepancy is explained: the check's fixture always renders its
+   selected threat inside a dense zoom-8 stack, so the marker carries
+   `compact-contact`, whose round-31 rules (`styles.css:2685`, `:2688`, `:2711`)
+   deliberately replace the red threat ring with a red corner and keep selection
+   white — exactly as the V-spec requires ("threat outline with a red corner.
+   Selection/focus remains white"). At `9961edd` the modern red came only from a
+   **source-order tie-break** between two equal-specificity rules (`.ship.selected`
+   white at `:275` vs `.ship.threat` red at `:362`), so the assertion recorded an
+   accident as a contract; classic still reads red only because
+   `body.classic .ship.selected.threat` at `:277` outranks both. **No threat
+   affordance was lost** — the red corner measures `display:block` at 8×8px and is
+   visible in a screenshot. So **the assertion is wrong, not the app** — but
+   "expect white in modern" would be wrong too, since the red ring still holds for
+   non-compact contacts; the fix is to split the assertion by contact mode and pin
+   the red corner alongside the white outline. Note this will **not** by itself
+   un-quarantine the check: with only that assertion corrected it fails again at
+   lines 161–163 on the known ResizeObserver redraw race, which was in fact this
+   check's original `d613faa` failure. Matt's ruling is still needed before the
+   assertion is edited, per his §7 instruction.
+2. ~~**Slices 3–4 (S0, S1) — replay prerequisites and the action log.**~~
+   **Both delivered 2026-11-12** (#127, #128) — see the completion records above.
+   Together they clear the Reach track's two prerequisites: battle identity is
+   reproducible, and every accepted command plus every sensor sweep is retained in a
+   form the rules can be handed back. **S2 is now the cheapest large capability left
+   in the program** and is next in the queue.
 3. **Slice 5 (L1) — war chronicle.** Zero rules-layer change: a bounded
    accumulator on the raw record batch at `collectRecords`, plus wiring the
-   `onRecords` hook `resolveCampaignRound` already accepts. Needs Matt's ruling on
-   the two-tier honesty model first. Note that P2 now consumes that same raw batch
-   for audio, so `collectRecords` has two presentation readers and L1 will be the
-   third — keep them independent.
+   `onRecords` hook `resolveCampaignRound` already accepts. **Blocked on Matt's
+   ruling on the honesty model — which the L1 brief shows has THREE tiers, not two.**
+   Read [the brief](../reviews/2026-11-12-l1-chronicle-research-and-honesty-tier-brief.md)
+   before starting; it carries the measured cost of each option and eight rulings
+   with recommended defaults. Note that P2 now consumes that same raw batch for
+   audio, so `collectRecords` has two presentation readers and L1 will be the third —
+   keep them independent, and see the `voiceRecords`/`battleId` requirement in the
+   Slice 5 completion record above.
 4. ~~**Slice 6 (P1) — ship schematic.**~~ **Delivered 2026-11-12 (PR #125)** — see
    the completion record above.
 5. ~~**Slice 7 (P2) — damage-reactive audio.**~~ **Delivered 2026-11-12** — see the
