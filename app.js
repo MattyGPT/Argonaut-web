@@ -1,6 +1,7 @@
 import { paintContactDensity } from './ui/contacts.js';
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets, REALTIME_COOLDOWN, sensorSweep } from './game/actions.js';
 import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, REALTIME, RULES_REVISION, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
+import { createActionLog, recordAction, recordSweep, restoreActionLog } from './game/action-log.js';
 import { alertLevel, appendLog, createGame, defaultLoadout, distance, facingOf, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, maintainedTowPair, nebulaHides, normalizeFleetSpec, sensorRange, systemUnits } from './game/state.js';
 import { abandonEngagement, autoResolveNode, buyDockyard, createCampaign, nodeById, resolveNodeBattle, startNodeBattle, travelTo } from './game/campaign.js';
 import { scenarioFor } from './game/scenarios.js';
@@ -113,6 +114,7 @@ const save = () => {
       localStorage.setItem(PRACTICE_SAVE_KEY, JSON.stringify(practiceSession));
     } else if (campaign) localStorage.setItem(CAMPAIGN_SAVE_KEY, JSON.stringify({ version: 1, rulesRevision: RULES_REVISION, campaign, commandHistory, roundPlayback }));
     else localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 1, rulesRevision: RULES_REVISION, game, commandHistory, journal: view.journal, roundPlayback }));
+    persistActionLog();
   } catch {
     /* storage unavailable */
   }
@@ -151,6 +153,39 @@ try {
     rulesNotice = `This game was saved under an earlier ruleset (${saved.rulesRevision}). It still plays, but its recorded outcomes may not match the rules now in force (${RULES_REVISION}), and a replay shared from it may not reproduce exactly. Saving again clears this notice.`;
   }
 } catch { /* Old saves or unavailable storage start with an empty command record. */ }
+
+// Slice S1: the retained action log. Its own localStorage key, deliberately NOT
+// folded into any of the four save envelopes — those have shape validators, and an
+// action log belongs to one specific battle rather than to a session. It is keyed by
+// seed, battle identity and timing model, so a log is only ever restored into the
+// exact war it was recorded against; anything else starts empty rather than half
+// matching. See game/action-log.js for why the keying has to be this careful.
+const ACTION_LOG_KEY = 'argonaut-web-action-log-v1';
+const actionLogIdentity = () => ({
+  seed: game?.seed ?? null,
+  battleId: game?.battleRecordState?.battleId ?? null,
+  realtime: Boolean(game?.realtime),
+});
+let actionLog = createActionLog(actionLogIdentity());
+try {
+  actionLog = restoreActionLog(JSON.parse(localStorage.getItem(ACTION_LOG_KEY)), actionLogIdentity());
+} catch { /* An unreadable log starts empty; it is never worth failing a load over. */ }
+
+/**
+ * Re-key the log to the battle now in play. Starting a new war, opening a campaign
+ * engagement, or entering a drill all change the identity, and the previous war's
+ * commands must not follow into the next one.
+ */
+const syncActionLog = () => {
+  const identity = actionLogIdentity();
+  if (identity.seed === actionLog.seed && identity.battleId === actionLog.battleId && identity.realtime === actionLog.realtime) return;
+  actionLog = createActionLog(identity);
+};
+
+const persistActionLog = () => {
+  try { localStorage.setItem(ACTION_LOG_KEY, JSON.stringify(actionLog)); } catch { /* storage unavailable */ }
+};
+
 const WALKTHROUGH_KEY = 'argonaut-web-first-orders';
 let walkthrough = operationSession?.resume?.walkthrough ?? practiceSession?.resume?.walkthrough ?? createWalkthrough(practiceSession?.resume?.game ?? game);
 try {
@@ -518,6 +553,7 @@ const refresh = ({ persist = true } = {}) => {
   if (practiceSession) game = updatePractice(game);
   syncCampaign();
   if (game) {
+    syncActionLog();
     syncCamera();
     redraw();
     refreshTargetPrompt();
@@ -1026,6 +1062,13 @@ const readHull = (shipId) => {
   view = { ...view, hoverShipId: shipId };
   const swept = sensorSweep(game, shipId);
   if (swept !== game) {
+    // Slice S1: this is the one authoritative write that bypasses applyPlayerAction,
+    // so it is logged as its own entry kind rather than folded in with actions. It
+    // sets game.scanned, which the hunt-the-vendetta objective reads to decide
+    // whether the hunter is identified — a replay built from actions alone would miss
+    // it and could finish the objective differently. Recorded only on a real change:
+    // sensorSweep returns the same object once a hull is already scanned.
+    actionLog = recordSweep(actionLog, game, shipId);
     // A sweep can name a captain, crown an ace, and identify the vendetta hunter,
     // so the field is redrawn rather than patched.
     game = swept;
@@ -1288,6 +1331,11 @@ const dispatch = async (action) => {
   const outcome = applyPlayerAction(game, action);
   collectRecords(outcome.records);
   const acted = outcome.game !== game;
+  // Slice S1: recorded against the PRE-action game, which is the state the command
+  // was issued against and therefore the turn or tick it belongs to. Only accepted
+  // commands are logged — `acted` is exactly the rules' own signal that state moved,
+  // and a refusal re-applied during a replay would simply be refused again.
+  if (acted) actionLog = recordAction(actionLog, game, action);
   game = acted
     ? { ...outcome.game, log: appendLog(outcome.game.log ?? game.log, outcome.messages) }
     : game;
