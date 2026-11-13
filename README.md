@@ -650,6 +650,17 @@ prior war or campaign without transferring practice hulls or credits.
   minimap, targets, journal, and campaign: ■ Federation, ▲ Axis, ◆ Bloc,
   ● Cabal, and ○ Neutral. Captured ships show their current allegiance;
   journal entries retain the allegiance known when the event occurred.
+- **Replays** — the chronicle panel can verify that a war reproduces exactly, by
+  rebuilding it from the seed, the options and every command issued and comparing
+  that against the war actually flown, and can make a **share link**. The link
+  carries the decisions and nothing else — not the outcome, not the state, and with
+  no server involved — so it fits in a URL fragment and works offline. Open one and
+  the war rebuilds itself one stardate at a time, with step, play, pause, speed,
+  restart and exit controls; it always opens paused, and exiting returns you to your
+  own war untouched. Two limits are stated rather than hidden: a custom fleet cannot
+  be carried faithfully (the fleet builder does not round-trip its own normalized
+  output), and a war whose command log overflowed replays only from where the log
+  begins. A link is readable by anyone holding it, so it discloses every order given.
 - **Sound** — enable tactical sound in `New game` for distinct phaser, photon,
   explosion, and miss effects (WebAudio, no assets). A klaxon sounds on the
   transition into RED alert, not continuously while you sit there. The soundtrack

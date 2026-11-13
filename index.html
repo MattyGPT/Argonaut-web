@@ -32,6 +32,24 @@
       <button id="return-to-sector" class="tiny" type="button" hidden>Return to sector map</button>
     </div>
     <p id="rules-notice" class="learning-panel rules-notice" role="note" hidden></p>
+    <section id="replay-panel" class="learning-panel replay-panel" aria-label="Replay playback" tabindex="-1" hidden>
+      <h2>Watching a replay</h2>
+      <p id="replay-panel-note" class="dialog-note"></p>
+      <p id="replay-progress" class="chronicle-note"></p>
+      <div class="dialog-actions">
+        <button id="replay-step" type="button" class="secondary">Step one stardate</button>
+        <button id="replay-play" type="button" class="secondary" aria-pressed="false">Play</button>
+        <button id="replay-restart" type="button" class="secondary">Restart</button>
+        <label class="replay-speed">Speed
+          <select id="replay-speed">
+            <option value="1200">Slow</option>
+            <option value="600" selected>Normal</option>
+            <option value="250">Fast</option>
+          </select>
+        </label>
+        <button id="replay-exit" type="button">Exit replay</button>
+      </div>
+    </section>
     <section id="operation-panel" class="learning-panel" aria-label="Rescue operation" tabindex="-1" hidden></section>
     <section id="practice-panel" class="learning-panel" aria-label="Guided practice" tabindex="-1" hidden></section>
     <section id="walkthrough-panel" class="learning-panel" aria-label="First-order hints" tabindex="-1" hidden></section>
@@ -275,7 +293,10 @@
           <p id="replay-status" class="chronicle-note"></p>
           <div class="dialog-actions">
             <button id="replay-verify" type="button" class="secondary">Verify this war reproduces exactly</button>
+            <button id="replay-share-make" type="button" class="secondary">Make a share link for this war</button>
           </div>
+          <textarea id="replay-link" readonly rows="3" aria-label="The share link for this war's replay" hidden></textarea>
+          <p id="replay-share-note" class="dialog-note" hidden></p>
         </details>
         <div class="dialog-actions">
           <button id="chronicle-download" type="button" class="secondary">Download .txt</button>
@@ -740,7 +761,8 @@
           <section id="guide-save" tabindex="-1">
             <h3>Save and resume</h3>
             <p>The game autosaves in this browser's local storage. Reload to resume the saved war or campaign; accepted-command history is saved alongside it. Starting a new war or campaign retires the other session. A different browser, browser profile, or cleared site storage will not contain that save. Keep the current session if you want to preserve its progress. Each save also records which revision of the rules wrote it; if you resume a war saved under older rules, a notice says so — the war still plays normally, and the notice goes away on its own once the game saves again.</p>
-            <p><b>War chronicle.</b> The <b>War chronicle</b> button in the top bar keeps an account of the war you are flying, built from the same records the battle journal is built from and kept separately, so it is not cut short when the journal reaches its limit. It is written in two registers and says which is which. <b>The account</b> is filtered to what your flagship could actually see or hear — the same rule the journal uses — so it will not name a hull you never identified. <b>The casualty roll</b> is compiled from the fleet's returns after the fighting, so it can attribute a loss to the hull and weapon that caused it even when your own sensors never saw the shot; it is labelled as such, it only ever speaks of hulls that are gone, and where the returns name nobody it says so rather than guessing. A hull that struck its colours is never attributed to anyone, because the record does not carry one. The <b>battle report</b> at the foot is reproduced exactly as issued and is not filtered. The panel also holds the whole account as plain text, which you can copy or download and keep.</p>
+            <p><b>War chronicle.</b> The <b>War chronicle</b> button in the Battle journal's title bar keeps an account of the war you are flying, built from the same records the battle journal is built from and kept separately, so it is not cut short when the journal reaches its limit. It is written in two registers and says which is which. <b>The account</b> is filtered to what your flagship could actually see or hear — the same rule the journal uses — so it will not name a hull you never identified. <b>The casualty roll</b> is compiled from the fleet's returns after the fighting, so it can attribute a loss to the hull and weapon that caused it even when your own sensors never saw the shot; it is labelled as such, it only ever speaks of hulls that are gone, and where the returns name nobody it says so rather than guessing. A hull that struck its colours is never attributed to anyone, because the record does not carry one. The <b>battle report</b> at the foot is reproduced exactly as issued and is not filtered. The panel also holds the whole account as plain text, which you can copy or download and keep.</p>
+            <p><b>Replays.</b> The same panel can <b>verify this war reproduces exactly</b> — rebuilding it from scratch out of the seed, the options and every command you issued, then comparing the result with the war you actually flew — and can <b>make a share link</b>. The link carries those decisions and nothing else: not the outcome, not the state, and no server is involved, so it fits in the address bar and works offline. Paste it to someone else and they watch your war rebuild itself, one stardate at a time, with controls to step, play, pause, change speed, restart and exit; it always opens paused so nothing moves before they have read what it is. Exiting returns them to their own war, which was never touched. Two limits are stated rather than hidden: a war flown with a custom fleet cannot be carried faithfully, because the fleet builder does not round-trip its own normalized output, and a war whose command log overflowed replays only from where the log begins. A link is also readable by anyone holding it, so it discloses every order you gave.</p>
           </section>
           <section id="guide-troubleshooting" tabindex="-1">
             <h3>Find why an order is unavailable</h3>
