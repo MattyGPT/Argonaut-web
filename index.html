@@ -269,6 +269,14 @@
           <summary>Plain text, for copying or keeping</summary>
           <textarea id="chronicle-text" readonly rows="12" aria-label="The war chronicle as plain text"></textarea>
         </details>
+        <details id="replay-share">
+          <summary>Replay</summary>
+          <p class="dialog-note">Every command you have issued in this war is retained, along with the war's seed and options, so the war can be rebuilt from scratch by re-applying them to the same rules. Nothing about the resulting state is stored — the record is the decisions, not the outcome.</p>
+          <p id="replay-status" class="chronicle-note"></p>
+          <div class="dialog-actions">
+            <button id="replay-verify" type="button" class="secondary">Verify this war reproduces exactly</button>
+          </div>
+        </details>
         <div class="dialog-actions">
           <button id="chronicle-download" type="button" class="secondary">Download .txt</button>
           <button value="close">Close</button>

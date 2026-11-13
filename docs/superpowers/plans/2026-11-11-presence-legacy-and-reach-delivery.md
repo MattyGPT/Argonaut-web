@@ -9,7 +9,7 @@ Track P's presentation work is now delivered through P2: the browser-check CI (P
 **S1**: battle identity is derived rather than drawn (S0, #127), so the engine has
 no remaining authoritative nondeterminism, and every accepted player command plus
 every hover sensor sweep is retained in a replayable log (S1). The enforced browser
-suite stands at **20 of 22**, with two checks quarantined for recorded reasons —
+suite stands at **21 of 23**, with two checks quarantined for recorded reasons —
 `check-faction-identity` was settled by measurement and un-quarantined on
 2026-11-12 with Matt's approval, leaving `check-battle-journal` and
 `check-combat-feedback`. See
@@ -337,7 +337,33 @@ None of them changed a file.
       and tether geometry P3 touches has a green baseline. `check-combat-feedback`
       is still red and still asserts beam-endpoint geometry, so it remains the one
       outstanding baseline gap for this slice.
-- [ ] Slice 9 — S2 replay and spectator.
+- [~] Slice 9 — S2 replay and spectator. **PARTIALLY DELIVERED 2026-11-13 as S2a**,
+      with [its own review](../reviews/2026-11-13-s2a-replay-engine.md). The gate's
+      four requirements are met: `game/replay.js` is a separate driver (not bolted
+      onto `runWar`), **exact reproduction from `(seed, options, entries[])` is
+      achieved in BOTH timing models** and verified by full-state comparison against
+      a real flown war, the URL-fragment codec round-trips, and scope is single wars.
+      A player-visible **Verify this war reproduces exactly** control sits in the
+      chronicle dialog. `npm test` 1062/1062; enforced browser suite **21 of 23**
+      with the new `check-replay`; `git diff game/` has **no modified files** (the
+      new module is imported only by `app.js` and tests), so no sim run was warranted.
+      **Its own verification caught a real bug:** the first version carried
+      `game.loadout` into the artifact, but `normalizeFleetSpec` is **not
+      idempotent** — a normalized spec fed back through `createGame` comes out as a
+      raw per-class map — so the replay silently rebuilt a *different war* from the
+      same seed and commands. `replayDivergence` named it in one line
+      (`first differs at "loadout"`). The artifact now omits `loadout`, records
+      `loadoutFaithful` via `replayLoadoutIsDefault`, and the control says plainly
+      when a custom fleet means an exact match is not expected. Default-fleet wars
+      replay exactly; the non-idempotency is pinned by a test so the omission can be
+      revisited if that ever changes.
+      **REMAINING (S2b): sharing the link and spectator playback.** Deliberately not
+      shipped here — a link whose recipient cannot watch the war is a dead feature,
+      and playback needs its own surface that agrees with scrubbing, speed and the
+      existing round-playback locks. The codec is done, so S2b is presentation only.
+      S2b must also carry `dropped` into the share flow: sharing a truncated replay
+      is worse than not sharing it. Closing the custom-loadout gap needs the raw
+      fleet spec retained at creation.
 - [ ] Slice 10 — P4 canvas renderer decision.
 - [ ] Slice 11 — S3 seed challenge and score export.
 - [ ] Slice 12 — L2 memorable moments.
