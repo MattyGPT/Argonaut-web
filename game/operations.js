@@ -52,7 +52,7 @@ export const createOperationGame = ({ seed = OPERATION_SEEDS[0], movementScale =
         'op-patrol': { home: { x: 232, y: 90 + offset }, radius: 65, points: [{ x: 202, y: 100 + offset }, { x: 248, y: 72 + offset }] },
       },
     },
-  }, { battleId: battleId ?? `operation:${allocateBattleId()}` });
+  }, { battleId: battleId ?? `operation:${allocateBattleId(base.seed)}` });
 };
 
 /** Used for local AI decisions; stale coordinates never follow hidden hulls. */

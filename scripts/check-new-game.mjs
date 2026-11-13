@@ -13,7 +13,7 @@ try {
   await page.route('**/app.js', async route => {
     const response = await route.fetch();
     await route.fulfill({ response, body: `${await response.text()}
-      window.__newGameSnapshot = () => ({ seed: game?.seed, realtime: Boolean(game?.realtime), reimagined: Boolean(game?.reimagined), time: game?.simTime, turn: game?.turn, paused: Boolean(view.paused), locked: playbackLocked(), open: newGameDialog.open, state: JSON.stringify(game), accumulator: simAccumulator });
+      window.__newGameSnapshot = () => ({ seed: game?.seed, realtime: Boolean(game?.realtime), reimagined: Boolean(game?.reimagined), time: game?.simTime, turn: game?.turn, paused: Boolean(view.paused), locked: playbackLocked(), open: newGameDialog.open, state: JSON.stringify(game), accumulator: simAccumulator, journalEvents: view.journal?.events?.length ?? -1, journalBattleId: view.journal?.battleId ?? null, journalLastEvent: view.journal?.lastEventNumber ?? -1 });
       window.__newGameTestLock = locked => { presentingTerminalEvents = locked; };
     ` });
   });
@@ -69,9 +69,19 @@ try {
   await page.selectOption('#ruleset', 'classic');
   await page.fill('#new-seed', 'replacement-classic');
   await page.click('#new-game-form button[value="confirm"]');
-  const repeated = JSON.parse((await snapshot()).state);
-  assert.notEqual(repeated.battleRecordState.battleId, identity.battleId, 'a repeated seed starts a distinct battle instance');
-  assert.equal(repeated.battleRecordState.nextAction, 1);
+  const repeatedSnapshot = await snapshot();
+  const repeated = JSON.parse(repeatedSnapshot.state);
+  // Slice S0 inverted this deliberately: identity is derived from the seed, so a
+  // replay can be compared byte for byte against the war it replays. What the old
+  // assertion ("a repeated seed starts a distinct battle instance") was really
+  // protecting is that starting a new game does not resurrect the previous battle,
+  // so that is now pinned directly instead of indirectly via an id difference.
+  assert.equal(repeated.battleRecordState.battleId, identity.battleId, 'a repeated seed reproduces the same battle identity');
+  assert.equal(repeated.battleRecordState.nextAction, 1, 'action counters restart');
+  assert.equal(repeated.battleRecordState.nextEvent, 1, 'event counters restart');
+  assert.equal(repeatedSnapshot.journalEvents, 0, 'the new war opens an empty journal rather than inheriting the old one');
+  assert.equal(repeatedSnapshot.journalLastEvent, 0, 'and its event numbering restarts');
+  assert.equal(repeatedSnapshot.journalBattleId, repeated.battleRecordState.battleId, 'the journal belongs to the battle it was created for');
   assert.equal(repeated.records, undefined, 'raw records do not enter saved battle state');
 
   for (const method of ['Cancel', 'Escape']) {

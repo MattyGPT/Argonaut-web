@@ -454,17 +454,33 @@ test('a campaign survives a JSON save round-trip and plays on', () => {
   assert.equal(started.battle.game.seed, battleSeed(campaign.seed, nodeId));
 });
 
-test('each campaign engagement gets a fresh identity while its mechanics stay deterministic', () => {
+test('an engagement\'s identity is reproducible, and re-fighting a node stays a distinct engagement', () => {
   const { campaign, nodeId } = campaignAtEnemy();
   const one = startNodeBattle(campaign, nodeId);
   const two = startNodeBattle(campaign, nodeId);
-  assert.notEqual(one.battle.battleId, two.battle.battleId);
+  // Same input, same identity: startNodeBattle is pure now, which is what lets a
+  // replay reconstruct an engagement instead of inventing a new one. It used to
+  // differ only in battleId, so this had to be compared modulo stripped metadata.
+  assert.deepEqual(one, two);
   assert.equal(one.battle.battleId, one.battle.game.battleRecordState.battleId);
-  assert.deepEqual(stripBattleRecordMetadata(one), stripBattleRecordMetadata(two));
   const loaded = JSON.parse(JSON.stringify(one));
   assert.equal(startNodeBattle(loaded, nodeId), loaded, 'continuing an engagement preserves its identity');
   const resolved = resolveNodeBattle(loaded, { strategy: false });
   assert.equal(resolved.results[0].battleId, one.battle.battleId);
+
+  // The invariant that actually protects the player. A node's battle seed is
+  // `${campaign.seed}:battle:${nodeId}` and deliberately omits the turn, so a fleet
+  // that withdraws and returns re-enters on an IDENTICAL seed. resolveNodeBattle
+  // dedups on battleId, so an identity derived from the seed alone would collide
+  // here and silently discard the second engagement — no result, no service
+  // records, no capture. The campaign turn is the discriminator that prevents it.
+  const again = startNodeBattle(resolved, nodeId);
+  assert.ok(again.battle, 'the fleet can re-engage the node it withdrew from');
+  assert.equal(again.battle.game.seed, one.battle.game.seed, 'and it really is the same battle seed');
+  assert.notEqual(again.battle.battleId, one.battle.battleId, 'but it is a different engagement');
+  const resolvedAgain = resolveNodeBattle(again, { strategy: false });
+  assert.equal(resolvedAgain.results.length, 2, 'both engagements are recorded; neither is deduped away');
+  assert.deepEqual(resolvedAgain.results.map((entry) => entry.battleId), [one.battle.battleId, again.battle.battleId]);
 });
 
 test('headless auto-resolve streams complete unique records without retaining unrestricted facts', () => {

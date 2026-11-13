@@ -2647,8 +2647,13 @@ body.learning #game-root { height: auto; min-height: 38rem; flex: 0 0 auto; }
 .maintained-tow-status p { margin: .35rem 0; font-size: .76rem; }
 .tow-status-heading { display: flex; align-items: center; justify-content: space-between; gap: .4rem; flex-wrap: wrap; }
 .tow-status-heading button { padding: .3rem .45rem; font-size: .75rem; }
-.operation-warning, .operation-result-reason { border-left: 3px solid #ffcf70; padding: .4rem .65rem; background: #5c481e59; }
-body.classic .operation-warning, body.classic .operation-result-reason { border-color: currentColor; background: transparent; }
+/* Slice S0 — the non-fatal rules-revision warning reuses the operation-warning
+   idiom so both themes treat it alike. It is a persistent note, not a live region:
+   renderGame rewrites #sr-status on every render, so a notice placed there would be
+   clobbered before it could be read. */
+.operation-warning, .operation-result-reason, .rules-notice { border-left: 3px solid #ffcf70; padding: .4rem .65rem; background: #5c481e59; }
+body.classic .operation-warning, body.classic .operation-result-reason, body.classic .rules-notice { border-color: currentColor; background: transparent; }
+.rules-notice { line-height: 1.5; overflow-wrap: anywhere; }
 .operation-controls { margin-top: .8rem; }
 .operation-controls label { display: inline-flex; align-items: center; gap: .4rem; }
 .operation-debrief { border-top: 1px solid currentColor; margin-top: .8rem; }

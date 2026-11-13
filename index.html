@@ -31,6 +31,7 @@
       <button id="abandon-engagement" class="secondary tiny" type="button">Abandon engagement</button>
       <button id="return-to-sector" class="tiny" type="button" hidden>Return to sector map</button>
     </div>
+    <p id="rules-notice" class="learning-panel rules-notice" role="note" hidden></p>
     <section id="operation-panel" class="learning-panel" aria-label="Rescue operation" tabindex="-1" hidden></section>
     <section id="practice-panel" class="learning-panel" aria-label="Guided practice" tabindex="-1" hidden></section>
     <section id="walkthrough-panel" class="learning-panel" aria-label="First-order hints" tabindex="-1" hidden></section>
@@ -714,7 +715,7 @@
           </section>
           <section id="guide-save" tabindex="-1">
             <h3>Save and resume</h3>
-            <p>The game autosaves in this browser's local storage. Reload to resume the saved war or campaign; accepted-command history is saved alongside it. Starting a new war or campaign retires the other session. A different browser, browser profile, or cleared site storage will not contain that save. Keep the current session if you want to preserve its progress.</p>
+            <p>The game autosaves in this browser's local storage. Reload to resume the saved war or campaign; accepted-command history is saved alongside it. Starting a new war or campaign retires the other session. A different browser, browser profile, or cleared site storage will not contain that save. Keep the current session if you want to preserve its progress. Each save also records which revision of the rules wrote it; if you resume a war saved under older rules, a notice says so — the war still plays normally, and the notice goes away on its own once the game saves again.</p>
           </section>
           <section id="guide-troubleshooting" tabindex="-1">
             <h3>Find why an order is unavailable</h3>

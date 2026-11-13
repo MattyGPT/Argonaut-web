@@ -1,6 +1,6 @@
 import { paintContactDensity } from './ui/contacts.js';
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets, REALTIME_COOLDOWN, sensorSweep } from './game/actions.js';
-import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, REALTIME, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
+import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, REALTIME, RULES_REVISION, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
 import { alertLevel, appendLog, createGame, defaultLoadout, distance, facingOf, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, maintainedTowPair, nebulaHides, normalizeFleetSpec, sensorRange, systemUnits } from './game/state.js';
 import { abandonEngagement, autoResolveNode, buyDockyard, createCampaign, nodeById, resolveNodeBattle, startNodeBattle, travelTo } from './game/campaign.js';
 import { scenarioFor } from './game/scenarios.js';
@@ -102,14 +102,17 @@ const save = () => {
   try {
     const commandHistory = { seed: game?.seed, entries: view.commandHistory ?? [] };
     const roundPlayback = view.roundPlayback;
+    // Every envelope carries the rules revision it was written under. The validators
+    // are conjunctions of positive field checks, so an added key is tolerated; it is
+    // read back on load to warn — never to refuse — when the rules have moved on.
     if (operationSession) {
-      operationSession = { ...operationSession, game, journal: view.journal, commandHistory, roundPlayback };
+      operationSession = { ...operationSession, game, journal: view.journal, commandHistory, roundPlayback, rulesRevision: RULES_REVISION };
       localStorage.setItem(OPERATION_SAVE_KEY, JSON.stringify(operationSession));
     } else if (practiceSession) {
-      practiceSession = { ...practiceSession, game, journal: view.journal, roundPlayback };
+      practiceSession = { ...practiceSession, game, journal: view.journal, roundPlayback, rulesRevision: RULES_REVISION };
       localStorage.setItem(PRACTICE_SAVE_KEY, JSON.stringify(practiceSession));
-    } else if (campaign) localStorage.setItem(CAMPAIGN_SAVE_KEY, JSON.stringify({ version: 1, campaign, commandHistory, roundPlayback }));
-    else localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 1, game, commandHistory, journal: view.journal, roundPlayback }));
+    } else if (campaign) localStorage.setItem(CAMPAIGN_SAVE_KEY, JSON.stringify({ version: 1, rulesRevision: RULES_REVISION, campaign, commandHistory, roundPlayback }));
+    else localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 1, rulesRevision: RULES_REVISION, game, commandHistory, journal: view.journal, roundPlayback }));
   } catch {
     /* storage unavailable */
   }
@@ -128,11 +131,25 @@ let game = operationSession?.game ?? practiceSession?.game ?? (campaign ? campai
 if (game) game = enableBattleRecords(game);
 let view = { entries: [], camera: null, paused: Boolean(practiceSession || operationSession), speed: 1 };
 if (game) view.journal = createJournal(game.battleRecordState.battleId);
+// Slice S0: a save stamped under different rules still loads — the warning is
+// deliberately non-fatal, because an old war is worth finishing — but the player is
+// told that resuming it, or a replay shared from it, may no longer reproduce.
+//
+// An UNSTAMPED save stays silent on purpose. Every save in existence predates the
+// stamp, and the rules that wrote them are the rules in force now, so warning there
+// would be a false claim rather than an honest one. From this release on every save
+// is stamped — and because refresh() persists by default, an unstamped envelope is
+// re-stamped on the same load it is read — so the silent window closes at once and
+// any later rules change is caught.
+let rulesNotice = null;
 try {
   const saved = operationSession ?? practiceSession ?? JSON.parse(localStorage.getItem(campaign ? CAMPAIGN_SAVE_KEY : SAVE_KEY));
   view.commandHistory = restoreCommandHistory(saved?.commandHistory, game?.seed);
   if (game) view.journal = restoreJournal(campaign?.battle?.journal ?? saved?.journal, game.battleRecordState.battleId, view.commandHistory);
   if (game && saved?.roundPlayback?.battleId === game.battleRecordState.battleId && Array.isArray(saved.roundPlayback.events)) view.roundPlayback = saved.roundPlayback;
+  if (typeof saved?.rulesRevision === 'string' && saved.rulesRevision !== RULES_REVISION) {
+    rulesNotice = `This game was saved under an earlier ruleset (${saved.rulesRevision}). It still plays, but its recorded outcomes may not match the rules now in force (${RULES_REVISION}), and a replay shared from it may not reproduce exactly. Saving again clears this notice.`;
+  }
 } catch { /* Old saves or unavailable storage start with an empty command record. */ }
 const WALKTHROUGH_KEY = 'argonaut-web-first-orders';
 let walkthrough = operationSession?.resume?.walkthrough ?? practiceSession?.resume?.walkthrough ?? createWalkthrough(practiceSession?.resume?.game ?? game);
@@ -453,6 +470,15 @@ const showScreens = () => {
     document.querySelector('#sr-status').textContent = operationLoadNotice;
     operationPanel.hidden = false;
     operationPanel.textContent = operationLoadNotice;
+  }
+  // A persistent visible note rather than an #sr-status announcement: renderGame
+  // rewrites #sr-status on every render, so a notice placed there would be clobbered
+  // before it could be read. role="note" keeps it out of the live-region channel,
+  // so the single #sr-status announcer is preserved.
+  const rulesNoticeEl = document.querySelector('#rules-notice');
+  if (rulesNoticeEl) {
+    rulesNoticeEl.hidden = !rulesNotice;
+    if (rulesNotice && rulesNoticeEl.textContent !== rulesNotice) rulesNoticeEl.textContent = rulesNotice;
   }
   document.querySelector('#new-game').disabled = Boolean(practiceSession || operationSession);
   document.querySelectorAll('[data-practice-start]').forEach((button) => { button.disabled = Boolean(practiceSession || operationSession); });

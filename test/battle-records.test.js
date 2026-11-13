@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { createGame, getShip } from '../game/state.js';
 import { applyPlayerAction } from '../game/actions.js';
 import { resolveAutopilotTurn, resolveComputerTurns } from '../game/turns.js';
-import { battleActionOf, emitBattleRecord, enableBattleRecords, shipConsequences, snapshotKnowledge, stripBattleRecordMetadata, withBattleAction, withBattleCause, withBattleRecords } from '../game/battle-records.js';
+import { allocateBattleId, battleActionOf, emitBattleRecord, enableBattleRecords, shipConsequences, snapshotKnowledge, stripBattleRecordMetadata, withBattleAction, withBattleCause, withBattleRecords } from '../game/battle-records.js';
+import { RULES_REVISION } from '../game/constants.js';
 
 const fixture = (seed = 'phaser-hit-2', options = {}) => {
   const game = createGame({ seed, ...options });
@@ -14,15 +15,55 @@ const fixture = (seed = 'phaser-hit-2', options = {}) => {
   }) };
 };
 
-test('battle instance IDs are independent of seeds while the factory remains pure', () => {
+test('battle identity is derived from the seed, so a replay reproduces it byte for byte', () => {
   const a = createGame({ seed: 'identity' });
   const b = createGame({ seed: 'identity' });
-  assert.deepEqual(a, b);
+  assert.deepEqual(a, b, 'the factory stays pure');
   const one = enableBattleRecords(a);
   const two = enableBattleRecords(b);
-  assert.notEqual(one.battleRecordState.battleId, two.battleRecordState.battleId);
+  // This is the inversion slice S0 exists to make. Identity used to be drawn from
+  // crypto.randomUUID, so it was the ONE field that differed between two runs of
+  // the same war -- which is exactly what blocked byte-exact state comparison
+  // against a replay. Derived from the seed, the two games are now identical
+  // outright rather than merely equal once identity is stripped.
+  assert.equal(one.battleRecordState.battleId, two.battleRecordState.battleId);
+  assert.deepEqual(one, two);
+  assert.notEqual(one.battleRecordState.battleId, enableBattleRecords(createGame({ seed: 'other-identity' })).battleRecordState.battleId,
+    'a different war still gets a different identity');
+  assert.match(one.battleRecordState.battleId, /^battle-[0-9a-z]{10}$/, 'the derived identity is stable in shape');
   assert.deepEqual(stripBattleRecordMetadata(one), a);
   assert.equal(enableBattleRecords(one), one, 'resume keeps its identity');
+  // Deriving needs something to derive from: a missing seed is a programming error
+  // and must not silently collapse every battle onto one constant identity.
+  assert.throws(() => allocateBattleId(), TypeError);
+  assert.throws(() => allocateBattleId(''), TypeError);
+});
+
+test('deriving battle identity consumes no gameplay randomness', () => {
+  // `allocateBattleId` instantiates its own generator and discards it, so enabling
+  // records must not shift the war's seeded stream. If it did, every recorded war
+  // would diverge from the same war played without recording — and a replay could
+  // never be compared against the original.
+  const bare = createGame({ seed: 'rng-parity', reimagined: true });
+  const recorded = enableBattleRecords(createGame({ seed: 'rng-parity', reimagined: true }));
+  assert.equal(recorded.randomStep, bare.randomStep, 'the seeded counter is untouched at battle entry');
+  let left = bare;
+  let right = recorded;
+  for (let round = 0; round < 25 && !left.outcome; round += 1) {
+    left = resolveComputerTurns(left);
+    right = resolveComputerTurns(right);
+  }
+  assert.equal(left.randomStep, right.randomStep, 'both wars consume randomness in lockstep');
+  assert.deepEqual(stripBattleRecordMetadata(right), stripBattleRecordMetadata(left),
+    'and end in identical authoritative state');
+});
+
+test('the rules revision is a stable, comparable stamp that nothing in the engine reads', () => {
+  assert.equal(typeof RULES_REVISION, 'string');
+  assert.ok(RULES_REVISION.length > 0, 'an empty stamp would match nothing and warn on every load');
+  // Compared for equality and never parsed, so its shape is free — but it must be
+  // JSON-safe, since it travels inside every save envelope.
+  assert.equal(JSON.parse(JSON.stringify({ rulesRevision: RULES_REVISION })).rulesRevision, RULES_REVISION);
 });
 
 test('rejected commands and pure reports consume no action or record identity', () => {

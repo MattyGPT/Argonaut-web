@@ -58,8 +58,13 @@ try {
   await page.fill('#new-seed', 'journal-app-lifecycle');
   await page.click('#new-game-form button[value="confirm"]');
   state = await snapshot();
-  assert.notEqual(state.journal.battleId, battleId);
-  assert.equal(state.journal.events.length, 0);
+  // The fixture above is seeded 'journal-app-lifecycle' and this new game uses the
+  // same seed, so since slice S0 the derived identity matches by design — that is
+  // what makes a replay comparable byte for byte against the war it replays. The
+  // protection that actually matters is the two assertions below: the saved journal
+  // for this battleId had events in it, so a resurrected journal would show them.
+  assert.equal(state.journal.battleId, battleId, 'a repeated seed reproduces the same battle identity');
+  assert.equal(state.journal.events.length, 0, 'and the new war still opens an empty journal, not the saved one');
   assert.equal(state.journal.legacyCards.length, 0);
 
   await page.evaluate(async () => {

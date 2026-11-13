@@ -1,3 +1,21 @@
+/**
+ * Identifies the authoritative ruleset, for stamps that have to say whether a
+ * stored artifact was produced by these rules.
+ *
+ * Bump it whenever a change under `game/` can alter an authoritative outcome — a
+ * roll, a range or cost gate, a resolution order, or any constant the rules read.
+ * A presentation-only change must NOT bump it: the stamp exists to warn that a
+ * resumed war or a shared replay may no longer reproduce, and a repaint does not
+ * make that true. The reference point is the baseline table in `CALIBRATION.md`,
+ * so a bump here and a new calibration row normally travel together.
+ *
+ * It is compared for equality and never parsed, and nothing in `game/` branches on
+ * its value — a saved artifact from another revision still loads. The warning it
+ * triggers is deliberately non-fatal: an old war is worth finishing even when it
+ * can no longer be reproduced exactly.
+ */
+export const RULES_REVISION = 'rules-2026-11-12a';
+
 export const GRID_SIZE = 100;
 
 /**

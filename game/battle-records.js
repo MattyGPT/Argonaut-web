@@ -5,6 +5,7 @@
  */
 import { distance, getShip, inRadioContact, isActive, isSpectator, nebulaHides, radioIntegrity, sensorRange } from './state.js';
 import { ACE_KILLS } from './constants.js';
+import { createRng } from './rng.js';
 
 const COLLECTOR = Symbol('battle resolution collector');
 const ACTION = Symbol('battle action context');
@@ -18,12 +19,36 @@ const freeze = (value) => {
 };
 const timeOf = (game) => game.simTime ?? (game.turn ?? 1) - 1;
 
-/** Called at battle entry, outside createGame and every gameplay RNG stream. */
-export const allocateBattleId = () => `battle-${globalThis.crypto.randomUUID()}`;
+/**
+ * Deterministic battle identity, derived from the engagement's own seed.
+ *
+ * Called at battle entry, outside createGame and every gameplay RNG stream: a
+ * fresh generator is created and discarded, so no downstream draw shifts.
+ *
+ * This replaces `crypto.randomUUID`, which was the last authoritative
+ * nondeterminism in the engine. It blocked byte-exact state comparison between a
+ * live war and a replay of it, and because it requires a secure context it also
+ * made play from another device on the LAN throw once served over plain HTTP.
+ *
+ * `discriminator` exists because a seed alone is NOT a unique engagement
+ * identity. A campaign node's battle seed is `${campaign.seed}:battle:${nodeId}`
+ * and deliberately omits the turn, so abandoning a node and returning to it
+ * later reuses the same seed — measured, not assumed. Since `resolveNodeBattle`
+ * dedups on `battleId`, an ID derived from the seed alone would collide and the
+ * second engagement would be silently discarded: no result, no service records,
+ * no capture. Callers that can re-engage therefore pass the campaign turn, which
+ * advances by exactly one per resolved engagement.
+ */
+export const allocateBattleId = (seed, discriminator = '') => {
+  if (seed === undefined || seed === null || seed === '') {
+    throw new TypeError('A battle ID is derived from its engagement seed; none was given.');
+  }
+  return `battle-${createRng(`${seed}#${discriminator}`).next().toString(36).slice(2, 12).padEnd(10, '0')}`;
+};
 
 export const enableBattleRecords = (game, { battleId } = {}) => {
   if (game.battleRecordState) return game;
-  const id = battleId ?? allocateBattleId();
+  const id = battleId ?? allocateBattleId(game.seed);
   if (typeof id !== 'string' || !id.trim()) throw new TypeError('A battle ID must be a nonempty string.');
   return { ...game, battleRecordState: { battleId: id, nextAction: 1, nextEvent: 1 } };
 };
