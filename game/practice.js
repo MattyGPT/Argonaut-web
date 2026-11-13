@@ -112,7 +112,9 @@ export const createPracticeGame = (id, { realtime = false, attempt = 1, battleId
     terrain = [{ id: 'practice-relay', type: 'relay', name: 'Beacon', x: 160, y: 160, radius: TERRAIN.relayRadius }];
     zone = { x: 160, y: 160, radius: TERRAIN.relayRadius };
   }
-  const identity = battleId ?? `practice:${id}:${allocateBattleId()}`;
+  // The attempt number is the discriminator, so a retry is a distinct engagement
+  // while resuming a given attempt reproduces the identity it was saved under.
+  const identity = battleId ?? `practice:${id}:${allocateBattleId(base.seed, number)}`;
   return enableBattleRecords({
     ...base, ships, orders, terrain, vendettaShipId: null,
     log: [exercise.briefing, exercise.setupDisclosure],

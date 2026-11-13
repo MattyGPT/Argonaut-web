@@ -5,14 +5,16 @@ passes landed and are consolidated in
 [the research findings digest](../reviews/2026-11-11-program-research-findings.md).
 Track P's presentation work is now delivered through P2: the browser-check CI (P0,
 #119) and its bisect/repair pass (P0b, #121–#124), the ship interior schematic
-(P1, #125) and damage-reactive audio (P2). The enforced browser suite stands at
-**16 of 19**, with three checks quarantined for recorded reasons and left there by
-Matt's standing decision — see
+(P1, #125) and damage-reactive audio (P2). Track S has begun: **S0 replay
+prerequisites are delivered**, so battle identity is now derived rather than drawn
+and the engine has no remaining authoritative nondeterminism. The enforced browser
+suite stands at **17 of 20**, with three checks quarantined for recorded reasons and
+left there by Matt's standing decision — see
 [the browser-check CI review](../reviews/2026-11-11-browser-check-ci.md) and
 [the bisect review](../reviews/2026-11-12-p0b-quarantine-bisect.md). Next up is
-Track S (S0, then S1); Track L's L1 is blocked on Matt's honesty-tier ruling, and
-P3 and P4 are blocked on a durability ruling and a frame measurement
-respectively.**
+**S1, the retained action log**, which now also owns the hover-sweep entry kind
+moved down from S0. Track L's L1 is blocked on Matt's honesty-tier ruling, and P3
+and P4 are blocked on a durability ruling and a frame measurement respectively.**
 
 **Corrected 2026-11-11:** the full research reports contradicted the condensed
 summaries this plan was first written from, on two load-bearing points. There is
@@ -26,10 +28,14 @@ verified against the source and recorded in the digest's correction record. Spec
 Baseline: `main` at `f1050ce` (PR #117), clean, **983 tests passing**.
 After slice 1: **991 tests passing**, 12/12 enforced browser checks green.
 After P1 (#125): **1004 tests passing**, 15 enforced checks green.
-After P2 (this slice): **1016 tests passing**, 16 enforced checks green of 19
+After P2: **1016 tests passing**, 16 enforced checks green of 19
 discovered, guide contract at 29 local links / 20 illustrated references / 33
 command types, and `git diff game/` empty for both P1 and P2 — neither moved the
 rules layer, so no CALIBRATION row was touched.
+After S0 (this slice): **1018 tests passing**, 17 enforced checks green of 20
+discovered. This one *does* touch `game/`, so both sim modes were re-run and diffed
+against a clean `origin/main` worktree: **byte-identical**, no CALIBRATION row
+moves and no re-baseline is needed.
 
 This plan owns completion state. The spec owns direction and guardrails. Dated
 reviews own evidence. Accepted live balance changes also land in
@@ -86,8 +92,8 @@ prerequisites, not the re-baseline originally scoped here. The research digest
 | --- | --- | --- | --- | --- |
 | 1 | Browser checks in CI | P0 | `package.json`, `package-lock.json`, `.github/workflows/`, `scripts/lib/`, `scripts/run-browser-checks.mjs` | **DONE** — `npm ci && npm test` plus a browser job green in CI; no game file touched |
 | 2 | Repair the five quarantined checks | P0b | `scripts/check-battle-journal.mjs`, `check-combat-console`, `check-combat-feedback`, `check-faction-identity`, `check-target-readiness` | **PARTIAL — closed for now.** Two of the five were fixed and un-quarantined (#122, #123), one real app bug found and fixed on the way (#124); the remaining three are left quarantined by Matt's standing decision (2026-11-12), each with a dated reason in `scripts/lib/browser-suite.mjs`. Still gates P3, which touches the same beam and tether geometry |
-| 3 | Replay prerequisites | S0 | `game/battle-records.js`, `game/constants.js`, `app.js` | Seed-derived `battleId` so state comparison is byte-exact; the hover sensor sweep logged as a distinct non-action entry kind; a `RULES_REVISION` stamp with a non-fatal mismatch warning. No CALIBRATION row expected to move |
-| 4 | Retained authoritative action log | S1 | new `game/action-log.js`, `app.js:1139` | Bounded growth; zero change to authoritative state or RNG; turn-based keyed by `game.turn` (not array position), real time by integer tick plus `seq`; own localStorage key, never folded into the four existing save envelopes |
+| 3 | Replay prerequisites | S0 | `game/battle-records.js`, `game/campaign.js`, `game/operations.js`, `game/practice.js`, `game/constants.js`, `app.js`, `index.html`, `styles.css` | **DONE, with two corrections.** Seed-derived `battleId` so state comparison is byte-exact, and a `RULES_REVISION` stamp with a non-fatal mismatch warning. Corrected: a bare seed is NOT a unique engagement identity (`battleId` is a dedup key and a node's seed omits the turn), so a discriminator is required; and an unstamped save must stay silent, since warning there would be a false claim. The hover-sweep entry kind **moved to S1**. No CALIBRATION row moved — both sim modes are byte-identical to `origin/main` |
+| 4 | Retained authoritative action log | S1 | new `game/action-log.js`, `app.js:1139` | Bounded growth; zero change to authoritative state or RNG; turn-based keyed by `game.turn` (not array position), real time by integer tick plus `seq`; own localStorage key, never folded into the four existing save envelopes. **Also owns the hover sensor sweep as a distinct non-action entry kind** (moved down from S0), and must resolve the `ui/command-history.js` question — see the S0 review's correction: the module is live, only `rememberCommand` is uncalled |
 | 5 | War chronicle | L1 | new `game/chronicle.js`, `app.js:147`, `ui/render.js` | Fed from the raw record batch at `collectRecords`, **never** from `view.journal` or `game.log`; every sentence traces to a record; knowledge tier chosen and stated per surface; read-only; export works |
 | 6 | Ship interior schematic | P1 | new `ui/schematic.js`, `index.html`, `styles.css`, `app.js` | **DONE** (#125) — browser check green in CI; keyboard reachable; honest about partial enemy knowledge; degrades correctly for drones (no arcs) and Classic (no arcs, no reactor key) |
 | 7 | Damage-reactive audio | P2 | new `ui/audio-model.js`, `ui/sound.js`, `app.js`, `index.html`, `styles.css` | **DONE** — radio-integrity mapping audible and text-equivalent; separate volumes; no gameplay RNG; `git diff game/` empty |
@@ -158,8 +164,37 @@ None of them changed a file.
       task. 8/8 runs green against 3/5 before, so it left the quarantine too and
       the enforced suite is **14 of 17**. Three remain: `check-battle-journal`,
       `check-combat-feedback`, `check-faction-identity`.
-- [ ] Slice 3 — S0 replay prerequisites.
-- [ ] Slice 4 — S1 retained action log.
+- [x] Slice 3 — S0 replay prerequisites. Delivered 2026-11-12 with
+      [its own review](../reviews/2026-11-12-s0-replay-prerequisites.md). Battle
+      identity is now **derived from the engagement seed** through the engine's own
+      PRNG instead of drawn from `crypto.randomUUID` — which was the last
+      authoritative nondeterminism, and also threw outside a secure context, so
+      playing from another device on the LAN over plain HTTP was broken. A
+      `RULES_REVISION` constant stamps all four save envelopes, and a mismatch
+      raises a **non-fatal**, self-healing note naming both revisions.
+      **The plan's own wording was a trap, and was corrected rather than followed:**
+      `battleId` is a *dedup key* (`campaign.js:337`), and a node's battle seed
+      deliberately omits the turn, so withdrawing from a node and returning
+      re-enters on an **identical** seed — measured, not assumed. An identity
+      derived from the seed alone would have collided, the dedup would have fired,
+      and the second engagement would have been silently discarded: no result, no
+      service records, no capture. `allocateBattleId` therefore takes a
+      discriminator and `startNodeBattle` passes `campaign.turn`.
+      Verification: `npm test` 1018/1018 (three existing tests rewritten to pin the
+      new contract, each strictly stronger than what it replaced); enforced browser
+      suite 17 of 20 with the new `check-rules-revision`, verified to fail without
+      the warning logic; both sim modes re-run and diffed against a clean
+      `origin/main` worktree.
+- [ ] Slice 4 — S1 retained action log. **Now also owns the hover sensor sweep
+      entry kind**, moved here from S0 on 2026-11-12: an entry kind needs a log to
+      live in and this slice is what creates one. The reason, and the evidence that
+      `view.commandHistory` is the wrong home (display-shaped entries, a validator
+      that would reject a sweep, and a renderer that would show it as a command),
+      are in the S0 review. That review also **corrects the research digest's claim
+      that `ui/command-history.js` is dead code**: `restoreCommandHistory`
+      (`app.js:142`) and `commandHistoryHtml` (`ui/render.js:1321`) are both live
+      and only `rememberCommand` is uncalled, so S1 must choose between wiring it
+      and removing the panel — not deleting the module.
 - [ ] Slice 5 — L1 war chronicle.
 - [x] Slice 6 — P1 ship interior schematic. Delivered 2026-11-12 with
       [its own review](../reviews/2026-11-12-p1-ship-schematic.md): a pure

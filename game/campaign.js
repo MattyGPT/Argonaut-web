@@ -304,7 +304,11 @@ export const startNodeBattle = (campaign, nodeId, { player = true, recordBattles
         xanadu: false,
       },
   });
-  const engagementId = battleId ?? allocateBattleId();
+  // The turn is the discriminator: a node's battle seed omits it, so a fleet that
+  // withdraws and returns to the same node re-enters on an identical seed. Without
+  // the turn the two engagements would share an identity and the dedup in
+  // resolveNodeBattle would discard the second one.
+  const engagementId = battleId ?? allocateBattleId(created.seed, campaign.turn);
   const prepared = prepareCampaignBattle(campaign, recordBattles ? enableBattleRecords(created, { battleId: engagementId }) : created, engagementId);
   const game = prepared.game;
   return {
@@ -366,7 +370,7 @@ export const resolveNodeBattle = (campaign, { abandoned = false, strategy = true
     : 'retreated';
   const result = {
     nodeId,
-    battleId: engagementId ?? allocateBattleId(),
+    battleId: engagementId ?? allocateBattleId(game.seed, campaign.turn),
     name: node?.name ?? nodeId,
     turn: campaign.turn + 1,
     outcome,
@@ -661,7 +665,9 @@ const garrisonHolds = (campaign, node, attacker, { onRecords, recordBattles = tr
       xanadu: false,
     },
   });
-  const battleId = allocateBattleId();
+  // No discriminator needed here: unlike a node battle, this seed already carries
+  // `campaign.turn`, so successive raids on one node are distinct engagements.
+  const battleId = allocateBattleId(game.seed);
   if (recordBattles) game = enableBattleRecords(game, { battleId });
   while (!game.outcome && game.turn < 600) {
     game = resolveCampaignRound(game, onRecords, { nodeId: node.id, kind: 'garrison' });

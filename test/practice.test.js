@@ -99,16 +99,23 @@ for (const realtime of [false, true]) {
   }
 }
 
-test('construction is deterministic except independent battle identity and leaves ordinary war unchanged', () => {
+test('construction is deterministic — battle identity included — and leaves ordinary war unchanged', () => {
   const ordinary = createGame({ seed: 'ordinary-seed', reimagined: true });
   const bytes = JSON.stringify(ordinary);
   for (const exercise of PRACTICE_EXERCISES) {
     const first = createPracticeGame(exercise.id);
     const second = createPracticeGame(exercise.id);
-    assert.notEqual(first.practice.battleId, second.practice.battleId);
-    first.practice.battleId = second.practice.battleId;
-    first.battleRecordState.battleId = second.battleRecordState.battleId;
+    // Identity used to be the one field that differed, so this test had to overwrite
+    // it on both objects before comparing. It is derived now, so the two agree
+    // outright with no mutation — which is what makes a drill reproducible.
+    assert.equal(first.practice.battleId, second.practice.battleId);
     assert.deepEqual(first, second);
+    // A retry is a different attempt and must not inherit the first attempt's
+    // identity, or its journal and progress would collide with it.
+    const retry = createPracticeGame(exercise.id, { attempt: 2 });
+    assert.notEqual(retry.practice.battleId, first.practice.battleId);
+    assert.equal(createPracticeGame(exercise.id, { attempt: 2 }).practice.battleId, retry.practice.battleId,
+      'the same attempt reproduces the same identity');
     assert.equal(first.campaign, undefined);
     assert.equal(evaluateOutcome(first).kind, 'active');
   }
