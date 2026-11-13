@@ -506,6 +506,78 @@ recorded here rather than silently removed, following the precedent of
    justification for the canvas track, so **P4's motivation is substantially
    weaker than the spec claims** and the zoom/pan path is the real cost.
 
+**Added 2026-11-12**, after delivering S0 (#127), S1 (#128) and the per-hull
+accessibility work (#129), and after the L1 research pass. Items 3–5 and 8–9 were
+verified directly against source during those slices; items 6, 7 and 10 come from
+[the L1 brief](2026-11-12-l1-chronicle-research-and-honesty-tier-brief.md) and are
+agent-measured — re-verify before relying on them, per the lesson at the foot of
+this record.
+
+3. **"Derive `battleId` from the seed" (the S0 instruction in the delivery plan and
+   the handoff).** **Incomplete, and following it literally ships a silent campaign
+   regression.** `battleId` is not a label, it is a **dedup key**:
+   `resolveNodeBattle` (`game/campaign.js:337`) drops an engagement whose id is
+   already in `campaign.results`. A node's battle seed is
+   `` `${campaign.seed}:battle:${nodeId}` `` and deliberately omits the turn, so
+   withdrawing from a node and returning re-enters on an **identical** seed —
+   measured: seed `nb-1:battle:n-1-3` at turns 0 and 1. A seed-only identity would
+   collide and the second battle would vanish: no result row, no service records, no
+   capture. `allocateBattleId` therefore takes a discriminator and `startNodeBattle`
+   passes `campaign.turn`.
+4. **"`ui/command-history.js` is DEAD CODE (`rememberCommand` is never called and
+   its render path is unreachable). Consider deleting it in S1."** **False, and
+   deleting it would break two live imports.** `restoreCommandHistory` is called at
+   `app.js:142` and `commandHistoryHtml` is imported at `ui/render.js:45` and called
+   at `:1321` when `!view.journal`. Only `rememberCommand` is uncalled, so the
+   *render path is reachable but the list is always empty* and the panel stays
+   hidden. The real choice is between wiring `rememberCommand` and removing the
+   panel — not deleting the module.
+5. **The per-hull map label is gated by `snapshotKnowledge`.** **It is not.**
+   `snapshotKnowledge` drives `schematicKnown` in `ui/schematic.js`, i.e. the
+   ship-menu interior. The map label's partial-knowledge gate is `game.scanned`
+   (`ui/render.js:1131`), and its shape is `name, faction, status` plus optional
+   comma-separated fields plus an **em-dash** tail (`:1178`) — not the
+   `factionLabel`/`statusLabel` composition the brief assumed. Both gates are now
+   pinned, with a cross-surface test that they agree.
+6. **"The battle journal retains only ~22.8% of broadcast `destruction` records."**
+   The L1 brief re-measured this at **26.2%**, and found two of 25 wars retained
+   zero. The conclusion is unchanged — the journal still cannot be the chronicle
+   substrate — but the figure quoted in this digest and in the handoff is not the one
+   a fresh measurement produces.
+7. **"41 record kinds; only 9 are `globalTerminal`; in an ordinary war just 7 reach
+   the player unconditionally."** The L1 brief counts **43** emitted kinds (the two
+   extra, `arrival` and `tow-complete`, come from a loop variable at
+   `game/turns.js:1498`), **13** that *can* carry `globalTerminal`, and exactly
+   **4** that do in an ordinary war — yielding ~43 unconditional facts per war
+   including a complete named casualty roll for both sides. The shape of the
+   argument survives; every one of the three numbers changes.
+8. **"The project already runs TWO honesty tiers."** **There are three, and the
+   third one matters most to L1.** Verified directly: the war-end battle report
+   (`ui/render.js:1455-1508`) reads the full `game.ships` roster with **zero**
+   knowledge, scan or radio filters — `grep` for `knowledge|scanned|radioIntegrity|
+   inRadioContact` across that block returns 0 — and picks `topGun` from that whole
+   roster, naming an enemy captain as top gun. The spec nominates that exact report
+   as the chronicle's coda, so an all-filtered chronicle would print directly above
+   an unfiltered summary of the same war. **Any tier ruling that does not cover this
+   surface is incomplete.**
+9. **"Wiring `resolveCampaignRound`'s `onRecords` hook covers auto-resolved and
+   garrison engagements with zero rules-layer change."** True of the *rules layer*,
+   but no longer free at the seam: since P2, `collectRecords` also drives audio, and
+   `voiceRecords` does **not** filter by `battleId` even though `presentationRecords`
+   already does (`app.js:617`) and every record carries one
+   (`game/battle-records.js:199`). Hull ids are deterministic per battle
+   (`fed-flagship` and friends), so feeding an offscreen garrison battle's records
+   into `collectRecords` can play impact audio for a fight the player is not in.
+   Not live today — `onRecords: collectRecords` is wired only at `app.js:752` and
+   `:1675`, both the player's own battle — but **L1 must add the `battleId` guard to
+   `voiceRecords` in the same commit that wires the campaign hook**, or it will
+   introduce the bug.
+10. **"A hull that strikes its colors is recorded as `kind:'surrender'` with
+    `cause:'disabled'`."** Confirmed, and the L1 brief adds the consequence that was
+    missed: `surrender` carries **no `actor` at all** (0 of 416 sampled), so **no
+    honesty tier can attribute a colors-strike to whoever forced it**. A chronicle
+    that names one would be fabricating, regardless of the ruling on tier.
+
 The lesson is the one this repository keeps relearning: a *replacement* figure
 needs the same verification as the figure it replaces, and an agent report is
 evidence, not fact. Every load-bearing claim above is now either marked
