@@ -665,6 +665,20 @@ prior war or campaign without transferring practice hulls or credits.
   effects and alert volumes with an effective mute — stored on this device, never
   in a save file — and states every one of those cues in words, so nothing in the
   soundtrack is audio-only.
+- **War chronicle** — the top-bar **War chronicle** button keeps an account of the
+  war you are flying, built from the raw battle records rather than from the journal,
+  so it is not cut short when the journal reaches its 500-event limit (which costs it
+  roughly three quarters of all destructions). It is written in two registers and
+  says which is which: **the account** is filtered to what your flagship could see or
+  hear, by the same rule the journal uses, while **the casualty roll** is compiled
+  from the fleet's returns after the fighting and can therefore attribute a loss to
+  the hull and weapon that caused it even when your sensors never saw the shot. That
+  relaxation is deliberate and bounded — it only ever speaks of hulls that are gone,
+  so no surviving hull learns anything new about itself, and where the returns name
+  nobody it says so instead of guessing. A hull that struck its colours is never
+  attributed to anyone, because a `surrender` record carries no actor at all. The
+  battle report is reproduced verbatim at the foot and labelled as an unfiltered
+  fleet return. The whole account is available as plain text to copy or download.
 - **Impact juice** — phaser hits flash where they land and the map shakes when a
   volley lands on your command ship. Both are suppressed under
   `prefers-reduced-motion`, and nothing in the rules reads them.

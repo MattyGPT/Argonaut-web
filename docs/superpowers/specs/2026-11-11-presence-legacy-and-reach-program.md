@@ -111,6 +111,19 @@ program specifically needs.
   observed is not sayable. The existing rule that "a service record never
   invents a rescue, evacuation or captain death" extends to every sentence this
   program generates.
+  - **Post-war declassification of terminal facts (Matt's ruling, 2026-11-12 —
+    honesty tier D).** Once a war is over, a *terminal* fact about a hull that no
+    longer exists — specifically `destruction` and `vacancy` — may be attributed
+    from the fleet's consolidated returns: the hull and weapon that caused it, even
+    when the flagship never observed the shot. This is a narrow, deliberate
+    relaxation and it is bounded three ways. It applies only to terminal facts about
+    hulls that are gone, so **no surviving hull ever learns anything new about
+    itself**. The surface carrying it must be labelled as compiled from the fleet's
+    returns after the fighting, so the reader knows the provenance is different from
+    the filtered account above it. And where the returns do not name anyone, the
+    gap is stated rather than filled — which is the whole of the colors-strike case,
+    since a `surrender` record carries no `actor` at all and therefore can never be
+    attributed to a hull under any tier.
 - **Browser evidence for presentation slices.** A presentation slice is not
   accepted on the strength of a Node-only test. It carries a browser check that
   runs in CI. This is why P0 exists and why it gates the rest of Track P.

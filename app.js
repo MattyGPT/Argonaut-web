@@ -2,6 +2,7 @@ import { paintContactDensity } from './ui/contacts.js';
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets, REALTIME_COOLDOWN, sensorSweep } from './game/actions.js';
 import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, REALTIME, RULES_REVISION, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
 import { createActionLog, recordAction, recordSweep, restoreActionLog } from './game/action-log.js';
+import { chronicleText, composeChronicle, createChronicle, recordChronicle, restoreChronicle } from './ui/chronicle.js';
 import { alertLevel, appendLog, createGame, defaultLoadout, distance, facingOf, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, maintainedTowPair, nebulaHides, normalizeFleetSpec, sensorRange, systemUnits } from './game/state.js';
 import { abandonEngagement, autoResolveNode, buyDockyard, createCampaign, nodeById, resolveNodeBattle, startNodeBattle, travelTo } from './game/campaign.js';
 import { scenarioFor } from './game/scenarios.js';
@@ -115,6 +116,7 @@ const save = () => {
     } else if (campaign) localStorage.setItem(CAMPAIGN_SAVE_KEY, JSON.stringify({ version: 1, rulesRevision: RULES_REVISION, campaign, commandHistory, roundPlayback }));
     else localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 1, rulesRevision: RULES_REVISION, game, commandHistory, journal: view.journal, roundPlayback }));
     persistActionLog();
+    persistChronicle();
   } catch {
     /* storage unavailable */
   }
@@ -186,6 +188,46 @@ const persistActionLog = () => {
   try { localStorage.setItem(ACTION_LOG_KEY, JSON.stringify(actionLog)); } catch { /* storage unavailable */ }
 };
 
+// Slice L1: the war chronicle. Like the action log it lives in `app.js` module scope
+// on its own localStorage key, with NOTHING on `game` or `campaign` — that is what
+// keeps `stripBattleRecordMetadata`, the record-parity assertions and the 1,000-war
+// baseline digest provably untouched by a presentation feature.
+const CHRONICLE_KEY = 'argonaut-web-chronicle-v1';
+const chronicleIdentity = () => ({
+  seed: game?.seed ?? null,
+  battleId: game?.battleRecordState?.battleId ?? null,
+  rulesRevision: RULES_REVISION,
+});
+let chronicle = createChronicle(chronicleIdentity());
+try {
+  chronicle = restoreChronicle(JSON.parse(localStorage.getItem(CHRONICLE_KEY)), chronicleIdentity());
+} catch { /* An unreadable chronicle starts empty; never worth failing a load over. */ }
+
+/** Re-key to the battle now in play, so one war's account never absorbs another's. */
+const syncChronicle = () => {
+  const identity = chronicleIdentity();
+  if (identity.seed === chronicle.seed && identity.battleId === chronicle.battleId) return;
+  chronicle = createChronicle(identity);
+};
+
+const persistChronicle = () => {
+  try { localStorage.setItem(CHRONICLE_KEY, JSON.stringify(chronicle)); } catch { /* storage unavailable */ }
+};
+
+/**
+ * Feed the chronicle from the RAW batch. Deliberately NOT wired through the
+ * campaign's `onRecords` hook into `collectRecords`: that seam also drives the P2
+ * audio, and `voiceRecords` does not filter by `battleId` while hull ids are
+ * deterministic per battle — so campaign records reaching it would play impact audio
+ * for a fight the player is not in. Covering campaign engagements needs its own hook
+ * plus that guard; see the L1 review.
+ */
+const chronicleRecords = (records) => {
+  if (!records?.length) return;
+  syncChronicle();
+  chronicle = recordChronicle(chronicle, records);
+};
+
 const WALKTHROUGH_KEY = 'argonaut-web-first-orders';
 let walkthrough = operationSession?.resume?.walkthrough ?? practiceSession?.resume?.walkthrough ?? createWalkthrough(practiceSession?.resume?.game ?? game);
 try {
@@ -202,6 +244,10 @@ const collectRecords = (records) => {
   // journal-less context still heard the blow, and the record is the only place
   // that knows which arc took it.
   voiceRecords(records);
+  // The chronicle reads the same raw batch, before the journal gate below: the
+  // journal truncates at 500 events and retains only about a quarter of broadcast
+  // destructions, so it cannot be the substrate for an account of the whole war.
+  chronicleRecords(records);
   if (campaign?.battle && records?.length) serviceRecords.push(...records);
   if (!operationSession && !practiceSession && records?.length) walkthrough = advanceWalkthrough(walkthrough, { type: 'records', records, paused: view.paused }, game);
   if (!records?.length || !view.journal) return false;
@@ -554,6 +600,7 @@ const refresh = ({ persist = true } = {}) => {
   syncCampaign();
   if (game) {
     syncActionLog();
+    syncChronicle();
     syncCamera();
     redraw();
     refreshTargetPrompt();
@@ -1971,6 +2018,87 @@ document.querySelector('#audio-muted').addEventListener('change', (event) => {
   applyAudioToggle();
 });
 applyAudioToggle();
+
+// Slice L1: the war chronicle panel. Built with textContent and createElement
+// rather than innerHTML — every line is prose composed from ship and captain names,
+// and constructing nodes directly removes the escaping hazard outright instead of
+// depending on remembering to escape each interpolation. That is not hypothetical:
+// the hull aria-label shipped unescaped for exactly that reason.
+const chronicleDialog = () => document.querySelector('#chronicle-dialog');
+const composedChronicle = () => composeChronicle(chronicle, {
+  game,
+  coda: game ? reportFor(game, 'battle-report') : null,
+});
+
+const renderChroniclePanel = () => {
+  const dialog = chronicleDialog();
+  if (!dialog?.open) return;
+  const composed = composedChronicle();
+  const war = document.querySelector('#chronicle-war');
+  if (war) {
+    war.textContent = [
+      composed.war.seed ? `War ${composed.war.seed}` : 'This war',
+      composed.war.ruleset,
+      composed.war.stardate ? `stardate ${composed.war.stardate}` : null,
+      `${composed.observed} records observed`,
+      composed.complete ? null : 'INCOMPLETE — earlier events exceeded the chronicle limit',
+    ].filter(Boolean).join(' · ');
+  }
+  const body = document.querySelector('#chronicle-body');
+  if (body) {
+    body.replaceChildren();
+    for (const section of composed.sections) {
+      const wrap = document.createElement('section');
+      wrap.className = 'chronicle-section';
+      const heading = document.createElement('h3');
+      heading.textContent = section.heading;
+      wrap.append(heading);
+      if (section.frame) {
+        const frame = document.createElement('p');
+        frame.className = 'chronicle-frame';
+        frame.textContent = section.frame;
+        wrap.append(frame);
+      }
+      const list = document.createElement('ul');
+      for (const line of section.lines) {
+        const item = document.createElement('li');
+        item.textContent = line;
+        list.append(item);
+      }
+      wrap.append(list);
+      for (const note of section.notes ?? []) {
+        const noteEl = document.createElement('p');
+        noteEl.className = 'chronicle-note';
+        noteEl.textContent = note;
+        wrap.append(noteEl);
+      }
+      body.append(wrap);
+    }
+  }
+  const exportText = document.querySelector('#chronicle-text');
+  if (exportText) exportText.value = chronicleText(composed);
+};
+
+document.querySelector('#chronicle-toggle').addEventListener('click', () => {
+  // Open first: the panel only renders while the dialog is up, so an idle war never
+  // pays to compose an account nobody is reading.
+  chronicleDialog().showModal();
+  renderChroniclePanel();
+});
+
+document.querySelector('#chronicle-download').addEventListener('click', () => {
+  const composed = composedChronicle();
+  const blob = new Blob([chronicleText(composed)], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `argonaut-chronicle-${composed.war.seed ?? 'war'}.txt`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  // Revoked after the click has been picked up, not synchronously.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
 
 document.querySelector('#contact-mode').addEventListener('change', (event) => {
   contactMode = event.target.value;
