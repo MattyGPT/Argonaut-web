@@ -2,6 +2,7 @@ import { paintContactDensity } from './ui/contacts.js';
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets, REALTIME_COOLDOWN, sensorSweep } from './game/actions.js';
 import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, REALTIME, RULES_REVISION, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
 import { createActionLog, recordAction, recordSweep, restoreActionLog } from './game/action-log.js';
+import { createReplayArtifact, encodeReplay, replayDivergence, replayLoadoutIsDefault, replayOptionsFromGame, replayWar } from './game/replay.js';
 import { chronicleText, composeChronicle, createChronicle, recordChronicle, restoreChronicle } from './ui/chronicle.js';
 import { alertLevel, appendLog, createGame, defaultLoadout, distance, facingOf, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, maintainedTowPair, nebulaHides, normalizeFleetSpec, sensorRange, systemUnits } from './game/state.js';
 import { abandonEngagement, autoResolveNode, buyDockyard, createCampaign, nodeById, resolveNodeBattle, startNodeBattle, travelTo } from './game/campaign.js';
@@ -2098,6 +2099,53 @@ document.querySelector('#chronicle-download').addEventListener('click', () => {
   link.remove();
   // Revoked after the click has been picked up, not synchronously.
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+
+// Slice S2: replay verification. The engine, the artifact codec and the URL-fragment
+// round trip are all in game/replay.js and proven by test/replay.test.js; what this
+// adds is the one part a player can see — that the war they just flew really does
+// rebuild itself from (seed, options, commands) alone.
+//
+// Sharing the link and watching it back are deliberately NOT here yet. A link whose
+// recipient cannot watch the war is a dead feature, and playback needs a spectator
+// surface of its own; both land together in the next increment.
+const replayStatusEl = () => document.querySelector('#replay-status');
+
+document.querySelector('#replay-verify').addEventListener('click', async () => {
+  const status = replayStatusEl();
+  if (!game) return;
+  if (!actionLog.entries.length) {
+    status.textContent = 'No commands have been issued in this war yet, so there is nothing to rebuild it from.';
+    return;
+  }
+  if (!game.outcome) {
+    // The driver flies the war out to its ending, so comparing against a war still in
+    // progress would report a divergence that is really just "you are not finished".
+    // Saying so is honest; pretending to verify would not be.
+    status.textContent = 'A war can only be compared once it has ended — the replay runs to its conclusion, so verifying mid-fight would compare two different points in the war. Finish this war, or the check will always report a difference.';
+    return;
+  }
+  status.textContent = 'Rebuilding the war from its seed and your commands…';
+  // Yield once so that message actually paints before a synchronous full-war replay
+  // occupies the main thread.
+  await new Promise((resolve) => { setTimeout(resolve, 0); });
+  const artifact = createReplayArtifact({
+    seed: game.seed,
+    options: replayOptionsFromGame(game),
+    entries: actionLog.entries,
+    battleId: game.battleRecordState?.battleId ?? null,
+    dropped: actionLog.dropped,
+    loadoutFaithful: replayLoadoutIsDefault(game),
+  });
+  const result = replayWar({ seed: artifact.seed, options: artifact.options, entries: artifact.entries, battleId: artifact.battleId });
+  const divergence = replayDivergence(game, result.game);
+  const encoded = await encodeReplay(artifact);
+  // A custom fleet cannot be carried in the artifact, so say so up front rather than
+  // letting the player read a divergence as a mystery.
+  const caveat = artifact.loadoutFaithful ? '' : ' This war used a custom fleet composition, which the record cannot carry, so an exact match is not expected.';
+  status.textContent = divergence
+    ? `Did not reproduce: the rebuilt war first differs at "${divergence.field}".${caveat || ' That means something the record does not carry influenced the outcome.'}`
+    : `Reproduced exactly. ${result.applied} of ${result.total} recorded commands were re-applied in ${result.steps} steps, and the rebuilt war ends at stardate ${result.game.turn} with the same outcome and identical state. The record for this war encodes to ${encoded.length} characters, small enough for a URL fragment.${caveat}`;
 });
 
 document.querySelector('#contact-mode').addEventListener('change', (event) => {
