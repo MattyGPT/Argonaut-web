@@ -334,19 +334,27 @@ None of them changed a file.
    quarantined geometry checks, P4 on a production-cadence frame measurement that
    has never been taken.
 
-Two small, valuable and still-unassigned tasks surfaced by these slices:
+One small task surfaced by these slices is still open, and one has been closed:
 
-- Pin the composed per-hull `aria-label` in `npm test`. Verified 2026-11-12:
-  `ui/render.js:1178` builds each hull as a `<button class="ship">` whose
-  `aria-label` composes name, faction, status, selection, command, captain,
-  orders, prize, stance, heading, distress and tractor state — and
-  `test/render.test.js` contains exactly two `aria-label` assertions, neither of
-  which touches a ship. The only coverage anywhere is `check-faction-identity`,
-  which is quarantined. Note the hulls are buttons, so the assertion to pin is the
-  composed label (and its `title`/`aria-hidden` split), **not** a `role="img"`;
-  the in-repo models are `test/sector-ui.test.js:207` for a pinned
-  `role`+`aria-label` pair on sector nodes and `test/schematic.test.js` for
-  `role="img"` on schematic bars.
+- ~~Pin the composed per-hull `aria-label` in `npm test`.~~ **DONE 2026-11-12** —
+  `test/ship-a11y.test.js`, 12 tests, with
+  [its own review](../reviews/2026-11-12-per-hull-accessible-names.md). Every living
+  hull is a `<button class="ship">` (a wreck is the one `role="img"` exception), the
+  label's field order is pinned by *relative* order so a reorder fails but a new field
+  does not, and partial knowledge degrades honestly: an unidentified hull keeps its
+  captain out of every accessible name, a held hull does not name a holder the sensors
+  cannot see, and a drone is never named as crewed. Each assertion was
+  mutation-verified against `ui/render.js`. **P4's prerequisite is now met.** It also
+  found and fixed a real latent defect: the living hull's `title` and `aria-label`
+  interpolated `ship.name` and `captain` raw while the wreck and minimap siblings both
+  escaped them, so a quoted name would have truncated the accessible name. Latent
+  rather than live — no shipped name pool contains `"`, `<`, `>` or `&`, verified —
+  and the fix is byte-identical for every name the game can currently produce.
+  Three cosmetic-but-real inconsistencies between surfaces were **reported and
+  deliberately not changed**, because which surface is wrong is a decision rather than
+  a test: the decorative `■` faction glyph inside a minimap/wreck accessible name, the
+  reversed selected/command order between map and minimap, and drones not being
+  identified as unmanned on the map at all.
 - Re-capture `assets/guide/` so the schematic and the audio panel are illustrated.
   Both P1 and P2 left this open; the PNGs are hash-verified via
   `assets/guide/manifest.json`, so the images, the manifest and the `index.html`
