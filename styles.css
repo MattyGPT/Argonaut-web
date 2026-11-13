@@ -1909,6 +1909,28 @@ body.classic #tow-risk { color: inherit; }
 
 body.classic #chronicle-text { background: #000; }
 
+/* Slice S2b — the replay spectator. It sits above the map like the other learning
+   panels, so it inherits their width rules and never competes with the topbar, which
+   is at its wrapping limit at 1600px. */
+.replay-panel h2 { margin: 0 0 .35rem; color: var(--cyan); font-size: .95rem; letter-spacing: .06em; text-transform: uppercase; }
+
+.replay-speed { display: inline-flex; align-items: center; gap: .4rem; font-size: .78rem; }
+
+#replay-link {
+  width: 100%;
+  margin-top: .4rem;
+  background: #060d16;
+  border: 1px solid var(--line);
+  border-radius: .35rem;
+  color: inherit;
+  font: inherit;
+  font-size: .72rem;
+  resize: vertical;
+  word-break: break-all;
+}
+
+body.classic #replay-link { background: #000; }
+
 .command-control { display: grid; align-content: start; gap: .25rem; min-width: 0; }
 .command-control > button { width: 100%; }
 .action-explanation { display: block; color: #b9d2e1; font-size: .72rem; line-height: 1.4; overflow-wrap: anywhere; }

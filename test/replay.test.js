@@ -7,9 +7,10 @@ import { enableBattleRecords, stripBattleRecordMetadata } from '../game/battle-r
 import { resolveComputerTurns, stepContinuum } from '../game/turns.js';
 import { createActionLog, recordAction, recordSweep } from '../game/action-log.js';
 import {
-  REPLAY_STEP_BUDGET, REPLAY_VERSION, createReplayArtifact, decodeReplay,
-  encodeReplay, replayCompatibility, replayDivergence, replayEngine,
-  replayLoadoutIsDefault, replayOptionsFromGame, replayWar,
+  REPLAY_STEP_BUDGET, REPLAY_VERSION, advanceReplay, createReplayArtifact, decodeReplay,
+  encodeReplay, openReplay, replayCompatibility, replayDivergence, replayDone,
+  replayEngine, replayLoadoutIsDefault, replayOptionsFromGame, replayProgress,
+  replayWar, seekReplay,
 } from '../game/replay.js';
 import { RULES_REVISION } from '../game/constants.js';
 
@@ -206,6 +207,66 @@ test('the artifact carries the options that change the war, and not the ones tha
   assert.equal(options.sound, undefined, 'presentation settings do not travel');
   assert.equal(options.precision, undefined);
 });
+
+for (const realtime of [false, true]) {
+  const label = realtime ? 'real-time' : 'turn-based';
+
+  test(`watching a ${label} replay stardate by stardate lands on the same war as rebuilding it whole`, () => {
+    const flown = flyWar(`replay-playback-${realtime}`, realtime);
+    assert.ok(flown.game.outcome, `the fixture war finished (${label})`);
+
+    // The load-bearing equivalence: the spectator walks the SAME cursor the verifier
+    // does, so what a player watches cannot differ from what was proven exact. If
+    // these two ever diverge, one of them is lying about the war.
+    const rebuilt = replayOf(flown);
+    let cursor = openReplay({
+      seed: flown.game.seed, options: flown.options, entries: flown.log.entries, battleId: flown.battleId,
+    });
+    assert.equal(cursor.game.turn, 1, 'playback opens at the first stardate');
+    assert.equal(replayProgress(cursor).applied, 0, 'with nothing applied yet');
+    assert.equal(replayProgress(cursor).total, flown.log.entries.length);
+    assert.equal(replayDone(cursor), false);
+
+    let stardates = 0;
+    let guard = 0;
+    while (!replayDone(cursor) && guard < 20000) {
+      const previous = cursor;
+      const previousTurn = previous.game.turn;
+      cursor = advanceReplay(cursor);
+      guard += 1;
+      stardates += 1;
+      assert.notEqual(cursor, previous, 'advance returns a new cursor');
+      assert.equal(previous.game.turn, previousTurn, 'and leaves the position it came from untouched');
+    }
+    assert.ok(replayDone(cursor), `playback reached the end (${label})`);
+    assert.equal(cursor.exhausted, false, 'by the war ending, not by running out of budget');
+    assert.equal(replayProgress(cursor).applied, flown.log.entries.length, 'every command applied exactly once');
+    assert.equal(cursor.game.turn, rebuilt.game.turn, 'same final stardate as the whole-war rebuild');
+    assert.equal(cursor.game.outcome?.kind, rebuilt.game.outcome?.kind, 'same outcome');
+    assert.equal(replayDivergence(rebuilt.game, cursor.game), null,
+      'and identical state — watching the war and rebuilding it are the same war');
+    assert.ok(stardates > 1, 'and it really stepped through the war');
+  });
+
+  test(`seeking in a ${label} replay still reproduces the same war, because rewinding re-walks it`, () => {
+    const flown = flyWar(`replay-seek-${realtime}`, realtime);
+    assert.ok(flown.game.outcome);
+    const rebuilt = replayOf(flown);
+    const start = openReplay({
+      seed: flown.game.seed, options: flown.options, entries: flown.log.entries, battleId: flown.battleId,
+    });
+    // A replay is the decisions, not a stored history, so seeking means re-opening the
+    // war and walking forward — memory stays flat however long the war ran.
+    const sought = seekReplay(start, Math.max(2, Math.floor(rebuilt.game.turn / 2)));
+    assert.ok(sought.game.turn >= 2 || replayDone(sought), 'the seek moved forward');
+    let cursor = sought;
+    let guard = 0;
+    while (!replayDone(cursor) && guard < 20000) { cursor = advanceReplay(cursor); guard += 1; }
+    assert.equal(replayDivergence(rebuilt.game, cursor.game), null,
+      'and continuing from a seek still lands on the identical war');
+    assert.equal(seekReplay(null, 5), null, 'seeking nothing is safe');
+  });
+}
 
 test('the driver is a separate module and does not touch the balance harness or authoritative state', () => {
   const flown = flyWar('replay-purity', false);

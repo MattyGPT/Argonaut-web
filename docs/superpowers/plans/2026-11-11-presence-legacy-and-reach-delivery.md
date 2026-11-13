@@ -9,7 +9,7 @@ Track P's presentation work is now delivered through P2: the browser-check CI (P
 **S1**: battle identity is derived rather than drawn (S0, #127), so the engine has
 no remaining authoritative nondeterminism, and every accepted player command plus
 every hover sensor sweep is retained in a replayable log (S1). The enforced browser
-suite stands at **21 of 23**, with two checks quarantined for recorded reasons —
+suite stands at **22 of 24**, with two checks quarantined for recorded reasons —
 `check-faction-identity` was settled by measurement and un-quarantined on
 2026-11-12 with Matt's approval, leaving `check-battle-journal` and
 `check-combat-feedback`. See
@@ -351,7 +351,8 @@ None of them changed a file.
       and tether geometry P3 touches has a green baseline. `check-combat-feedback`
       is still red and still asserts beam-endpoint geometry, so it remains the one
       outstanding baseline gap for this slice.
-- [~] Slice 9 — S2 replay and spectator. **PARTIALLY DELIVERED 2026-11-13 as S2a**,
+- [x] Slice 9 — S2 replay and spectator. **DELIVERED in two increments: S2a then
+      S2b, both 2026-11-13.** S2a
       with [its own review](../reviews/2026-11-13-s2a-replay-engine.md). The gate's
       four requirements are met: `game/replay.js` is a separate driver (not bolted
       onto `runWar`), **exact reproduction from `(seed, options, entries[])` is
@@ -371,13 +372,28 @@ None of them changed a file.
       when a custom fleet means an exact match is not expected. Default-fleet wars
       replay exactly; the non-idempotency is pinned by a test so the omission can be
       revisited if that ever changes.
-      **REMAINING (S2b): sharing the link and spectator playback.** Deliberately not
-      shipped here — a link whose recipient cannot watch the war is a dead feature,
-      and playback needs its own surface that agrees with scrubbing, speed and the
-      existing round-playback locks. The codec is done, so S2b is presentation only.
-      S2b must also carry `dropped` into the share flow: sharing a truncated replay
-      is worse than not sharing it. Closing the custom-loadout gap needs the raw
-      fleet spec retained at creation.
+      **S2b DELIVERED 2026-11-13** with
+      [its own review](../reviews/2026-11-13-s2b-replay-sharing-and-spectator.md):
+      a share link (seed + options + commands, deflated to base64url in a URL
+      fragment, no server) and a spectator that opens **paused at stardate 1** with
+      step / play / pause / speed / restart / exit. The driver was refactored into an
+      immutable cursor so `replayWar` and playback walk ONE ordering implementation —
+      a second loop for playback is how a rebuild and a spectator would come to
+      disagree about the same war. That equivalence is tested rather than assumed:
+      walking stardate by stardate lands on a state with `replayDivergence === null`
+      against the whole-war rebuild, in both timing models, and seeking partway then
+      walking on lands on the identical war too. `dropped` reaches the share flow as
+      required, alongside the custom-loadout and unfinished-war caveats; a replay
+      does NOT inherit the live war's journal or command history, since showing this
+      war's journal over another's map would attribute one war's events to another.
+      `playbackLocked()` gained the replay session rather than a parallel lock.
+      `npm test` 1066/1066; enforced browser suite **22 of 24** with the new
+      `check-replay-share`, which opens the link in a second page as a recipient
+      would. **Slice 9 is now complete.**
+      Still open from this slice's scope: campaign replays, the custom-loadout gap
+      (needs the raw fleet spec retained at creation), no scrubber UI although
+      `seekReplay` exists and is tested, and nothing records that a shared war failed
+      to reproduce on someone else's machine.
 - [ ] Slice 10 — P4 canvas renderer decision.
 - [ ] Slice 11 — S3 seed challenge and score export.
 - [ ] Slice 12 — L2 memorable moments.

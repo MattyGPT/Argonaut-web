@@ -2,7 +2,7 @@ import { paintContactDensity } from './ui/contacts.js';
 import { applyPlayerAction, defaultTargetFor, eligibleTargets, maneuverTo, orderTargets, REALTIME_COOLDOWN, sensorSweep } from './game/actions.js';
 import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, REALTIME, RULES_REVISION, TARGETED_ORDERS, WEAPONS } from './game/constants.js';
 import { createActionLog, recordAction, recordSweep, restoreActionLog } from './game/action-log.js';
-import { createReplayArtifact, encodeReplay, replayDivergence, replayLoadoutIsDefault, replayOptionsFromGame, replayWar } from './game/replay.js';
+import { advanceReplay, createReplayArtifact, decodeReplay, encodeReplay, openReplay, replayCompatibility, replayDivergence, replayDone, replayLoadoutIsDefault, replayOptionsFromGame, replayProgress, replayWar, seekReplay } from './game/replay.js';
 import { chronicleText, composeChronicle, createChronicle, recordChronicle, restoreChronicle } from './ui/chronicle.js';
 import { alertLevel, appendLog, createGame, defaultLoadout, distance, facingOf, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, maintainedTowPair, nebulaHides, normalizeFleetSpec, sensorRange, systemUnits } from './game/state.js';
 import { abandonEngagement, autoResolveNode, buyDockyard, createCampaign, nodeById, resolveNodeBattle, startNodeBattle, travelTo } from './game/campaign.js';
@@ -214,6 +214,13 @@ const syncChronicle = () => {
 const persistChronicle = () => {
   try { localStorage.setItem(CHRONICLE_KEY, JSON.stringify(chronicle)); } catch { /* storage unavailable */ }
 };
+
+// Slice S2b: replay spectator state. A session holds an IMMUTABLE cursor from
+// game/replay.js plus the playback timer, and while one is open it owns the map —
+// the live war is left exactly as it was and restored on exit. Nothing here is
+// authoritative and nothing is persisted: a replay is derived from the artifact in
+// the URL, so there is no state worth saving.
+let replaySession = null;
 
 /**
  * Feed the chronicle from the RAW batch. Deliberately NOT wired through the
@@ -465,6 +472,11 @@ const drawOperationBriefing = () => {
   }
 };
 const redraw = () => {
+  // A replay owns the map while it is open. The live war's camera, journal and
+  // command history are deliberately not carried across: showing this war's journal
+  // over another war's map would be exactly the kind of unattributed claim the
+  // chronicle's tier labels exist to prevent.
+  if (replaySession) { drawReplay(); return; }
   syncCamera();
   const progress = practiceProgress(game);
   const report = view.report ?? (operationSession ? { title: 'Rescue at the Belt', lines: ['Recover Sentinel and withdraw through 38, 160. See the operation briefing above the map.', 'The beacon is an extraction area, with no repairs or protection. Wayfarer is optional.'] } : progress ? { title: 'Practice objective', lines: [progress.objective, progress.message ?? 'Use the normal commands. Retry or return whenever you wish.'] } : null);
@@ -654,7 +666,7 @@ const showEvents = (events) => {
 let presentingTerminalEvents = false;
 let replayingRound = false;
 let playingTrajectory = false;
-const playbackLocked = () => presentingTerminalEvents || replayingRound || playingTrajectory;
+const playbackLocked = () => presentingTerminalEvents || replayingRound || playingTrajectory || Boolean(replaySession);
 let playbackSession = null;
 const clearTerminalPresentation = () => {
   view = { ...view, terminalEvent: null, terminalGroup: null, battlePaused: replayingRound };
@@ -2148,6 +2160,179 @@ document.querySelector('#replay-verify').addEventListener('click', async () => {
     : `Reproduced exactly. ${result.applied} of ${result.total} recorded commands were re-applied in ${result.steps} steps, and the rebuilt war ends at stardate ${result.game.turn} with the same outcome and identical state. The record for this war encodes to ${encoded.length} characters, small enough for a URL fragment.${caveat}`;
 });
 
+// --- Slice S2b: sharing a war, and watching someone else's -----------------------
+
+const replayPanelEl = () => document.querySelector('#replay-panel');
+
+const drawReplay = () => {
+  renderGame(replaySession.cursor.game, {
+    // The live war's journal, command history and round playback are NOT carried into
+    // a replay: showing this war's journal over another war's map would attribute one
+    // war's events to another, which is the exact fabrication the chronicle's tier
+    // labels exist to prevent. The camera is released so the whole field fits.
+    ...view, camera: null, journal: null, commandHistory: [], roundPlayback: null,
+    terminalEvent: null, terminalGroup: null,
+    terrainArt, terrainBoundaries, contactMode,
+    report: { title: 'Replay', lines: [replaySession.note] },
+    playbackMode: false, playbackActive: false, playbackLocked: true,
+    shipArt: document.body.classList.contains('classic') ? 'letters' : shipArtPref,
+    precision: null,
+  });
+};
+
+const renderReplayPanel = () => {
+  const panel = replayPanelEl();
+  if (!panel) return;
+  if (!replaySession) { panel.hidden = true; return; }
+  panel.hidden = false;
+  const progress = replayProgress(replaySession.cursor);
+  document.querySelector('#replay-panel-note').textContent = replaySession.note;
+  document.querySelector('#replay-progress').textContent = `Stardate ${progress.stardate} · ${progress.applied} of ${progress.total} commands re-applied`
+    + (progress.done ? (progress.exhausted ? ' · stopped at the step budget, so this replay is incomplete' : ` · war ended: ${progress.outcome}`) : '');
+  const play = document.querySelector('#replay-play');
+  play.textContent = replaySession.playing ? 'Pause' : 'Play';
+  play.setAttribute('aria-pressed', String(replaySession.playing));
+  play.disabled = progress.done;
+  document.querySelector('#replay-step').disabled = progress.done;
+};
+
+const stopReplayTimer = () => {
+  if (replaySession?.timer) { clearInterval(replaySession.timer); replaySession.timer = null; }
+};
+
+const setReplayPlaying = (playing) => {
+  if (!replaySession) return;
+  stopReplayTimer();
+  replaySession = { ...replaySession, playing };
+  if (playing) {
+    const interval = Number(document.querySelector('#replay-speed').value) || 600;
+    replaySession.timer = setInterval(() => {
+      if (!replaySession) return;
+      const next = advanceReplay(replaySession.cursor);
+      replaySession = { ...replaySession, cursor: next };
+      drawReplay();
+      renderReplayPanel();
+      if (replayDone(next)) setReplayPlaying(false);
+    }, interval);
+  }
+  renderReplayPanel();
+};
+
+const startReplay = (artifact, note) => {
+  stopReplayTimer();
+  replaySession = {
+    artifact,
+    cursor: openReplay({ seed: artifact.seed, options: artifact.options, entries: artifact.entries, battleId: artifact.battleId }),
+    playing: false,
+    timer: null,
+    note,
+  };
+  // Paused at the opening, never auto-playing: a shared link should not start moving
+  // the map before the player has read what it is.
+  renderReplayPanel();
+  redraw();
+};
+
+const exitReplay = () => {
+  stopReplayTimer();
+  replaySession = null;
+  replayPanelEl().hidden = true;
+  // Drop the fragment so a reload returns to the player's own war instead of the
+  // replay they just left. replaceState, not an assignment: a fragment change should
+  // not leave a history entry the player has to click back through.
+  if (window.location.hash.startsWith('#replay=')) {
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+  refresh({ persist: true });
+};
+
+document.querySelector('#replay-step').addEventListener('click', () => {
+  if (!replaySession) return;
+  setReplayPlaying(false);
+  replaySession = { ...replaySession, cursor: advanceReplay(replaySession.cursor) };
+  drawReplay();
+  renderReplayPanel();
+});
+document.querySelector('#replay-play').addEventListener('click', () => setReplayPlaying(!replaySession?.playing));
+document.querySelector('#replay-restart').addEventListener('click', () => {
+  if (!replaySession) return;
+  startReplay(replaySession.artifact, replaySession.note);
+});
+document.querySelector('#replay-exit').addEventListener('click', exitReplay);
+document.querySelector('#replay-speed').addEventListener('change', () => {
+  if (replaySession?.playing) setReplayPlaying(true);
+});
+
+/** The honest caveats a share link has to carry with it. */
+const replayShareWarnings = (artifact) => {
+  const warnings = [];
+  if (artifact.dropped) warnings.push(`The action log overflowed by ${artifact.dropped} entries, so this replay begins partway through the war rather than at its opening.`);
+  if (!artifact.loadoutFaithful) warnings.push('This war used a custom fleet composition, which the link cannot carry, so it will not reproduce exactly.');
+  if (!game?.outcome) warnings.push('This war has not ended yet, so the link replays only what has been fought so far.');
+  return warnings;
+};
+
+document.querySelector('#replay-share-make').addEventListener('click', async () => {
+  const field = document.querySelector('#replay-link');
+  const note = document.querySelector('#replay-share-note');
+  if (!game) return;
+  if (!actionLog.entries.length) {
+    field.hidden = true;
+    note.hidden = false;
+    note.textContent = 'No commands have been issued in this war yet, so there is nothing to share.';
+    return;
+  }
+  const artifact = createReplayArtifact({
+    seed: game.seed,
+    options: replayOptionsFromGame(game),
+    entries: actionLog.entries,
+    battleId: game.battleRecordState?.battleId ?? null,
+    dropped: actionLog.dropped,
+    loadoutFaithful: replayLoadoutIsDefault(game),
+  });
+  const encoded = await encodeReplay(artifact);
+  window.history.replaceState(null, '', `#replay=${encoded}`);
+  field.hidden = false;
+  field.value = window.location.href;
+  field.select();
+  const warnings = replayShareWarnings(artifact);
+  note.hidden = false;
+  // navigator.clipboard is deliberately not used: like crypto.randomUUID it needs a
+  // secure context, and server.js serves plain HTTP, so it is undefined for anyone
+  // playing from another device on the LAN. The address bar plus a selectable field
+  // works everywhere.
+  note.textContent = `${warnings.length ? `${warnings.join(' ')} ` : ''}The link is ${encoded.length} characters, is now in the address bar, and is selected above so you can copy it. It carries the seed and every command — not the outcome — so anyone holding it can read what you ordered, and can watch the war play out.`;
+});
+
+/**
+ * Pick up a shared replay from the URL fragment. Runs after the first refresh so the
+ * replay takes the map from the player's own war, and is async because the fragment
+ * has to be inflated before it can be read.
+ */
+const loadSharedReplay = async () => {
+  const hash = window.location.hash;
+  if (!hash.startsWith('#replay=')) return;
+  const artifact = await decodeReplay(hash);
+  if (!artifact) {
+    const note = document.querySelector('#replay-share-note');
+    note.hidden = false;
+    note.textContent = 'That replay link could not be read — it may be truncated, or from a newer version of the game.';
+    return;
+  }
+  const compat = replayCompatibility(artifact);
+  const parts = [`A shared war: seed ${artifact.seed}, ${artifact.entries.length} recorded commands, ${artifact.options.realtime ? 'fought in real time' : 'fought turn by turn'}.`];
+  if (!compat.ok) {
+    parts.push(`It was recorded under rules ${compat.recordedRev} and the rules in force are ${compat.currentRev}, so it will still play but the outcomes may differ from what whoever shared it saw.`);
+  } else {
+    parts.push('Nothing is stored but the decisions, so this rebuilds the war by re-applying them to the same rules.');
+    if (!compat.complete) parts.push(`Its action log was truncated (${artifact.dropped} entries dropped), so it begins partway through the war rather than at the opening.`);
+    if (!compat.faithful) parts.push('It used a custom fleet composition the link cannot carry, so it will not reproduce exactly.');
+    if (!compat.engineMatch) parts.push('It was recorded in a different browser engine, and exact reproduction across engines is not guaranteed.');
+  }
+  parts.push('Your own war is untouched and returns when you exit.');
+  startReplay(artifact, parts.join(' '));
+};
+
 document.querySelector('#contact-mode').addEventListener('change', (event) => {
   contactMode = event.target.value;
   try { localStorage.setItem(CONTACTS_KEY, contactMode); } catch { /* optional */ }
@@ -2183,3 +2368,6 @@ new ResizeObserver(([entry]) => {
 refresh();
 if (game?.phase === 'computer') { runComputer(); refresh(); }
 if (game && isSpectator(game) && !game.outcome && game.phase === 'player') spectate();
+// Last, so a shared replay takes the map from the player's own war rather than being
+// drawn over by the initial refresh. Async: the fragment has to be inflated first.
+loadSharedReplay();

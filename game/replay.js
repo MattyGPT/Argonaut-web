@@ -53,51 +53,129 @@ const applyEntry = (game, entry) => (entry.kind === 'sweep'
   ? sensorSweep(game, entry.targetId)
   : applyPlayerAction(game, { type: entry.type, ...(entry.request ?? {}) }).game);
 
+const advanceSim = (cursor) => (cursor.realtime ? stepContinuum(cursor.game).game : resolveComputerTurns(cursor.game));
+
 /**
- * Rebuild a war. Returns the final state plus enough accounting to tell an exact
- * reproduction from a partial one: `applied` versus `entries.length`, and whether the
+ * The single driver, expressed as a cursor. `replayWar` and the spectator's playback
+ * both walk this, deliberately: the ordering rules below are the subtle part of the
+ * whole slice, and keeping one copy is what stops a rebuild and a playback from
+ * disagreeing about the same war.
+ *
+ * A cursor is immutable — every advance returns a new one — so a spectator can hold a
+ * position without the driver mutating underneath it.
+ */
+const openCursor = ({ seed, options = {}, entries = [], battleId = null }) => {
+  const game = enableBattleRecords(createGame({ seed, ...options }), battleId ? { battleId } : {});
+  return {
+    game,
+    // Ordered by seq, never by array position: several commands can share one tick in
+    // real time, and their issue order is load-bearing.
+    ordered: [...entries].sort((a, b) => a.seq - b.seq),
+    index: 0,
+    applied: 0,
+    steps: 0,
+    exhausted: false,
+    realtime: Boolean(game.realtime),
+  };
+};
+
+/** Whether the next entry belongs at the cursor's current position in the war. */
+const entryDue = (cursor) => {
+  const entry = cursor.ordered[cursor.index];
+  if (!entry) return false;
+  // Turn-based waits for the stardate AND the player's phase, because free actions
+  // (orders, refit, stance, helm, shield focus) let several entries share one turn —
+  // resolving too early would fire a command on the wrong stardate.
+  return cursor.realtime
+    ? tickOf(cursor.game) >= entry.tick
+    : cursor.game.turn >= entry.turn && cursor.game.phase !== 'computer';
+};
+
+/** Advance exactly one driver step: apply the due entry, or move the sim forward. */
+const cursorAdvance = (cursor) => {
+  if (cursor.exhausted || cursor.game.outcome) return cursor;
+  if (cursor.steps >= REPLAY_STEP_BUDGET) return { ...cursor, exhausted: true };
+  if (entryDue(cursor)) {
+    return {
+      ...cursor,
+      game: applyEntry(cursor.game, cursor.ordered[cursor.index]),
+      index: cursor.index + 1,
+      applied: cursor.applied + 1,
+      steps: cursor.steps + 1,
+    };
+  }
+  return { ...cursor, game: advanceSim(cursor), steps: cursor.steps + 1 };
+};
+
+/** A replay is finished when the war ended or the runaway budget was hit. */
+export const replayDone = (cursor) => Boolean(cursor?.game?.outcome) || Boolean(cursor?.exhausted);
+
+export const replayProgress = (cursor) => ({
+  stardate: cursor?.game?.turn ?? null,
+  tick: cursor?.realtime ? tickOf(cursor.game) : null,
+  applied: cursor?.applied ?? 0,
+  total: cursor?.ordered?.length ?? 0,
+  steps: cursor?.steps ?? 0,
+  done: replayDone(cursor),
+  exhausted: Boolean(cursor?.exhausted),
+  outcome: cursor?.game?.outcome?.kind ?? null,
+});
+
+/**
+ * Rebuild a war to its ending. Returns the final state plus enough accounting to tell
+ * an exact reproduction from a partial one: `applied` versus `total`, and whether the
  * driver stopped because the war ended or because it ran out of budget.
  */
 export const replayWar = ({ seed, options = {}, entries = [], battleId = null }) => {
-  let game = enableBattleRecords(createGame({ seed, ...options }), battleId ? { battleId } : {});
-  const ordered = [...entries].sort((a, b) => a.seq - b.seq);
-  const realtime = Boolean(game.realtime);
-  const applied = [];
-  let steps = 0;
-  let exhausted = false;
-  const step = () => {
-    steps += 1;
-    if (steps > REPLAY_STEP_BUDGET) { exhausted = true; return false; }
-    return true;
+  let cursor = openCursor({ seed, options, entries, battleId });
+  while (!replayDone(cursor)) cursor = cursorAdvance(cursor);
+  return {
+    game: cursor.game,
+    applied: cursor.applied,
+    total: cursor.ordered.length,
+    steps: cursor.steps,
+    exhausted: cursor.exhausted,
   };
+};
 
-  let index = 0;
-  while (index < ordered.length && !game.outcome && !exhausted) {
-    const entry = ordered[index];
-    if (realtime) {
-      if (tickOf(game) < entry.tick) {
-        if (!step()) break;
-        game = stepContinuum(game).game;
-        continue;
-      }
-    } else if (game.turn < entry.turn || game.phase === 'computer') {
-      if (!step()) break;
-      game = resolveComputerTurns(game);
-      continue;
-    }
-    game = applyEntry(game, entry);
-    applied.push(entry);
-    index += 1;
-  }
+/** Open a replay at the start of the war, ready to be watched. */
+export const openReplay = openCursor;
 
-  // Fly the war out to its ending, so the final state is comparable with a live war
-  // that was played to completion rather than abandoned mid-fight.
-  while (!game.outcome && !exhausted) {
-    if (!step()) break;
-    game = realtime ? stepContinuum(game).game : resolveComputerTurns(game);
-  }
+/**
+ * Advance one STARDATE, applying every command that falls in between. The stardate is
+ * the unit the game already renders on — `renderGame` runs per stardate boundary, not
+ * per frame — so it is also the natural unit for a spectator: one step is one beat of
+ * the war rather than one eighth-of-a-stardate subtick.
+ */
+export const advanceReplay = (cursor) => {
+  if (!cursor || replayDone(cursor)) return cursor;
+  const startTurn = cursor.game.turn;
+  const startTick = tickOf(cursor.game);
+  let next = cursor;
+  do {
+    next = cursorAdvance(next);
+  } while (!replayDone(next) && (next.realtime
+    ? tickOf(next.game) - startTick < REALTIME.ticksPerStardate
+    : next.game.turn === startTurn));
+  return next;
+};
 
-  return { game, applied: applied.length, total: ordered.length, steps, exhausted };
+/**
+ * Jump to a stardate by replaying forward to it. There is no seeking backwards through
+ * stored states — a replay is the decisions, not the history — so rewinding means
+ * re-opening the war and walking forward again. That is cheap enough to do on demand
+ * and keeps memory flat however long the war ran.
+ */
+export const seekReplay = (cursor, stardate) => {
+  if (!cursor) return cursor;
+  let next = openReplay({
+    seed: cursor.game.seed,
+    options: replayOptionsFromGame(cursor.game),
+    entries: cursor.ordered,
+    battleId: cursor.game.battleRecordState?.battleId ?? null,
+  });
+  while (!replayDone(next) && next.game.turn < stardate) next = advanceReplay(next);
+  return next;
 };
 
 /**
