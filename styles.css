@@ -1843,6 +1843,72 @@ body.classic #tow-risk { color: inherit; }
   line-height: 1.45;
 }
 
+/* Slice L1 — the war chronicle. It is a long document rather than a control panel,
+   so it gets a wider dialog and its own scroll region instead of growing the page.
+   Colours come from the theme variables, so the classic view re-skins it for free. */
+#chronicle-dialog { width: min(94vw, 760px); max-width: 94vw; }
+
+.chronicle-body {
+  display: grid;
+  gap: .85rem;
+  max-height: min(56vh, 30rem);
+  overflow-y: auto;
+  padding-right: .3rem;
+}
+
+.chronicle-section h3 {
+  margin: 0 0 .3rem;
+  color: var(--cyan);
+  font-size: .78rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.chronicle-section ul {
+  display: grid;
+  gap: .22rem;
+  margin: 0;
+  padding-left: 1.05rem;
+  font-size: .78rem;
+  line-height: 1.45;
+}
+
+/* The tier label. It has to read as a statement about provenance rather than as body
+   copy, because it is what makes the filtered/declassified split honest instead of
+   merely inconsistent. */
+.chronicle-frame {
+  margin: 0 0 .4rem;
+  padding: .3rem .55rem;
+  border-left: 3px solid var(--line);
+  color: var(--cyan);
+  font-size: .72rem;
+  font-style: italic;
+  line-height: 1.45;
+}
+
+.chronicle-note {
+  margin: .35rem 0 0;
+  color: #93b4c8;
+  font-size: .72rem;
+  line-height: 1.45;
+}
+
+#chronicle-export summary { color: var(--cyan); cursor: pointer; font-size: .78rem; }
+
+#chronicle-text {
+  width: 100%;
+  margin-top: .4rem;
+  background: #060d16;
+  border: 1px solid var(--line);
+  border-radius: .35rem;
+  color: inherit;
+  font: inherit;
+  font-size: .72rem;
+  resize: vertical;
+}
+
+body.classic #chronicle-text { background: #000; }
+
 .command-control { display: grid; align-content: start; gap: .25rem; min-width: 0; }
 .command-control > button { width: 100%; }
 .action-explanation { display: block; color: #b9d2e1; font-size: .72rem; line-height: 1.4; overflow-wrap: anywhere; }

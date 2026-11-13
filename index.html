@@ -87,6 +87,7 @@
           <span>Battle journal</span>
           <span class="panel-meta">
             <button id="replay-round" class="secondary tiny" data-command="replay" hidden>Replay round</button>
+            <button id="chronicle-toggle" class="secondary tiny" type="button" aria-haspopup="dialog" title="The account of this war, what it is allowed to claim, and a copy you can keep">War chronicle</button>
             <span id="log-meta">Newest first</span>
           </span>
         </div>
@@ -255,6 +256,21 @@
           <p class="dialog-note">Every cue above is also stated here in words, so nothing in the soundtrack is audio-only.</p>
         </div>
         <div class="dialog-actions">
+          <button value="close">Close</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="chronicle-dialog" aria-labelledby="chronicle-title">
+      <form method="dialog" id="chronicle-form">
+        <h2 id="chronicle-title">War chronicle</h2>
+        <p id="chronicle-war" class="dialog-note"></p>
+        <div id="chronicle-body" class="chronicle-body"></div>
+        <details id="chronicle-export">
+          <summary>Plain text, for copying or keeping</summary>
+          <textarea id="chronicle-text" readonly rows="12" aria-label="The war chronicle as plain text"></textarea>
+        </details>
+        <div class="dialog-actions">
+          <button id="chronicle-download" type="button" class="secondary">Download .txt</button>
           <button value="close">Close</button>
         </div>
       </form>
@@ -716,6 +732,7 @@
           <section id="guide-save" tabindex="-1">
             <h3>Save and resume</h3>
             <p>The game autosaves in this browser's local storage. Reload to resume the saved war or campaign; accepted-command history is saved alongside it. Starting a new war or campaign retires the other session. A different browser, browser profile, or cleared site storage will not contain that save. Keep the current session if you want to preserve its progress. Each save also records which revision of the rules wrote it; if you resume a war saved under older rules, a notice says so — the war still plays normally, and the notice goes away on its own once the game saves again.</p>
+            <p><b>War chronicle.</b> The <b>War chronicle</b> button in the top bar keeps an account of the war you are flying, built from the same records the battle journal is built from and kept separately, so it is not cut short when the journal reaches its limit. It is written in two registers and says which is which. <b>The account</b> is filtered to what your flagship could actually see or hear — the same rule the journal uses — so it will not name a hull you never identified. <b>The casualty roll</b> is compiled from the fleet's returns after the fighting, so it can attribute a loss to the hull and weapon that caused it even when your own sensors never saw the shot; it is labelled as such, it only ever speaks of hulls that are gone, and where the returns name nobody it says so rather than guessing. A hull that struck its colours is never attributed to anyone, because the record does not carry one. The <b>battle report</b> at the foot is reproduced exactly as issued and is not filtered. The panel also holds the whole account as plain text, which you can copy or download and keep.</p>
           </section>
           <section id="guide-troubleshooting" tabindex="-1">
             <h3>Find why an order is unavailable</h3>

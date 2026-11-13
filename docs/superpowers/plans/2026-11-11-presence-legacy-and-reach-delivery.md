@@ -9,7 +9,7 @@ Track P's presentation work is now delivered through P2: the browser-check CI (P
 **S1**: battle identity is derived rather than drawn (S0, #127), so the engine has
 no remaining authoritative nondeterminism, and every accepted player command plus
 every hover sensor sweep is retained in a replayable log (S1). The enforced browser
-suite stands at **19 of 21**, with two checks quarantined for recorded reasons —
+suite stands at **20 of 22**, with two checks quarantined for recorded reasons —
 `check-faction-identity` was settled by measurement and un-quarantined on
 2026-11-12 with Matt's approval, leaving `check-battle-journal` and
 `check-combat-feedback`. See
@@ -221,7 +221,38 @@ None of them changed a file.
       adding the `export` keyword to `commandRequest` — 3 insertions, 1 deletion —
       and nothing in `game/` imports the new module, so no rule can read the log.
       Both sim modes were still diffed against a clean `origin/main` worktree.
-- [ ] Slice 5 — L1 war chronicle. **UNBLOCKED — Matt ruled 2026-11-12: tier D.**
+- [x] Slice 5 — L1 war chronicle. **Delivered 2026-11-13 under Matt's tier-D
+      ruling**, with [its own review](../reviews/2026-11-13-l1-war-chronicle.md).
+      A single war now produces a kept account: a filtered **account** of terminal
+      events rendered through the journal's own `projectJournalRecord` +
+      `formatJournalEvent` (so the two surfaces cannot drift), a **casualty roll**
+      declassified from the raw records for `destruction`/`vacancy` only and labelled
+      as compiled from the fleet's returns, and the **battle report** reproduced
+      verbatim and labelled an unfiltered fleet return. Fed from the raw batch, never
+      from the journal (which retains only about a quarter of destructions).
+      `git diff game/` is **empty**; `npm test` 1051/1051; enforced browser suite
+      **20 of 22** with the new `check-chronicle`, which feeds a hostile
+      `<img onerror>` ship name through the real pipeline and asserts it arrives as
+      inert text. The spec's *No fabricated narrative* guardrail gains the
+      declassification clause the ruling required.
+      **Two deviations from the plan, both recorded with reasons.** The module is
+      `ui/chronicle.js`, not `game/chronicle.js`, because the plan's own instruction
+      to reuse `projectJournalRecord` requires importing from `ui/` and no `game/`
+      module does that anywhere in this codebase. And the campaign `onRecords` hook
+      was **not** wired, because that seam also drives P2 audio and `voiceRecords`
+      does not filter by `battleId`. A campaign-length chronicle is therefore the next
+      increment, and it must land the hook and that guard together.
+      **This slice also caused and fixed a real layout regression.** An eighth topbar
+      button grows the topbar from 94px to 132px at 1600×1000, and against
+      `#game-root`'s deliberate `min-height: 760px` that pushes the page bottom to
+      1011px — 11px of overflow on the exact viewport #122 was written to fix —
+      leaving hulls near the top of the map unclickable under `#terrain-controls`.
+      Found by bisecting one file at a time against `origin/main` after two wrong
+      hypotheses, and fixed by moving the button into the Battle journal's
+      `.panel-meta`, which is also where it belongs. **The topbar is at its wrapping
+      limit at 1600px: any new control added there risks the same break.**
+      The ruling as recorded at the time follows.
+      **UNBLOCKED — Matt ruled 2026-11-12: tier D.**
       Per-surface split (chronicle narrative filtered to what the flagship could
       know) **plus post-war declassification of terminal facts** — a destruction's
       killer and weapon, named at war's end from the fleet's consolidated returns,
