@@ -246,3 +246,42 @@ export const scarSummary = (ship) => {
  * tabbing a fleet needs "scarred" to be heard, not recited.
  */
 export const scarNote = (ship) => (scarsOf(ship).length ? ' — battle-scarred' : '');
+
+/**
+ * The debris field a destroyed hull leaves behind (P3b), as one background value
+ * for an overlay on the wreck: a scorch halo under the hulk, a scatter of charred
+ * fragments, and a couple of embers still holding their heat.
+ *
+ * It persists for the rest of the engagement by construction — it is part of the
+ * wreck element, which the renderer rebuilds per redraw and a new war simply does
+ * not contain — so unlike a timed effect there is no lifetime to manage and
+ * nothing to leak into the next fight. Positions come from the same FNV-1a hash as
+ * the decals: a given hull always sheds the same field, on every render and every
+ * machine, with no RNG stream touched.
+ *
+ * Every shape stays inside the middle of the overlay, which itself overshoots the
+ * hulk by only a tenth of its box: debris that drifted far enough to reach a
+ * neighbour would read as dirt on that neighbour's hull rather than as this one's
+ * wreckage.
+ */
+export const debrisBackground = (ship) => {
+  if (!ship?.id) return '';
+  // These values are already percentages of the overlay box, so they take a plain
+  // formatter — `percent` converts fractions, and feeding it a percentage is the
+  // exact mistake that once put every decal at 6500% of the art box.
+  const pc = (value) => `${Math.round(value * 10) / 10}%`;
+  const seed = hash(`wreck#${ship.id}`);
+  const shards = Array.from({ length: 7 }, (_, index) => {
+    const shardSeed = hash(`${ship.id}#shard${index}`);
+    const across = frac(shardSeed, 0);
+    const along = frac(shardSeed, 10);
+    const size = 1.6 + frac(shardSeed, 20) * 2.6;
+    return `radial-gradient(${pc(size)} ${pc(size * (0.7 + across * 0.6))} at ${pc(18 + across * 64)} ${pc(18 + along * 64)},rgba(22,20,18,.85) 0 52%,rgba(52,44,38,.4) 54% 78%,rgba(0,0,0,0) 92%)`;
+  });
+  const embers = [0, 1].map((index) => {
+    const emberSeed = hash(`${ship.id}#ember${index}`);
+    return `radial-gradient(1.1% 1.1% at ${pc(30 + frac(emberSeed, 0) * 40)} ${pc(30 + frac(emberSeed, 12) * 40)},rgba(255,146,64,.6) 0 40%,rgba(190,70,20,.28) 42% 70%,rgba(0,0,0,0) 88%)`;
+  });
+  const halo = `radial-gradient(46% 42% at ${pc(50 + (frac(seed, 0) - 0.5) * 8)} ${pc(50 + (frac(seed, 10) - 0.5) * 8)},rgba(12,9,7,.5) 0 40%,rgba(30,22,16,.26) 42% 72%,rgba(0,0,0,0) 94%)`;
+  return [halo, ...shards, ...embers].join(',');
+};

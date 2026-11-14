@@ -15,10 +15,11 @@ suite stands at **22 of 24**, with two checks quarantined for recorded reasons �
 `check-combat-feedback`. See
 [the browser-check CI review](../reviews/2026-11-11-browser-check-ci.md) and
 [the bisect review](../reviews/2026-11-12-p0b-quarantine-bisect.md). **S2 (replay and
-spectator), L1 (war chronicle) and P3a (battle scarring) have since been delivered**
-— #133, #135, #132 and the P3a increment of 2026-11-13 — so Tracks P, S and L are
-delivered through P2, S2 and L1 respectively, plus the first half of P3. **Next is
-P3b** (arc-impact FX and persistent debris), then S3. **Matt ruled on
+spectator), L1 (war chronicle) and P3 (battle scarring, then arc-impact FX and
+debris) have since been delivered** — #133, #135, #132, #136 and the P3b increment of
+2026-11-13 — so Tracks P, S and L are delivered through P2, S2 and L1 respectively,
+and P3 is complete in both increments. **Next is S3** (seed challenge and score
+export, retiring BACKLOG Round 28). **Matt ruled on
 2026-11-12** on the two blocked slices: L1 takes honesty **tier D** (per-surface
 split plus post-war declassification of terminal facts, labelled on the page) and P3
 takes the **new authoritative damage-history field** rather than derived wear. P4
@@ -384,6 +385,16 @@ None of them changed a file.
       debris that persists where a hull died. `check-combat-feedback` is still
       quarantined and still asserts beam-endpoint geometry; P3a did not touch that
       geometry, so it neither needed nor consumed that baseline.
+      **P3b DELIVERED 2026-11-13** with
+      [its review](../reviews/2026-11-13-p3b-arc-impact-and-debris.md): the fire
+      events carry the arc from the four sites that already computed it, the impact
+      ring moves to the struck edge and a shield-arc flare bows beyond it (ion and
+      misses flare nowhere, because flaring a direction the rules never used would
+      be a claim the fight did not make), and a destroyed hull leaves a debris
+      field that is part of the wreck element and so has no lifetime to leak.
+      `npm test` **1102/1102**; enforced suite **24 of 26** with the new
+      `check-arc-impact`; four-profile sim parity against the P3a baseline
+      byte-identical. **Slice 8 (P3) is complete.**
 - [x] Slice 9 — S2 replay and spectator. **DELIVERED in two increments: S2a then
       S2b, both 2026-11-13.** S2a
       with [its own review](../reviews/2026-11-13-s2a-replay-engine.md). The gate's
@@ -546,19 +557,21 @@ None of them changed a file.
    the completion record above.
 5. ~~**Slice 7 (P2) — damage-reactive audio.**~~ **Delivered 2026-11-12** — see the
    completion record and [its review](../reviews/2026-11-12-p2-damage-reactive-audio.md).
-6. **Slice 8b (P3b) — arc-impact FX and persistent debris.** The durable half of P3
-   landed as P3a on 2026-11-13; this is the moment-of-impact half. The fire events
-   do not yet carry the arc, though `struckArc` is already computed at every site
-   that would need it and `fireEvent` spreads a details bag, so the first move is
-   putting the arc on the event payload and letting `ui/fx.js` bow a shield flare
-   out on the struck side — the shooter→target bearing the FX layer already has is
-   the physical fact, so no new geometry is required. Debris that persists where a
-   hull died is the second half; wrecks already persist as `.wreck` elements, so
-   this is a scatter over what is already there rather than a new lifetime. Keep it
-   inside the existing `MAX_EFFECTS` / 48 ms budget and respect
-   `prefers-reduced-motion` as P3a's static decals already do.
-   Track P then has only P4 left, gated on a production-cadence frame measurement
-   that has never been taken.
+6. ~~**Slice 8b (P3b) — arc-impact FX and persistent debris.**~~ **DELIVERED
+   2026-11-13** with [its review](../reviews/2026-11-13-p3b-arc-impact-and-debris.md).
+   The fire events now carry the arc `struckArc` already computed at four sites
+   (player volley, autopilot volley, real-time warhead, spread primary — splash
+   stays unaimed); `ui/fx.js` offsets the impact ring to the struck edge and bows a
+   shield-arc flare beyond it, in screen pixels converted through the live
+   viewBox because hulls are a constant screen size; ion and misses flare nowhere.
+   Debris is part of the wreck element rather than a timed effect, so it has no
+   lifetime to manage and a new war cannot inherit it. `check-arc-impact` is the
+   one check that stubs `app.js`, because it must await inside the page and every
+   await is a window for the live app to redraw over the fixture — measured, not
+   assumed. Enforced suite **24 of 26**; four-profile sim parity against the P3a
+   baseline byte-identical. **Slice 8 (P3) is now complete**; Track P has only P4
+   left, gated on the production-cadence frame measurement that has never been
+   taken.
 
 One small task surfaced by these slices is still open, and one has been closed:
 

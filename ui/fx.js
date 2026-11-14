@@ -89,6 +89,7 @@ const drawBeam = (svg, e, map) => {
   setTimeout(() => line.remove(), 420);
   const flash = e.hit ? drawImpact(svg, { x: e.x2, y: e.y2 }) : null;
   const started = performance.now();
+  let flared = false;
   const anchor = () => {
     const from = e.historical ? { x: e.x1, y: e.y1 } : displayedPoint(map, svg, e.fromId, { x: e.x1, y: e.y1 });
     const target = e.historical ? { x: e.x2, y: e.y2 } : displayedPoint(map, svg, e.toId, { x: e.x2, y: e.y2 });
@@ -98,8 +99,15 @@ const drawBeam = (svg, e, map) => {
     line.setAttribute('x2', to.x);
     line.setAttribute('y2', to.y);
     if (flash) {
-      flash.setAttribute('cx', to.x);
-      flash.setAttribute('cy', to.y);
+      // An aimed hit that names an arc lands on the quarter that took it, and the
+      // arc throws a flare there; anything unaimed keeps the centre ring.
+      const at = e.arc && !e.historical ? struckPoint(svg, from, to) : { ...to, angle: null };
+      flash.setAttribute('cx', at.x);
+      flash.setAttribute('cy', at.y);
+      if (e.arc && !e.historical && !flared) {
+        flared = true;
+        drawArcFlare(svg, at, e.kind);
+      }
     }
     if (line.isConnected !== false && performance.now() - started < 420
       && typeof requestAnimationFrame === 'function') requestAnimationFrame(anchor);
@@ -116,6 +124,61 @@ const drawImpact = (svg, at) => {
   svg.appendChild(flash);
   setTimeout(() => flash.remove(), 340);
   return flash;
+};
+
+/**
+ * World units per screen pixel, from the live viewBox against the live box. Hulls
+ * are a constant SCREEN size (a 3rem sprite) whatever the zoom, so anything drawn
+ * "at the hull's edge" has to be measured in pixels and converted — a world-unit
+ * offset would crawl across the hull as the camera zooms.
+ */
+const screenScale = (svg) => {
+  const [x, y, width, height] = svg.getAttribute('viewBox').split(/\s+/).map(Number);
+  const box = svg.getBoundingClientRect?.();
+  return { sx: width / (box?.width || 800), sy: height / (box?.height || 800) };
+};
+
+/** Half the sprite box, less the silhouette's taper: where the plating actually is. */
+const HULL_EDGE_PX = 17;
+/** The flare's reach beyond the plating, and its angular half-width in radians. */
+const FLARE_PX = 21;
+const FLARE_SPREAD = 0.62;
+
+/**
+ * The point on a hull's edge facing the shooter, in world units. The bearing from
+ * target back to shooter is the physical fact of which side was struck — the same
+ * fact `struckArc` buckets into a name — so the impact and its flare land on the
+ * quarter that actually took the volley instead of dead centre. Computed in screen
+ * space and converted back, because the map's projection is not square.
+ */
+const struckPoint = (svg, from, to) => {
+  const { sx, sy } = screenScale(svg);
+  const dx = (from.x - to.x) / sx;
+  const dy = (from.y - to.y) / sy;
+  const len = Math.hypot(dx, dy) || 1;
+  return { x: to.x + (dx / len) * HULL_EDGE_PX * sx, y: to.y + (dy / len) * HULL_EDGE_PX * sy, angle: Math.atan2(dy, dx) };
+};
+
+/**
+ * A shield-arc flare: a bow of light outside the plating on the struck quarter,
+ * spanning the 90 degrees the arc covers. This is the moment-of-impact half of
+ * directional shields — P3a put the burn on the arc afterwards; this shows the arc
+ * throwing the volley as it lands. Drawn only for an aimed hit that names an arc:
+ * ion and splash reach the frame without favouring a side, and flaring a direction
+ * the rules never used would be a claim the fight did not make.
+ */
+const drawArcFlare = (svg, at, kind) => {
+  const { sx, sy } = screenScale(svg);
+  const rx = FLARE_PX * sx;
+  const ry = FLARE_PX * sy;
+  const from = { x: at.x + Math.cos(at.angle - FLARE_SPREAD) * rx, y: at.y + Math.sin(at.angle - FLARE_SPREAD) * ry };
+  const to = { x: at.x + Math.cos(at.angle + FLARE_SPREAD) * rx, y: at.y + Math.sin(at.angle + FLARE_SPREAD) * ry };
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', `M ${from.x} ${from.y} A ${rx} ${ry} 0 0 1 ${to.x} ${to.y}`);
+  path.setAttribute('class', `fx-arcflare fx-arcflare-${kind}`);
+  path.setAttribute('vector-effect', 'non-scaling-stroke');
+  svg.appendChild(path);
+  setTimeout(() => path.remove(), 420);
 };
 
 const drawTorpedo = (svg, e) => {
