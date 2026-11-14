@@ -6,6 +6,7 @@ import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
 import { isOperation } from '../game/operations.js';
 import { cameraWindow, distanceScale, fieldTransform, minimapWindow, viewportFromWorld } from './camera.js';
 import { schematicHtml } from './schematic.js';
+import { scarBackground, scarNote, scarSummary, scarWearClass } from './scarring.js';
 import { stormCore, terrainMaterial } from './terrain-art.js';
 import { drawMove } from './fx.js';
 import {
@@ -643,6 +644,13 @@ const sensorCardHtml = (game, actor, ship, contact) => {
       `Shields ${ship.shields}${arcs ? ` · arcs ${arcs}` : ''}${heading === null ? '' : ` · heading ${heading}°`}`,
       `Crew ${ship.crew}`,
     ]),
+    // Battle scarring (P3). Not gated on the sweep, unlike the captain's name:
+    // the decals are painted on every hull the map draws, so the card that
+    // explains that hull has to say what they mean. Gating the words behind a
+    // scan the picture never waited for would leave the graphic carrying
+    // information the text withholds. Escaped because a cause name reaching the
+    // projection came off a save, and a save is a boundary.
+    ...(!wreck && scarSummary(ship) ? [escapeJournal(scarSummary(ship))] : []),
     ...(captain ? [`Captain ${escapeJournal(captain)}${isAce(ship) ? ` · an ace, ${ship.kills} kills` : ''}`] : []),
     ...(isDrone(ship) ? [`Unmanned fighter drone of the ${escapeJournal(getShip(game, ship.droneOf)?.name ?? 'fleet')}`] : []),
     ...(game.reimagined && !wreck && isActive(ship) && hostile && !isNeutral(ship) ? [`Combat stance: ${stanceOf(game, ship)}`] : []),
@@ -1162,6 +1170,25 @@ export const renderGame = (game, view = {}) => {
     const headingHtml = heading === null ? '' : `<span class="heading-glyph" style="--heading:${heading}deg" aria-hidden="true"></span>`;
     const rotStyle = heading === null || !useSprite ? '' : `;--rot:${heading}deg`;
     const headingNote = heading === null ? '' : ` — heading ${heading}°`;
+    // Battle scarring (P3): the frame's own record of every volley that reached
+    // it, painted as decals over the art. ONE overlay span per hull carrying all
+    // of its marks as stacked background layers, not one node per mark — a hull
+    // raked across four arcs by three weapons still costs the field a single
+    // element, and the layer is masked to the sprite's own alpha so a burn never
+    // floats off the silhouette into space. Only under sprite art: letters and
+    // classic have no hull to paint on, and the words below carry it either way.
+    const spriteSrc = useSprite ? `assets/sprites/${spriteFaction.toLowerCase()}/${spriteSlug}.png` : null;
+    const scarring = spriteSrc ? scarBackground(ship) : '';
+    const scarHtml = scarring ? `<span class="scarring" aria-hidden="true" style="--hull-art:url(${spriteSrc});background-image:${scarring}"></span>` : '';
+    // At gameplay scale a 48px sprite cannot show individual burns, so a hull
+    // whose frame has taken enough to matter also wears a whole-hull dulling —
+    // the thing a player can actually see across a fleet at a glance. Keyed off
+    // the marks' total weight, never off current condition.
+    const wearClass = scarWearClass(ship);
+    // Public, like the stance and the heading: the decals are drawn on every hull
+    // you can see, so the accessible name has to say it too or the picture would
+    // be carrying information the words never mention.
+    const scarText = scarNote(ship);
     // A hull broadcasting distress (round 24) wears a marker: the call is public,
     // and the rescue is the point.
     const distress = ship.encounter?.type === 'distress' && isActive(ship) && systemUnits(ship, 'engines') === 0;
@@ -1175,7 +1202,7 @@ export const renderGame = (game, view = {}) => {
     const selected = ship.id === view.contextShipId;
     const command = ship.id === game.playerShipId;
     const statusMark = ['vacant', 'surrendered'].includes(ship.status) ? `<span class="ship-state" aria-hidden="true">${ship.status === 'vacant' ? 'V' : 'S'}</span>` : '';
-    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}${heldClass}${useSprite ? ' has-sprite' : ''}${selected ? ' selected' : ''}${command ? ' command-ship' : ''}${compact.has(ship.id) ? ' compact-contact' : ''}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}${rotStyle}" data-ship-id="${ship.id}"${cardReplacesTip(ship) ? '' : ` title="${escapeJournal(ship.name)}: ${ship.status} · ${factionText(ship.faction)}${captain ? ` — Captain ${escapeJournal(captain)}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}"`} aria-label="${escapeJournal(ship.name)}, ${ship.faction}, ${ship.status}${selected ? ', selected' : ''}${command ? ', command ship' : ''}${captain ? `, Captain ${escapeJournal(captain)}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${distressNote}${heldNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}${useSprite ? `<img class="sprite" src="assets/sprites/${spriteFaction.toLowerCase()}/${SPRITE_SLUGS.get(ship.className)}.png" alt="" aria-hidden="true" draggable="false">` : `<span class="glyph">${glyph}</span>`}${game.reimagined && useSprite ? `<span class="contact-glyph" aria-hidden="true">${escapeJournal(glyph)}</span>` : ''}<span class="stack-tether" aria-hidden="true"></span>${factionBadgeHtml(ship.faction, { label: false })}${statusMark}${game.reimagined && threat ? '<span class="contact-threat" aria-hidden="true"></span>' : ''}${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}${held ? '<span class="tractor-pip" aria-hidden="true"></span>' : ''}</button>`;
+    return `<button class="ship ${ship.faction} ${ship.status}${threat}${duty ? ' has-order' : ''}${ace}${prize}${drone}${stanceClass}${distressClass}${heldClass}${wearClass}${useSprite ? ' has-sprite' : ''}${selected ? ' selected' : ''}${command ? ' command-ship' : ''}${compact.has(ship.id) ? ' compact-contact' : ''}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}${rotStyle}" data-ship-id="${ship.id}"${cardReplacesTip(ship) ? '' : ` title="${escapeJournal(ship.name)}: ${ship.status} · ${factionText(ship.faction)}${captain ? ` — Captain ${escapeJournal(captain)}` : ''}${duty ? ` — ${duty}` : ''}${ship.prize ? ' — prize of war' : ''}${stanceNote}${headingNote}${scarText}${distressNote}${heldNote}"`} aria-label="${escapeJournal(ship.name)}, ${ship.faction}, ${ship.status}${selected ? ', selected' : ''}${command ? ', command ship' : ''}${captain ? `, Captain ${escapeJournal(captain)}` : ''}${duty ? `, orders ${duty}` : ''}${ship.prize ? ', prize of war' : ''}${stanceNote}${headingNote}${scarText}${distressNote}${heldNote}"${view.battlePaused ? ' disabled' : ''}>${headingHtml}${spriteSrc ? `<img class="sprite" src="${spriteSrc}" alt="" aria-hidden="true" draggable="false">` : `<span class="glyph">${glyph}</span>`}${scarHtml}${game.reimagined && useSprite ? `<span class="contact-glyph" aria-hidden="true">${escapeJournal(glyph)}</span>` : ''}<span class="stack-tether" aria-hidden="true"></span>${factionBadgeHtml(ship.faction, { label: false })}${statusMark}${game.reimagined && threat ? '<span class="contact-threat" aria-hidden="true"></span>' : ''}${ship.prize ? '<span class="prize-pip" aria-hidden="true"></span>' : ''}${distress ? '<span class="distress-pip" aria-hidden="true"></span>' : ''}${held ? '<span class="tractor-pip" aria-hidden="true"></span>' : ''}</button>`;
   }).join('');
   // Tractor lock lines (Matt's call, 2026-09-25): the beam is physical. A held
   // hull you can see draws its lock back to the source even when a nebula hides

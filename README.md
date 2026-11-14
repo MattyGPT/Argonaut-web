@@ -690,6 +690,21 @@ prior war or campaign without transferring practice hulls or credits.
   attributed to anyone, because a `surrender` record carries no actor at all. The
   battle report is reproduced verbatim at the foot and labelled as an unfiltered
   fleet return. The whole account is available as plain text to copy or download.
+- **Battle scarring** — every volley that gets past a hull's shields leaves a mark
+  on its frame, on the arc it came in on, and the marks are a new authoritative
+  field on the hull rather than a reading of its current condition: shields
+  regenerate and hardware is rebuilt, but the paint does not come back, so a
+  veteran hull looks like one. Marks are painted as decals clipped to the sprite's
+  own silhouette and rotate with the hull, and a frame that has taken enough also
+  dulls, so a beaten hull reads next to its sisters at a glance. The same facts are
+  stated in words wherever the picture appears — the hull's accessible name, the
+  sensor card, and a **Frame** section in the interior schematic — and a hull that
+  carries none says so plainly rather than claiming it was never hit. Only the
+  dockyard removes scarring, and only while it has the hull open: a starbase yard
+  works one mark out per stardate it is repairing, and a campaign overhaul
+  refinishes the frame as part of the rebuild. Scarring carries across a campaign
+  and survives in a save, never consumes gameplay randomness, and no rule reads
+  it — every calibrated figure is untouched.
 - **Impact juice** — phaser hits flash where they land and the map shakes when a
   volley lands on your command ship. Both are suppressed under
   `prefers-reduced-motion`, and nothing in the rules reads them.

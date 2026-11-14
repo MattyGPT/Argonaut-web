@@ -4,7 +4,7 @@ import { SPECTATOR_TICK_MS, GRID_SIZE, LOADOUT, REALTIME, RULES_REVISION, TARGET
 import { createActionLog, recordAction, recordSweep, restoreActionLog } from './game/action-log.js';
 import { advanceReplay, createReplayArtifact, decodeReplay, encodeReplay, openReplay, replayCompatibility, replayDivergence, replayDone, replayLoadoutIsDefault, replayOptionsFromGame, replayProgress, replayWar, seekReplay } from './game/replay.js';
 import { chronicleText, composeChronicle, createChronicle, recordChronicle, restoreChronicle } from './ui/chronicle.js';
-import { alertLevel, appendLog, createGame, defaultLoadout, distance, facingOf, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, maintainedTowPair, nebulaHides, normalizeFleetSpec, sensorRange, systemUnits } from './game/state.js';
+import { alertLevel, appendLog, createGame, defaultLoadout, distance, ensureScars, facingOf, fleetCost, fleetHulls, getShip, isSpectator, isTractorHeld, maintainedTowPair, nebulaHides, normalizeFleetSpec, sensorRange, systemUnits } from './game/state.js';
 import { abandonEngagement, autoResolveNode, buyDockyard, createCampaign, nodeById, resolveNodeBattle, startNodeBattle, travelTo } from './game/campaign.js';
 import { scenarioFor } from './game/scenarios.js';
 import { positionAt, positionsOf, simTimeOf } from './game/realtime.js';
@@ -133,7 +133,11 @@ let sectorSelection = null;
 let game = operationSession?.game ?? practiceSession?.game ?? (campaign ? campaign.battle?.game ?? null : loadSave() ?? createGame({ seed: randomSeed() }));
 // Only resumable counters and in-flight causal identities belong in this state.
 // Raw resolution records are projected before entering the saved journal.
-if (game) game = enableBattleRecords(game);
+// A war saved before battle scarring existed (P3) resumes with hulls that carry
+// no mark list at all, so adopt an empty one here — the single point every resume
+// path converges on. It claims nothing about what the hull already survived; it
+// only lets the rest of the war be recorded on the frame.
+if (game) game = enableBattleRecords(ensureScars(game));
 let view = { entries: [], camera: null, paused: Boolean(practiceSession || operationSession), speed: 1 };
 if (game) view.journal = createJournal(game.battleRecordState.battleId);
 // Slice S0: a save stamped under different rules still loads — the warning is

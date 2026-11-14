@@ -1003,6 +1003,74 @@ export const ARC = Object.freeze({
 });
 
 /**
+ * Battle scarring (P3, Argonaut Reimagined). A hull's shields regenerate, its
+ * crew is replaced and the dockyard rebuilds its hardware — but the burn it took
+ * doing it stays on the frame. `ship.scars` is that memory: an ordered list of
+ * marks, each recording WHICH ARC a volley reached the hull through, WHAT reached
+ * it, and HOW HARD, accumulated over every engagement the hull survives.
+ *
+ * This is authoritative state rather than a projection of current condition, on
+ * Matt's ruling of 2026-11-12. Wear derived from `shields`/`systems` would snap
+ * back the moment the reactor topped the pool up, so a veteran would look
+ * pristine between fights; a retained list does not, and it carries across a
+ * campaign, so a prize taken in the first war still looks like the wreck it was
+ * when it is flown in the fifth.
+ *
+ * Two rules keep it honest and keep it out of the balance:
+ *
+ * - **A mark is earned only when a volley reaches the hull.** Points soaked by
+ *   shields leave the frame alone, so a fresh hull under a probing fire stays
+ *   clean and the scarring begins at the moment the fight starts going badly —
+ *   which is exactly the sensation the presence track is after. Rock strikes and
+ *   the ion burn's shield soak therefore scar nothing on their own.
+ * - **No rule reads it.** Scarring is recorded by the damage paths, persisted,
+ *   carried and cleaned; nothing in the engine consults it to decide a roll, a
+ *   range or an outcome, so every calibrated figure is untouched. That is the
+ *   whole reason the sim baselines can be re-run and expected not to move.
+ *
+ * Only the dockyard removes a mark, and only while it already has the hull open
+ * for repair — see `resolveDockingRules`. A classic hull never gains the field at
+ * all, so its serialized shape stays byte-identical, exactly as with `arcs`.
+ */
+export const SCAR = Object.freeze({
+  /**
+   * Marks retained on one hull. A long war lands far more volleys than this, so
+   * the list coalesces instead of growing: a further strike on an arc that
+   * already carries a mark of the same kind deepens it (`weight`) rather than
+   * adding a node. That bounds both the save size and the decal count, and it is
+   * also what a hull actually looks like — one raked flank burns black rather
+   * than collecting a hundred separate spots. Once every slot is taken a genuinely
+   * new kind of mark is dropped: the frame is covered already, and the marks are a
+   * picture of the worst of it rather than a ledger of all of it.
+   */
+  maxMarks: 24,
+  /**
+   * How deep one mark goes: the count of strikes of that kind that reached the
+   * hull through that arc, capped here. Deepening is what a saturated hull does
+   * instead of growing, and the projection reads it as a larger, darker decal, so
+   * the cap is the point at which a flank reads as burned out rather than merely
+   * hit.
+   */
+  maxWeight: 9,
+  /**
+   * Marks the dockyard works out per stardate it is repairing the hull. Deliberate
+   * and slow: a beaten hull spends real time in the yard before it looks
+   * commissioned again, which is the cost the scarring exists to make visible.
+   */
+  yardRate: 1,
+  /**
+   * Total mark weight at which a hull starts to LOOK beaten rather than merely
+   * marked — the whole-hull dulling the map applies so a veteran reads at a
+   * glance, because at 48px a sprite cannot show individual burns. Tuned against
+   * a measured war: a hull that took a bad exchange lands around 6-10, one that
+   * has been raked over a long war past 20.
+   */
+  worn: 10,
+  /** The second step: a hull that has been through a war, not just a fight. */
+  wornHeavy: 22,
+});
+
+/**
  * How each alliance's captains fight, in a Reimagined war. The original ran every
  * autopilot on one doctrine — pursue the fleet's target, fire, and never mind your
  * own skin — so shields only ever went down and no captain ever ran.

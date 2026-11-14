@@ -13,6 +13,7 @@ import {
   appendLog,
   applyHeading,
   bearingDeg,
+  cleanScars,
   crewCapacity,
   describeOrder,
   distance,
@@ -317,7 +318,7 @@ const executeAiAction = (startGame, shipId, action, plotDest = false) => {
     // null outside a Reimagined war or against a drone, so a classic
     // hit keeps its single-pool math byte-identically.
     const arc = struckArc(game, actor, target);
-    const hit = damageShip(target, amount, rng, arc ? { arc } : {});
+    const hit = damageShip(target, amount, rng, { cause: action.type, ...(arc ? { arc } : {}) });
     const kill = before === 'active' && hit.status !== 'active' ? 1 : 0;
     const shooter = { ...actor, shotsFired: actor.shotsFired + 1, kills: actor.kills + kill };
     const victim = { ...hit, shotsTaken: hit.shotsTaken + 1 };
@@ -871,7 +872,13 @@ const resolveDockingRules = (game) => {
     // Round 23: the yard's shield top-up pours into the breakdown — focused arc
     // first, then the weakest (inert without arcs, so parity holds).
     const arcs = grownArcs(game, ship, shields);
-    return { ...ship, shields, crew, systems, ...(arcs ? { arcs } : {}) };
+    // P3: while the yard has the hull open it works the battle scarring out too,
+    // one mark a stardate, oldest first. Deliberately NOT a line in `gains` — a
+    // per-hull per-stardate message is noise, the decals show it happening, and
+    // the hull's own readout states it in words. It cannot move a record either:
+    // the `dockyard` branch of `recordRuleChanges` gates on shields, crew and
+    // systems, all of which are unchanged by cleaning the frame.
+    return cleanScars({ ...ship, shields, crew, systems, ...(arcs ? { arcs } : {}) });
   });
   return { game: { ...game, ships }, messages };
 };
@@ -1372,7 +1379,7 @@ const resolveWarheadImpactRules = (game, warhead) => {
     const damage = weaponDamage('photons', actor, rng, grudge, powerEffect(game, actor, 'weapons'), game.reimagined ? REIMAGINED_WEAPON_DAMAGE_SCALE : 1);
     const before = target.status;
     const arc = struckArc(game, actor, target);
-    const hit = damageShip(target, damage, rng, arc ? { arc } : {});
+    const hit = damageShip(target, damage, rng, { cause: 'photons', ...(arc ? { arc } : {}) });
     const kill = before === 'active' && hit.status !== 'active' ? 1 : 0;
     const victim = { ...hit, shotsTaken: hit.shotsTaken + 1 };
     const shooter = kill ? { ...actor, kills: actor.kills + kill } : null;

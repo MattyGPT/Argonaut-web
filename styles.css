@@ -345,6 +345,56 @@ body.classic .journal-identities { color: inherit; }
   width: 1.4rem;
 }
 
+/* Battle scarring (P3): the frame's own record of every volley that reached it,
+   painted over the art. One overlay span per hull carries ALL of its marks as
+   stacked background layers rather than one node per mark — a hull raked across
+   four arcs by three weapons still costs the field a single element, which is the
+   difference between this and a dozen extra nodes on every contact in a melee.
+
+   The mask is the sprite's own alpha, passed down as --hull-art, so a burn is
+   clipped to the silhouette and never floats off the hull into space. The layer
+   carries the same --rot the sprite does, because a scar is painted on the frame
+   and swings with it as the hull turns. inset matches .has-sprite's 1px padding,
+   which is exactly the art box the sprite fills.
+
+   Purely decorative and marked aria-hidden: the accessible name says
+   "battle-scarred", the sensor card and the Interior panel's Frame section say it
+   in full, so nothing here is graphics-only. Static paint, so there is nothing
+   for prefers-reduced-motion to suppress and nothing for the frame loop to touch. */
+.ship .scarring {
+  position: absolute;
+  inset: 1px;
+  pointer-events: none;
+  transform: rotate(var(--rot, 0deg));
+  background-repeat: no-repeat;
+  mask-image: var(--hull-art);
+  mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  -webkit-mask-image: var(--hull-art);
+  -webkit-mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+}
+
+/* The whole-hull half of battle scarring (P3). At gameplay scale a 48px sprite
+   cannot show individual burns, so a hull whose frame has taken enough to matter
+   also dulls: less saturated, a shade darker, the paint knocked back. This is the
+   cue a player actually sees across a fleet — a veteran reads as beaten next to
+   its sisters before any decal is legible. Keyed off the marks' total weight by
+   `scarWearClass`, never off current condition, so a repaired hull stays dull
+   until the yard refinishes it. */
+.ship.battle-worn .sprite {
+  filter: drop-shadow(0 0 2px currentColor) saturate(.76) brightness(.88);
+}
+.ship.battle-worn-heavy .sprite {
+  filter: drop-shadow(0 0 2px currentColor) saturate(.55) brightness(.76) contrast(1.08);
+}
+
+/* At compact density the art is dropped for a letter disc, so the decals have
+   nothing to sit on and go with it. */
+.ship.compact-contact .scarring {
+  display: none;
+}
+
 .ship.vacant .glyph {
   color: #b5c1ca;
 }
@@ -2832,6 +2882,10 @@ body.classic .priority-objective strong, body.classic .priority-pending { color:
 .schematic-row { display: grid; grid-template-columns: 6.5rem 1fr auto; align-items: center; gap: .45rem; padding: .12rem 0; }
 .schematic-label { font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .schematic-value { font-size: .78rem; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+/* The Frame section's middle column (P3): what kind of fire reached this flank,
+   and how deep. Text rather than a bar — the number that would fill a bar has no
+   honest maximum, since a flank's depth is a sum of capped marks. */
+.schematic-frame { font-size: .78rem; color: var(--muted); overflow-wrap: anywhere; }
 .schematic-bar { position: relative; display: block; height: .5rem; border: 1px solid var(--line); background: rgba(127, 127, 127, .16); }
 .schematic-bar > i { position: absolute; inset: 0 auto 0 0; display: block; background: currentColor; }
 .schematic-row.down .schematic-value, .schematic-down-mark { color: #ff6b5d; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }

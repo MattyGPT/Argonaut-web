@@ -79,6 +79,7 @@ import {
   powerEffect,
   radioReaches,
   reactorOutput,
+  scarShip,
   segmentCrossesFeature,
   sensorRange,
   shieldCapacity,
@@ -445,6 +446,25 @@ export const sensorContact = (game, targetId) => {
 };
 
 /**
+ * Applies combat damage and marks the frame where it landed (P3).
+ *
+ * Every damaging path in the engine funnels through here — an aimed volley, a
+ * spread salvo's splash, a collision's cripple, self-destruct shrapnel — so this
+ * is the one place battle scarring has to be recorded, and the six call sites
+ * never have to remember to. `options.cause` names what did the damage for the
+ * mark it leaves; `options.arc` is the arc an aimed volley struck, already
+ * computed for the shield breakdown, so the scarring costs no extra geometry.
+ *
+ * A hull with no `scars` list — a classic hull, or one restored from a save
+ * written before the field existed — comes back byte-identical, which is how
+ * classic parity holds without a branch at any call site.
+ */
+export const damageShip = (ship, amount, rng = createRng('damage'), options = {}) => {
+  const hit = damageShipRules(ship, amount, rng, options);
+  return hit === ship ? ship : scarShip(hit, ship, { cause: options.cause ?? 'volley', arc: options.arc ?? null });
+};
+
+/**
  * Applies combat damage without changing its ship argument. Shields absorb damage
  * first; each exposed point then removes one crew member or one live subsystem unit,
  * weighted by CREW_DAMAGE_WEIGHT so the crew takes the bulk and the subsystems survive
@@ -453,7 +473,7 @@ export const sensorContact = (game, targetId) => {
  * the surviving subsystems, which tears the frame apart (`destroyed`). A hull with
  * neither crew nor subsystems left is destroyed outright.
  */
-export const damageShip = (ship, amount, rng = createRng('damage'), options = {}) => {
+const damageShipRules = (ship, amount, rng = createRng('damage'), options = {}) => {
   if (!isActive(ship) || !Number.isFinite(amount) || amount <= 0) return ship;
 
   let remaining = Math.floor(amount);
@@ -560,8 +580,17 @@ export const damageShip = (ship, amount, rng = createRng('damage'), options = {}
  * an enemy finishes off or boards. Leftover burst past the last system unit is
  * wasted. The system lottery matches `damageShip` (one slot per live unit, same walk
  * order), so ion degrades a hull exactly the way lethal fire would, minus the killing.
+ *
+ * A burst that reaches the hardware leaves an ion burn on the frame (P3). It is
+ * recorded unaimed, because the charge sidesteps facing entirely and soaks against
+ * the whole pool — a mark that claimed an arc would be a lie about how ion works.
  */
 export const ionDamage = (ship, amount, rng = createRng('ion')) => {
+  const hit = ionDamageRules(ship, amount, rng);
+  return hit === ship ? ship : scarShip(hit, ship, { cause: 'ion' });
+};
+
+const ionDamageRules = (ship, amount, rng = createRng('ion')) => {
   if (!isActive(ship) || !Number.isFinite(amount) || amount <= 0) return ship;
   let remaining = Math.floor(amount);
   // Round 23: an ion burst is not a kinetic hit — it sidesteps facing entirely,
@@ -890,7 +919,7 @@ const weaponAction = (game, action, actor, type) => {
   // null outside a Reimagined war or against a drone, so the hit resolves
   // against the single pool exactly as before.
   const arc = struckArc(game, actor, found.target);
-  const hit = damageShip(found.target, damage, rng, { ...(focus ? { focus } : {}), ...(arc ? { arc } : {}) });
+  const hit = damageShip(found.target, damage, rng, { cause: type, ...(focus ? { focus } : {}), ...(arc ? { arc } : {}) });
   const kill = before === 'active' && hit.status !== 'active' ? 1 : 0;
   const shooter = { ...actor, shotsFired: actor.shotsFired + 1, kills: actor.kills + kill };
   const victim = { ...hit, shotsTaken: hit.shotsTaken + 1 };
@@ -1000,7 +1029,7 @@ export const spreadSplashAt = (game, actor, target, impact, full, rng, creditSho
     // Round 23: only the salvo's primary hit is aimed — it lands on the target's
     // arc the launcher bears on. The splash on secondary hulls is positional:
     // it hits the total pool and burns the arcs proportionally.
-    const hit = damageShip(ship, amount, rng, ship.id === target?.id ? { arc: struckArc(game, actor, target) } : {});
+    const hit = damageShip(ship, amount, rng, ship.id === target?.id ? { cause: 'spread', arc: struckArc(game, actor, target) } : { cause: 'spread' });
     recorded = resolvedDamage(recorded, actor, ship, { ...hit, shotsTaken: hit.shotsTaken + 1 }, 'spread', {
       damage: amount, arc: ship.id === target?.id ? struckArc(game, actor, target) : null,
     });
@@ -1098,7 +1127,7 @@ const collided = (ship) => ({ ...ship, collisions: (ship.collisions ?? 0) + 1 })
  */
 const cripple = (ship, rng) => {
   const internals = ship.crew + Object.values(ship.systems).reduce((total, units) => total + units, 0);
-  return damageShip(ship, ship.shields + Math.ceil(internals * CRIPPLE.fraction), rng);
+  return damageShip(ship, ship.shields + Math.ceil(internals * CRIPPLE.fraction), rng, { cause: 'collision' });
 };
 
 const oneCollision = (game, first, second, towCauses = {}) => {
@@ -1574,7 +1603,7 @@ export const detonate = (game, actor) => {
     if (range <= shrapnel) {
       const damage = SHRAPNEL_DAMAGE.base + rng.integer(SHRAPNEL_DAMAGE.min, SHRAPNEL_DAMAGE.max);
       messages.push(`${ship.name} has been hit by shrapnel.  Damage to shields: ${damage} units.`);
-      const damaged = damageShip(ship, damage, rng);
+      const damaged = damageShip(ship, damage, rng, { cause: 'shrapnel' });
       damageFacts.push({ before: ship, damage });
       if (damaged.status === 'destroyed') {
         events.push(terminalEvent('destruction', 'self-destruct', damaged, { attacker: actor }));

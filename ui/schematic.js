@@ -25,8 +25,9 @@
 import { ARCS, POWER, POWER_SINKS } from '../game/constants.js';
 import {
   arcCapacities, arcFocusOf, arcsOf, crewCapacity, hasArcs, isDrone,
-  powerAllocation, powerEffect, reactorOutput, stanceOf, systemUnits, templateSystems,
+  powerAllocation, powerEffect, reactorOutput, scarsOf, stanceOf, systemUnits, templateSystems,
 } from '../game/state.js';
+import { scarArcTally, scarCauseWord, scarSummary } from './scarring.js';
 import { snapshotKnowledge } from '../game/battle-records.js';
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -137,6 +138,43 @@ const crewSection = (game, ship) => {
   </div>`;
 };
 
+/**
+ * The frame's battle scarring (P3) — the word equivalent of the decals the map
+ * paints on the hull, and the only place a player can read their OWN scarring in
+ * detail, since the sensor card covers every hull but the command ship.
+ *
+ * One row per flank that was reached, heaviest first, naming what kind of fire
+ * did it. `Unaimed` is a real category rather than a missing one: ion bursts,
+ * spread splash on a secondary hull and rams all reach the frame without
+ * favouring a side, and pretending otherwise would be a claim the record does not
+ * support. A clean frame says so plainly and claims nothing beyond that — a hull
+ * can have absorbed strikes the shields soaked whole, or have had its marks worked
+ * out at a dockyard, so "never hit" would be a fabrication either way.
+ */
+const frameSection = (game, ship) => {
+  // A hull with no mark list at all — a Classic hull, or one restored from a save
+  // written before the field existed and not yet migrated — has no record to
+  // report. Saying "no battle scarring" about it would imply a record that is
+  // empty when in truth there is none, so the section is simply absent.
+  if (!Array.isArray(ship?.scars)) return '';
+  const tally = scarArcTally(ship);
+  if (!tally.length) {
+    return `<div class="schematic-group" data-console-key="frame">
+      <span class="schematic-legend">Frame</span>
+      <p class="schematic-note" data-console-key="frame-clean">No battle scarring on the frame.</p>
+    </div>`;
+  }
+  const rows = tally.map((entry) => `<div class="schematic-row" data-console-key="frame-${entry.arc ?? 'unaimed'}">
+      <span class="schematic-label">${escapeHtml(entry.arc ? titleCase(entry.arc) : 'Unaimed')}</span>
+      <span class="schematic-frame">${escapeHtml(entry.kinds.map((kind) => `${scarCauseWord(kind.cause)} ×${kind.weight}`).join(', '))}</span>
+      <span class="schematic-value">${entry.weight}</span>
+    </div>`).join('');
+  return `<div class="schematic-group" data-console-key="frame" data-scar-marks="${scarsOf(ship).length}">
+    <span class="schematic-legend">Frame <span class="schematic-legend-note">${escapeHtml(scarSummary(ship) ?? '')}</span></span>
+    ${rows}
+  </div>`;
+};
+
 const reactorSection = (game, ship) => {
   // Reactor distribution is a Reimagined rule; a Classic hull has no sink bars to
   // draw, and drawing empty ones would imply a system it does not have.
@@ -189,6 +227,7 @@ export const schematicHtml = (game, ship) => {
     ${arcSection(game, ship)}
     ${systemSection(game, ship)}
     ${crewSection(game, ship)}
+    ${frameSection(game, ship)}
     ${reactorSection(game, ship)}
   </section>`;
 };
