@@ -14,8 +14,11 @@ suite stands at **22 of 24**, with two checks quarantined for recorded reasons �
 2026-11-12 with Matt's approval, leaving `check-battle-journal` and
 `check-combat-feedback`. See
 [the browser-check CI review](../reviews/2026-11-11-browser-check-ci.md) and
-[the bisect review](../reviews/2026-11-12-p0b-quarantine-bisect.md). **Next is S2,
-replay and spectator**, which now has both prerequisites in place. **Matt ruled on
+[the bisect review](../reviews/2026-11-12-p0b-quarantine-bisect.md). **S2 (replay and
+spectator), L1 (war chronicle) and P3a (battle scarring) have since been delivered**
+— #133, #135, #132 and the P3a increment of 2026-11-13 — so Tracks P, S and L are
+delivered through P2, S2 and L1 respectively, plus the first half of P3. **Next is
+P3b** (arc-impact FX and persistent debris), then S3. **Matt ruled on
 2026-11-12** on the two blocked slices: L1 takes honesty **tier D** (per-surface
 split plus post-war declassification of terminal facts, labelled on the page) and P3
 takes the **new authoritative damage-history field** rather than derived wear. P4
@@ -106,7 +109,7 @@ prerequisites, not the re-baseline originally scoped here. The research digest
 | 5 | War chronicle | L1 | new `game/chronicle.js`, `app.js:147`, `ui/render.js` | Fed from the raw record batch at `collectRecords`, **never** from `view.journal` or `game.log`; every sentence traces to a record; knowledge tier chosen and stated per surface; read-only; export works |
 | 6 | Ship interior schematic | P1 | new `ui/schematic.js`, `index.html`, `styles.css`, `app.js` | **DONE** (#125) — browser check green in CI; keyboard reachable; honest about partial enemy knowledge; degrades correctly for drones (no arcs) and Classic (no arcs, no reactor key) |
 | 7 | Damage-reactive audio | P2 | new `ui/audio-model.js`, `ui/sound.js`, `app.js`, `index.html`, `styles.css` | **DONE** — radio-integrity mapping audible and text-equivalent; separate volumes; no gameplay RNG; `git diff game/` empty |
-| 8 | Persistent damage and impact FX | P3 | `ui/render.js`, `ui/fx.js`, `assets/sprites/` | **First resolve the spec's guardrail contradiction**: is wear derived from existing state, or a new authoritative field? Record the choice. Then before/after frame measurement on the named reference scene; new FX inside the existing `MAX_EFFECTS`/48 ms budget; reduced-motion respected |
+| 8 | Persistent damage and impact FX | P3 | `ui/render.js`, `ui/fx.js`, `assets/sprites/` | **Guardrail contradiction resolved by Matt's ruling (2026-11-12): a new authoritative field.** **P3a (battle scarring) delivered 2026-11-13** — field, recording, persistence, campaign carry-over, dockyard-only removal, decals and their word equivalents, with the four-profile sim parity and both record-parity scripts re-run. **P3b (arc-impact FX, persistent debris) remains**, gated on nothing but scope; before/after frame measurement on the named reference scene is in `check-scarring`, and reduced-motion is respected because the decals are static |
 | 9 | Replay and spectator | S2 | new `game/replay.js`, `app.js`, `ui/`, `index.html` | Exact reproduction from `(seed, options, actions[])` in both timing models, verified by full-state comparison; a separate driver, **not** bolted onto `runWar`; URL fragment round-trip; scoped to single wars |
 | 10 | Renderer cost measurement, then canvas decision | P4 | `docs/superpowers/experiments/`, review doc | Measure the production cadence (`renderFrame`) and the zoom/pan path first — the V8 number has never been taken. Then accept / revise / narrow / stop. Default expectation is **narrow**: transform-only camera update and/or the existing keyed reconciler on `#map-field`. Any migration is partial (terrain and rings to canvas, ships stay DOM) and must be preceded by pinned per-hull a11y tests |
 | 11 | Seed challenge and score export | S3 | new module, `app.js`, `index.html` | Reproducibility test; export/import round-trip; BACKLOG Round 28 removed |
@@ -338,19 +341,49 @@ None of them changed a file.
       **16 of 19**; `npm test` 1016/1016. Not done: no guide screenshot (hash-verified
       manifest, same follow-up as P1), traffic chirps rate-limited rather than
       per-message, and no per-hull spatialisation beyond the storm.
-- [ ] Slice 8 — P3 persistent damage and impact FX. **UNBLOCKED — Matt ruled
-      2026-11-12: a new authoritative damage-history field, not derived wear.**
-      That resolves the spec's guardrail contradiction in favour of durability:
-      scarring survives repair and carries across a campaign, so a veteran hull
-      really does look like one rather than snapping back as shields regenerate.
-      It is the expensive branch and the slice must budget for all of it — a new
-      field on ship state, a save-format decision, campaign carry-over, an entry in
-      `stripBattleRecordMetadata`, a four-profile parity re-run, and the full sim
-      discipline with a CALIBRATION row if anything moves. The other P3 gate is now
-      met: `check-faction-identity` was un-quarantined on 2026-11-12, so the beam
-      and tether geometry P3 touches has a green baseline. `check-combat-feedback`
-      is still red and still asserts beam-endpoint geometry, so it remains the one
-      outstanding baseline gap for this slice.
+- [x] Slice 8 — P3 persistent damage and impact FX. **First increment (P3a,
+      battle scarring) DELIVERED 2026-11-13** with
+      [its review](../reviews/2026-11-13-p3a-battle-scarring.md). Matt's ruling is
+      implemented as written: `ship.scars` is a **new authoritative field**, an
+      ordered list of `{ cause, arc?, weight }` marks earned only when a volley
+      reaches the hull (internals dropped), recorded at the single `damageShip` /
+      `ionDamage` choke point so no call site can forget. It survives repair,
+      carries across a campaign through `fleetRecordsFrom` / `createVeteranFleet`,
+      rides the save envelope for free (wholesale JSON, no schema change), and a
+      pre-field save is migrated by adopting an EMPTY list at the one resume
+      convergence point — claiming nothing about what the hull already survived,
+      and `RULES_REVISION` is deliberately not bumped. Only the dockyard removes a
+      mark: a starbase yard works one out per stardate it is already repairing, a
+      campaign overhaul refinishes as part of the rebuild; no new credit sink,
+      because pricing a cosmetic field would reprice the campaign economy.
+      **No rule reads it**, pinned three ways (identically-seeded generators on a
+      marked and an unmarked hull produce byte-identical wounds; the four-profile
+      sim diff is empty; `scarShip` takes no RNG and no game). `stripBattleRecordMetadata`
+      gained **no** entry against this plan's expectation: scarring is produced by
+      the damage paths, not the record layer, so recorded and plain runs agree on
+      it and stripping it would weaken the single-war parity, which passed with the
+      marks inside the compared state. The campaign parity script is a
+      cross-*revision* comparison (current tree vs a baseline tree), so a slice that
+      adds ship state can never pass it as written; run with the new field excluded
+      it is green over 8 seeds and 73 full tactical resolutions — see the review.
+      Presentation: one masked overlay span per hull carrying every mark as
+      background layers, clipped to the sprite's own alpha, rotated with the hull,
+      placed on the arc that was struck (`ARC_ANCHOR`, pinned by test), plus a
+      whole-hull dulling past a weight threshold because a 48px sprite cannot show
+      individual burns. Words everywhere the picture appears: accessible name,
+      sensor card (ungated, because the decals are), and a **Frame** section in the
+      interior schematic with `Unaimed` as a real category. `npm test` **1097/1097**
+      (31 new); enforced browser suite **23 of 25** with the new `check-scarring`,
+      which also measures the redraw cost against a clean fleet. Two paint failures
+      and one geometry failure were caught by looking at screenshots and reading the
+      emitted CSS rather than by any assertion — hard black circles read as holes
+      in pixel art, a blend-mode pass defeated the alpha mask, and a double
+      percent-conversion put every decal at ~6500% of the art box while every
+      geometric test passed.
+      **P3b remains**: arc-impact FX (the fire events do not yet carry the arc) and
+      debris that persists where a hull died. `check-combat-feedback` is still
+      quarantined and still asserts beam-endpoint geometry; P3a did not touch that
+      geometry, so it neither needed nor consumed that baseline.
 - [x] Slice 9 — S2 replay and spectator. **DELIVERED in two increments: S2a then
       S2b, both 2026-11-13.** S2a
       with [its own review](../reviews/2026-11-13-s2a-replay-engine.md). The gate's
@@ -513,10 +546,19 @@ None of them changed a file.
    the completion record above.
 5. ~~**Slice 7 (P2) — damage-reactive audio.**~~ **Delivered 2026-11-12** — see the
    completion record and [its review](../reviews/2026-11-12-p2-damage-reactive-audio.md).
-   Track P now has only P3 and P4 left, and both are gated on measurement or on a
-   decision rather than on code: P3 on Matt's durability ruling and on the two
-   quarantined geometry checks, P4 on a production-cadence frame measurement that
-   has never been taken.
+6. **Slice 8b (P3b) — arc-impact FX and persistent debris.** The durable half of P3
+   landed as P3a on 2026-11-13; this is the moment-of-impact half. The fire events
+   do not yet carry the arc, though `struckArc` is already computed at every site
+   that would need it and `fireEvent` spreads a details bag, so the first move is
+   putting the arc on the event payload and letting `ui/fx.js` bow a shield flare
+   out on the struck side — the shooter→target bearing the FX layer already has is
+   the physical fact, so no new geometry is required. Debris that persists where a
+   hull died is the second half; wrecks already persist as `.wreck` elements, so
+   this is a scatter over what is already there rather than a new lifetime. Keep it
+   inside the existing `MAX_EFFECTS` / 48 ms budget and respect
+   `prefers-reduced-motion` as P3a's static decals already do.
+   Track P then has only P4 left, gated on a production-cadence frame measurement
+   that has never been taken.
 
 One small task surfaced by these slices is still open, and one has been closed:
 

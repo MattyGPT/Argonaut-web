@@ -144,7 +144,8 @@ const KIND_BY_CLASS = Object.fromEntries(
  * Extracts the campaign fleet records from a battle's end state (round 26
  * decision 6): one record per surviving Federation ship of the line, carrying
  * everything that persists between battles — the hull's wounds (shields, crew,
- * every subsystem unit, arcs), its people and history (captain, kills, shots
+ * every subsystem unit, arcs, and the battle scarring those wounds left on the
+ * frame), its people and history (captain, kills, shots
  * fired), its prize record, and a carrier's spent-complement flag. Tactical
  * state (position, facing, power, stance, orders, arc focus) is NOT recorded —
  * it resets per battle. Destroyed hulls, vacant hulks (crew lost — the pods
@@ -171,6 +172,11 @@ export const fleetRecordsFrom = (game) => (game?.ships ?? [])
     crew: Math.max(0, Math.round(ship.crew ?? 0)),
     systems: { ...(ship.systems ?? {}) },
     ...(ship.arcs ? { arcs: { ...ship.arcs } } : {}),
+    // Battle scarring (P3) carries like any other wound the yard has not worked
+    // out: a prize taken in the first war still wears the burns it was taken with
+    // when it is flown in the fifth. Copied mark by mark so a carried fleet never
+    // shares a mutable array with the battle it came out of.
+    ...(ship.scars?.length ? { scars: ship.scars.map((mark) => ({ ...mark })) } : {}),
     ...(ship.prize ? { prize: { ...ship.prize } } : {}),
     ...(ship.dronesLaunched ? { dronesLaunched: true } : {}),
   }));
@@ -583,8 +589,9 @@ export const dockyardOffers = (campaign) => {
  * current campaign (never trusted from the caller), so an unaffordable,
  * obsolete, or out-of-place purchase returns the campaign untouched. Shield
  * repair re-splits the arcs to the round-23 invariant; an overhaul restores
- * every burnt unit to complement without touching refit bonuses; a
- * commission joins the fleet as a full-health record with no captain — the
+ * every burnt unit to complement without touching refit bonuses, and works the
+ * battle scarring out with them (P3) — the only thing in a campaign that does;
+ * a commission joins the fleet as a full-health record with no captain — the
  * next battle deals one off its captains stream, like any muster.
  */
 export const buyDockyard = (campaign, offerId) => {
@@ -621,7 +628,12 @@ export const buyDockyard = (campaign, offerId) => {
       if (offer.kind === 'systems') {
         const systems = { ...record.systems };
         for (const system of Object.keys(systems)) systems[system] = Math.max(systems[system], baseUnits(record.kind, system));
-        return { ...record, systems };
+        // P3: an overhaul strips the frame open and rebuilds every burnt unit, so
+        // it is also the one thing that takes the battle scarring off — free, as
+        // part of the work already paid for, rather than as a new credit sink that
+        // would quietly reprice the campaign economy around a cosmetic field.
+        const { scars, ...refurbished } = { ...record, systems };
+        return refurbished;
       }
       if (offer.kind === 'refit') {
         const systems = { ...record.systems };

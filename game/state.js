@@ -24,6 +24,7 @@ import {
   RANGES,
   REIMAGINED_GRID_SIZE,
   REIMAGINED_SELF_DESTRUCT_SCALE,
+  SCAR,
   SCENARIO_IDS,
   SHIP_NAMES,
   SHIP_TEMPLATES,
@@ -227,6 +228,12 @@ export const createShip = ({ id, name, faction, kind, x, y, reimagined }) => {
     shotsTaken: 0,
     collisions: 0,
     ...(arcs ? { arcs, facing: 0 } : {}),
+    // Battle scarring (P3): the frame's own memory of what reached it. Reimagined
+    // only, for the same reason `arcs` is — a classic hull never gains the key, so
+    // its serialized shape and every reader of it stay byte-identical. A drone
+    // carries scarring too: it has no arcs, so its marks are unaimed, but it is a
+    // frame that gets shot at all the same.
+    ...(reimagined ? { scars: [] } : {}),
   };
 };
 
@@ -456,6 +463,11 @@ const createVeteranFleet = (records, rng, regional, occupied, gridSize, deployme
     kills: record.kills ?? 0,
     shotsFired: record.shotsFired ?? 0,
     ...(hull.arcs ? { arcs: carriedArcs ?? arcSplit(shields) } : {}),
+    // Carried scarring (P3) goes back through the same clamp every other reader
+    // uses, so a record from an older save — or a hand-edited one — cannot smuggle
+    // an unbounded or malformed list onto a fresh hull. Absent marks mean a clean
+    // frame, which is what `createShip` already gave it.
+    ...(hull.scars ? { scars: scarsOf({ scars: record.scars }) } : {}),
     ...(record.captain ? { captain: record.captain } : {}),
     ...(record.prize ? { prize: { ...record.prize } } : {}),
     ...(record.dronesLaunched ? { dronesLaunched: true } : {}),
@@ -1392,6 +1404,109 @@ export const struckArc = (game, shooter, target) => {
   if (relative < 90 + half) return 'starboard';
   if (relative < 180 + half) return 'aft';
   return 'port';
+};
+
+/** Everything aboard that a volley can kill or break: the complement plus every live subsystem unit. */
+export const internalsOf = (ship) => (ship?.crew ?? 0)
+  + Object.values(ship?.systems ?? {}).reduce((total, units) => total + Math.max(0, units), 0);
+
+/**
+ * Marks a hull's frame where a volley reached it (P3, Reimagined).
+ *
+ * The gate is that the strike got past the shields: `internalsOf` dropped. A
+ * volley the pool soaks whole leaves the frame untouched, so a fresh hull under a
+ * probing fire stays clean and the scarring begins at the moment the fight starts
+ * going badly. That also makes the record honest — every mark is a wound the hull
+ * actually took, never a projection of how low its shields happen to be, which is
+ * what lets it survive the reactor topping them back up.
+ *
+ * Marks coalesce by (cause, arc) rather than accumulating one node per volley: a
+ * flank raked by twenty phaser salvos carries one deep phaser mark, not twenty
+ * spots. Once every slot is taken a genuinely new kind is dropped rather than
+ * evicting an older one, so the list is a picture of the worst of a hull's
+ * history rather than a ledger of all of it — and nothing downstream claims
+ * otherwise, which is why `scarSummary` counts marks and never strikes.
+ *
+ * Pure integer bookkeeping over the two ship snapshots the caller already holds.
+ * It consumes no RNG and reads no rule, which is how the sim baselines hold.
+ * Returns the ship argument unchanged when it carries no `scars` list — a classic
+ * hull, and a hull from a save written before this field existed — so both stay
+ * byte-identical rather than gaining a key on the way through.
+ */
+export const scarShip = (ship, before, { cause = 'unknown', arc = null } = {}) => {
+  if (!ship || !Array.isArray(ship?.scars) || !before) return ship;
+  if (internalsOf(before) - internalsOf(ship) <= 0) return ship;
+  const marks = ship.scars;
+  const struck = arc && ARCS.includes(arc) ? arc : null;
+  const at = marks.findIndex((mark) => mark.cause === cause && (mark.arc ?? null) === struck);
+  if (at >= 0) {
+    const mark = marks[at];
+    if (mark.weight >= SCAR.maxWeight) return ship;
+    return { ...ship, scars: [...marks.slice(0, at), { ...mark, weight: mark.weight + 1 }, ...marks.slice(at + 1)] };
+  }
+  if (marks.length >= SCAR.maxMarks) return ship;
+  return { ...ship, scars: [...marks, { cause, ...(struck ? { arc: struck } : {}), weight: 1 }] };
+};
+
+/**
+ * The marks a hull still carries, clamped to the recorded shape. A save written
+ * before scarring existed has no list, and a hand-edited or corrupt one may carry
+ * anything, so every reader goes through here rather than trusting `ship.scars`.
+ * Never mutates: an old save gains nothing until the hull is next struck.
+ */
+export const scarsOf = (ship) => (Array.isArray(ship?.scars)
+  ? ship.scars
+    .filter((mark) => mark && typeof mark === 'object' && typeof mark.cause === 'string')
+    .slice(0, SCAR.maxMarks)
+    .map((mark) => ({
+      cause: mark.cause,
+      ...(ARCS.includes(mark.arc) ? { arc: mark.arc } : {}),
+      weight: Math.max(1, Math.min(SCAR.maxWeight, Math.round(Number(mark.weight) || 1))),
+    }))
+  : []);
+
+/**
+ * Works scarring off a hull, oldest mark first, at the dockyard's cadence. The
+ * yard removes marks in the order the frame acquired them, so a hull comes out
+ * looking recently repainted rather than randomly blotched. Returns the ship
+ * unchanged when there is nothing to do.
+ */
+export const cleanScars = (ship, count = SCAR.yardRate) => {
+  const marks = scarsOf(ship);
+  const take = Math.max(0, Math.min(Math.floor(count) || 0, marks.length));
+  if (!Array.isArray(ship?.scars) || take <= 0) return ship;
+  return { ...ship, scars: marks.slice(take) };
+};
+
+/** Whether a hull carries any battle scarring at all. */
+export const isScarred = (ship) => scarsOf(ship).length > 0;
+
+/**
+ * Gives a restored Reimagined war the scarring field it was saved without (P3).
+ *
+ * The save envelope is a wholesale JSON of the game with no per-field schema, so a
+ * war saved before this field existed resumes with hulls that have no `scars` key
+ * at all — and `scarShip` deliberately leaves such a hull byte-identical rather
+ * than inventing history for it, which is what keeps classic parity and old saves
+ * safe. Without this, a player who was mid-war when the feature landed would never
+ * see a single mark for the rest of that war.
+ *
+ * Adopting an EMPTY list is the honest migration: it claims nothing about what the
+ * hull has already been through, and starts the record from the next volley. The
+ * rules themselves did not change, so `RULES_REVISION` stays where it is — raising
+ * it would tell the player their save was revised by a rules change that did not
+ * happen. Idempotent, and a no-op that returns the same object when there is
+ * nothing to adopt.
+ */
+export const ensureScars = (game) => {
+  if (!game?.reimagined || !Array.isArray(game.ships)) return game;
+  let adopted = false;
+  const ships = game.ships.map((ship) => {
+    if (!ship || Array.isArray(ship.scars)) return ship;
+    adopted = true;
+    return { ...ship, scars: [] };
+  });
+  return adopted ? { ...game, ships } : game;
 };
 
 /**
