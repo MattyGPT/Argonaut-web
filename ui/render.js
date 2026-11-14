@@ -6,7 +6,7 @@ import { scenarioFor, scenarioProgress } from '../game/scenarios.js';
 import { isOperation } from '../game/operations.js';
 import { cameraWindow, distanceScale, fieldTransform, minimapWindow, viewportFromWorld } from './camera.js';
 import { schematicHtml } from './schematic.js';
-import { scarBackground, scarNote, scarSummary, scarWearClass } from './scarring.js';
+import { debrisBackground, scarBackground, scarNote, scarSummary, scarWearClass } from './scarring.js';
 import { stormCore, terrainMaterial } from './terrain-art.js';
 import { drawMove } from './fx.js';
 import {
@@ -1129,7 +1129,11 @@ export const renderGame = (game, view = {}) => {
       const wreckMark = view.shipArt === 'sprites'
         ? '<img class="wreck-sprite" src="assets/sprites/neutral/wreck.png" alt="" aria-hidden="true">'
         : '+';
-      return `<span class="wreck ${ship.faction}${compact.has(ship.id) ? ' compact-contact' : ''}" data-ship-id="${ship.id}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}"${cardReplacesTip(ship) ? '' : ` title="${escapeJournal(ship.name)}: destroyed · ${factionText(ship.faction)}"`} role="img" aria-label="${escapeJournal(ship.name)}, ${factionText(ship.faction)}, destroyed wreck">${wreckMark}${game.reimagined && view.shipArt === 'sprites' ? '<span class="contact-glyph" aria-hidden="true">+</span>' : ''}<span class="stack-tether" aria-hidden="true"></span>${factionBadgeHtml(ship.faction, { label: false })}</span>`;
+      // P3b: the debris field the hulk lies in, for the rest of the engagement.
+      // Drawn as part of the wreck element so it has no lifetime of its own.
+      const debris = view.shipArt === 'sprites' ? debrisBackground(ship) : '';
+      const debrisHtml = debris ? `<span class="debris" aria-hidden="true" style="background-image:${debris}"></span>` : '';
+      return `<span class="wreck ${ship.faction}${compact.has(ship.id) ? ' compact-contact' : ''}" data-ship-id="${ship.id}" style="--x:${pct(ship.x)};--y:${pct(ship.y)}${stackStyle(ship)}"${cardReplacesTip(ship) ? '' : ` title="${escapeJournal(ship.name)}: destroyed · ${factionText(ship.faction)}"`} role="img" aria-label="${escapeJournal(ship.name)}, ${factionText(ship.faction)}, destroyed wreck">${wreckMark}${debrisHtml}${game.reimagined && view.shipArt === 'sprites' ? '<span class="contact-glyph" aria-hidden="true">+</span>' : ''}<span class="stack-tether" aria-hidden="true"></span>${factionBadgeHtml(ship.faction, { label: false })}</span>`;
     }
     const threat = threats.has(ship.id) ? ' threat' : '';
     const standing = orderFor(game, ship.id) ?? pendingOrderFor(game, ship.id);

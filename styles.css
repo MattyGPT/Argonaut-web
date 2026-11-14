@@ -577,6 +577,25 @@ body.classic .journal-identities { color: inherit; }
   filter: grayscale(.45) brightness(.8);
 }
 
+/* Wreck debris (P3b): the field a destroyed hull leaves for the rest of the
+   engagement — charred fragments, a scorch halo, embers still holding heat. It is
+   part of the wreck element, so it has no lifetime to manage, nothing to leak into
+   the next fight, and it follows the hulk through every redraw and camera move.
+   The overshoot is a tenth of the hulk's box and every shard sits inside that, so
+   the field reads as this hull's wreckage and never as dirt on a neighbour.
+   Decorative and aria-hidden: the wreck's accessible name already says
+   "destroyed wreck", and the journal narrated the destruction. */
+.wreck .debris {
+  position: absolute;
+  inset: -10%;
+  pointer-events: none;
+  background-repeat: no-repeat;
+}
+
+.wreck.compact-contact .debris {
+  display: none;
+}
+
 /* Legend chips mirror the field: under sprite art the wreck/drone/merchant
    entries key with their sprites instead of letter glyphs. */
 .legend-swatch img {
@@ -2342,6 +2361,28 @@ body.classic .legend-swatch.lock-tractor {
   animation: fx-impact .34s ease-out forwards;
 }
 
+/* The shield-arc flare (P3b): a bow of light just outside the plating on the
+   quarter that took an aimed volley, so directional shields are felt at the
+   moment of impact and not only read afterwards in the scarring. It is transient
+   emphasis of a fact the journal already narrates and the Frame section keeps,
+   which is why it needs no word equivalent of its own. Colour follows the weapon:
+   phaser fire flares warm, a warhead white-hot, spread pale gold, ion cold. */
+.fx-arcflare {
+  fill: none;
+  stroke: #ffd9a0;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  animation: fx-arcflare .42s ease-out forwards;
+}
+.fx-arcflare-photons { stroke: #fff3d6; }
+.fx-arcflare-spread { stroke: #ffe9b0; }
+.fx-arcflare-ion { stroke: #cfe9ff; }
+
+@keyframes fx-arcflare {
+  from { opacity: .95; }
+  to { opacity: 0; }
+}
+
 .fx-move {
   stroke: #7d94a8;
   stroke-width: 1;
@@ -2389,6 +2430,7 @@ body.classic .legend-swatch.lock-tractor {
   .fx-phaser,
   .fx-ion,
   .fx-splash,
+  .fx-arcflare,
   .fx-terminal-destruction,
   .fx-terminal-surrender,
   .terminal-event {

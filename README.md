@@ -704,7 +704,13 @@ prior war or campaign without transferring practice hulls or credits.
   works one mark out per stardate it is repairing, and a campaign overhaul
   refinishes the frame as part of the rebuild. Scarring carries across a campaign
   and survives in a save, never consumes gameplay randomness, and no rule reads
-  it — every calibrated figure is untouched.
+  it — every calibrated figure is untouched. When an aimed volley lands, the
+  shield arc that threw it also **flares at the moment of impact**, so which
+  quarter is taking the fight is visible as it happens; ion and splash, which
+  reach the frame without favouring a side, flare nowhere, and so does a miss.
+  A destroyed hull leaves a **debris field** where it fell for the rest of the
+  engagement. Both are presentation, and both collapse under reduced-motion like
+  every other impact effect.
 - **Impact juice** — phaser hits flash where they land and the map shakes when a
   volley lands on your command ship. Both are suppressed under
   `prefers-reduced-motion`, and nothing in the rules reads them.

@@ -931,7 +931,7 @@ const weaponAction = (game, action, actor, type) => {
       return ship;
     }),
   }));
-  const events = [fireEvent(type, actor, found.target, true, details)];
+  const events = [fireEvent(type, actor, found.target, true, { ...details, ...(arc ? { arc } : {}) })];
   // A hull whose crew is killed but whose frame survives goes dark as a vacant
   // prize, not wreckage: only outright destruction draws the blast and the marker.
   if (hit.status === 'destroyed') {
@@ -1111,10 +1111,13 @@ const spreadAction = (game, action, actor) => {
   const grudge = vendettaGrudge(game, actor, found.target);
   const full = weaponDamage('spread', actor, rng, grudge, powerEffect(game, actor, 'weapons'), game.reimagined ? REIMAGINED_WEAPON_DAMAGE_SCALE : 1);
   const splash = spreadSplash(game, actor, found.target, full, rng);
+  // The salvo's primary hit is aimed, so it struck an arc and the FX can show
+  // which; the splash on secondary hulls is positional and stays unaimed.
+  const primaryArc = struckArc(game, actor, found.target);
   return result(resolvedWeapon(completeTurn(advanceRandom(splash.game)), actor, found.target, 'spread', 'hit', { damage: full }), [
     `${actor.name} fires a spread of torpedoes at ${found.target.name}.`,
     ...splash.messages,
-  ], { events: [fireEvent('spread', actor, found.target, true), ...splash.events] });
+  ], { events: [fireEvent('spread', actor, found.target, true, primaryArc ? { arc: primaryArc } : {}), ...splash.events] });
 };
 
 /** Counts a collision on both hulls; the battle report names the clumsiest captain. */

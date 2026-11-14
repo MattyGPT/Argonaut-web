@@ -330,7 +330,7 @@ const executeAiAction = (startGame, shipId, action, plotDest = false) => {
         return ship;
       }),
     });
-    const events = [fireEvent(action.type, actor, target, true)];
+    const events = [fireEvent(action.type, actor, target, true, arc ? { arc } : {})];
     // A hull whose crew is killed but whose frame survives goes dark as a vacant
     // prize, not wreckage: only outright destruction draws the blast and the marker.
     if (hit.status === 'destroyed') {
@@ -1391,7 +1391,7 @@ const resolveWarheadImpactRules = (game, warhead) => {
         return ship;
       }),
     });
-    const events = [boom, fireEvent('photons', actor, target, true)];
+    const events = [boom, fireEvent('photons', actor, target, true, arc ? { arc } : {})];
     if (hit.status === 'destroyed') {
       events.push({ kind: 'explosion', fromId: actor.id, toId: victim.id, x1: victim.x, y1: victim.y, x2: victim.x, y2: victim.y, hit: true });
       events.push(terminalEvent('destruction', 'photons', victim, { attacker: actor }));
