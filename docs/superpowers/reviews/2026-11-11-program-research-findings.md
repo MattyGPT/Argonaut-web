@@ -577,6 +577,37 @@ this record.
     missed: `surrender` carries **no `actor` at all** (0 of 416 sampled), so **no
     honesty tier can attribute a colors-strike to whoever forced it**. A chronicle
     that names one would be fabricating, regardless of the ruling on tier.
+11. **"If any chronicle field ever lands on `game` or `campaign`, it must be added
+    to `stripBattleRecordMetadata` … or the parity tests and the 250-seed baseline
+    (`scripts/check-record-parity.mjs`, SHA `05a5501f…`) fail"** (§3). **Both halves
+    are wrong, and P3a (#136) is the measurement:** it put a new authoritative field
+    (`ship.scars`) on `game`, added nothing to the strip list, and every parity
+    assertion passed. The strip list exists for keys the *recording layer* adds that
+    a plain game never has (`battleRecordState`, `battleId`, `causal`,
+    `campaignShipId`, `serviceRecords`, `serviceRecordState`); roughly half of the
+    in-test parity assertions strip only the **recorded** side, so a field present
+    on both sides passes untouched and adding it to the strip list would *break*
+    them. The cited SHA is also misattributed: it belongs to
+    `docs/superpowers/experiments/2026-10-06-ordinary-parity.mjs` (the 1,000-war
+    full-state harness), not to `check-record-parity.mjs`, which produces no digest.
+    What a new field on `game` genuinely costs is a **re-baselined ordinary-parity
+    digest**, because that harness hashes `JSON.stringify(game)` at every observer
+    callback — see the P3b review's *Corrections recorded* section for the
+    re-baseline and for the proof of exactly what moves.
+    **How to apply:** no strip entry for a field both runs produce; instead re-run
+    ordinary-parity against the parent commit, record both digests, and show which
+    profiles moved.
+12. **The P3 gate's "existing `MAX_EFFECTS`/48 ms budget" does not exist.** A
+    repo-wide grep finds `MAX_EFFECTS` only in the delivery plan's own gate line;
+    `ui/fx.js` has no effect cap at all — every effect is created and removed by a
+    bare `setTimeout` with no ceiling — and the 48 ms figure appears in no constant
+    or doc either. P3 therefore measured what the gate was reaching for instead:
+    `check-scarring` times a full `renderGame` redraw over a scarred fleet against
+    the same fleet clean (deltas within noise, both directions), and P3b's flare is
+    one SVG path per volley whose 420 ms lifetime `check-arc-impact` observes
+    expire. **How to apply:** if a real effect cap is ever wanted it is a new
+    feature with its own measurement, not an existing budget to stay inside; do not
+    cite `MAX_EFFECTS` as though it were code.
 
 The lesson is the one this repository keeps relearning: a *replacement* figure
 needs the same verification as the figure it replaces, and an agent report is

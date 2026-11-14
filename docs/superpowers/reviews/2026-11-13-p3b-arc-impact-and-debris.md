@@ -117,3 +117,50 @@ equivalents; arc-impact FX; persistent debris; a before/after frame measurement 
 the renderer (`check-scarring`, deltas within noise); and reduced-motion respected
 by both increments. Track P now has only **P4** left, gated on a production-cadence
 frame measurement that has never been taken.
+
+## Corrections recorded
+
+Two claims this slice's verification falsified, recorded here rather than silently
+rewritten, and mirrored as items 11–12 of the
+[research digest's correction record](2026-11-11-program-research-findings.md).
+
+**1. The 1,000-war ordinary-parity digest moved at P3a, by construction, and had not
+been re-recorded.** `docs/superpowers/experiments/2026-10-06-ordinary-parity.mjs`
+hashes `JSON.stringify(game)` at every observer callback, so any new field inside
+ship state moves it *even when no rule reads it* — which is precisely why it is a
+full-state tripwire and not a balance tripwire. Seven docs cite the October baseline
+`05a5501f…`; every one of those citations is by a slice that changed no game module
+and remains true of its own commit, but the *live* reference value was stale as of
+#136. Re-run here against the P3a parent (`437dc70`) and against current main, same
+machine, same harness:
+
+- pre-P3 (437dc70): `2a36f9edad715e1a50a25a0d2dacd0ef0e8240460efcc3f36b516812db0c3400`
+- post-P3 (main):  `b639847a55f530cb9f05af6d69d76932aa742d719b5ed243b4bad41e92edc174`
+
+(The historical `05a5501f…` was a *combined two-file* hash of a baseline/candidate
+pair, per the 2026-10-06 review, so a single output file was never expected to
+equal it; the pre/post pair above is the comparable evidence.) Comparing the two
+outputs war by war over all 1,000 wars and four profiles:
+
+| Profile | metrics differing | state-counts differing | per-war state digests differing |
+| --- | --- | --- | --- |
+| classic | 0/250 | 0/250 | **0/250** |
+| classic, precision | 0/250 | 0/250 | **0/250** |
+| reimagined | 0/250 | 0/250 | 250/250 |
+| realtime | 0/250 | 0/250 | 250/250 |
+
+That is the inert-field claim at the strongest resolution this repository has: the
+classic profiles are byte-identical *including their full-state digests*, because a
+classic hull never gains the key; and in the two Reimagined profiles the **only**
+thing that moved is the hashed state itself — no metric, no observer-snapshot count,
+no outcome, no RNG cursor. **`b639847a…` is the current ordinary-parity reference**;
+a future slice whose game/ diff is inert should reproduce it exactly, and one whose
+diff is not should explain every profile that moves.
+
+**2. The plan's P3 gate cited an "`MAX_EFFECTS`/48 ms budget" that does not exist.**
+`MAX_EFFECTS` appears nowhere in the repository except the plan's own gate line;
+`ui/fx.js` caps nothing — every effect is created and removed by a bare
+`setTimeout`. P3 measured what the gate was reaching for instead (redraw cost in
+`check-scarring`, flare lifetime observed expiring in `check-arc-impact`), and the
+plan's gate text has been corrected to name those measurements. If a real cap is
+ever wanted it is a new feature with its own measurement, not an existing budget.

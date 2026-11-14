@@ -395,6 +395,18 @@ None of them changed a file.
       `npm test` **1102/1102**; enforced suite **24 of 26** with the new
       `check-arc-impact`; four-profile sim parity against the P3a baseline
       byte-identical. **Slice 8 (P3) is complete.**
+      **Two corrections recorded with it** (see the P3b review and digest items
+      11–12): this gate's "`MAX_EFFECTS`/48 ms budget" never existed anywhere in the
+      code — `ui/fx.js` caps nothing — so the gate is restated as the measurements P3
+      actually made (`check-scarring`'s redraw timing, `check-arc-impact`'s observed
+      flare lifetime); and the 1,000-war ordinary-parity digest, which hashes full
+      game state and therefore moves for ANY new ship field even an inert one, was
+      re-baselined at P3a — pre `2a36f9ed…`, current reference **`b639847a…`**, with
+      the war-by-war proof that classic and precision-classic are unchanged
+      including their state digests and that only the two Reimagined profiles'
+      hashed state moved. Future slices with a non-empty `game/` diff must re-run
+      `docs/superpowers/experiments/2026-10-06-ordinary-parity.mjs` against their
+      parent commit and explain every profile that moves.
 - [x] Slice 9 — S2 replay and spectator. **DELIVERED in two increments: S2a then
       S2b, both 2026-11-13.** S2a
       with [its own review](../reviews/2026-11-13-s2a-replay-engine.md). The gate's
