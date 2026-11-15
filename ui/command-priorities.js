@@ -116,7 +116,7 @@ export const commandPriorities = (game) => {
 export const commandPrioritiesMarkup = (model) => {
   if (!model) return '';
   const notices = (items) => items.map((notice) => `<li data-console-key="priority-${notice.id}">${escape(notice.text)}</li>`).join('');
-  return `<p class="priority-objective"><strong>Objective</strong> ${escape(model.objective)}</p>
+  return `<div class="priority-head" data-console-key="priority-head"><p class="priority-objective"><strong>Objective</strong> ${escape(model.objective)}</p><button class="secondary tiny panel-hide-btn" type="button" data-panel-toggle="objective" title="Hide Objective bar (O)">Hide</button></div>
     ${model.notices.length ? `<ul class="priority-notices">${notices(model.notices)}</ul>` : ''}
     <details data-console-key="fleet-order-status"><summary>Fleet order status (${model.orders.length})${model.additional.length ? ` · ${model.additional.length} more ${model.additional.length === 1 ? 'notice' : 'notices'}` : ''}</summary>
       ${model.additional.length ? `<ul>${notices(model.additional)}</ul>` : ''}

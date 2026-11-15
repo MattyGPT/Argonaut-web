@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 // coupling in the one automated layer that exists, so restyling either rule
 // fails here instead of in a screenshot.
 const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
 const rule = (selector) => {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -63,4 +64,20 @@ test('the teaching modes keep the grid content-sized instead of filling the view
     assert.ok(body, `body.${mode} #game-root must exist`);
     assert.match(body, /flex:\s*0 0 auto/, `body.${mode} #game-root must opt out of filling the viewport`);
   }
+});
+
+test('the tactical map header exposes section collapse, legend popover, and focus-mode controls', () => {
+  assert.match(html, /id="toggle-journal"[^>]*data-panel-toggle="journal"/);
+  assert.match(html, /id="toggle-objective"[^>]*data-panel-toggle="objective"/);
+  assert.match(html, /id="toggle-report"[^>]*data-panel-toggle="report"/);
+  assert.match(html, /id="toggle-console"[^>]*data-panel-toggle="console"/);
+  assert.match(html, /id="legend-toggle"/);
+  assert.match(html, /id="focus-toggle"/);
+  assert.match(html, /id="map-legend"[^>]*hidden/, 'the map legend starts hidden behind the popover toggle');
+  assert.match(css, /body\.hide-journal #battle-journal[\s\S]*?display:\s*none !important/);
+  assert.match(css, /body\.hide-console #console[\s\S]*?display:\s*none !important/);
+  assert.match(css, /body\.hide-report #report[\s\S]*?display:\s*none !important/);
+  assert.match(css, /body\.hide-objective #command-priorities[\s\S]*?display:\s*none !important/);
+  assert.match(css, /body\.focus-mode \.topbar[\s\S]*?display:\s*none !important/);
+  assert.match(css, /body\.hide-journal\.hide-console\.hide-report #game-root \{[\s\S]*?grid-template-areas:\s*"map"/);
 });

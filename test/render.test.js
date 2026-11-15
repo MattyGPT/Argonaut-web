@@ -1591,3 +1591,17 @@ test('the frame-loop card refresh reports the hull it is reading and hides witho
   assert.equal(read('#sensor-card').innerHTML, '');
   elements.clear();
 });
+
+test('rendered panels include direct hide buttons and the legend popover includes a close control', () => {
+  elements.clear();
+  renderGame(createGame({ seed: 'chrome-controls', reimagined: true }));
+  assert.match(read('#console').innerHTML, /data-panel-toggle="console"/);
+  assert.match(read('#report').innerHTML, /data-panel-toggle="report"/);
+  assert.match(read('#command-priorities').innerHTML, /data-panel-toggle="objective"/);
+  assert.match(read('#map-legend').innerHTML, /data-legend-close/);
+  assert.equal(read('#toggle-objective').hidden, false);
+
+  elements.clear();
+  renderGame(createGame({ seed: 'chrome-controls-classic', reimagined: false }));
+  assert.equal(read('#toggle-objective').hidden, true);
+});

@@ -165,8 +165,8 @@ export const bindInput = (root, dispatch, getCamera = () => ({ minX: 0, minY: 0,
     }
     // The menu body is not empty space: clicking it may never become a maneuver.
     if (event.target.closest('#ship-menu')) return;
-    // Neither is the camera chrome (minimap, zoom buttons) that overlays the map.
-    if (event.target.closest('#minimap') || event.target.closest('#camera-controls')) return;
+    // Neither is the camera or HUD chrome (minimap, zoom buttons, terrain controls, legend) that overlays the map.
+    if (event.target.closest('#minimap') || event.target.closest('#camera-controls') || event.target.closest('#terrain-controls') || event.target.closest('#map-legend')) return;
     const command = event.target.closest('[data-command]')?.dataset.command;
     if (command) dispatch({ type: command });
     const ship = event.target.closest('[data-ship-id]')?.dataset.shipId;

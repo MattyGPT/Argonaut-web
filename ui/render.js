@@ -977,7 +977,7 @@ const renderMapLegend = (game, shipArt) => {
       legendEntry('pip-distress', 'distress call'),
     ] : []),
   ].join('');
-  legend.innerHTML = factions + entries + '<span class="legend-note" id="legend-note"></span>';
+  legend.innerHTML = factions + entries + '<span class="legend-note" id="legend-note"></span><button type="button" class="secondary tiny legend-close-btn" data-legend-close title="Close legend">Close</button>';
   // Set through the element rather than into the markup so the note stays a live
   // node (and the screen-reader/legend tests read it the same way as before).
   document.querySelector('#legend-note').textContent = game.reimagined
@@ -991,6 +991,8 @@ export const renderGame = (game, view = {}) => {
     priorities.hidden = !game.reimagined;
     updateConsole(priorities, commandPrioritiesMarkup(commandPriorities(game)));
   }
+  const toggleObjective = document.querySelector('#toggle-objective');
+  if (toggleObjective) toggleObjective.hidden = !game.reimagined;
   const extracted = game.operation?.extracted.find((ship) => ship.id === game.playerShipId);
   const actor = getShip(game, game.playerShipId) ?? (extracted ? { ...extracted, status: 'extracted' } : undefined);
   const map = document.querySelector('#map-field');
@@ -1295,7 +1297,7 @@ export const renderGame = (game, view = {}) => {
     ${game.towNotice ? `<p>${escapeJournal(game.towNotice)}</p>` : ''}</div>`
     : game.reimagined && game.towNotice ? `<p class="maintained-tow-status" data-console-key="tow-status">${escapeJournal(game.towNotice)}</p>` : '';
   updateConsole(consoleRoot, `
-    <div class="panel-title" data-console-key="title"><span>Command console</span><span class="alert-${condition.toLowerCase()}">Condition: ${condition}</span></div>
+    <div class="panel-title" data-console-key="title"><span>Command console</span><span class="panel-meta"><span class="alert-${condition.toLowerCase()}">Condition: ${condition}</span><button class="secondary tiny panel-hide-btn" type="button" data-panel-toggle="console" title="Hide Command console (])">Hide</button></span></div>
     <div class="status" data-console-key="status">
       <div class="status-row command-identity"><span>Command</span><b>${actor.name} ${factionBadgeHtml(actor.faction)}</b></div>
       <div class="status-row"><span>Location</span><b>${coordOf(actor)}</b></div>
@@ -1325,7 +1327,7 @@ export const renderGame = (game, view = {}) => {
     title: scenarioFor(game).title,
     lines: [scenarioFor(game).brief, ...scenarioProgress(game)],
   };
-  updateScrolledContent(report, `<h2>${activeReport.title}</h2><ul>${activeReport.lines.map((line) => `<li>${line}</li>`).join('')}</ul>`);
+  updateScrolledContent(report, `<div class="report-head"><h2>${activeReport.title}</h2><button class="secondary tiny panel-hide-btn" type="button" data-panel-toggle="report" title="Hide Mission status report (M)">Hide</button></div><ul>${activeReport.lines.map((line) => `<li>${line}</li>`).join('')}</ul>`);
 
   const entries = view.entries?.length
     ? view.entries
@@ -1382,7 +1384,7 @@ export const renderGame = (game, view = {}) => {
 
   if (game.outcome) {
     const section = (part) => `<h2>${part.title}</h2><ul>${part.lines.map((line) => `<li>${line}</li>`).join('')}</ul>`;
-    report.innerHTML = `<h2>${game.operation ? 'Operation concluded' : 'War concluded'}</h2><ul><li>${game.outcome.message ?? game.outcome.kind.replace('-', ' ')}</li></ul>`
+    report.innerHTML = `<div class="report-head"><h2>${game.operation ? 'Operation concluded' : 'War concluded'}</h2><button class="secondary tiny panel-hide-btn" type="button" data-panel-toggle="report" title="Hide Mission status report (M)">Hide</button></div><ul><li>${game.outcome.message ?? game.outcome.kind.replace('-', ' ')}</li></ul>`
       + section(reportFor(game, 'battle-report'))
       + section(reportFor(game, 'rollcall'))
       + `<ul><li>Begin a new war to continue.</li></ul>`;
