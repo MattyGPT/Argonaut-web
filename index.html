@@ -57,7 +57,17 @@
     <main id="game-root">
       <section class="map-panel panel" aria-label="Tactical map">
         <div class="panel-title">
-          <span>Tactical map</span>
+          <span class="map-title-group">
+            <span>Tactical map</span>
+            <span class="view-toggles" role="group" aria-label="Panel visibility">
+              <button id="toggle-journal" class="secondary tiny" type="button" data-panel-toggle="journal" aria-pressed="true" title="Show or hide Battle journal ([)">Journal</button>
+              <button id="toggle-objective" class="secondary tiny" type="button" data-panel-toggle="objective" aria-pressed="true" title="Show or hide Objective bar (O)" hidden>Objective</button>
+              <button id="toggle-report" class="secondary tiny" type="button" data-panel-toggle="report" aria-pressed="true" title="Show or hide Mission status report (M)">Report</button>
+              <button id="toggle-console" class="secondary tiny" type="button" data-panel-toggle="console" aria-pressed="true" title="Show or hide Command console (])">Console</button>
+              <button id="legend-toggle" class="secondary tiny" type="button" aria-pressed="false" aria-expanded="false" aria-controls="map-legend" title="Show or hide Map legend (?)">Legend</button>
+              <button id="focus-toggle" class="secondary tiny" type="button" aria-pressed="false" title="Maximize tactical map by hiding surrounding chrome (Z)">Focus</button>
+            </span>
+          </span>
           <span class="panel-meta">
             <span id="time-controls" hidden>
               <span id="time-pause-status" role="status" hidden></span>
@@ -90,7 +100,7 @@
           <div id="minimap" class="minimap" role="group" aria-label="War zone minimap" hidden></div>
           <div id="distance-scale" class="distance-scale" aria-label="Map distance scale" hidden></div>
         </div>
-        <div class="map-legend" id="map-legend">
+        <div class="map-legend" id="map-legend" hidden>
           <span class="Federation">Federation</span>
           <span class="Axis">Axis</span>
           <span class="Bloc">Bloc</span>
@@ -107,6 +117,7 @@
             <button id="replay-round" class="secondary tiny" data-command="replay" hidden>Replay round</button>
             <button id="chronicle-toggle" class="secondary tiny" type="button" aria-haspopup="dialog" title="The account of this war, what it is allowed to claim, and a copy you can keep">War chronicle</button>
             <span id="log-meta">Newest first</span>
+            <button class="secondary tiny panel-hide-btn" type="button" data-panel-toggle="journal" title="Hide Battle journal ([)">Hide</button>
           </span>
         </div>
         <div class="playback-controls">

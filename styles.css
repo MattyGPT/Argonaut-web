@@ -67,14 +67,21 @@ button.secondary {
 }
 
 .topbar {
-  max-width: 1440px;
+  max-width: 2560px;
   margin: auto;
-  padding: 1.25rem 1.4rem 1rem;
+  padding: .45rem 1.4rem;
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
+  gap: .8rem;
   align-items: center;
   border-bottom: 1px solid #1a334a;
+}
+
+.topbar > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: .65rem;
+  flex-wrap: wrap;
 }
 
 h1, h2, p {
@@ -82,37 +89,41 @@ h1, h2, p {
 }
 
 h1 {
-  font-size: clamp(1.2rem, 3vw, 1.8rem);
+  font-size: clamp(1.05rem, 1.8vw, 1.35rem);
   letter-spacing: .06em;
   color: var(--cyan);
 }
 
 .eyebrow {
   color: #6f9cb5;
-  font-size: .72rem;
+  font-size: .68rem;
   letter-spacing: .12em;
-  margin-bottom: .25rem;
+  margin-bottom: 0;
 }
 
 .top-actions {
   display: flex;
   align-items: center;
-  gap: .8rem;
+  gap: .5rem;
   color: #a9c7d8;
-  font-size: .75rem;
+  font-size: .74rem;
+}
+
+.top-actions button {
+  padding: .3rem .55rem;
 }
 
 #game-root {
   /* Readability pass (27c): the map column takes more of the page — a wider
      viewport means more pixels per world unit at any zoom, which is what
      separates a melee visually. */
-  max-width: 1680px;
+  max-width: 2560px;
   margin: 0 auto;
-  padding: 1rem 1.4rem 2rem;
+  padding: .55rem 1.4rem .8rem;
   display: grid;
-  grid-template-columns: minmax(230px, .5fr) minmax(420px, 1.9fr) minmax(280px, .72fr);
-  grid-template-areas: "log map console" "log report report";
-  gap: 1rem;
+  grid-template-columns: minmax(220px, .42fr) minmax(420px, 2.3fr) minmax(270px, .62fr);
+  grid-template-areas: "log map console" "log report console";
+  gap: .65rem;
 }
 
 .panel {
@@ -126,9 +137,11 @@ h1 {
 .panel-title {
   display: flex;
   justify-content: space-between;
-  padding: .6rem .75rem;
+  align-items: center;
+  gap: .5rem;
+  padding: .42rem .65rem;
   border-bottom: 1px solid var(--line);
-  font-size: .76rem;
+  font-size: .74rem;
   color: #95b8cf;
   text-transform: uppercase;
   letter-spacing: .08em;
@@ -136,6 +149,37 @@ h1 {
 
 .map-panel {
   grid-area: map;
+  position: relative;
+}
+
+.map-title-group {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .4rem .6rem;
+}
+
+.view-toggles {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .25rem;
+}
+
+.view-toggles button[aria-pressed="true"],
+#legend-toggle[aria-pressed="true"],
+#focus-toggle[aria-pressed="true"] {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  background: rgba(27, 75, 105, .38);
+}
+
+.panel-hide-btn {
+  padding: .08rem .4rem;
+  min-height: 0;
+  font-size: .66rem;
+  text-transform: none;
+  letter-spacing: .02em;
 }
 
 #map {
@@ -517,7 +561,28 @@ body.classic .journal-identities { color: inherit; }
   border: max(.5px, calc(1px * var(--invzoom, 1))) solid #c3a06d;
   background: repeating-linear-gradient(135deg, transparent 0 7px, #c3a06d18 7px 8px);
 }
-.terrain-controls { display: flex; gap: .5rem; padding: .35rem .75rem; flex-wrap: wrap; }
+.terrain-controls {
+  display: flex;
+  gap: .4rem;
+  padding: .22rem .55rem;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: .7rem;
+  border-bottom: 1px solid var(--line);
+}
+.terrain-controls button.tiny {
+  padding: .14rem .42rem;
+  min-height: 0;
+  font-size: .68rem;
+}
+.terrain-controls select {
+  background: #06101e;
+  color: #e7f7ff;
+  border: 1px solid #4a728d;
+  border-radius: 3px;
+  padding: .1rem .3rem;
+  font-size: .68rem;
+}
 .terrain-controls:has(button[hidden]):not(:has(button:not([hidden]))) { display: none; }
 .distance-scale {
   position: absolute; bottom: 14px; left: 14px; z-index: 3; pointer-events: none;
@@ -1016,6 +1081,35 @@ body.classic #sensor-card .card-systems span.down b {
   border-top: 1px solid var(--line);
 }
 
+#map-legend {
+  position: absolute;
+  left: .5rem;
+  right: .5rem;
+  bottom: .5rem;
+  z-index: 6;
+  align-items: center;
+  max-height: 60%;
+  overflow-y: auto;
+  background: linear-gradient(145deg, rgba(12, 28, 44, .97), rgba(6, 13, 24, .97));
+  border: 1px solid var(--cyan);
+  border-radius: 6px;
+  box-shadow: 0 12px 34px #000c;
+}
+
+body.classic #map-legend {
+  background: #000;
+  border-color: #38ff38;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.legend-close-btn {
+  margin-left: auto;
+  padding: .1rem .45rem;
+  min-height: 0;
+  font-size: .68rem;
+}
+
 /* The battlefield legend (play-test balance pass): each chip mirrors the real
    thing on the map — rings dashed in their own colors, pips glowing, terrain
    translucent, the threat outline a red ring — so the key teaches by looking
@@ -1348,7 +1442,7 @@ body.classic .console-section summary { color: inherit; }
   /* A flex item with an auto cross-axis margin is not stretched, so the
      centered blocks keep the width they have in block flow. */
   .topbar, .campaign-bar, #game-root, #sector-root { width: 100%; }
-  #game-root { flex: 1 1 0; min-height: 0; padding-bottom: 1rem; grid-template-rows: minmax(0, 1fr) minmax(6rem, .2fr); }
+  #game-root { flex: 1 1 0; min-height: 0; padding-bottom: .65rem; grid-template-rows: minmax(0, 1fr) minmax(8.5rem, .25fr); }
   .map-panel { display: flex; flex-direction: column; min-height: 0; }
   .map-panel > .panel-title, .map-legend { flex: 0 0 auto; }
   #map { flex: 1 1 auto; min-height: 0; aspect-ratio: auto; }
@@ -1357,6 +1451,54 @@ body.classic .console-section summary { color: inherit; }
   #game-root:has(#terrain-toggle:not([hidden])) { min-height: 760px; }
   .terrain-controls { flex: 0 0 auto; }
   #report { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+}
+
+/* Collapsible panels & Focus Mode (desktop & mobile) */
+body.hide-journal #battle-journal,
+body.hide-console #console,
+body.hide-report #report,
+body.hide-objective #command-priorities,
+body.focus-mode .topbar {
+  display: none !important;
+}
+
+body.focus-mode #game-root {
+  padding: .35rem .5rem;
+  gap: .45rem;
+}
+
+@media (min-width: 1101px) and (min-height: 620px) {
+  body.hide-report #game-root { grid-template-rows: minmax(0, 1fr); }
+}
+
+@media (min-width: 1101px) {
+  body.hide-journal:not(.hide-console):not(.hide-report) #game-root {
+    grid-template-columns: minmax(420px, 1fr) minmax(270px, 340px);
+    grid-template-areas: "map console" "report console";
+  }
+  body.hide-console:not(.hide-journal):not(.hide-report) #game-root {
+    grid-template-columns: minmax(220px, 280px) minmax(420px, 1fr);
+    grid-template-areas: "log map" "log report";
+  }
+  body.hide-report:not(.hide-journal):not(.hide-console) #game-root {
+    grid-template-areas: "log map console";
+  }
+  body.hide-journal.hide-console:not(.hide-report) #game-root {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "map" "report";
+  }
+  body.hide-journal.hide-report:not(.hide-console) #game-root {
+    grid-template-columns: minmax(420px, 1fr) minmax(270px, 340px);
+    grid-template-areas: "map console";
+  }
+  body.hide-console.hide-report:not(.hide-journal) #game-root {
+    grid-template-columns: minmax(220px, 280px) minmax(420px, 1fr);
+    grid-template-areas: "log map";
+  }
+  body.hide-journal.hide-console.hide-report #game-root {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "map";
+  }
 }
 
 @media (max-width: 1100px), (max-height: 619px) {
@@ -1568,14 +1710,26 @@ body.classic .console-section summary { color: inherit; }
 
 .report {
   grid-area: report;
-  min-height: 6rem;
-  padding: .75rem;
+  min-height: 4.5rem;
+  padding: .55rem .75rem;
+}
+
+.report-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: .35rem;
 }
 
 .report h2 {
   color: var(--cyan);
   font-size: .85rem;
   margin-bottom: .45rem;
+}
+
+.report-head h2 {
+  margin-bottom: 0;
 }
 
 .report ul {
@@ -2621,7 +2775,7 @@ body.classic .guide-body b {
    The star chart is its own screen with its own projection; nothing here is
    read by the tactical map, and the whole block is inert in a single war. */
 .campaign-bar {
-  max-width: 1440px;
+  max-width: 2560px;
   margin: 0 auto;
   padding: .45rem 1.4rem 0;
   display: flex;
@@ -2630,7 +2784,7 @@ body.classic .guide-body b {
 }
 
 #sector-root {
-  max-width: 1440px;
+  max-width: 2560px;
   margin: 0 auto;
   padding: 1rem 1.4rem 2rem;
   display: grid;
@@ -2794,10 +2948,10 @@ body.classic .guide-body b {
 @media (max-width: 1100px), (max-height: 619px) { #terminal-members-list { max-height: none; overflow: visible; } }
 
 /* Optional teaching panels stay in normal flow and never cover the controls.
-   They share #game-root's horizontal geometry — a centered 1680px box with
+   They share #game-root's horizontal geometry — a centered 2560px box with
    1.4rem side padding — so their edges line up with the journal and console
    columns instead of running to the window edge. */
-.learning-panel { width: min(100% - 2.8rem, 1680px - 2.8rem); margin: .65rem auto; padding: .7rem 1rem; border: 1px solid var(--line); border-radius: .45rem; background: var(--panel); font-size: .85rem; }
+.learning-panel { width: min(100% - 2.8rem, 2560px - 2.8rem); margin: .35rem auto; padding: .45rem .85rem; border: 1px solid var(--line); border-radius: .45rem; background: var(--panel); font-size: .82rem; }
 .learning-panel h2, .learning-panel h3 { margin: 0 0 .35rem; font-size: 1rem; color: var(--cyan); }
 .learning-panel p { margin: .3rem 0; }
 .learning-panel button, .practice-entry button, #guide-practice-chooser button { margin: .25rem .5rem .25rem 0; }
@@ -2896,8 +3050,9 @@ body.classic .operation-warning, body.classic .operation-result-reason, body.cla
 
 /* Mission context stays outside the tactical grid so expanded order details do
    not squeeze the map or replace the player's open report/journal. */
-.command-priorities { padding: .65rem .85rem; }
-.priority-objective { margin: 0; line-height: 1.5; }
+.command-priorities { padding: .4rem .75rem; }
+.priority-head { display: flex; justify-content: space-between; align-items: center; gap: .75rem; }
+.priority-objective { margin: 0; line-height: 1.4; }
 .priority-objective strong { color: var(--cyan); margin-right: .5rem; }
 .priority-notices { display: flex; flex-wrap: wrap; gap: .4rem 1.5rem; padding-left: 1.1rem; margin: .45rem 0; }
 .priority-notices li { flex: 1 1 15rem; max-width: 100%; }

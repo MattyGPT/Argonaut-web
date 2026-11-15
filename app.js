@@ -1229,6 +1229,7 @@ const dispatch = async (action) => {
 
   if (['rollcall', 'statistics', 'shots', 'fullmap', 'fleet'].includes(action.type)) {
     view = { ...view, contextShipId: null, report: reportFor(game, action.type) };
+    showPanel('report');
     refresh();
     return;
   }
@@ -1412,6 +1413,7 @@ const dispatch = async (action) => {
     // spends the stardate puts it away.
     ...(['orders', 'refit', 'stance', 'facing', 'arcFocus'].includes(action.type) ? {} : { contextShipId: null }),
   };
+  if (outcome.report || game.outcome) showPanel('report');
   if (!['phasers', 'photons'].includes(action.type)) playEffect('command', game.sound);
   // A command can reposition a hull outright (hyperspace) and the refresh that
   // follows draws true state — drop the interpolation baseline so the frame
@@ -2360,6 +2362,116 @@ document.querySelector('#boundaries-toggle').addEventListener('click', () => {
   try { localStorage.setItem(BOUNDARIES_KEY, terrainBoundaries ? 'strong' : 'quiet'); } catch { /* optional */ }
   applyTerrainPreferences(); redraw();
 });
+const panelState = {
+  journal: true,
+  objective: true,
+  report: true,
+  console: true,
+  legend: false,
+  focus: false,
+};
+let preFocusPanels = null;
+
+const syncPanelChrome = () => {
+  document.body.classList.toggle('hide-journal', !panelState.journal);
+  document.body.classList.toggle('hide-objective', !panelState.objective);
+  document.body.classList.toggle('hide-report', !panelState.report);
+  document.body.classList.toggle('hide-console', !panelState.console);
+  document.body.classList.toggle('focus-mode', panelState.focus);
+  for (const key of ['journal', 'objective', 'report', 'console']) {
+    const button = document.querySelector(`#toggle-${key}`);
+    if (button) button.setAttribute('aria-pressed', String(panelState[key]));
+  }
+  const legend = document.querySelector('#map-legend');
+  if (legend) legend.hidden = !panelState.legend;
+  const legendButton = document.querySelector('#legend-toggle');
+  if (legendButton) {
+    legendButton.setAttribute('aria-pressed', String(panelState.legend));
+    legendButton.setAttribute('aria-expanded', String(panelState.legend));
+  }
+  const focusButton = document.querySelector('#focus-toggle');
+  if (focusButton) {
+    focusButton.setAttribute('aria-pressed', String(panelState.focus));
+    focusButton.textContent = panelState.focus ? 'Exit focus' : 'Focus';
+  }
+};
+
+const showPanel = (key) => {
+  if (!panelState[key]) {
+    panelState[key] = true;
+    syncPanelChrome();
+  }
+};
+
+const togglePanel = (key) => {
+  if (!(key in panelState)) return;
+  panelState[key] = !panelState[key];
+  syncPanelChrome();
+};
+
+const toggleLegend = (force) => {
+  panelState.legend = typeof force === 'boolean' ? force : !panelState.legend;
+  syncPanelChrome();
+};
+
+const toggleFocusMode = () => {
+  if (!panelState.focus) {
+    preFocusPanels = {
+      journal: panelState.journal,
+      objective: panelState.objective,
+      report: panelState.report,
+      console: panelState.console,
+    };
+    panelState.focus = true;
+    panelState.journal = false;
+    panelState.objective = false;
+    panelState.report = false;
+  } else {
+    if (preFocusPanels) Object.assign(panelState, preFocusPanels);
+    else {
+      panelState.journal = true;
+      panelState.objective = true;
+      panelState.report = true;
+      panelState.console = true;
+    }
+    panelState.focus = false;
+    preFocusPanels = null;
+  }
+  syncPanelChrome();
+};
+
+document.addEventListener('click', (event) => {
+  const panelToggle = event.target.closest('[data-panel-toggle]');
+  if (panelToggle) {
+    togglePanel(panelToggle.dataset.panelToggle);
+    return;
+  }
+  if (event.target.closest('#legend-toggle')) {
+    toggleLegend();
+    return;
+  }
+  if (event.target.closest('[data-legend-close]')) {
+    toggleLegend(false);
+    return;
+  }
+  if (event.target.closest('#focus-toggle')) {
+    toggleFocusMode();
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  if (sectorMode() || document.querySelector('dialog[open]')) return;
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.target.matches?.('input,select,textarea')) return;
+  if (event.key === '[') { event.preventDefault(); togglePanel('journal'); return; }
+  if (event.key === ']') { event.preventDefault(); togglePanel('console'); return; }
+  if (event.key === 'm' || event.key === 'M') { event.preventDefault(); togglePanel('report'); return; }
+  if ((event.key === 'o' || event.key === 'O') && game?.reimagined) { event.preventDefault(); togglePanel('objective'); return; }
+  if (event.key === '?' || event.key === 'k' || event.key === 'K') { event.preventDefault(); toggleLegend(); return; }
+  if (event.key === 'z' || event.key === 'Z' || event.key === '\\') { event.preventDefault(); toggleFocusMode(); }
+});
+
+syncPanelChrome();
 applyTerrainPreferences();
 let mapSize = '';
 new ResizeObserver(([entry]) => {
