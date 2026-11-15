@@ -564,10 +564,11 @@ body.classic .journal-identities { color: inherit; }
 .terrain-controls {
   display: flex;
   gap: .4rem;
-  padding: .25rem .5rem;
+  padding: .22rem .55rem;
   flex-wrap: wrap;
   align-items: center;
   font-size: .7rem;
+  border-bottom: 1px solid var(--line);
 }
 .terrain-controls button.tiny {
   padding: .14rem .42rem;
@@ -581,26 +582,6 @@ body.classic .journal-identities { color: inherit; }
   border-radius: 3px;
   padding: .1rem .3rem;
   font-size: .68rem;
-}
-@media (min-width: 761px) {
-  .terrain-controls {
-    position: absolute;
-    top: 2.35rem;
-    left: .5rem;
-    z-index: 4;
-    width: fit-content;
-    max-width: calc(100% - 3.4rem);
-    background: rgba(5, 12, 22, .84);
-    border: 1px solid var(--line);
-    border-radius: 5px;
-    box-shadow: 0 4px 16px #0008;
-  }
-  body.classic .terrain-controls {
-    background: #000;
-    border-color: #145014;
-    border-radius: 0;
-    box-shadow: none;
-  }
 }
 .terrain-controls:has(button[hidden]):not(:has(button:not([hidden]))) { display: none; }
 .distance-scale {
@@ -1461,7 +1442,7 @@ body.classic .console-section summary { color: inherit; }
   /* A flex item with an auto cross-axis margin is not stretched, so the
      centered blocks keep the width they have in block flow. */
   .topbar, .campaign-bar, #game-root, #sector-root { width: 100%; }
-  #game-root { flex: 1 1 0; min-height: 0; padding-bottom: .65rem; grid-template-rows: minmax(0, 1fr) minmax(4.8rem, .16fr); }
+  #game-root { flex: 1 1 0; min-height: 0; padding-bottom: .65rem; grid-template-rows: minmax(0, 1fr) minmax(8.5rem, .25fr); }
   .map-panel { display: flex; flex-direction: column; min-height: 0; }
   .map-panel > .panel-title, .map-legend { flex: 0 0 auto; }
   #map { flex: 1 1 auto; min-height: 0; aspect-ratio: auto; }
